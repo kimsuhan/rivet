@@ -10,6 +10,7 @@
   1. [공통 개발 지침](../../docs/development/common.md)
   2. [데이터베이스 개발 지침](../../docs/development/database.md)
 - 제품 데이터 정책이나 관계가 필요할 때만 [문서 색인](../../docs/index.md)에서 도메인·데이터 모델 명세를 찾아 읽는다.
+- 로컬 PostgreSQL 테스트는 루트 `.env.test.local`의 `DATABASE_URL`을 사용한다.
 
 ## 책임 경계
 
@@ -29,6 +30,7 @@
 ## 완료 조건
 
 - 저장소 스크립트를 통해 Prisma format, validate와 generate를 실행한다.
+- 로컬 `rivet` 데이터베이스의 `public` 스키마 안에서는 테스트에 필요한 초기화와 데이터 변경을 허용하고 다른 데이터베이스나 스키마에는 접근하지 않는다.
 - 변경된 제약·쿼리·트랜잭션은 실제 PostgreSQL 통합 테스트로 검증한다.
 - 관련 lint, typecheck와 데이터베이스 테스트를 실행한다.
 - schema와 migration 이력, 생성 진입점의 일관성을 확인한다.
