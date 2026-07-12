@@ -35,6 +35,7 @@ export default async function WorkspaceLayout({
         Files: messages.Files,
         IssueCreate: messages.IssueCreate,
         Markdown: messages.Markdown,
+        States: messages.States,
       }}
     >
       <SessionBoundary
