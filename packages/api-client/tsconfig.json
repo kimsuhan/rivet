@@ -1,0 +1,9 @@
+{
+  "extends": "@rivet/config/typescript/library.json",
+  "compilerOptions": {
+    "lib": ["DOM", "DOM.Iterable", "ES2024"],
+    "rootDir": ".",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["orval.config.ts", "src/**/*.ts"]
+}

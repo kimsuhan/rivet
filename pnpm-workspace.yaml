@@ -1,0 +1,23 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  '@parcel/watcher': true
+  '@prisma/engines': true
+  '@scarf/scarf': false
+  '@swc/core': true
+  '@tailwindcss/oxide': true
+  argon2: true
+  esbuild: true
+  prisma: true
+  sharp: true
+  unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - prettier@3.9.5
+  - '@nestjs/cli@11.0.24'
+  - icu-minify@4.13.2
+  - next-intl-swc-plugin-extractor@4.13.2
+  - next-intl@4.13.2
+  - use-intl@4.13.2

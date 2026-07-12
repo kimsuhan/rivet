@@ -1,0 +1,43 @@
+{
+  "name": "@rivet/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./eslint/base": "./eslint/base.mjs",
+    "./eslint/nest": "./eslint/nest.mjs",
+    "./eslint/next": "./eslint/next.mjs",
+    "./prettier": "./prettier.config.mjs",
+    "./typescript/base.json": "./typescript/base.json",
+    "./typescript/library.json": "./typescript/library.json",
+    "./typescript/nest.json": "./typescript/nest.json",
+    "./typescript/next.json": "./typescript/next.json",
+    "./typescript/node.json": "./typescript/node.json"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test",
+    "test:coverage": "node --test"
+  },
+  "dependencies": {
+    "@eslint/js": "10.0.1",
+    "@next/eslint-plugin-next": "16.2.10",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-simple-import-sort": "13.0.0",
+    "globals": "17.7.0",
+    "prettier-plugin-tailwindcss": "0.8.0",
+    "typescript-eslint": "8.63.0"
+  },
+  "devDependencies": {
+    "eslint": "10.6.0",
+    "typescript": "6.0.3"
+  },
+  "peerDependencies": {
+    "eslint": ">=10.0.0",
+    "prettier": ">=3.0.0",
+    "typescript": ">=5.9.0 <6.1.0"
+  }
+}

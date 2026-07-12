@@ -1,0 +1,50 @@
+{
+  "name": "@rivet/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "prisma/migrations"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "format": "prisma format",
+    "generate": "prisma generate",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "migrate:test": "NODE_ENV=test prisma migrate deploy",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:dev": "prisma migrate dev",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.cjs --passWithNoTests",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --config jest.config.cjs --coverage --passWithNoTests",
+    "test:integration": "NODE_OPTIONS=--experimental-vm-modules NODE_ENV=test jest --config jest.integration.config.cjs --runInBand",
+    "typecheck": "tsc --noEmit",
+    "validate": "prisma validate"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.8.0",
+    "@prisma/client": "7.8.0",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@rivet/config": "workspace:*",
+    "@types/jest": "30.0.0",
+    "@types/node": "24.13.3",
+    "@types/pg": "8.20.0",
+    "dotenv": "17.4.2",
+    "eslint": "10.6.0",
+    "jest": "30.4.2",
+    "prisma": "7.8.0",
+    "ts-jest": "29.4.11",
+    "typescript": "6.0.3"
+  }
+}

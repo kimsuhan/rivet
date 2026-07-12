@@ -1,0 +1,31 @@
+{
+  "name": "@rivet/event-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "tsc -p tsconfig.build.json && node --test test/*.test.cjs",
+    "test:coverage": "tsc -p tsconfig.build.json && node --test --experimental-test-coverage test/*.test.cjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@rivet/config": "workspace:*",
+    "@types/node": "24.13.3",
+    "eslint": "10.6.0",
+    "typescript": "6.0.3"
+  }
+}

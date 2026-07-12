@@ -1,0 +1,84 @@
+import { getTranslations, setRequestLocale } from 'next-intl/server';
+
+import { type TeamSettingsLabels, TeamSettingsScreen } from '@/features/teams/team-settings-screen';
+
+export default async function TeamSettingsPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+  const t = await getTranslations('Settings.teams');
+  const labels: TeamSettingsLabels = {
+    activeEmptyDescription: t('activeEmptyDescription'),
+    activeEmptyTitle: t('activeEmptyTitle'),
+    activeTab: t('activeTab'),
+    archive: t('archive'),
+    archiveBlockedDescription: t('archiveBlockedDescription'),
+    archiveBlockedTitle: t('archiveBlockedTitle'),
+    archiveConfirm: t('archiveConfirm'),
+    archiveDescription: t('archiveDescription'),
+    archiveTitle: t('archiveTitle'),
+    archivedBadge: t('archivedBadge'),
+    archivedEmptyDescription: t('archivedEmptyDescription'),
+    archivedEmptyTitle: t('archivedEmptyTitle'),
+    archivedTab: t('archivedTab'),
+    cancel: t('cancel'),
+    close: t('close'),
+    conflictDescription: t('conflictDescription'),
+    conflictTitle: t('conflictTitle'),
+    create: t('create'),
+    createDescription: t('createDescription'),
+    createTitle: t('createTitle'),
+    creating: t('creating'),
+    currentAdmin: t('currentAdmin'),
+    description: t('description'),
+    discardChanges: t('discardChanges'),
+    discardDescription: t('discardDescription'),
+    discardTitle: t('discardTitle'),
+    edit: t('edit'),
+    editDescription: t('editDescription'),
+    editTitle: t('editTitle'),
+    errorDescription: t('errorDescription'),
+    errorTitle: t('errorTitle'),
+    forbiddenDescription: t('forbiddenDescription'),
+    forbiddenTitle: t('forbiddenTitle'),
+    keyDescription: t('keyDescription'),
+    keyFormat: t('keyFormat'),
+    keyInUse: t('keyInUse'),
+    keyLabel: t('keyLabel'),
+    keyLockedDescription: t('keyLockedDescription'),
+    keyLockedTitle: t('keyLockedTitle'),
+    keyPlaceholder: t('keyPlaceholder'),
+    keepEditing: t('keepEditing'),
+    loadMoreMembers: t('loadMoreMembers'),
+    loadMoreMembersErrorDescription: t('loadMoreMembersErrorDescription'),
+    loadMoreMembersErrorTitle: t('loadMoreMembersErrorTitle'),
+    loading: t('loading'),
+    memberBlockedDescription: t('memberBlockedDescription'),
+    memberBlockedTitle: t('memberBlockedTitle'),
+    memberRequired: t('memberRequired'),
+    memberUnit: t('memberUnit'),
+    memberUpdateDescription: t('memberUpdateDescription'),
+    memberUpdateTitle: t('memberUpdateTitle'),
+    membersDescription: t('membersDescription'),
+    membersLabel: t('membersLabel'),
+    nameInUse: t('nameInUse'),
+    nameInvalid: t('nameInvalid'),
+    nameLabel: t('nameLabel'),
+    namePlaceholder: t('namePlaceholder'),
+    nameRequired: t('nameRequired'),
+    nameTooLong: t('nameTooLong'),
+    removeMemberAction: t('removeMemberAction'),
+    removeMemberDescription: t('removeMemberDescription'),
+    removeMemberTitle: t('removeMemberTitle'),
+    retry: t('retry'),
+    save: t('save'),
+    saving: t('saving'),
+    title: t('title'),
+    workflow: t('workflow'),
+  };
+
+  return <TeamSettingsScreen labels={labels} />;
+}

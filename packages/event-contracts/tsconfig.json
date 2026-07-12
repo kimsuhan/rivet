@@ -1,0 +1,9 @@
+{
+  "extends": "@rivet/config/typescript/node.json",
+  "compilerOptions": {
+    "isolatedModules": true,
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -1,0 +1,46 @@
+{
+  "name": "@rivet/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "generate": "orval --config orval.config.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.101.2"
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0"
+  },
+  "devDependencies": {
+    "@rivet/config": "workspace:*",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.17",
+    "@vitest/coverage-v8": "4.1.10",
+    "eslint": "10.6.0",
+    "globals": "17.7.0",
+    "jsdom": "29.1.1",
+    "orval": "8.20.0",
+    "react": "19.2.7",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

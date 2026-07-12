@@ -1,0 +1,54 @@
+enum FileScope {
+  USER_PROFILE
+  WORKSPACE
+}
+
+enum IssueFileKind {
+  ISSUE_ATTACHMENT
+  DESCRIPTION_IMAGE
+  COMMENT_IMAGE
+  HANDOFF_IMAGE
+}
+
+model File {
+  id               String    @id @default(uuid()) @db.Uuid
+  scope            FileScope
+  workspaceId      String?   @map("workspace_id") @db.Uuid
+  uploadedByUserId String    @map("uploaded_by_user_id") @db.Uuid
+  storageKey       String    @unique @map("storage_key") @db.VarChar(255)
+  originalName     String    @map("original_name") @db.VarChar(255)
+  detectedMimeType String    @map("detected_mime_type") @db.VarChar(255)
+  sizeBytes        BigInt    @map("size_bytes")
+  unlinkedAt       DateTime? @default(now()) @map("unlinked_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace        Workspace?            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  uploadedByUser   User                  @relation("FileUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  avatarUser       User?                 @relation("UserAvatarFile")
+  issueAttachments IssueFileAttachment[]
+
+  @@unique([workspaceId, id])
+  @@map("files")
+}
+
+model IssueFileAttachment {
+  id                    String        @id @default(uuid()) @db.Uuid
+  workspaceId           String        @map("workspace_id") @db.Uuid
+  issueId               String        @map("issue_id") @db.Uuid
+  fileId                String        @unique @map("file_id") @db.Uuid
+  kind                  IssueFileKind
+  commentId             String?       @map("comment_id") @db.Uuid
+  apiHandoffId          String?       @map("api_handoff_id") @db.Uuid
+  createdByMembershipId String        @map("created_by_membership_id") @db.Uuid
+  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  issue               Issue               @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
+  file                File                @relation(fields: [workspaceId, fileId], references: [workspaceId, id], onDelete: Restrict)
+  comment             Comment?            @relation(fields: [workspaceId, issueId, commentId], references: [workspaceId, issueId, id], onDelete: Cascade, map: "issue_file_attachments_workspace_issue_comment_fkey")
+  apiHandoff          ApiHandoff?         @relation(fields: [workspaceId, issueId, apiHandoffId], references: [workspaceId, issueId, id], onDelete: Cascade, map: "issue_file_attachments_workspace_issue_handoff_fkey")
+  createdByMembership WorkspaceMembership @relation("IssueFileAttachmentCreator", fields: [workspaceId, createdByMembershipId], references: [workspaceId, id], onDelete: Restrict, map: "issue_file_attachments_workspace_creator_fkey")
+
+  @@index([workspaceId, issueId, createdAt, id])
+  @@map("issue_file_attachments")
+}

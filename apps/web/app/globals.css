@@ -1,0 +1,161 @@
+@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
+  --font-sans: var(--app-font-sans);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-background: var(--background);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-destructive: var(--destructive);
+  --color-disabled: var(--disabled);
+  --color-foreground: var(--foreground);
+  --color-info: var(--info);
+  --color-input: var(--input);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-overlay: var(--overlay);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-success: var(--success);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+  --color-warning: var(--warning);
+  --radius-sm: calc(var(--radius) * 0.75);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) * 1.25);
+  --radius-xl: calc(var(--radius) * 2);
+}
+
+:root {
+  color-scheme: dark;
+  --app-font-sans:
+    'Pretendard Variable', Pretendard, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
+  --app-font-mono: 'Geist Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --background: #010102;
+  --foreground: #f7f8f8;
+  --card: #141516;
+  --card-foreground: #f7f8f8;
+  --popover: #18191a;
+  --popover-foreground: #f7f8f8;
+  --primary: #5e6ad2;
+  --primary-foreground: #ffffff;
+  --secondary: #141516;
+  --secondary-foreground: #d0d6e0;
+  --muted: #0f1011;
+  --muted-foreground: #8a8f98;
+  --accent: rgb(94 106 210 / 16%);
+  --accent-foreground: #f7f8f8;
+  --destructive: #ef6a70;
+  --border: #23252a;
+  --border-strong: #34343a;
+  --input: #34343a;
+  --ring: #828fff;
+  --radius: 0.5rem;
+  --surface-1: #0f1011;
+  --surface-2: #141516;
+  --surface-3: #18191a;
+  --surface-4: #191a1b;
+  --disabled: #62666d;
+  --info: #9aa4ff;
+  --success: #62d783;
+  --warning: #e8c675;
+  --overlay: rgb(0 0 0 / 64%);
+  --sidebar: #0f1011;
+  --sidebar-foreground: #d0d6e0;
+  --sidebar-primary: #5e6ad2;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgb(94 106 210 / 16%);
+  --sidebar-accent-foreground: #f7f8f8;
+  --sidebar-border: #23252a;
+  --sidebar-ring: #828fff;
+  --layer-sticky: 100;
+  --layer-scrim: 400;
+  --layer-modal: 500;
+  --layer-alert-scrim: 600;
+  --layer-alert-modal: 700;
+  --layer-floating: 800;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  body {
+    @apply bg-background text-foreground min-h-dvh antialiased;
+  }
+
+  ::selection {
+    background: rgb(94 106 210 / 36%);
+    color: #ffffff;
+  }
+
+  :focus-visible {
+    outline-offset: 2px;
+  }
+}
+
+.app-sticky-layer {
+  z-index: var(--layer-sticky);
+}
+
+.app-scrim-layer {
+  z-index: var(--layer-scrim);
+}
+
+.app-modal-layer {
+  z-index: var(--layer-modal);
+}
+
+.app-alert-scrim-layer {
+  z-index: var(--layer-alert-scrim);
+}
+
+.app-alert-modal-layer {
+  z-index: var(--layer-alert-modal);
+}
+
+.app-floating-layer {
+  z-index: var(--layer-floating);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

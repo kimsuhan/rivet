@@ -1,0 +1,9 @@
+{
+  "extends": "@rivet/config/typescript/node.json",
+  "compilerOptions": {
+    "isolatedModules": true,
+    "rootDir": ".",
+    "types": ["jest", "node"]
+  },
+  "include": ["prisma.config.ts", "src/**/*.ts", "test/**/*.ts"]
+}

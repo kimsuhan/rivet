@@ -1,0 +1,9 @@
+{
+  "extends": "@rivet/config/typescript/nest.json",
+  "compilerOptions": {
+    "isolatedModules": true,
+    "rootDir": ".",
+    "types": ["jest", "node"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

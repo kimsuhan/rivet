@@ -1,0 +1,77 @@
+import { getTranslations, setRequestLocale } from 'next-intl/server';
+
+import {
+  type WorkflowSettingsLabels,
+  WorkflowSettingsScreen,
+} from '@/features/teams/workflow-settings-screen';
+
+export default async function WorkflowSettingsPage({
+  params,
+}: {
+  params: Promise<{ locale: string; teamId: string }>;
+}) {
+  const { locale, teamId } = await params;
+  setRequestLocale(locale);
+  const t = await getTranslations('Settings.workflow');
+  const labels: WorkflowSettingsLabels = {
+    backToTeams: t('backToTeams'),
+    cancel: t('cancel'),
+    categoryBacklog: t('categoryBacklog'),
+    categoryBacklogDescription: t('categoryBacklogDescription'),
+    categoryCanceled: t('categoryCanceled'),
+    categoryCanceledDescription: t('categoryCanceledDescription'),
+    categoryCompleted: t('categoryCompleted'),
+    categoryCompletedDescription: t('categoryCompletedDescription'),
+    categoryEmpty: t('categoryEmpty'),
+    categoryStarted: t('categoryStarted'),
+    categoryStartedDescription: t('categoryStartedDescription'),
+    categoryUnstarted: t('categoryUnstarted'),
+    categoryUnstartedDescription: t('categoryUnstartedDescription'),
+    close: t('close'),
+    conflictDescription: t('conflictDescription'),
+    conflictTitle: t('conflictTitle'),
+    defaultBadge: t('defaultBadge'),
+    delete: t('delete'),
+    deleteConfirm: t('deleteConfirm'),
+    deleteDescription: t('deleteDescription'),
+    deleteInUseDescription: t('deleteInUseDescription'),
+    deleteInUseTitle: t('deleteInUseTitle'),
+    deleteTitle: t('deleteTitle'),
+    deleting: t('deleting'),
+    description: t('description'),
+    discardChanges: t('discardChanges'),
+    discardDescription: t('discardDescription'),
+    discardTitle: t('discardTitle'),
+    errorDescription: t('errorDescription'),
+    errorTitle: t('errorTitle'),
+    forbiddenDescription: t('forbiddenDescription'),
+    forbiddenTitle: t('forbiddenTitle'),
+    loading: t('loading'),
+    keepEditing: t('keepEditing'),
+    moveDown: t('moveDown'),
+    moveUp: t('moveUp'),
+    nameInvalid: t('nameInvalid'),
+    nameLabel: t('nameLabel'),
+    nameRequired: t('nameRequired'),
+    nameTooLong: t('nameTooLong'),
+    rename: t('rename'),
+    renameDescription: t('renameDescription'),
+    renameTitle: t('renameTitle'),
+    reorderErrorDescription: t('reorderErrorDescription'),
+    reorderErrorTitle: t('reorderErrorTitle'),
+    reorderSuccess: t('reorderSuccess'),
+    replacementDescription: t('replacementDescription'),
+    replacementLabel: t('replacementLabel'),
+    replacementPlaceholder: t('replacementPlaceholder'),
+    replacementRequired: t('replacementRequired'),
+    retry: t('retry'),
+    save: t('save'),
+    saving: t('saving'),
+    teamLabel: t('teamLabel'),
+    teamMissingDescription: t('teamMissingDescription'),
+    teamMissingTitle: t('teamMissingTitle'),
+    title: t('title'),
+  };
+
+  return <WorkflowSettingsScreen labels={labels} teamId={teamId} />;
+}

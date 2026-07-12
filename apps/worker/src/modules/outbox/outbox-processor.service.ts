@@ -1,0 +1,720 @@
+import { Injectable } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
+
+import {
+  API_HANDOFF_CREATED,
+  COMMENT_CREATED,
+  COMMENT_MENTIONS_ADDED,
+  isAccountEmailEventType,
+  ISSUE_CHANGED,
+  ISSUE_CREATED,
+  ISSUE_PURGE_SCHEDULED,
+  ISSUE_UNBLOCKED,
+  type IssueUnblockedOutboxPayload,
+  PROJECT_CREATED,
+  PROJECT_PURGE_SCHEDULED,
+  PROJECT_STATUS_CHANGED,
+  validateAccountEmailOutboxPayload,
+  validateApiHandoffCreatedOutboxPayload,
+  validateCommentCreatedOutboxPayload,
+  validateCommentMentionsAddedOutboxPayload,
+  validateIssueChangedOutboxPayload,
+  validateIssueCreatedOutboxPayload,
+  validateIssuePurgeScheduledOutboxPayload,
+  validateIssueUnblockedOutboxPayload,
+  validateProjectCreatedOutboxPayload,
+  validateProjectPurgeScheduledOutboxPayload,
+  validateProjectStatusChangedOutboxPayload,
+  validateWorkspaceCreatedOutboxPayload,
+  validateWorkspaceInvitationEmailOutboxPayload,
+  WORKSPACE_CREATED,
+  WORKSPACE_INVITATION_REQUESTED,
+} from '@rivet/event-contracts';
+
+import { DatabaseService } from '../../common/database/database.service';
+import { ObservabilityService } from '../../common/observability/observability.service';
+import { EmailDeliveryError } from '../email/email-delivery.error';
+import { AccountEmailHandler } from './handlers/account-email.handler';
+import { ApiHandoffNotificationHandler } from './handlers/api-handoff-notification.handler';
+import { IssueCollaborationNotificationHandler } from './handlers/issue-collaboration-notification.handler';
+import { ResourcePurgeHandler } from './handlers/resource-purge.handler';
+import { WorkspaceInvitationEmailHandler } from './handlers/workspace-invitation-email.handler';
+import { OutboxService } from './outbox.service';
+import type { ClaimedOutboxEvent } from './outbox.types';
+import { CanceledOutboxError, PermanentOutboxError, RetryableOutboxError } from './outbox-errors';
+import { calculateRetryDelayMs } from './outbox-retry';
+
+const MAX_CONCURRENT_EVENTS = 5;
+
+@Injectable()
+export class OutboxProcessorService {
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly outbox: OutboxService,
+    private readonly accountEmailHandler: AccountEmailHandler,
+    private readonly apiHandoffNotificationHandler: ApiHandoffNotificationHandler,
+    private readonly issueCollaborationNotificationHandler: IssueCollaborationNotificationHandler,
+    private readonly resourcePurgeHandler: ResourcePurgeHandler,
+    private readonly workspaceInvitationEmailHandler: WorkspaceInvitationEmailHandler,
+    private readonly observability: ObservabilityService,
+    private readonly logger: PinoLogger,
+  ) {}
+
+  async processBatch(events: ClaimedOutboxEvent[], workerId: string): Promise<void> {
+    for (let index = 0; index < events.length; index += MAX_CONCURRENT_EVENTS) {
+      await Promise.all(
+        events
+          .slice(index, index + MAX_CONCURRENT_EVENTS)
+          .map((event) => this.processEvent(event, workerId)),
+      );
+    }
+  }
+
+  private async processEvent(event: ClaimedOutboxEvent, workerId: string): Promise<void> {
+    const startedAt = Date.now();
+    const jobLogger = this.logger.logger.child({
+      aggregateId: event.aggregateId,
+      aggregateType: event.aggregateType,
+      attempt: event.attemptCount,
+      eventId: event.id,
+      eventType: event.eventType,
+      jobId: `job_${event.id}`,
+      workspaceId: event.workspaceId,
+    });
+
+    if (!(await this.outbox.renewLock(event.id, workerId))) {
+      jobLogger.warn(
+        { duration: Date.now() - startedAt, errorCode: 'OUTBOX_LOCK_LOST', result: 'skipped' },
+        'Outbox 잠금 상실',
+      );
+      return;
+    }
+
+    try {
+      await this.handleEvent(event);
+      const completed = await this.outbox.complete(event.id, workerId);
+      jobLogger.info(
+        { duration: Date.now() - startedAt, result: completed ? 'processed' : 'lock_lost' },
+        completed ? 'Outbox 처리 완료' : 'Outbox 결과 저장 실패',
+      );
+      if (completed) this.captureCompletedEvent(event);
+    } catch (error) {
+      if (error instanceof CanceledOutboxError) {
+        const canceled = await this.outbox.cancel(event.id, workerId, error.code);
+
+        if (!canceled) {
+          jobLogger.warn(
+            { duration: Date.now() - startedAt, errorCode: error.code, result: 'lock_lost' },
+            'Outbox 결과 저장 실패',
+          );
+          return;
+        }
+
+        jobLogger.info(
+          { duration: Date.now() - startedAt, errorCode: error.code, result: 'canceled' },
+          'Outbox 처리 취소',
+        );
+        return;
+      }
+
+      if (error instanceof PermanentOutboxError) {
+        const failed = await this.outbox.failPermanently(event.id, workerId, error.code);
+
+        if (!failed) {
+          jobLogger.warn(
+            { duration: Date.now() - startedAt, errorCode: error.code, result: 'lock_lost' },
+            'Outbox 결과 저장 실패',
+          );
+          return;
+        }
+
+        jobLogger.error(
+          { duration: Date.now() - startedAt, errorCode: error.code, result: 'failed' },
+          'Outbox 영구 실패',
+        );
+        this.alertPermanentFailure(event, error.code);
+        return;
+      }
+
+      if (error instanceof EmailDeliveryError && !error.isRetryable) {
+        const failed = await this.outbox.failPermanently(event.id, workerId, error.code);
+
+        if (!failed) {
+          jobLogger.warn(
+            { duration: Date.now() - startedAt, errorCode: error.code, result: 'lock_lost' },
+            'Outbox 결과 저장 실패',
+          );
+          return;
+        }
+
+        jobLogger.error(
+          { duration: Date.now() - startedAt, errorCode: error.code, result: 'failed' },
+          'Outbox 영구 실패',
+        );
+        this.alertPermanentFailure(event, error.code);
+        return;
+      }
+
+      if (!(error instanceof EmailDeliveryError) && !(error instanceof RetryableOutboxError)) {
+        this.observability.captureException(error, `job_${event.id}`);
+      }
+
+      const retryDelayMs = calculateRetryDelayMs(event.attemptCount);
+
+      if (retryDelayMs === null) {
+        const failed = await this.outbox.failPermanently(
+          event.id,
+          workerId,
+          'OUTBOX_MAX_ATTEMPTS_REACHED',
+        );
+
+        if (!failed) {
+          jobLogger.warn(
+            {
+              duration: Date.now() - startedAt,
+              errorCode: 'OUTBOX_MAX_ATTEMPTS_REACHED',
+              result: 'lock_lost',
+            },
+            'Outbox 결과 저장 실패',
+          );
+          return;
+        }
+
+        jobLogger.error(
+          {
+            duration: Date.now() - startedAt,
+            errorCode: 'OUTBOX_MAX_ATTEMPTS_REACHED',
+            result: 'failed',
+          },
+          'Outbox 최대 재시도 도달',
+        );
+        this.alertPermanentFailure(event, 'OUTBOX_MAX_ATTEMPTS_REACHED');
+        return;
+      }
+
+      const errorCode =
+        error instanceof EmailDeliveryError || error instanceof RetryableOutboxError
+          ? error.code
+          : 'OUTBOX_PROCESSING_FAILED';
+      const scheduled = await this.outbox.scheduleRetry(
+        event.id,
+        workerId,
+        retryDelayMs,
+        errorCode,
+      );
+
+      if (!scheduled) {
+        jobLogger.warn(
+          { duration: Date.now() - startedAt, errorCode, result: 'lock_lost' },
+          'Outbox 결과 저장 실패',
+        );
+        return;
+      }
+
+      jobLogger.warn(
+        { duration: Date.now() - startedAt, errorCode, result: 'retry' },
+        'Outbox 재시도 예약',
+      );
+    }
+  }
+
+  private async handleEvent(event: ClaimedOutboxEvent): Promise<void> {
+    if (event.eventType === WORKSPACE_CREATED) {
+      const validation = validateWorkspaceCreatedOutboxPayload(event.payload);
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'WORKSPACE' ||
+        event.aggregateId !== event.workspaceId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+      await this.assertAnalyticsEventReferences(event);
+      return;
+    }
+
+    if (event.eventType === PROJECT_CREATED) {
+      const validation = validateProjectCreatedOutboxPayload(event.payload);
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'PROJECT'
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+      await this.assertAnalyticsEventReferences(event);
+      return;
+    }
+
+    if (event.eventType === PROJECT_STATUS_CHANGED) {
+      const validation = validateProjectStatusChangedOutboxPayload(event.payload);
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'PROJECT'
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+      await this.assertAnalyticsEventReferences(event);
+      return;
+    }
+
+    if (event.eventType === ISSUE_UNBLOCKED) {
+      const validation = validateIssueUnblockedOutboxPayload(event.payload);
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'ISSUE' ||
+        event.aggregateId !== validation.payload.issueId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+      await this.assertAnalyticsEventReferences(event, validation.payload);
+      return;
+    }
+
+    if (event.eventType === ISSUE_PURGE_SCHEDULED) {
+      const validation = validateIssuePurgeScheduledOutboxPayload(event.payload);
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'ISSUE' ||
+        event.aggregateId !== validation.payload.issueId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+      await this.resourcePurgeHandler.handleIssue(event, validation.payload);
+      return;
+    }
+
+    if (event.eventType === PROJECT_PURGE_SCHEDULED) {
+      const validation = validateProjectPurgeScheduledOutboxPayload(event.payload);
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'PROJECT' ||
+        event.aggregateId !== validation.payload.projectId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+      await this.resourcePurgeHandler.handleProject(event, validation.payload);
+      return;
+    }
+
+    if (event.eventType === ISSUE_CREATED) {
+      const validation = validateIssueCreatedOutboxPayload(event.payload);
+
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'ISSUE' ||
+        event.aggregateId !== validation.payload.issueId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+
+      await this.issueCollaborationNotificationHandler.handleIssueCreated(
+        event,
+        validation.payload,
+      );
+      return;
+    }
+
+    if (event.eventType === ISSUE_CHANGED) {
+      const validation = validateIssueChangedOutboxPayload(event.payload);
+
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'ISSUE' ||
+        event.aggregateId !== validation.payload.issueId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+
+      await this.issueCollaborationNotificationHandler.handleIssueChanged(
+        event,
+        validation.payload,
+      );
+      return;
+    }
+
+    if (event.eventType === COMMENT_CREATED) {
+      const validation = validateCommentCreatedOutboxPayload(event.payload);
+
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'COMMENT' ||
+        event.aggregateId !== validation.payload.commentId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+
+      await this.issueCollaborationNotificationHandler.handleCommentCreated(
+        event,
+        validation.payload,
+      );
+      return;
+    }
+
+    if (event.eventType === COMMENT_MENTIONS_ADDED) {
+      const validation = validateCommentMentionsAddedOutboxPayload(event.payload);
+
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'COMMENT' ||
+        event.aggregateId !== validation.payload.commentId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+
+      await this.issueCollaborationNotificationHandler.handleCommentMentionsAdded(
+        event,
+        validation.payload,
+      );
+      return;
+    }
+
+    if (event.eventType === API_HANDOFF_CREATED) {
+      const validation = validateApiHandoffCreatedOutboxPayload(event.payload);
+
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'API_HANDOFF' ||
+        event.aggregateId !== validation.payload.handoffId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+
+      await this.apiHandoffNotificationHandler.handle(event, validation.payload);
+      return;
+    }
+
+    if (isAccountEmailEventType(event.eventType)) {
+      const validation = validateAccountEmailOutboxPayload(event.payload);
+
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+
+      if (
+        event.workspaceId !== null ||
+        event.actorMembershipId !== null ||
+        event.aggregateType !== 'USER' ||
+        event.aggregateId !== validation.payload.userId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+
+      await this.accountEmailHandler.handle(event, event.eventType, validation.payload);
+      return;
+    }
+
+    if (event.eventType === WORKSPACE_INVITATION_REQUESTED) {
+      const validation = validateWorkspaceInvitationEmailOutboxPayload(event.payload);
+
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'WORKSPACE_INVITATION' ||
+        event.aggregateId !== validation.payload.invitationId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+
+      await this.workspaceInvitationEmailHandler.handle(event, validation.payload);
+      return;
+    }
+
+    throw new PermanentOutboxError('OUTBOX_EVENT_TYPE_UNSUPPORTED');
+  }
+
+  private async assertAnalyticsEventReferences(
+    event: ClaimedOutboxEvent,
+    issueUnblockedPayload?: IssueUnblockedOutboxPayload,
+  ): Promise<void> {
+    if (event.workspaceId === null) {
+      throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+    }
+
+    if (event.eventType === WORKSPACE_CREATED) {
+      const workspace = await this.database.client.workspace.findUnique({
+        select: { id: true },
+        where: { id: event.workspaceId },
+      });
+      if (!workspace) throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      return;
+    }
+
+    if (event.eventType === PROJECT_CREATED || event.eventType === PROJECT_STATUS_CHANGED) {
+      const project = await this.database.client.project.findFirst({
+        select: { id: true },
+        where: { id: event.aggregateId, workspaceId: event.workspaceId },
+      });
+      if (!project) throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      return;
+    }
+
+    if (event.eventType === ISSUE_UNBLOCKED) {
+      if (!issueUnblockedPayload) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+      const issueCount = await this.database.client.issue.count({
+        where: {
+          id: { in: [issueUnblockedPayload.issueId, issueUnblockedPayload.blockerIssueId] },
+          workspaceId: event.workspaceId,
+        },
+      });
+      if (issueCount !== 2) throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+    }
+  }
+
+  private alertPermanentFailure(event: ClaimedOutboxEvent, errorCode: string): void {
+    this.observability.alert({
+      errorCode,
+      jobId: `job_${event.id}`,
+      type: 'OUTBOX_PERMANENTLY_FAILED',
+    });
+  }
+
+  private captureCompletedEvent(event: ClaimedOutboxEvent): void {
+    if (event.workspaceId === null || event.actorMembershipId === null) return;
+
+    if (event.eventType === WORKSPACE_CREATED) {
+      const validation = validateWorkspaceCreatedOutboxPayload(event.payload);
+      if (!validation.success) return;
+      this.observability.capture({
+        distinctId: event.actorMembershipId,
+        name: 'workspace_created',
+        properties: {
+          acquisitionSource: validation.payload.acquisitionSource,
+          workspaceId: event.workspaceId,
+        },
+      });
+      return;
+    }
+
+    if (event.eventType === PROJECT_CREATED) {
+      const validation = validateProjectCreatedOutboxPayload(event.payload);
+      if (!validation.success) return;
+      this.observability.capture({
+        distinctId: event.actorMembershipId,
+        name: 'project_created',
+        properties: {
+          hasTargetDate: validation.payload.hasTargetDate,
+          roleCount: validation.payload.roleCount,
+          roles: validation.payload.roles,
+          workspaceId: event.workspaceId,
+        },
+      });
+      return;
+    }
+
+    if (event.eventType === PROJECT_STATUS_CHANGED) {
+      const validation = validateProjectStatusChangedOutboxPayload(event.payload);
+      if (!validation.success) return;
+      this.observability.capture({
+        distinctId: event.actorMembershipId,
+        name: 'project_status_changed',
+        properties: {
+          fromStatus: validation.payload.fromStatus,
+          progress: validation.payload.progress,
+          toStatus: validation.payload.toStatus,
+          workspaceId: event.workspaceId,
+        },
+      });
+      return;
+    }
+
+    if (event.eventType === ISSUE_UNBLOCKED) {
+      const validation = validateIssueUnblockedOutboxPayload(event.payload);
+      if (!validation.success) return;
+      this.observability.capture({
+        distinctId: event.actorMembershipId,
+        name: 'issue_unblocked',
+        properties: {
+          blockedProjectRole: validation.payload.blockedProjectRole,
+          blockingDurationBucket: validation.payload.blockingDurationBucket,
+          blockingProjectRole: validation.payload.blockingProjectRole,
+          workspaceId: event.workspaceId,
+        },
+      });
+      return;
+    }
+
+    if (event.eventType === WORKSPACE_INVITATION_REQUESTED) {
+      const validation = validateWorkspaceInvitationEmailOutboxPayload(event.payload);
+      if (!validation.success) return;
+      this.observability.capture({
+        distinctId: event.actorMembershipId,
+        name: 'member_invited',
+        properties: {
+          currentMemberCount: validation.payload.currentMemberCount,
+          workspaceId: event.workspaceId,
+        },
+      });
+      return;
+    }
+
+    if (event.eventType === ISSUE_CREATED) {
+      const validation = validateIssueCreatedOutboxPayload(event.payload);
+      if (!validation.success) return;
+      this.observability.capture({
+        distinctId: event.actorMembershipId,
+        name: 'issue_created',
+        properties: {
+          hasAssignee: validation.payload.assigneeMembershipId !== null,
+          hasMention: validation.payload.mentionedMembershipIds.length > 0,
+          workspaceId: event.workspaceId,
+        },
+      });
+      return;
+    }
+
+    if (event.eventType === ISSUE_CHANGED) {
+      const validation = validateIssueChangedOutboxPayload(event.payload);
+      if (!validation.success) return;
+      this.observability.capture({
+        distinctId: event.actorMembershipId,
+        name: 'issue_property_changed',
+        properties: {
+          propertyTypes: [...validation.payload.changedFields],
+          workspaceId: event.workspaceId,
+        },
+      });
+      if (validation.payload.terminalCategory === 'COMPLETED') {
+        this.observability.capture({
+          distinctId: event.actorMembershipId,
+          name: 'issue_completed',
+          properties: { workspaceId: event.workspaceId },
+        });
+      }
+      return;
+    }
+
+    if (event.eventType === COMMENT_CREATED) {
+      const validation = validateCommentCreatedOutboxPayload(event.payload);
+      if (!validation.success) return;
+      this.observability.capture({
+        distinctId: event.actorMembershipId,
+        name: 'comment_created',
+        properties: {
+          hasMention: validation.payload.hasMention,
+          workspaceId: event.workspaceId,
+        },
+      });
+      return;
+    }
+
+    if (event.eventType === API_HANDOFF_CREATED) {
+      const validation = validateApiHandoffCreatedOutboxPayload(event.payload);
+      if (!validation.success) return;
+      this.observability.capture({
+        distinctId: event.actorMembershipId,
+        name: 'api_handoff_created',
+        properties: {
+          downstreamIssueCount: validation.payload.downstreamIssueIds.length,
+          isFollowUp: validation.payload.kind === 'FOLLOW_UP',
+          workspaceId: event.workspaceId,
+        },
+      });
+    }
+  }
+}

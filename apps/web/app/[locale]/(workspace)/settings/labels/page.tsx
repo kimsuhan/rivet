@@ -1,0 +1,90 @@
+import { getTranslations, setRequestLocale } from 'next-intl/server';
+
+import {
+  type LabelSettingsLabels,
+  LabelSettingsScreen,
+} from '@/features/settings/label-settings-screen';
+
+export default async function LabelSettingsPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+  const t = await getTranslations('Settings.labels');
+  const labels: LabelSettingsLabels = {
+    activeTab: t('activeTab'),
+    archive: t('archive'),
+    archiveAction: t('archiveAction'),
+    archiveDescription: t('archiveDescription'),
+    archiveErrorDescription: t('archiveErrorDescription'),
+    archiveErrorTitle: t('archiveErrorTitle'),
+    archiveTitle: t('archiveTitle'),
+    archivedNoticeDescription: t('archivedNoticeDescription'),
+    archivedNoticeTitle: t('archivedNoticeTitle'),
+    archivedTab: t('archivedTab'),
+    archiving: t('archiving'),
+    cancel: t('cancel'),
+    clearSearch: t('clearSearch'),
+    colorBlue: t('colorBlue'),
+    colorCyan: t('colorCyan'),
+    colorCustom: t('colorCustom'),
+    colorDescription: t('colorDescription'),
+    colorFormat: t('colorFormat'),
+    colorGray: t('colorGray'),
+    colorGreen: t('colorGreen'),
+    colorLabel: t('colorLabel'),
+    colorLavender: t('colorLavender'),
+    colorOrange: t('colorOrange'),
+    colorPreview: t('colorPreview'),
+    colorRed: t('colorRed'),
+    colorYellow: t('colorYellow'),
+    conflictDescription: t('conflictDescription'),
+    conflictTitle: t('conflictTitle'),
+    createDescription: t('createDescription'),
+    createLabel: t('createLabel'),
+    createTitle: t('createTitle'),
+    description: t('description'),
+    discardChanges: t('discardChanges'),
+    discardDescription: t('discardDescription'),
+    discardTitle: t('discardTitle'),
+    edit: t('edit'),
+    editDescription: t('editDescription'),
+    editTitle: t('editTitle'),
+    emptyActiveDescription: t('emptyActiveDescription'),
+    emptyActiveTitle: t('emptyActiveTitle'),
+    emptyArchivedDescription: t('emptyArchivedDescription'),
+    emptyArchivedTitle: t('emptyArchivedTitle'),
+    emptySearchDescription: t('emptySearchDescription'),
+    emptySearchTitle: t('emptySearchTitle'),
+    errorDescription: t('errorDescription'),
+    errorTitle: t('errorTitle'),
+    loading: t('loading'),
+    keepEditing: t('keepEditing'),
+    nameInUse: t('nameInUse'),
+    nameInvalid: t('nameInvalid'),
+    nameLabel: t('nameLabel'),
+    namePlaceholder: t('namePlaceholder'),
+    nameRequired: t('nameRequired'),
+    nameTooLong: t('nameTooLong'),
+    nextPage: t('nextPage'),
+    paginationLabel: t('paginationLabel'),
+    permissionDescription: t('permissionDescription'),
+    permissionTitle: t('permissionTitle'),
+    previousPage: t('previousPage'),
+    reloadLatest: t('reloadLatest'),
+    retry: t('retry'),
+    saveChanges: t('saveChanges'),
+    saveErrorDescription: t('saveErrorDescription'),
+    saveErrorTitle: t('saveErrorTitle'),
+    saving: t('saving'),
+    search: t('search'),
+    searchLabel: t('searchLabel'),
+    searchPlaceholder: t('searchPlaceholder'),
+    tabsLabel: t('tabsLabel'),
+    title: t('title'),
+  };
+
+  return <LabelSettingsScreen labels={labels} />;
+}

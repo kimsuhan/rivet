@@ -1,0 +1,73 @@
+model OutboxEvent {
+  id                String    @id @default(uuid()) @db.Uuid
+  workspaceId       String?   @map("workspace_id") @db.Uuid
+  eventType         String    @map("event_type") @db.VarChar(100)
+  aggregateType     String    @map("aggregate_type") @db.VarChar(100)
+  aggregateId       String    @map("aggregate_id") @db.Uuid
+  actorMembershipId String?   @map("actor_membership_id") @db.Uuid
+  payload           Json      @default("{}") @db.JsonB
+  availableAt       DateTime  @default(now()) @map("available_at") @db.Timestamptz(3)
+  attemptCount      Int       @default(0) @map("attempt_count")
+  nextAttemptAt     DateTime? @map("next_attempt_at") @db.Timestamptz(3)
+  lastErrorCode     String?   @map("last_error_code") @db.VarChar(100)
+  lockedAt          DateTime? @map("locked_at") @db.Timestamptz(3)
+  lockedBy          String?   @map("locked_by") @db.VarChar(100)
+  processedAt       DateTime? @map("processed_at") @db.Timestamptz(3)
+  canceledAt        DateTime? @map("canceled_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace       Workspace?           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  actorMembership WorkspaceMembership? @relation("OutboxActorMembership", fields: [workspaceId, actorMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  emailDelivery   EmailDelivery?
+
+  @@unique([workspaceId, id])
+  @@map("outbox_events")
+}
+
+enum EmailTemplateType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  WORKSPACE_INVITATION
+}
+
+model EmailDelivery {
+  id                String            @id @default(uuid()) @db.Uuid
+  outboxEventId     String            @unique @map("outbox_event_id") @db.Uuid
+  templateType      EmailTemplateType @map("template_type")
+  recipientEmail    String            @map("recipient_email") @db.VarChar(254)
+  providerMessageId String?           @map("provider_message_id") @db.VarChar(255)
+  sentAt            DateTime?         @map("sent_at") @db.Timestamptz(3)
+  failedAt          DateTime?         @map("failed_at") @db.Timestamptz(3)
+  lastErrorCode     String?           @map("last_error_code") @db.VarChar(100)
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  outboxEvent OutboxEvent @relation(fields: [outboxEventId], references: [id], onDelete: Restrict)
+
+  @@map("email_deliveries")
+}
+
+enum ExportType {
+  ISSUES
+  PROJECTS
+}
+
+model ExportAudit {
+  id                      String     @id @default(uuid()) @db.Uuid
+  workspaceId             String     @map("workspace_id") @db.Uuid
+  requestedByMembershipId String     @map("requested_by_membership_id") @db.Uuid
+  type                    ExportType
+  itemCount               Int?       @map("item_count")
+  requestedAt             DateTime   @default(now()) @map("requested_at") @db.Timestamptz(3)
+  completedAt             DateTime?  @map("completed_at") @db.Timestamptz(3)
+  failedAt                DateTime?  @map("failed_at") @db.Timestamptz(3)
+  downloadedAt            DateTime?  @map("downloaded_at") @db.Timestamptz(3)
+  lastErrorCode           String?    @map("last_error_code") @db.VarChar(100)
+
+  workspace             Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  requestedByMembership WorkspaceMembership @relation("ExportRequesterMembership", fields: [workspaceId, requestedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@index([workspaceId, requestedAt, id])
+  @@index([workspaceId, requestedByMembershipId, requestedAt, id], map: "export_audits_requester_requested_at_id_idx")
+  @@map("export_audits")
+}

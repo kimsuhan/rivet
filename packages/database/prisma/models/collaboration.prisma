@@ -1,0 +1,43 @@
+model Comment {
+  id                 String    @id @default(uuid()) @db.Uuid
+  workspaceId        String    @map("workspace_id") @db.Uuid
+  issueId            String    @map("issue_id") @db.Uuid
+  authorMembershipId String    @map("author_membership_id") @db.Uuid
+  bodyMarkdown       String?   @map("body_markdown") @db.Text
+  version            Int       @default(1)
+  editedAt           DateTime? @map("edited_at") @db.Timestamptz(3)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace        Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  issue            Issue                 @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
+  authorMembership WorkspaceMembership   @relation("CommentAuthorMembership", fields: [workspaceId, authorMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  mentions         Mention[]
+  fileAttachments  IssueFileAttachment[]
+  notifications    Notification[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, issueId, id])
+  @@index([workspaceId, issueId, createdAt, id])
+  @@map("comments")
+}
+
+model Mention {
+  id                    String   @id @default(uuid()) @db.Uuid
+  workspaceId           String   @map("workspace_id") @db.Uuid
+  issueId               String   @map("issue_id") @db.Uuid
+  commentId             String?  @map("comment_id") @db.Uuid
+  mentionedMembershipId String   @map("mentioned_membership_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  issue               Issue               @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
+  comment             Comment?            @relation(fields: [workspaceId, issueId, commentId], references: [workspaceId, issueId, id], onDelete: Cascade)
+  mentionedMembership WorkspaceMembership @relation("MentionedMembership", fields: [workspaceId, mentionedMembershipId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([commentId, mentionedMembershipId])
+  @@index([workspaceId, issueId, createdAt, id])
+  @@index([workspaceId, mentionedMembershipId, createdAt, id], map: "mentions_workspace_id_mentioned_membership_id_created_idx")
+  @@map("mentions")
+}

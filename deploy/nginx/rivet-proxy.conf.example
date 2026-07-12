@@ -1,0 +1,43 @@
+# 기존 HTTPS server 블록 안에 포함한다. 인증서와 server_name은 서버에서 관리한다.
+client_max_body_size 30m;
+access_log /var/log/nginx/rivet-access.log rivet_json;
+
+proxy_http_version 1.1;
+proxy_hide_header X-Rivet-Environment;
+proxy_hide_header X-Rivet-Release-Id;
+proxy_hide_header X-Powered-By;
+proxy_hide_header X-Middleware-Rewrite;
+proxy_set_header Connection "";
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-For $remote_addr;
+proxy_set_header X-Forwarded-Host $host;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Real-IP $remote_addr;
+
+location = /api/v1/events {
+    proxy_pass http://127.0.0.1:4000;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 75s;
+    proxy_send_timeout 75s;
+    gzip off;
+}
+
+location ~ ^/api/v1/exports/(issues|projects)\.csv$ {
+    proxy_pass http://127.0.0.1:4000;
+    proxy_buffering off;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+}
+
+location /api/ {
+    proxy_pass http://127.0.0.1:4000;
+    proxy_read_timeout 60s;
+    proxy_send_timeout 60s;
+}
+
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_read_timeout 60s;
+    proxy_send_timeout 60s;
+}

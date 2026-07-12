@@ -1,0 +1,27 @@
+# 이 파일은 nginx.conf의 http 블록 안에서 한 번만 include한다.
+# 앱이 응답하지 못한 Nginx 자체 오류도 유효한 JSON을 남기도록 안전한 기본값을 둔다.
+map $uri $rivet_path_template {
+    default                                                                  "UNMATCHED_ROUTE";
+    "/"                                                                      "/";
+    ~^/_next(?:/|$)                                                          "/_next/:asset";
+    ~^/api/v1(?:/|$)                                                         "/api/v1/:route";
+    ~^/(?:ko/)?issues(?:/|$)                                                 "/issues/:issueRef";
+    ~^/(?:ko/)?teams(?:/|$)                                                  "/teams/:teamKey/:view";
+    ~^/(?:ko/)?projects(?:/|$)                                               "/projects/:view";
+    ~^/(?:ko/)?(?:forgot-password|inbox|invite|login|my-issues|onboarding|reset-password|settings|signup|verify-email)(?:/|$) "/:page";
+}
+
+map $upstream_http_x_rivet_environment $rivet_environment {
+    ""      "production";
+    default $upstream_http_x_rivet_environment;
+}
+
+map $upstream_http_x_rivet_release_id $rivet_release_id {
+    ""      "unknown";
+    default $upstream_http_x_rivet_release_id;
+}
+
+log_format rivet_json escape=json
+    '{"timestamp":"$time_iso8601","level":"info","environment":"$rivet_environment",'
+    '"releaseId":"$rivet_release_id","method":"$request_method","path":"$rivet_path_template",'
+    '"status":$status,"duration":$request_time}';

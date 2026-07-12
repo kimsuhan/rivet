@@ -1,0 +1,10 @@
+{
+  "extends": "./typescript/library.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["eslint/**/*.mjs", "eslint.config.mjs", "prettier.config.mjs"]
+}

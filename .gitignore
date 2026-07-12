@@ -3,3 +3,22 @@
 .env.*
 !.env.example
 !.env.*.example
+
+# Dependencies and package manager state
+node_modules/
+.pnpm-store/
+
+# Build and test output
+.turbo/
+.next/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Generated database client
+packages/database/src/generated/prisma/
+
+# Local file storage
+.local-storage/
