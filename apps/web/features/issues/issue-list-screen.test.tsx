@@ -173,7 +173,7 @@ describe('IssueListScreen', () => {
     );
     expect(screen.getByRole('heading', { level: 1, name: '내 이슈' })).toBeVisible();
     expect(screen.getByText('할당된 이슈가 없습니다')).toBeVisible();
-    expect(screen.getAllByRole('link', { name: '팀 작업 만들기' })[0]).toHaveAttribute(
+    expect(screen.getAllByRole('link', { name: '이슈 만들기' })[0]).toHaveAttribute(
       'href',
       '/my-issues?create=1',
     );

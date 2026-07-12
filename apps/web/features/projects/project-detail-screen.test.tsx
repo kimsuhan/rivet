@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, type ProjectResponseDto } from '@rivet/api-client';
+import { ApiError, type IssueSummaryResponseDto, type ProjectResponseDto } from '@rivet/api-client';
 
 import messages from '@/messages/ko.json';
 
@@ -188,5 +188,114 @@ describe('ProjectDetailScreen trash action', () => {
     expect(screen.getByText(messages.Projects.trash.conflictDescription)).toBeVisible();
     expect(mocks.projectRefetch).toHaveBeenCalledOnce();
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it('백엔드와 프론트가 병렬로 시작한 이슈에는 미선택 역할을 전달 예정으로 표시하지 않는다', () => {
+    const apiTeam = { archived: false, id: 'api-team-id', key: 'API', name: 'API 팀' };
+    const appTeam = { archived: false, id: 'app-team-id', key: 'APP', name: '앱 팀' };
+    const webTeam = { archived: false, id: 'web-team-id', key: 'WEB', name: '웹 팀' };
+    const projectWithRoles: ProjectResponseDto = {
+      ...project,
+      roleTeams: [
+        { role: 'BACKEND', team: apiTeam },
+        { role: 'WEB_FRONTEND', team: webTeam },
+        { role: 'APP_FRONTEND', team: appTeam },
+      ],
+      status: 'IN_PROGRESS',
+    };
+    const projectSummary = {
+      archived: false,
+      id: project.id,
+      name: project.name,
+      status: 'IN_PROGRESS' as const,
+    };
+    const parentIssue = { id: 'feature-id', identifier: 'F-1', title: '병렬 이슈' };
+    const common = {
+      assignee: null,
+      blocked: false,
+      createdAt: '2026-07-12T00:00:00.000Z',
+      labels: [],
+      priority: 'NONE' as const,
+      project: projectSummary,
+      updatedAt: '2026-07-12T00:00:00.000Z',
+      version: 1,
+    };
+    const feature = {
+      ...common,
+      id: parentIssue.id,
+      identifier: parentIssue.identifier,
+      parentIssue: null,
+      progress: { completed: 0, percentage: 0, total: 2 },
+      projectRole: null,
+      status: { category: 'BACKLOG', featureStatus: 'IN_PROGRESS', workflowState: null },
+      team: null,
+      title: parentIssue.title,
+      type: 'FEATURE',
+    } satisfies IssueSummaryResponseDto;
+    const task = (
+      id: string,
+      identifier: string,
+      projectRole: 'APP_FRONTEND' | 'BACKEND',
+      team: typeof apiTeam,
+    ) =>
+      ({
+        ...common,
+        id,
+        identifier,
+        parentIssue,
+        progress: null,
+        projectRole,
+        status: {
+          category: 'UNSTARTED',
+          featureStatus: null,
+          workflowState: {
+            category: 'UNSTARTED',
+            id: `${id}-state`,
+            isDefault: true,
+            name: '할 일',
+            position: 0,
+            version: 1,
+          },
+        },
+        team,
+        title: `${identifier} 작업`,
+        type: 'TEAM_TASK',
+      }) satisfies IssueSummaryResponseDto;
+
+    mocks.projectHook.mockReturnValue({
+      data: projectWithRoles,
+      error: null,
+      isError: false,
+      isPending: false,
+      refetch: mocks.projectRefetch,
+    });
+    mocks.issuePagesHook.mockReturnValue({
+      data: {
+        pageParams: [undefined],
+        pages: [
+          {
+            items: [
+              feature,
+              task('backend-task-id', 'API-1', 'BACKEND', apiTeam),
+              task('app-task-id', 'APP-1', 'APP_FRONTEND', appTeam),
+            ],
+            nextCursor: null,
+          },
+        ],
+      },
+      error: null,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isError: false,
+      isFetchNextPageError: false,
+      isFetchingNextPage: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+
+    renderScreen();
+
+    expect(screen.getByText('현재 작업 · 백엔드 · 앱 프론트')).toBeVisible();
+    expect(screen.queryByText(messages.Projects.issues.expectedStage)).not.toBeInTheDocument();
   });
 });

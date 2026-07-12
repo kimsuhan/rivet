@@ -5,6 +5,7 @@ import { type BrowserContext, expect, type Page, type Route, test } from '@playw
 import type {
   AuthenticatedSessionDto,
   CommentResourceResponseDto,
+  CreateIssueResponseDto,
   IssueDetailResponseDto,
   NotificationReadAllResponseDto,
   NotificationUnreadCountResponseDto,
@@ -175,17 +176,19 @@ test('E06 알림 앵커와 E08 다중 브라우저 SSE 수렴을 검증한다', 
     const defaultState = states.items.find((state) => state.isDefault);
     if (!defaultState) throw new Error('M6 E2E 기본 상태를 찾지 못했습니다.');
 
-    const issue = await apiRequest<IssueDetailResponseDto>(page, '/issues', {
-      body: {
-        assigneeMembershipId: recipientSession.membership.id,
-        priority: 'HIGH',
-        teamId: team.id,
-        title: initialTitle,
-        type: 'TEAM_TASK',
-        workflowStateId: defaultState.id,
-      },
-      method: 'POST',
-    });
+    const issue = (
+      await apiRequest<CreateIssueResponseDto>(page, '/issues', {
+        body: {
+          assigneeMembershipId: recipientSession.membership.id,
+          priority: 'HIGH',
+          teamId: team.id,
+          title: initialTitle,
+          type: 'TEAM_TASK',
+          workflowStateId: defaultState.id,
+        },
+        method: 'POST',
+      })
+    ).issue;
 
     await expect(recipientPage.getByRole('link', { exact: true, name: initialTitle })).toBeVisible({
       timeout: 20_000,
@@ -220,7 +223,11 @@ test('E06 알림 앵커와 E08 다중 브라우저 SSE 수렴을 검증한다', 
     await expect(mentionNotification).toContainText('멘션');
     await mentionNotification.click();
     await expect(recipientPage).toHaveURL(
-      new RegExp(`/issues/${issue.identifier}#comment-${comment.id}$`),
+      new RegExp(`/issues/${issue.identifier}\\?tab=work#comment-${comment.id}$`),
+    );
+    await expect(recipientPage.getByRole('tab', { name: '업무' })).toHaveAttribute(
+      'aria-selected',
+      'true',
     );
     await expect(recipientPage.locator(`#comment-${comment.id}`)).toBeVisible();
     await expect.poll(() => unreadCount(recipientPage), { timeout: 10_000 }).toBe(0);

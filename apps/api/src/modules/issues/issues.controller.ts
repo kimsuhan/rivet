@@ -40,10 +40,16 @@ import {
   CreateIssueDto,
   CreateTeamTaskIssueDto,
   IssueListQueryDto,
+  StartIssueDto,
   TrashIssueDto,
   UpdateIssueDto,
 } from './dto/issue-request.dto';
-import { IssueDetailResponseDto, IssueListResponseDto } from './dto/issue-response.dto';
+import {
+  CreateIssueResponseDto,
+  IssueDetailResponseDto,
+  IssueListResponseDto,
+  UpdateIssueResponseDto,
+} from './dto/issue-response.dto';
 import { IssuesService } from './issues.service';
 
 function workspaceContext(authentication: AuthenticatedRequestContext): {
@@ -119,7 +125,7 @@ export class IssuesController {
       ],
     },
   })
-  @ApiCreatedResponse({ type: IssueDetailResponseDto })
+  @ApiCreatedResponse({ type: CreateIssueResponseDto })
   @ApiConflictResponse({ description: 'FILE_ALREADY_LINKED', type: ApiErrorResponseDto })
   @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
   @ApiForbiddenResponse({
@@ -129,7 +135,7 @@ export class IssuesController {
   @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
   @ApiUnprocessableEntityResponse({
     description:
-      'VALIDATION_ERROR, ISSUE_TYPE_FIELD_INVALID, ASSIGNEE_NOT_TEAM_MEMBER, PROJECT_ROLE_TEAM_MISMATCH, PARENT_ISSUE_PROJECT_MISMATCH, MARKDOWN_INVALID, MENTION_INVALID 또는 FILE_REFERENCE_INVALID',
+      'VALIDATION_ERROR, ISSUE_TYPE_FIELD_INVALID, INITIAL_ROLE_NOT_AVAILABLE, ASSIGNEE_NOT_TEAM_MEMBER, PROJECT_ROLE_TEAM_MISMATCH, PARENT_ISSUE_PROJECT_MISMATCH, MARKDOWN_INVALID, MENTION_INVALID 또는 FILE_REFERENCE_INVALID',
     type: ApiErrorResponseDto,
   })
   @ApiUnsupportedMediaTypeResponse({
@@ -140,8 +146,32 @@ export class IssuesController {
   create(
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Body() dto: CreateIssueDto,
-  ): Promise<IssueDetailResponseDto> {
+  ): Promise<CreateIssueResponseDto> {
     return this.issues.create(workspaceContext(authentication), dto);
+  }
+
+  @Post(':issueId/start')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '기존 기능 이슈의 최초 팀 작업 시작' })
+  @ApiParam({ format: 'uuid', name: 'issueId' })
+  @ApiBody({ type: StartIssueDto })
+  @ApiOkResponse({ type: CreateIssueResponseDto })
+  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({
+    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
+    type: ApiErrorResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  @ApiUnprocessableEntityResponse({
+    description: 'VALIDATION_ERROR, INITIAL_ROLE_REQUIRED 또는 INITIAL_ROLE_NOT_AVAILABLE',
+    type: ApiErrorResponseDto,
+  })
+  start(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
+    @Body() dto: StartIssueDto,
+  ): Promise<CreateIssueResponseDto> {
+    return this.issues.start(workspaceContext(authentication), issueId, dto);
   }
 
   @Get(':issueRef')
@@ -164,7 +194,7 @@ export class IssuesController {
   @Patch(':issueId')
   @ApiOperation({ summary: '이슈 제목과 유형별 속성 수정' })
   @ApiParam({ format: 'uuid', name: 'issueId' })
-  @ApiOkResponse({ type: IssueDetailResponseDto })
+  @ApiOkResponse({ type: UpdateIssueResponseDto })
   @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
   @ApiForbiddenResponse({
     description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
@@ -172,13 +202,13 @@ export class IssuesController {
   })
   @ApiConflictResponse({
     description:
-      'VERSION_CONFLICT, ISSUE_TEAM_IMMUTABLE, ISSUE_PROJECT_IMMUTABLE, HANDOFF_REQUIRED, INITIAL_HANDOFF_EXISTS 또는 FILE_ALREADY_LINKED',
+      'VERSION_CONFLICT, ISSUE_VERSION_CONFLICT, ISSUE_TEAM_IMMUTABLE, ISSUE_PROJECT_IMMUTABLE, HANDOFF_REQUIRED, INITIAL_HANDOFF_EXISTS, DOWNSTREAM_TASK_SCOPE_CONFLICT, DOWNSTREAM_TASK_ALREADY_CLOSED 또는 FILE_ALREADY_LINKED',
     type: ApiErrorResponseDto,
   })
   @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
   @ApiUnprocessableEntityResponse({
     description:
-      'VALIDATION_ERROR, ISSUE_TYPE_FIELD_INVALID, ASSIGNEE_NOT_TEAM_MEMBER, PROJECT_ROLE_TEAM_MISMATCH, PARENT_ISSUE_PROJECT_MISMATCH, HANDOFF_NOT_ALLOWED, HANDOFF_REQUIRES_COMPLETION, MARKDOWN_INVALID, MENTION_INVALID 또는 FILE_REFERENCE_INVALID',
+      'VALIDATION_ERROR, ISSUE_TYPE_FIELD_INVALID, ASSIGNEE_NOT_TEAM_MEMBER, PROJECT_ROLE_TEAM_MISMATCH, PARENT_ISSUE_PROJECT_MISMATCH, HANDOFF_NOT_ALLOWED, HANDOFF_REQUIRES_COMPLETION, HANDOFF_DESTINATION_REQUIRED, PROJECT_FRONTEND_ROLE_REQUIRED, MARKDOWN_INVALID, MENTION_INVALID 또는 FILE_REFERENCE_INVALID',
     type: ApiErrorResponseDto,
   })
   @ApiUnsupportedMediaTypeResponse({
@@ -190,7 +220,7 @@ export class IssuesController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
     @Body() dto: UpdateIssueDto,
-  ): Promise<IssueDetailResponseDto> {
+  ): Promise<UpdateIssueResponseDto> {
     return this.issues.update(workspaceContext(authentication), issueId, dto);
   }
 

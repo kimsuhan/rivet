@@ -4,6 +4,7 @@ import { type Download, expect, type Page, test } from '@playwright/test';
 
 import type {
   AuthenticatedSessionDto,
+  CreateIssueResponseDto,
   IssueDetailResponseDto,
   TeamListResponseDto,
   WorkflowStateListResponseDto,
@@ -130,18 +131,20 @@ test('M7 관리자 삭제·복구와 CSV 내보내기 안전 경계를 검증한
     const defaultState = states.items.find((state) => state.isDefault);
     if (!defaultState) throw new Error('M7 E2E 기본 상태를 찾지 못했습니다.');
 
-    const issue = await apiRequest<IssueDetailResponseDto>(page, '/issues', {
-      body: {
-        assigneeMembershipId: session.membership.id,
-        descriptionMarkdown: `M7 데이터 안전 검증 ${runId}`,
-        priority: 'MEDIUM',
-        teamId: team.id,
-        title,
-        type: 'TEAM_TASK',
-        workflowStateId: defaultState.id,
-      },
-      method: 'POST',
-    });
+    const issue = (
+      await apiRequest<CreateIssueResponseDto>(page, '/issues', {
+        body: {
+          assigneeMembershipId: session.membership.id,
+          descriptionMarkdown: `M7 데이터 안전 검증 ${runId}`,
+          priority: 'MEDIUM',
+          teamId: team.id,
+          title,
+          type: 'TEAM_TASK',
+          workflowStateId: defaultState.id,
+        },
+        method: 'POST',
+      })
+    ).issue;
 
     await page.goto(`/issues/${issue.identifier}`);
     await expect(page.getByLabel('이슈 제목')).toHaveValue(title);

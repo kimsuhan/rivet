@@ -5,6 +5,7 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
+import type { InlineHandoffDtoDestinationRolesItem } from './inlineHandoffDtoDestinationRolesItem';
 
 export interface InlineHandoffDto {
   /**
@@ -12,4 +13,9 @@ export interface InlineHandoffDto {
      * @maxLength 50000
      */
   bodyMarkdown: string;
+  /**
+     * 최초 전달로 생성·재사용할 프론트엔드 프로젝트 역할입니다. 프로젝트에 설정된 WEB_FRONTEND, APP_FRONTEND만 허용됩니다.
+     * @maxItems 2
+     */
+  destinationRoles?: InlineHandoffDtoDestinationRolesItem[];
 }

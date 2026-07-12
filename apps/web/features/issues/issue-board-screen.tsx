@@ -488,6 +488,7 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
   const createSearchParams = new URLSearchParams(searchParams.toString());
   createSearchParams.delete('cursor');
   createSearchParams.set('create', '1');
+  createSearchParams.set('type', 'TEAM_TASK');
   const createHref = `${pathname}?${createSearchParams.toString()}`;
   const cardLabels: IssueBoardCardLabels = {
     assignee: t('columns.assignee'),

@@ -107,6 +107,8 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
   const currentQueryKey = getIssuePagesQueryKey(listParams);
   const createSearchParams = new URLSearchParams(searchParams.toString());
   createSearchParams.set('create', '1');
+  if (mode === 'team') createSearchParams.set('type', 'TEAM_TASK');
+  else createSearchParams.delete('type');
   const createHref = `${pathname}?${createSearchParams.toString()}`;
   const rowLabels: IssueRowLabels = {
     assignee: t('columns.assignee'),
@@ -229,7 +231,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
         ) : null}
         <Link href={createHref} className={buttonVariants({ size: 'sm' })}>
           <Plus aria-hidden="true" data-icon="inline-start" />
-          {t('create')}
+          {mode === 'my' ? t('createIssue') : t('create')}
         </Link>
       </div>
 
@@ -395,7 +397,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           ) : (
             <Link href={createHref} className={buttonVariants({ variant: 'outline' })}>
               <Plus aria-hidden="true" data-icon="inline-start" />
-              {t('create')}
+              {mode === 'my' ? t('createIssue') : t('create')}
             </Link>
           )}
         </ContentEmpty>

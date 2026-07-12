@@ -6,6 +6,7 @@ import { Test } from '@nestjs/testing';
 import { LoggerModule } from 'nestjs-pino';
 
 import {
+  FeatureIssueStatus,
   HandoffKind,
   IssueType,
   MembershipRole,
@@ -35,6 +36,8 @@ type WorkspaceFixture = {
   foreignRecipientMembershipId: string;
   inactiveRecipientMembershipId: string;
   issueId: string;
+  parentIssueId: string | null;
+  projectId: string;
   workspaceId: string;
 };
 
@@ -147,7 +150,9 @@ describe('API handoff notification integration', () => {
     return id;
   }
 
-  async function createWorkspaceFixture(): Promise<WorkspaceFixture> {
+  async function createWorkspaceFixture({
+    withParent = false,
+  }: { withParent?: boolean } = {}): Promise<WorkspaceFixture> {
     const actorUserId = await createUser('M4 전달 작성자');
     const activeRecipientUserId = await createUser('M4 활성 수신자');
     const inactiveRecipientUserId = await createUser('M4 비활성 수신자');
@@ -162,6 +167,7 @@ describe('API handoff notification integration', () => {
     const stateId = randomUUID();
     const projectId = randomUUID();
     const issueId = randomUUID();
+    const parentIssueId = withParent ? randomUUID() : null;
     workspaceIds.push(workspaceId, foreignWorkspaceId);
 
     await database.client.$transaction(async (transaction) => {
@@ -240,11 +246,27 @@ describe('API handoff notification integration', () => {
       await transaction.projectRoleTeam.create({
         data: { projectId, role: ProjectRole.BACKEND, teamId, workspaceId },
       });
+      if (parentIssueId) {
+        await transaction.issue.create({
+          data: {
+            createdByMembershipId: actorMembershipId,
+            featureStatus: FeatureIssueStatus.TODO,
+            id: parentIssueId,
+            identifier: 'F-1',
+            projectId,
+            sequenceNumber: 1,
+            title: '상위 전달 이슈',
+            type: IssueType.FEATURE,
+            workspaceId,
+          },
+        });
+      }
       await transaction.issue.create({
         data: {
           createdByMembershipId: actorMembershipId,
           id: issueId,
           identifier: 'API-1',
+          parentIssueId,
           projectId,
           projectRole: ProjectRole.BACKEND,
           sequenceNumber: 1,
@@ -263,8 +285,78 @@ describe('API handoff notification integration', () => {
       foreignRecipientMembershipId,
       inactiveRecipientMembershipId,
       issueId,
+      parentIssueId,
+      projectId,
       workspaceId,
     };
+  }
+
+  async function createDownstreamTask(
+    fixture: WorkspaceFixture,
+    role: 'APP_FRONTEND' | 'WEB_FRONTEND',
+    key: 'APP' | 'WEB',
+    identifier: string,
+  ): Promise<string> {
+    const issueId = randomUUID();
+    const stateId = randomUUID();
+    const teamId = randomUUID();
+    const teamName = key === 'WEB' ? '웹 팀' : '앱 팀';
+    await database.client.$transaction(async (transaction) => {
+      await transaction.team.create({
+        data: {
+          id: teamId,
+          key,
+          name: teamName,
+          normalizedName: teamName,
+          workspaceId: fixture.workspaceId,
+        },
+      });
+      await transaction.workflowState.create({
+        data: {
+          category: StateCategory.UNSTARTED,
+          id: stateId,
+          isDefault: true,
+          name: '할 일',
+          normalizedName: '할 일',
+          position: 0,
+          teamId,
+          workspaceId: fixture.workspaceId,
+        },
+      });
+      await transaction.projectRoleTeam.create({
+        data: {
+          projectId: fixture.projectId,
+          role,
+          teamId,
+          workspaceId: fixture.workspaceId,
+        },
+      });
+      await transaction.teamMember.create({
+        data: {
+          membershipId: fixture.activeRecipientMembershipId,
+          teamId,
+          workspaceId: fixture.workspaceId,
+        },
+      });
+      await transaction.issue.create({
+        data: {
+          assigneeMembershipId: fixture.activeRecipientMembershipId,
+          createdByMembershipId: fixture.actorMembershipId,
+          id: issueId,
+          identifier,
+          parentIssueId: fixture.parentIssueId,
+          projectId: fixture.projectId,
+          projectRole: role,
+          sequenceNumber: 1,
+          teamId,
+          title: `${key} 전달 작업`,
+          type: IssueType.TEAM_TASK,
+          workflowStateId: stateId,
+          workspaceId: fixture.workspaceId,
+        },
+      });
+    });
+    return issueId;
   }
 
   async function createHandoffEvent(
@@ -272,6 +364,7 @@ describe('API handoff notification integration', () => {
     kind: 'INITIAL' | 'FOLLOW_UP',
     sequenceNumber: number,
     issueId = fixture.issueId,
+    downstreamIssueIds: string[] = [],
   ): Promise<{ eventId: string; handoffId: string; payload: ApiHandoffCreatedOutboxPayload }> {
     const handoffId = randomUUID();
     const eventId = randomUUID();
@@ -293,7 +386,7 @@ describe('API handoff notification integration', () => {
         fixture.inactiveRecipientMembershipId,
         fixture.foreignRecipientMembershipId,
       ],
-      downstreamIssueIds: [],
+      downstreamIssueIds,
       handoffId,
       issueId,
       kind,
@@ -325,20 +418,24 @@ describe('API handoff notification integration', () => {
     return events;
   }
 
-  it('stores kind-specific notifications once and filters ineligible candidates', async () => {
+  it('filters ineligible recipients, uses the source fallback, and stays idempotent', async () => {
     const fixture = await createWorkspaceFixture();
     const initial = await createHandoffEvent(fixture, 'INITIAL', 1);
     const followUp = await createHandoffEvent(fixture, 'FOLLOW_UP', 2);
     const workerId = 'm4-handoff-success-worker';
     const events = await claimEvents([initial.eventId, followUp.eventId], workerId);
 
+    for (const created of [initial, followUp]) {
+      expect(created.payload.candidateRecipientMembershipIds).toHaveLength(
+        new Set(created.payload.candidateRecipientMembershipIds).size,
+      );
+    }
+
     await processor.processBatch(events, workerId);
 
-    const notifications = await database.client.notification.findMany({
-      where: { workspaceId: fixture.workspaceId },
-    });
-    expect(notifications).toHaveLength(2);
-    expect(notifications).toEqual(
+    await expect(
+      database.client.notification.findMany({ where: { workspaceId: fixture.workspaceId } }),
+    ).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           actorMembershipId: fixture.actorMembershipId,
@@ -358,15 +455,111 @@ describe('API handoff notification integration', () => {
         }),
       ]),
     );
+    await expect(
+      database.client.notification.count({
+        where: {
+          recipientMembershipId: {
+            in: [
+              fixture.actorMembershipId,
+              fixture.inactiveRecipientMembershipId,
+              fixture.foreignRecipientMembershipId,
+            ],
+          },
+        },
+      }),
+    ).resolves.toBe(0);
 
     for (const event of events) {
       const created = event.id === initial.eventId ? initial : followUp;
       await handler.handle(event, created.payload);
+      await handler.handle(event, created.payload);
+      await expect(
+        database.client.notification.count({
+          where: {
+            eventId: event.id,
+            recipientMembershipId: fixture.activeRecipientMembershipId,
+          },
+        }),
+      ).resolves.toBe(1);
     }
 
     await expect(
       database.client.notification.count({ where: { workspaceId: fixture.workspaceId } }),
     ).resolves.toBe(2);
+  });
+
+  it('uses the source parent when no downstream task is connected to the recipient', async () => {
+    const fixture = await createWorkspaceFixture({ withParent: true });
+    const created = await createHandoffEvent(fixture, 'INITIAL', 1);
+    const [event] = await claimEvents([created.eventId], 'm4-handoff-parent-worker');
+
+    if (!event || !fixture.parentIssueId) {
+      throw new Error('테스트 상위 이슈 또는 작업 전달 이벤트가 없습니다.');
+    }
+
+    await processor.processBatch([event], 'm4-handoff-parent-worker');
+
+    await expect(
+      database.client.notification.findFirstOrThrow({
+        where: {
+          eventId: event.id,
+          recipientMembershipId: fixture.activeRecipientMembershipId,
+        },
+      }),
+    ).resolves.toMatchObject({
+      handoffId: created.handoffId,
+      issueId: fixture.parentIssueId,
+    });
+  });
+
+  it('chooses a stable downstream target before parent/source fallbacks and stays idempotent', async () => {
+    const fixture = await createWorkspaceFixture({ withParent: true });
+    const appIssueId = await createDownstreamTask(
+      fixture,
+      ProjectRole.APP_FRONTEND,
+      'APP',
+      'APP-1',
+    );
+    const webIssueId = await createDownstreamTask(
+      fixture,
+      ProjectRole.WEB_FRONTEND,
+      'WEB',
+      'WEB-1',
+    );
+    const created = await createHandoffEvent(fixture, 'INITIAL', 1, fixture.issueId, [
+      appIssueId,
+      webIssueId,
+    ]);
+    const workerId = 'm4-handoff-downstream-worker';
+    const [event] = await claimEvents([created.eventId], workerId);
+
+    if (!event) {
+      throw new Error('테스트 작업 전달 이벤트가 없습니다.');
+    }
+
+    await processor.processBatch([event], workerId);
+    await handler.handle(event, created.payload);
+    await handler.handle(event, created.payload);
+
+    await expect(
+      database.client.notification.findFirstOrThrow({
+        where: {
+          eventId: event.id,
+          recipientMembershipId: fixture.activeRecipientMembershipId,
+        },
+      }),
+    ).resolves.toMatchObject({
+      handoffId: created.handoffId,
+      issueId: webIssueId,
+    });
+    await expect(
+      database.client.notification.count({
+        where: {
+          eventId: event.id,
+          recipientMembershipId: fixture.activeRecipientMembershipId,
+        },
+      }),
+    ).resolves.toBe(1);
   });
 
   it('permanently fails when the payload issue does not match the handoff source', async () => {

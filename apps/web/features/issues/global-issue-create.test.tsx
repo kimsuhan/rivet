@@ -7,10 +7,14 @@ import { GlobalIssueCreate, type IssueCreateSeed } from './global-issue-create';
 
 type CreateCallbacks = {
   onError?: (error: { body: { code: string; fieldErrors: Record<string, string[]> } }) => void;
-  onSuccess?: (issue: { id: string; identifier: string }) => Promise<void> | void;
+  onSuccess?: (result: {
+    createdTeamTasks: unknown[];
+    issue: { id: string; identifier: string; project: { id: string } | null };
+  }) => Promise<void> | void;
 };
 
 const ids = vi.hoisted(() => ({
+  appTeam: '00000000-0000-4000-8000-000000000003',
   apiMember: '00000000-0000-4000-8000-000000000022',
   apiState: '00000000-0000-4000-8000-000000000012',
   apiTeam: '00000000-0000-4000-8000-000000000002',
@@ -38,6 +42,8 @@ vi.mock('@rivet/api-client', () => ({
   filesControllerUpload: mocks.uploadFile,
   getIssuesControllerGetQueryKey: (issueRef: string) => [`/api/v1/issues/${issueRef}`],
   getIssuesControllerListQueryKey: () => ['/api/v1/issues'],
+  getProjectsControllerGetQueryKey: (projectId: string) => [`/api/v1/projects/${projectId}`],
+  getProjectsControllerListQueryKey: () => ['/api/v1/projects'],
   useIssuesControllerCreate: () => ({
     error: null,
     isError: false,
@@ -99,7 +105,15 @@ vi.mock('@rivet/api-client', () => ({
           roleTeams: [
             {
               role: 'BACKEND',
+              team: { archived: false, id: ids.apiTeam, key: 'API', name: 'API 팀' },
+            },
+            {
+              role: 'WEB_FRONTEND',
               team: { archived: false, id: ids.webTeam, key: 'WEB', name: '웹 팀' },
+            },
+            {
+              role: 'APP_FRONTEND',
+              team: { archived: false, id: ids.appTeam, key: 'APP', name: '앱 팀' },
             },
           ],
           status: 'IN_PROGRESS',
@@ -191,6 +205,9 @@ const labels = {
     UNSORTED: '분류 안 됨',
   },
   featureType: '기능 이슈',
+  initialRoleSelected: '선택됨',
+  initialRolesDescription: '아직 작업 범위가 정해지지 않았다면 선택하지 않아도 됩니다.',
+  initialRolesLabel: '처음 작업할 팀 (선택)',
   keepEditing: '계속 작성',
   labelsLabel: '라벨',
   labelsUnavailable: '라벨 오류',
@@ -234,6 +251,11 @@ const labels = {
   teamLockedByRole: '역할의 담당 팀으로 고정됩니다.',
   teamPlaceholder: '팀 선택',
   teamRequired: '팀을 선택해 주세요.',
+  teamTaskClose: '팀 작업 만들기 닫기',
+  teamTaskDescription: '팀 작업 속성을 입력합니다.',
+  teamTaskSubmit: '팀 작업 만들기',
+  teamTaskSubmitting: '팀 작업을 만드는 중입니다.',
+  teamTaskTitle: '팀 작업 만들기',
   teamTaskType: '팀 작업',
   title: '이슈 만들기',
   titleLabel: '제목',
@@ -289,10 +311,99 @@ describe('GlobalIssueCreate', () => {
     vi.unstubAllGlobals();
   });
 
+  it('기본 생성에서는 유형 선택기 없이 FEATURE와 프로젝트로 생성한다', async () => {
+    const user = userEvent.setup();
+    renderCreate({ seed: { projectId: ids.project } });
+
+    expect(screen.queryByLabelText(labels.typeLabel)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(labels.teamLabel)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(labels.assigneeLabel)).not.toBeInTheDocument();
+    await user.type(screen.getByRole('textbox', { name: labels.titleLabel }), '결제 이슈');
+    await user.click(screen.getByRole('button', { name: labels.submit }));
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        data: {
+          attachmentFileIds: [],
+          descriptionMarkdown: null,
+          featureStatus: 'UNSORTED',
+          initialRoles: [],
+          labelIds: [],
+          priority: 'NONE',
+          projectId: ids.project,
+          title: '결제 이슈',
+          type: 'FEATURE',
+        },
+      },
+      expect.any(Object),
+    );
+  });
+
+  it('프로젝트 역할을 키보드로 복수 선택하고 선택 상태와 함께 생성 요청에 보낸다', async () => {
+    const user = userEvent.setup();
+    renderCreate({ seed: { projectId: ids.project } });
+
+    const backend = screen.getByRole('checkbox', { name: /백엔드/ });
+    const web = screen.getByRole('checkbox', { name: /웹 프론트/ });
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(0), 0),
+    );
+    backend.focus();
+    await user.keyboard(' ');
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: /백엔드/ })).toBeChecked());
+    await user.click(web);
+
+    expect(screen.getByRole('checkbox', { name: /백엔드/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /웹 프론트/ })).toBeChecked();
+    expect(screen.getAllByText(labels.initialRoleSelected)).toHaveLength(2);
+
+    await user.type(screen.getByRole('textbox', { name: labels.titleLabel }), '병렬 작업 이슈');
+    await user.click(screen.getByRole('button', { name: labels.submit }));
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        data: expect.objectContaining({
+          initialRoles: ['BACKEND', 'WEB_FRONTEND'],
+          projectId: ids.project,
+          type: 'FEATURE',
+        }),
+      },
+      expect.any(Object),
+    );
+  });
+
+  it('프로젝트 역할 변경 오류 뒤 선택지를 갱신하고 입력·선택·포커스를 유지한다', async () => {
+    const user = userEvent.setup();
+    renderCreate({ seed: { projectId: ids.project } });
+    const title = screen.getByRole('textbox', { name: labels.titleLabel });
+    const backend = screen.getByRole('checkbox', { name: /백엔드/ });
+
+    await user.type(title, '입력 유지 이슈');
+    await user.click(backend);
+    await user.click(screen.getByRole('button', { name: labels.submit }));
+
+    act(() => {
+      mocks.mutate.mock.calls[0]?.[1]?.onError?.({
+        body: {
+          code: 'INITIAL_ROLE_NOT_AVAILABLE',
+          fieldErrors: {},
+        },
+      });
+    });
+
+    expect(await screen.findByText('initialRolesInvalid')).toBeVisible();
+    expect(title).toHaveValue('입력 유지 이슈');
+    expect(screen.getByRole('checkbox', { name: /백엔드/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /백엔드/ })).toHaveFocus();
+    expect(mocks.refetch).toHaveBeenCalledOnce();
+  });
+
   it('현재 팀 경로를 마지막 팀보다 우선하고 기본 상태로 단축키 제출한다', async () => {
     window.localStorage.setItem('rivet:last-team-key:v1', 'WEB');
     const user = userEvent.setup();
-    renderCreate({ currentTeamKey: 'API' });
+    renderCreate({ currentTeamKey: 'API', seed: { type: 'TEAM_TASK' } });
+
+    expect(screen.getByRole('heading', { name: labels.teamTaskTitle })).toBeVisible();
 
     const title = screen.getByRole('textbox', { name: labels.titleLabel });
     await waitFor(() =>
@@ -322,7 +433,7 @@ describe('GlobalIssueCreate', () => {
 
   it('경로 팀이 유효하지 않으면 마지막 팀을 기본값으로 사용한다', async () => {
     window.localStorage.setItem('rivet:last-team-key:v1', 'WEB');
-    renderCreate({ currentTeamKey: 'UNKNOWN' });
+    renderCreate({ currentTeamKey: 'UNKNOWN', seed: { type: 'TEAM_TASK' } });
 
     await waitFor(() => expect(screen.getByLabelText(labels.teamLabel)).toHaveTextContent('웹 팀'));
     expect(screen.getByLabelText(labels.stateLabel)).toHaveTextContent('할 일');
@@ -330,14 +441,16 @@ describe('GlobalIssueCreate', () => {
 
   it('팀을 바꾸면 기본 상태와 팀 담당자만 초기화하고 라벨은 유지한다', async () => {
     const user = userEvent.setup();
-    renderCreate({ currentTeamKey: 'WEB' });
+    renderCreate({ currentTeamKey: 'WEB', seed: { type: 'TEAM_TASK' } });
     await waitFor(() =>
       expect(screen.getByLabelText(labels.stateLabel)).toHaveTextContent('할 일'),
     );
 
     screen.getByLabelText(labels.assigneeLabel).focus();
     await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
-    expect(screen.getByLabelText(labels.assigneeLabel)).toHaveTextContent('웹 담당자');
+    await waitFor(() =>
+      expect(screen.getByLabelText(labels.assigneeLabel)).toHaveTextContent('웹 담당자'),
+    );
     await user.click(screen.getByRole('checkbox', { name: '버그' }));
     screen.getByLabelText(labels.teamLabel).focus();
     await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
@@ -350,13 +463,13 @@ describe('GlobalIssueCreate', () => {
 
   it('서버 필드 오류를 순서대로 연결하고 입력한 제목을 유지한다', async () => {
     const user = userEvent.setup();
-    renderCreate({ currentTeamKey: 'WEB' });
+    renderCreate({ currentTeamKey: 'WEB', seed: { type: 'TEAM_TASK' } });
     const title = screen.getByRole('textbox', { name: labels.titleLabel });
     await waitFor(() =>
       expect(screen.getByLabelText(labels.stateLabel)).toHaveTextContent('할 일'),
     );
     await user.type(title, '입력 유지');
-    await user.click(screen.getByRole('button', { name: labels.submit }));
+    await user.click(screen.getByRole('button', { name: labels.teamTaskSubmit }));
 
     act(() => {
       mocks.mutate.mock.calls[0]?.[1]?.onError?.({
@@ -391,7 +504,7 @@ describe('GlobalIssueCreate', () => {
       expect(screen.getByLabelText(labels.parentLabel)).toHaveTextContent('F-1 · 결제 기능'),
     );
     await user.type(title, '부모 연결 유지');
-    await user.click(screen.getByRole('button', { name: labels.submit }));
+    await user.click(screen.getByRole('button', { name: labels.teamTaskSubmit }));
 
     act(() => {
       mocks.mutate.mock.calls[0]?.[1]?.onError?.({
@@ -411,10 +524,7 @@ describe('GlobalIssueCreate', () => {
 
   it('설명과 성공한 일반 첨부 ID를 생성 요청에 함께 보낸다', async () => {
     const user = userEvent.setup();
-    renderCreate({ currentTeamKey: 'WEB' });
-    await waitFor(() =>
-      expect(screen.getByLabelText(labels.stateLabel)).toHaveTextContent('할 일'),
-    );
+    renderCreate({ seed: { projectId: ids.project } });
 
     await user.type(screen.getByRole('textbox', { name: labels.titleLabel }), '협업 요청');
     await user.type(
@@ -448,10 +558,7 @@ describe('GlobalIssueCreate', () => {
         }),
     );
     const user = userEvent.setup();
-    renderCreate({ currentTeamKey: 'WEB' });
-    await waitFor(() =>
-      expect(screen.getByLabelText(labels.stateLabel)).toHaveTextContent('할 일'),
-    );
+    renderCreate({ seed: { projectId: ids.project } });
     await user.type(screen.getByRole('textbox', { name: labels.titleLabel }), '업로드 대기');
     await user.upload(
       screen.getByLabelText('chooseFiles'),
@@ -495,15 +602,19 @@ describe('GlobalIssueCreate', () => {
   it('성공하면 이슈 목록을 무효화하고 표시 ID 상세로 이동한다', async () => {
     const user = userEvent.setup();
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    renderCreate({ currentTeamKey: 'WEB' });
-    await waitFor(() =>
-      expect(screen.getByLabelText(labels.stateLabel)).toHaveTextContent('할 일'),
-    );
+    renderCreate({ seed: { projectId: ids.project } });
     await user.type(screen.getByRole('textbox', { name: labels.titleLabel }), '완료 이동');
     await user.click(screen.getByRole('button', { name: labels.submit }));
 
     await act(async () => {
-      await mocks.mutate.mock.calls[0]?.[1]?.onSuccess?.({ id: 'issue-id', identifier: 'WEB-42' });
+      await mocks.mutate.mock.calls[0]?.[1]?.onSuccess?.({
+        createdTeamTasks: [{ id: 'team-task-id' }],
+        issue: {
+          id: 'issue-id',
+          identifier: 'F-42',
+          project: { id: ids.project },
+        },
+      });
     });
 
     const predicate = invalidate.mock.calls[0]?.[0]?.predicate;
@@ -511,6 +622,6 @@ describe('GlobalIssueCreate', () => {
     expect(predicate?.({ queryKey: ['/api/v1/issues?teamId=team-id'] } as never)).toBe(true);
     expect(predicate?.({ queryKey: ['/api/v1/teams'] } as never)).toBe(false);
     expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
-    expect(mocks.push).toHaveBeenCalledWith('/issues/WEB-42');
+    expect(mocks.push).toHaveBeenCalledWith('/issues/F-42');
   });
 });

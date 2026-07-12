@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, Link2, RotateCcw, Trash2 } from 'lucide-react';
+import { ArrowRight, GitBranch, Link2, RotateCcw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -19,6 +19,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
   Select,
   SelectContent,
@@ -51,19 +52,21 @@ function relationError(error: unknown, t: (key: string) => string): string {
 }
 
 function RelationGroup({
-  empty,
   issue,
   label,
   onRemove,
   relations,
+  removeLabel,
   removingId,
+  resolvedLabel,
 }: {
-  empty: string;
   issue: TeamTaskIssue<IssueDetailResponseDto>;
   label: string;
   onRemove: (relation: IssueBlockRelationResponseDto) => void;
   relations: IssueBlockRelationResponseDto[];
+  removeLabel: string;
   removingId: string | null;
+  resolvedLabel: string;
 }) {
   return (
     <details open className="group rounded-xl border">
@@ -72,35 +75,31 @@ function RelationGroup({
         <Badge variant="secondary">{relations.length}</Badge>
       </summary>
       <div className="border-t px-3 py-2">
-        {relations.length === 0 ? (
-          <p className="text-muted-foreground py-2 text-sm">{empty}</p>
-        ) : (
-          <ul className="divide-y">
-            {relations.map((relation) => (
-              <li key={relation.id} className="flex min-w-0 items-center gap-2 py-2.5">
-                <ArrowRight aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
-                <Link
-                  href={`/issues/${encodeURIComponent(relation.issue.identifier)}`}
-                  className="min-w-0 flex-1 truncate text-sm font-medium underline-offset-4 hover:underline"
-                >
-                  {relation.issue.identifier} · {relation.issue.title}
-                </Link>
-                {relation.resolved ? <Badge variant="outline">해제됨</Badge> : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  className="hidden lg:inline-flex"
-                  aria-label={`${relation.issue.identifier} 관계 해제`}
-                  disabled={removingId !== null || issue.version < 1}
-                  onClick={() => onRemove(relation)}
-                >
-                  <Trash2 aria-hidden="true" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <ul className="divide-y">
+          {relations.map((relation) => (
+            <li key={relation.id} className="flex min-w-0 items-center gap-2 py-2.5">
+              <ArrowRight aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
+              <Link
+                href={`/issues/${encodeURIComponent(relation.issue.identifier)}`}
+                className="min-w-0 flex-1 truncate text-sm font-medium underline-offset-4 hover:underline"
+              >
+                {relation.issue.identifier} · {relation.issue.title}
+              </Link>
+              {relation.resolved ? <Badge variant="outline">{resolvedLabel}</Badge> : null}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="hidden lg:inline-flex"
+                aria-label={`${relation.issue.identifier} ${removeLabel}`}
+                disabled={removingId !== null || issue.version < 1}
+                onClick={() => onRemove(relation)}
+              >
+                <Trash2 aria-hidden="true" />
+              </Button>
+            </li>
+          ))}
+        </ul>
       </div>
     </details>
   );
@@ -118,9 +117,10 @@ export function IssueRelations({
   const [targetId, setTargetId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeReadError, setRemoveReadError] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
   const candidates = useIssuesControllerList(
     { limit: 100, type: 'TEAM_TASK' },
-    { query: { retry: false } },
+    { query: { enabled: showCreate, retry: false } },
   );
   const createRelation = useIssueBlockRelationsControllerCreate();
   const removeRelation = useIssueBlockRelationsControllerRemove();
@@ -132,6 +132,7 @@ export function IssueRelations({
   );
   const activeBlockers = issue.blockers.filter((relation) => !relation.resolved);
   const resolvedBlockers = issue.blockers.filter((relation) => relation.resolved);
+  const hasRelations = issue.blockers.length > 0 || issue.blocking.length > 0;
 
   async function refresh() {
     await Promise.all([
@@ -165,6 +166,7 @@ export function IssueRelations({
       {
         onSuccess: () => {
           setTargetId(null);
+          setShowCreate(false);
           void refresh();
         },
       },
@@ -200,14 +202,34 @@ export function IssueRelations({
   const error = createRelation.error ?? removeRelation.error;
 
   return (
-    <section aria-labelledby="issue-relations-title" className="mt-8">
-      <div className="flex items-center gap-2">
-        <Link2 aria-hidden="true" className="text-muted-foreground size-4" />
-        <h2 id="issue-relations-title" className="text-base font-semibold">
-          {t('relations.title')}
-        </h2>
-      </div>
-      <p className="text-muted-foreground mt-1 text-sm">{t('relations.description')}</p>
+    <section
+      aria-labelledby={
+        hasRelations || showCreate ? 'issue-relations-title' : 'issue-relations-empty-title'
+      }
+      className="mt-8"
+    >
+      {hasRelations || showCreate ? (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link2 aria-hidden="true" className="text-muted-foreground size-4" />
+            <h2 id="issue-relations-title" className="text-base font-semibold">
+              {t('relations.title')}
+            </h2>
+            {hasRelations && !showCreate ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="ml-auto hidden lg:inline-flex"
+                onClick={() => setShowCreate(true)}
+              >
+                {t('relations.add')}
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-muted-foreground mt-1 text-sm">{t('relations.description')}</p>
+        </>
+      ) : null}
 
       {(error || removeReadError) && (
         <Alert variant="destructive" className="mt-3">
@@ -222,92 +244,132 @@ export function IssueRelations({
         </Alert>
       )}
 
-      <div className="mt-4 hidden grid-cols-[10rem_minmax(0,1fr)_auto] gap-2 lg:grid">
-        <Select
-          items={[
-            { label: t('relations.blockedBy'), value: 'BLOCKED_BY' },
-            { label: t('relations.blocks'), value: 'BLOCKS' },
-          ]}
-          value={direction}
-          onValueChange={(value) => {
-            if (value === 'BLOCKED_BY' || value === 'BLOCKS') {
-              setDirection(value);
-              setTargetId(null);
-              createRelation.reset();
-            }
-          }}
-        >
-          <SelectTrigger aria-label={t('relations.direction')} className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            <SelectGroup>
-              <SelectItem value="BLOCKED_BY">{t('relations.blockedBy')}</SelectItem>
-              <SelectItem value="BLOCKS">{t('relations.blocks')}</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <Select
-          items={candidateItems.map((candidate) => ({
-            label: `${candidate.identifier} · ${candidate.title}`,
-            value: candidate.id,
-          }))}
-          value={targetId}
-          onValueChange={setTargetId}
-        >
-          <SelectTrigger aria-label={t('relations.target')} className="w-full">
-            <SelectValue
-              placeholder={candidates.isPending ? t('loadingOptions') : t('relations.target')}
-            />
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            <SelectGroup>
-              {candidateItems.map((candidate) => (
-                <SelectItem key={candidate.id} value={candidate.id}>
-                  {candidate.identifier} · {candidate.title}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!targetId || createRelation.isPending}
-          onClick={create}
-        >
-          {t('relations.add')}
-        </Button>
-      </div>
+      {showCreate ? (
+        <FieldGroup className="mt-4 hidden grid-cols-[12rem_minmax(0,1fr)_auto] items-end gap-2 lg:grid">
+          <Field>
+            <FieldLabel htmlFor="issue-order-direction">{t('relations.direction')}</FieldLabel>
+            <Select
+              items={[
+                { label: t('relations.before'), value: 'BLOCKED_BY' },
+                { label: t('relations.after'), value: 'BLOCKS' },
+              ]}
+              value={direction}
+              onValueChange={(value) => {
+                if (value === 'BLOCKED_BY' || value === 'BLOCKS') {
+                  setDirection(value);
+                  setTargetId(null);
+                  createRelation.reset();
+                }
+              }}
+            >
+              <SelectTrigger id="issue-order-direction" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  <SelectItem value="BLOCKED_BY">{t('relations.before')}</SelectItem>
+                  <SelectItem value="BLOCKS">{t('relations.after')}</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="issue-order-target">{t('relations.target')}</FieldLabel>
+            <Select
+              items={candidateItems.map((candidate) => ({
+                label: `${candidate.identifier} · ${candidate.title}`,
+                value: candidate.id,
+              }))}
+              value={targetId}
+              onValueChange={setTargetId}
+            >
+              <SelectTrigger id="issue-order-target" className="w-full">
+                <SelectValue
+                  placeholder={candidates.isPending ? t('loadingOptions') : t('relations.target')}
+                />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {candidateItems.map((candidate) => (
+                    <SelectItem key={candidate.id} value={candidate.id}>
+                      {candidate.identifier} · {candidate.title}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <div className="flex gap-2">
+            <Button type="button" variant="ghost" onClick={() => setShowCreate(false)}>
+              {t('cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!targetId || createRelation.isPending}
+              onClick={create}
+            >
+              {t('relations.add')}
+            </Button>
+          </div>
+        </FieldGroup>
+      ) : null}
 
-      <div className="mt-4 grid gap-3">
-        <RelationGroup
-          empty={t('relations.blockedByEmpty')}
-          issue={issue}
-          label={t('relations.blockedBy')}
-          onRemove={remove}
-          relations={activeBlockers}
-          removingId={removingId}
-        />
-        <RelationGroup
-          empty={t('relations.blocksEmpty')}
-          issue={issue}
-          label={t('relations.blocks')}
-          onRemove={remove}
-          relations={issue.blocking}
-          removingId={removingId}
-        />
-        {resolvedBlockers.length > 0 ? (
-          <RelationGroup
-            empty={t('relations.resolvedEmpty')}
-            issue={issue}
-            label={t('relations.resolved')}
-            onRemove={remove}
-            relations={resolvedBlockers}
-            removingId={removingId}
-          />
-        ) : null}
-      </div>
+      {!hasRelations && !showCreate ? (
+        <div className="bg-surface-1 rounded-xl border p-4">
+          <div className="flex items-center gap-2">
+            <GitBranch aria-hidden="true" className="text-muted-foreground size-4" />
+            <h2 id="issue-relations-empty-title" className="text-base font-semibold">
+              {t('relations.emptyTitle')}
+            </h2>
+          </div>
+          <p className="text-muted-foreground mt-2 text-sm">{t('relations.emptyDescription')}</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-4 hidden lg:inline-flex"
+            onClick={() => setShowCreate(true)}
+          >
+            {t('relations.add')}
+          </Button>
+        </div>
+      ) : hasRelations ? (
+        <div className="mt-4 grid gap-3">
+          {activeBlockers.length > 0 ? (
+            <RelationGroup
+              issue={issue}
+              label={t('relations.blockedBy')}
+              onRemove={remove}
+              relations={activeBlockers}
+              removeLabel={t('relations.remove')}
+              removingId={removingId}
+              resolvedLabel={t('relations.available')}
+            />
+          ) : null}
+          {issue.blocking.length > 0 ? (
+            <RelationGroup
+              issue={issue}
+              label={t('relations.blocks')}
+              onRemove={remove}
+              relations={issue.blocking}
+              removeLabel={t('relations.remove')}
+              removingId={removingId}
+              resolvedLabel={t('relations.available')}
+            />
+          ) : null}
+          {resolvedBlockers.length > 0 ? (
+            <RelationGroup
+              issue={issue}
+              label={t('relations.resolved')}
+              onRemove={remove}
+              relations={resolvedBlockers}
+              removeLabel={t('relations.remove')}
+              removingId={removingId}
+              resolvedLabel={t('relations.available')}
+            />
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }

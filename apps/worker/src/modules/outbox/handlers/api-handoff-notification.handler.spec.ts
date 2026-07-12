@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 
-import { MembershipStatus, NotificationType } from '@rivet/database';
+import { MembershipStatus, NotificationType, ProjectRole } from '@rivet/database';
 import type { ApiHandoffCreatedOutboxPayload } from '@rivet/event-contracts';
 
 import { DatabaseService } from '../../../common/database/database.service';
@@ -13,6 +13,7 @@ describe('ApiHandoffNotificationHandler', () => {
   const inactiveRecipientMembershipId = '9d349d04-c7d5-43fb-bb57-b768e2bf0e86';
   const foreignRecipientMembershipId = 'e707e5a7-70b7-487e-a214-b0e7ecb23615';
   const workspaceId = '77a49ce9-f158-4f4d-b898-bb5b309e461f';
+  const downstreamIssueId = '98ab3a6d-0d24-484e-a36a-b8028dc00465';
   const event: ClaimedOutboxEvent = {
     actorMembershipId,
     aggregateId: 'de9d55e4-6181-4a8a-8fdf-f8faf536dc99',
@@ -32,7 +33,7 @@ describe('ApiHandoffNotificationHandler', () => {
       inactiveRecipientMembershipId,
       foreignRecipientMembershipId,
     ],
-    downstreamIssueIds: ['98ab3a6d-0d24-484e-a36a-b8028dc00465'],
+    downstreamIssueIds: [downstreamIssueId],
     handoffId: event.aggregateId,
     issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
     kind: 'INITIAL',
@@ -48,6 +49,36 @@ describe('ApiHandoffNotificationHandler', () => {
   const database = { client: { $transaction: jest.fn() } };
   let handler: ApiHandoffNotificationHandler;
 
+  function downstreamIssue({
+    assigneeMembershipId = null,
+    deletedAt = null,
+    id,
+    identifier,
+    projectRole,
+    subscriberMembershipIds = [],
+    teamMembershipIds = [],
+  }: {
+    assigneeMembershipId?: string | null;
+    deletedAt?: Date | null;
+    id: string;
+    identifier: string;
+    projectRole: ProjectRole;
+    subscriberMembershipIds?: string[];
+    teamMembershipIds?: string[];
+  }) {
+    return {
+      assigneeMembershipId,
+      deletedAt,
+      id,
+      identifier,
+      projectRole,
+      subscriptions: subscriberMembershipIds.map((membershipId) => ({ membershipId })),
+      team: {
+        teamMembers: teamMembershipIds.map((membershipId) => ({ membershipId })),
+      },
+    };
+  }
+
   beforeEach(async () => {
     jest.resetAllMocks();
     database.client.$transaction.mockImplementation(
@@ -56,11 +87,18 @@ describe('ApiHandoffNotificationHandler', () => {
     transaction.apiHandoff.findFirst.mockResolvedValue({
       authorMembershipId: actorMembershipId,
       issueId: payload.issueId,
-      issue: { deletedAt: null },
+      issue: { deletedAt: null, parentIssueId: null },
       kind: 'INITIAL',
       workspaceId,
     });
-    transaction.issue.findMany.mockResolvedValue(payload.downstreamIssueIds.map((id) => ({ id })));
+    transaction.issue.findMany.mockResolvedValue([
+      downstreamIssue({
+        id: downstreamIssueId,
+        identifier: 'WEB-42',
+        projectRole: ProjectRole.WEB_FRONTEND,
+        teamMembershipIds: [activeRecipientMembershipId],
+      }),
+    ]);
     transaction.workspaceMembership.findMany.mockResolvedValue([
       { id: activeRecipientMembershipId },
     ]);
@@ -100,7 +138,7 @@ describe('ApiHandoffNotificationHandler', () => {
           actorMembershipId,
           eventId: event.id,
           handoffId: payload.handoffId,
-          issueId: payload.issueId,
+          issueId: downstreamIssueId,
           recipientMembershipId: activeRecipientMembershipId,
           type: NotificationType.API_HANDOFF_CREATED,
           workspaceId,
@@ -126,13 +164,156 @@ describe('ApiHandoffNotificationHandler', () => {
       }),
     );
     expect(signal.eventId).not.toBe(event.id);
+    expect(transaction.issue.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('prefers the current assignee over subscribers and active team members', async () => {
+    const assignedIssueId = '0ddb88a3-dce6-4c6a-a117-2ca3c6dff723';
+    const subscribedIssueId = '0a9633a2-4e5a-4ea8-8bf0-dd0406b2338b';
+    const teamIssueId = '576db6f5-d728-4f63-8075-d33751a0104b';
+    transaction.issue.findMany.mockResolvedValue([
+      downstreamIssue({
+        id: teamIssueId,
+        identifier: 'WEB-1',
+        projectRole: ProjectRole.WEB_FRONTEND,
+        teamMembershipIds: [activeRecipientMembershipId],
+      }),
+      downstreamIssue({
+        id: subscribedIssueId,
+        identifier: 'WEB-2',
+        projectRole: ProjectRole.WEB_FRONTEND,
+        subscriberMembershipIds: [activeRecipientMembershipId],
+      }),
+      downstreamIssue({
+        assigneeMembershipId: activeRecipientMembershipId,
+        id: assignedIssueId,
+        identifier: 'APP-9',
+        projectRole: ProjectRole.APP_FRONTEND,
+      }),
+    ]);
+
+    await handler.handle(event, {
+      ...payload,
+      downstreamIssueIds: [teamIssueId, subscribedIssueId, assignedIssueId],
+    });
+
+    expect(transaction.notification.createManyAndReturn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ issueId: assignedIssueId })],
+      }),
+    );
+  });
+
+  it('prefers an automatic subscription over active target team membership', async () => {
+    const subscribedIssueId = '9df3a7d9-1d60-4341-bcaf-9f56cc77f66d';
+    const teamIssueId = '598ea445-cf8c-43fe-a45d-0259288bc7fa';
+    transaction.issue.findMany.mockResolvedValue([
+      downstreamIssue({
+        id: teamIssueId,
+        identifier: 'WEB-1',
+        projectRole: ProjectRole.WEB_FRONTEND,
+        teamMembershipIds: [activeRecipientMembershipId],
+      }),
+      downstreamIssue({
+        id: subscribedIssueId,
+        identifier: 'APP-9',
+        projectRole: ProjectRole.APP_FRONTEND,
+        subscriberMembershipIds: [activeRecipientMembershipId],
+      }),
+    ]);
+
+    await handler.handle(event, {
+      ...payload,
+      downstreamIssueIds: [teamIssueId, subscribedIssueId],
+    });
+
+    expect(transaction.notification.createManyAndReturn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ issueId: subscribedIssueId })],
+      }),
+    );
+  });
+
+  it('uses project role, identifier, and id ordering for multiple targets at the same priority', async () => {
+    const appIssueId = '6c641b9e-bb59-4490-9bd7-0dc3ce38e493';
+    const laterWebIssueId = '8c770c29-0524-4a30-827a-44f08a3ef8af';
+    const earlierWebIssueId = '35b6f486-6796-4cb0-bbe1-3fb81d3b55a0';
+    transaction.issue.findMany.mockResolvedValue([
+      downstreamIssue({
+        assigneeMembershipId: activeRecipientMembershipId,
+        id: appIssueId,
+        identifier: 'APP-1',
+        projectRole: ProjectRole.APP_FRONTEND,
+      }),
+      downstreamIssue({
+        assigneeMembershipId: activeRecipientMembershipId,
+        id: laterWebIssueId,
+        identifier: 'WEB-2',
+        projectRole: ProjectRole.WEB_FRONTEND,
+      }),
+      downstreamIssue({
+        assigneeMembershipId: activeRecipientMembershipId,
+        id: earlierWebIssueId,
+        identifier: 'WEB-1',
+        projectRole: ProjectRole.WEB_FRONTEND,
+      }),
+    ]);
+
+    await handler.handle(event, {
+      ...payload,
+      downstreamIssueIds: [appIssueId, laterWebIssueId, earlierWebIssueId],
+    });
+
+    expect(transaction.notification.createManyAndReturn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ issueId: earlierWebIssueId })],
+      }),
+    );
+  });
+
+  it('falls back to the source parent when the recipient has no downstream connection', async () => {
+    const parentIssueId = '26607c81-4939-4074-97c8-50d254483b5d';
+    transaction.apiHandoff.findFirst.mockResolvedValue({
+      authorMembershipId: actorMembershipId,
+      issueId: payload.issueId,
+      issue: { deletedAt: null, parentIssueId },
+      kind: 'INITIAL',
+      workspaceId,
+    });
+    transaction.issue.findMany.mockResolvedValue([
+      downstreamIssue({
+        id: downstreamIssueId,
+        identifier: 'WEB-42',
+        projectRole: ProjectRole.WEB_FRONTEND,
+      }),
+    ]);
+
+    await handler.handle(event, payload);
+
+    expect(transaction.notification.createManyAndReturn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ issueId: parentIssueId })],
+      }),
+    );
+  });
+
+  it('falls back to the source backend when it has no parent or connected downstream', async () => {
+    transaction.issue.findMany.mockResolvedValue([]);
+
+    await handler.handle(event, { ...payload, downstreamIssueIds: [] });
+
+    expect(transaction.notification.createManyAndReturn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ issueId: payload.issueId })],
+      }),
+    );
   });
 
   it('does not notify when an idempotent replay inserts no rows', async () => {
     transaction.apiHandoff.findFirst.mockResolvedValue({
       authorMembershipId: actorMembershipId,
       issueId: payload.issueId,
-      issue: { deletedAt: null },
+      issue: { deletedAt: null, parentIssueId: null },
       kind: 'FOLLOW_UP',
       workspaceId,
     });
@@ -174,7 +355,7 @@ describe('ApiHandoffNotificationHandler', () => {
   it('treats a delayed handoff event for a trashed source issue as a successful no-op', async () => {
     transaction.apiHandoff.findFirst.mockResolvedValue({
       authorMembershipId: actorMembershipId,
-      issue: { deletedAt: new Date() },
+      issue: { deletedAt: new Date(), parentIssueId: null },
       issueId: payload.issueId,
       kind: 'INITIAL',
       workspaceId,

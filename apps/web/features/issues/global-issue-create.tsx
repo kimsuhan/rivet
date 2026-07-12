@@ -10,9 +10,12 @@ import { z } from 'zod';
 
 import {
   type CreateFeatureIssueDto,
+  type CreateIssueResponseDto,
   type CreateTeamTaskIssueDto,
   getIssuesControllerGetQueryKey,
   getIssuesControllerListQueryKey,
+  getProjectsControllerGetQueryKey,
+  getProjectsControllerListQueryKey,
   useIssuesControllerCreate,
   useIssuesControllerList,
   useLabelsControllerList,
@@ -45,6 +48,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -100,6 +104,9 @@ export type IssueCreateLabels = {
   errorTitle: string;
   featureStatuses: Record<(typeof FEATURE_STATUSES)[number], string>;
   featureType: string;
+  initialRoleSelected: string;
+  initialRolesDescription: string;
+  initialRolesLabel: string;
   keepEditing: string;
   labelsLabel: string;
   labelsUnavailable: string;
@@ -133,6 +140,11 @@ export type IssueCreateLabels = {
   teamLockedByRole: string;
   teamPlaceholder: string;
   teamRequired: string;
+  teamTaskClose: string;
+  teamTaskDescription: string;
+  teamTaskSubmit: string;
+  teamTaskSubmitting: string;
+  teamTaskTitle: string;
   teamTaskType: string;
   title: string;
   titleLabel: string;
@@ -172,6 +184,7 @@ export function GlobalIssueCreate({
   const createT = useTranslations('IssueCreate');
   const markdownT = useTranslations('Markdown');
   const filesT = useTranslations('Files');
+  const manualTeamTask = seed?.type === 'TEAM_TASK';
   const schema = useMemo(
     () =>
       z
@@ -180,6 +193,7 @@ export function GlobalIssueCreate({
           attachmentFileIds: z.array(z.string()),
           descriptionMarkdown: z.string().max(100_000),
           featureStatus: z.enum(FEATURE_STATUSES),
+          initialRoles: z.array(z.enum(PROJECT_ROLES)),
           labelIds: z.array(z.string()),
           parentIssueId: z.string().nullable(),
           priority: z.enum(PRIORITIES),
@@ -187,11 +201,10 @@ export function GlobalIssueCreate({
           projectRole: z.enum(PROJECT_ROLES).nullable(),
           teamId: z.string(),
           title: z.string().trim().min(1, labels.titleRequired).max(500, labels.titleTooLong),
-          type: z.enum(['TEAM_TASK', 'FEATURE']),
           workflowStateId: z.string(),
         })
         .superRefine((values, context) => {
-          if (values.type === 'FEATURE') {
+          if (!manualTeamTask) {
             if (!values.projectId) {
               context.addIssue({
                 code: 'custom',
@@ -220,7 +233,7 @@ export function GlobalIssueCreate({
             });
           }
         }),
-    [labels],
+    [labels, manualTeamTask],
   );
   type FormValues = z.infer<typeof schema>;
   const form = useForm<FormValues>({
@@ -229,6 +242,7 @@ export function GlobalIssueCreate({
       attachmentFileIds: [],
       descriptionMarkdown: '',
       featureStatus: 'UNSORTED',
+      initialRoles: [],
       labelIds: [],
       parentIssueId: null,
       priority: 'NONE',
@@ -236,7 +250,6 @@ export function GlobalIssueCreate({
       projectRole: null,
       teamId: '',
       title: '',
-      type: 'TEAM_TASK',
       workflowStateId: '',
     },
     resolver: zodResolver(schema),
@@ -248,8 +261,8 @@ export function GlobalIssueCreate({
     setFocus,
     setValue,
   } = form;
-  const issueType = useWatch({ control: form.control, name: 'type' });
   const selectedProjectId = useWatch({ control: form.control, name: 'projectId' });
+  const selectedInitialRoles = useWatch({ control: form.control, name: 'initialRoles' });
   const selectedProjectRole = useWatch({ control: form.control, name: 'projectRole' });
   const selectedTeamId = useWatch({ control: form.control, name: 'teamId' });
   const mutation = useIssuesControllerCreate();
@@ -259,7 +272,7 @@ export function GlobalIssueCreate({
   const [attachmentsReady, setAttachmentsReady] = useState(true);
   const teams = useTeamsControllerList(
     { includeArchived: false },
-    { query: { enabled: open, retry: false } },
+    { query: { enabled: open && manualTeamTask, retry: false } },
   );
   const projects = useProjectsControllerList(
     { includeArchived: false, limit: 100 },
@@ -267,16 +280,16 @@ export function GlobalIssueCreate({
   );
   const parentFeatures = useIssuesControllerList(
     { limit: 100, ...(selectedProjectId ? { projectId: selectedProjectId } : {}), type: 'FEATURE' },
-    { query: { enabled: open && Boolean(selectedProjectId), retry: false } },
+    { query: { enabled: open && manualTeamTask && Boolean(selectedProjectId), retry: false } },
   );
   const workflowStates = useTeamsControllerListWorkflowStates(selectedTeamId, {
-    query: { enabled: open && issueType === 'TEAM_TASK' && Boolean(selectedTeamId), retry: false },
+    query: { enabled: open && manualTeamTask && Boolean(selectedTeamId), retry: false },
   });
   const members = useMembersControllerList(
     { limit: 100, status: 'ACTIVE', teamId: selectedTeamId },
     {
       query: {
-        enabled: open && issueType === 'TEAM_TASK' && Boolean(selectedTeamId),
+        enabled: open && manualTeamTask && Boolean(selectedTeamId),
         retry: false,
       },
     },
@@ -296,6 +309,9 @@ export function GlobalIssueCreate({
   );
   const selectedProject = projectItems.find((project) => project.id === selectedProjectId);
   const roleItems = useMemo(() => selectedProject?.roleTeams ?? [], [selectedProject]);
+  const initialRoleItems = PROJECT_ROLES.filter(
+    (role) => roleItems.some((item) => item.role === role) || selectedInitialRoles.includes(role),
+  );
   const parentItems = parentFeatures.data?.items ?? [];
   const labelItems = (availableLabels.data?.items ?? []).filter((label) => !label.archived);
   const mentionOptions = (workspaceMembers.data?.items ?? []).map((member) => ({
@@ -303,12 +319,12 @@ export function GlobalIssueCreate({
     membershipId: member.id,
   }));
   const hasOptionsError =
-    teams.isError ||
+    (manualTeamTask && teams.isError) ||
     projects.isError ||
     availableLabels.isError ||
     workspaceMembers.isError ||
-    (issueType === 'TEAM_TASK' && (workflowStates.isError || members.isError)) ||
-    (Boolean(selectedProjectId) && parentFeatures.isError);
+    (manualTeamTask && (workflowStates.isError || members.isError)) ||
+    (manualTeamTask && Boolean(selectedProjectId) && parentFeatures.isError);
 
   useEffect(() => {
     if (!open) return;
@@ -318,6 +334,7 @@ export function GlobalIssueCreate({
       attachmentFileIds: [],
       descriptionMarkdown: '',
       featureStatus: 'UNSORTED',
+      initialRoles: [],
       labelIds: [],
       parentIssueId: seed?.parentIssueId ?? null,
       priority: 'NONE',
@@ -325,7 +342,6 @@ export function GlobalIssueCreate({
       projectRole: seed?.projectRole ?? null,
       teamId: '',
       title: '',
-      type: seed?.type ?? 'TEAM_TASK',
       workflowStateId: '',
     });
     resetMutation();
@@ -333,7 +349,7 @@ export function GlobalIssueCreate({
   }, [open, resetForm, resetMutation, seed, setFocus]);
 
   useEffect(() => {
-    if (!open || issueType !== 'TEAM_TASK') return;
+    if (!open || !manualTeamTask) return;
 
     if (selectedProjectId) {
       const roleTeam = roleItems.find(({ role }) => role === selectedProjectRole);
@@ -355,7 +371,7 @@ export function GlobalIssueCreate({
   }, [
     currentTeamKey,
     getValues,
-    issueType,
+    manualTeamTask,
     open,
     roleItems,
     selectedProjectId,
@@ -365,7 +381,7 @@ export function GlobalIssueCreate({
   ]);
 
   useEffect(() => {
-    if (!open || issueType !== 'TEAM_TASK' || !selectedTeamId || getValues('workflowStateId')) {
+    if (!open || !manualTeamTask || !selectedTeamId || getValues('workflowStateId')) {
       return;
     }
 
@@ -376,7 +392,7 @@ export function GlobalIssueCreate({
         shouldValidate: false,
       });
     }
-  }, [getValues, issueType, open, selectedTeamId, setValue, workflowStates.data]);
+  }, [getValues, manualTeamTask, open, selectedTeamId, setValue, workflowStates.data]);
 
   function requestClose() {
     if (mutation.isPending) return;
@@ -409,25 +425,25 @@ export function GlobalIssueCreate({
       priority: values.priority,
       title: values.title.trim(),
     };
-    const data: CreateFeatureIssueDto | CreateTeamTaskIssueDto =
-      values.type === 'FEATURE'
-        ? {
-            ...common,
-            featureStatus: values.featureStatus,
-            projectId: values.projectId!,
-            type: 'FEATURE',
-          }
-        : {
-            ...common,
-            assigneeMembershipId: values.assigneeMembershipId,
-            ...(values.parentIssueId ? { parentIssueId: values.parentIssueId } : {}),
-            ...(values.projectId && values.projectRole
-              ? { projectId: values.projectId, projectRole: values.projectRole }
-              : {}),
-            teamId: values.teamId,
-            type: 'TEAM_TASK',
-            workflowStateId: values.workflowStateId,
-          };
+    const data: CreateFeatureIssueDto | CreateTeamTaskIssueDto = !manualTeamTask
+      ? {
+          ...common,
+          featureStatus: values.featureStatus,
+          initialRoles: values.initialRoles,
+          projectId: values.projectId!,
+          type: 'FEATURE',
+        }
+      : {
+          ...common,
+          assigneeMembershipId: values.assigneeMembershipId,
+          ...(values.parentIssueId ? { parentIssueId: values.parentIssueId } : {}),
+          ...(values.projectId && values.projectRole
+            ? { projectId: values.projectId, projectRole: values.projectRole }
+            : {}),
+          teamId: values.teamId,
+          type: 'TEAM_TASK',
+          workflowStateId: values.workflowStateId,
+        };
 
     form.clearErrors();
     mutation.reset();
@@ -438,12 +454,21 @@ export function GlobalIssueCreate({
           if (error.body.code === 'PARENT_ISSUE_PROJECT_MISMATCH') {
             void parentFeatures.refetch();
           }
+          if (error.body.code === 'INITIAL_ROLE_NOT_AVAILABLE') {
+            void projects.refetch();
+            form.setError(
+              'initialRoles',
+              { message: createT('initialRolesInvalid'), type: 'server' },
+              { shouldFocus: true },
+            );
+            return;
+          }
           const fieldOrder: Array<keyof FormValues> = [
             'title',
             'descriptionMarkdown',
             'attachmentFileIds',
-            'type',
             'projectId',
+            'initialRoles',
             'projectRole',
             'parentIssueId',
             'teamId',
@@ -473,10 +498,12 @@ export function GlobalIssueCreate({
             shouldFocus = false;
           }
         },
-        onSuccess: (issue) => {
+        onSuccess: (result: CreateIssueResponseDto) => {
+          const { issue } = result;
           queryClient.setQueryData(getIssuesControllerGetQueryKey(issue.id), issue);
           queryClient.setQueryData(getIssuesControllerGetQueryKey(issue.identifier), issue);
           const issueListRoot = getIssuesControllerListQueryKey()[0];
+          const projectListRoot = getProjectsControllerListQueryKey()[0];
           onOpenChange(false);
           router.push(`/issues/${encodeURIComponent(issue.identifier)}`);
           void queryClient
@@ -485,11 +512,18 @@ export function GlobalIssueCreate({
                 const key = queryKey[0];
                 return (
                   key === issueListRoot ||
-                  (typeof key === 'string' && key.startsWith(`${issueListRoot}?`))
+                  key === projectListRoot ||
+                  (typeof key === 'string' &&
+                    (key.startsWith(`${issueListRoot}?`) || key.startsWith(`${projectListRoot}?`)))
                 );
               },
             })
             .catch(() => undefined);
+          if (issue.project) {
+            void queryClient
+              .invalidateQueries({ queryKey: getProjectsControllerGetQueryKey(issue.project.id) })
+              .catch(() => undefined);
+          }
         },
       },
     );
@@ -512,10 +546,15 @@ export function GlobalIssueCreate({
           if (!nextOpen) requestClose();
         }}
       >
-        <DialogContent closeLabel={labels.close} className="sm:max-w-2xl">
+        <DialogContent
+          closeLabel={manualTeamTask ? labels.teamTaskClose : labels.close}
+          className="sm:max-w-2xl"
+        >
           <DialogHeader>
-            <DialogTitle>{labels.title}</DialogTitle>
-            <DialogDescription>{labels.description}</DialogDescription>
+            <DialogTitle>{manualTeamTask ? labels.teamTaskTitle : labels.title}</DialogTitle>
+            <DialogDescription>
+              {manualTeamTask ? labels.teamTaskDescription : labels.description}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="lg:hidden">
@@ -563,44 +602,6 @@ export function GlobalIssueCreate({
                 </Alert>
               ) : null}
 
-              <Controller
-                control={form.control}
-                name="type"
-                render={({ field }) => (
-                  <Field>
-                    <FieldLabel htmlFor="issue-type">{labels.typeLabel}</FieldLabel>
-                    <Select
-                      items={[
-                        { label: labels.teamTaskType, value: 'TEAM_TASK' },
-                        { label: labels.featureType, value: 'FEATURE' },
-                      ]}
-                      value={field.value}
-                      onValueChange={(value) => {
-                        if (value !== 'TEAM_TASK' && value !== 'FEATURE') return;
-                        field.onChange(value);
-                        form.setValue('teamId', '', { shouldDirty: true });
-                        form.setValue('workflowStateId', '', { shouldDirty: true });
-                        form.setValue('assigneeMembershipId', null, { shouldDirty: true });
-                        if (value === 'FEATURE') {
-                          form.setValue('projectRole', null, { shouldDirty: true });
-                          form.setValue('parentIssueId', null, { shouldDirty: true });
-                        }
-                      }}
-                    >
-                      <SelectTrigger id="issue-type" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent alignItemWithTrigger={false}>
-                        <SelectGroup>
-                          <SelectItem value="TEAM_TASK">{labels.teamTaskType}</SelectItem>
-                          <SelectItem value="FEATURE">{labels.featureType}</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                )}
-              />
-
               <Field data-invalid={Boolean(form.formState.errors.title)}>
                 <FieldLabel htmlFor="issue-title">{labels.titleLabel}</FieldLabel>
                 <Input
@@ -624,18 +625,28 @@ export function GlobalIssueCreate({
                       <FieldLabel htmlFor="issue-project">{labels.projectLabel}</FieldLabel>
                       <Select
                         items={[
-                          ...(issueType === 'TEAM_TASK'
-                            ? [{ label: labels.noProject, value: 'none' }]
-                            : []),
+                          ...(manualTeamTask ? [{ label: labels.noProject, value: 'none' }] : []),
                           ...projectItems.map((project) => ({
                             label: project.name,
                             value: project.id,
                           })),
                         ]}
-                        value={field.value ?? (issueType === 'TEAM_TASK' ? 'none' : null)}
+                        value={field.value ?? (manualTeamTask ? 'none' : null)}
                         onValueChange={(value) => {
                           const projectId = value === 'none' || value === null ? null : value;
                           field.onChange(projectId);
+                          const availableRoles = new Set(
+                            projectItems
+                              .find((project) => project.id === projectId)
+                              ?.roleTeams.map(({ role }) => role) ?? [],
+                          );
+                          form.setValue(
+                            'initialRoles',
+                            form
+                              .getValues('initialRoles')
+                              .filter((role) => availableRoles.has(role)),
+                            { shouldDirty: true, shouldValidate: true },
+                          );
                           form.setValue('projectRole', null, { shouldDirty: true });
                           form.setValue('parentIssueId', null, { shouldDirty: true });
                           form.setValue('teamId', '', { shouldDirty: true });
@@ -647,6 +658,7 @@ export function GlobalIssueCreate({
                           ref={field.ref}
                           id="issue-project"
                           className="w-full"
+                          disabled={Boolean(seed?.projectId)}
                           aria-invalid={fieldState.invalid}
                           aria-errormessage={fieldState.invalid ? 'issue-project-error' : undefined}
                         >
@@ -658,7 +670,7 @@ export function GlobalIssueCreate({
                         </SelectTrigger>
                         <SelectContent alignItemWithTrigger={false}>
                           <SelectGroup>
-                            {issueType === 'TEAM_TASK' ? (
+                            {manualTeamTask ? (
                               <SelectItem value="none">{labels.noProject}</SelectItem>
                             ) : null}
                             {projectItems.map((project) => (
@@ -674,7 +686,7 @@ export function GlobalIssueCreate({
                   )}
                 />
 
-                {issueType === 'FEATURE' ? (
+                {!manualTeamTask ? (
                   <Controller
                     control={form.control}
                     name="featureStatus"
@@ -750,7 +762,60 @@ export function GlobalIssueCreate({
                 ) : null}
               </FieldGroup>
 
-              {issueType === 'TEAM_TASK' ? (
+              {!manualTeamTask && selectedProjectId ? (
+                <Controller
+                  control={form.control}
+                  name="initialRoles"
+                  render={({ field, fieldState }) => (
+                    <FieldSet data-invalid={fieldState.invalid}>
+                      <FieldLegend variant="label">{labels.initialRolesLabel}</FieldLegend>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {initialRoleItems.map((role) => {
+                          const checked = field.value.includes(role);
+                          return (
+                            <Field
+                              key={role}
+                              orientation="horizontal"
+                              className="rounded-lg border p-3"
+                            >
+                              <Checkbox
+                                ref={role === initialRoleItems[0] ? field.ref : undefined}
+                                id={`issue-initial-role-${role}`}
+                                checked={checked}
+                                aria-invalid={fieldState.invalid}
+                                aria-errormessage={
+                                  fieldState.invalid ? 'issue-initial-roles-error' : undefined
+                                }
+                                onBlur={field.onBlur}
+                                onCheckedChange={(nextChecked) => {
+                                  const currentRoles = form.getValues('initialRoles');
+                                  field.onChange(
+                                    nextChecked
+                                      ? [...new Set([...currentRoles, role])]
+                                      : currentRoles.filter((value) => value !== role),
+                                  );
+                                }}
+                              />
+                              <FieldLabel htmlFor={`issue-initial-role-${role}`}>
+                                <span>{labels.projectRoles[role]}</span>
+                                {checked ? (
+                                  <span className="text-muted-foreground text-xs">
+                                    {labels.initialRoleSelected}
+                                  </span>
+                                ) : null}
+                              </FieldLabel>
+                            </Field>
+                          );
+                        })}
+                      </div>
+                      <FieldDescription>{labels.initialRolesDescription}</FieldDescription>
+                      <FieldError id="issue-initial-roles-error" errors={[fieldState.error]} />
+                    </FieldSet>
+                  )}
+                />
+              ) : null}
+
+              {manualTeamTask ? (
                 <>
                   <FieldGroup className="grid grid-cols-2 gap-4">
                     <Controller
@@ -1074,14 +1139,14 @@ export function GlobalIssueCreate({
                 {mutation.isPending ? (
                   <Spinner data-icon="inline-start" aria-hidden="true" />
                 ) : null}
-                {labels.submit}
+                {manualTeamTask ? labels.teamTaskSubmit : labels.submit}
               </Button>
               <span className="text-muted-foreground mr-auto hidden self-center text-xs xl:block">
                 {labels.shortcutHint}
               </span>
               {mutation.isPending ? (
                 <span role="status" className="sr-only">
-                  {labels.submitting}
+                  {manualTeamTask ? labels.teamTaskSubmitting : labels.submitting}
                 </span>
               ) : null}
             </DialogFooter>

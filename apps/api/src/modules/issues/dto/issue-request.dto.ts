@@ -6,6 +6,7 @@ import {
   IsArray,
   IsBooleanString,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -18,6 +19,8 @@ import {
 } from 'class-validator';
 
 import { FeatureIssueStatus, IssuePriority, IssueType, ProjectRole } from '@rivet/database';
+
+const HANDOFF_DESTINATION_ROLES = [ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND] as const;
 
 const HANDOFF_BODY_DESCRIPTION =
   '고정 순서의 H2 섹션 7개(변경 요약, API 명세 링크, 사용 가능 환경, 추가·변경 API, 요청·응답 변경, 오류·권한, 프론트 주의사항)를 모두 작성해야 합니다. 각 섹션에는 내용 또는 `해당 없음`을 입력하고, API 명세 링크 섹션은 `해당 없음`이 아니면 사용자 정보가 없는 유효한 HTTP(S) URL을 하나 이상 포함해야 합니다.';
@@ -210,6 +213,19 @@ export class CreateIssueDto {
   @IsUUID('4', { message: '프로젝트 식별자가 올바르지 않습니다.' })
   projectId?: string;
 
+  @ApiPropertyOptional({
+    description: '기능 이슈 생성과 함께 시작할 프로젝트 역할입니다.',
+    enum: ProjectRole,
+    isArray: true,
+    uniqueItems: true,
+  })
+  @IsOptional()
+  @IsArray({ message: '처음 작업할 역할 목록이 올바르지 않습니다.' })
+  @ArrayMaxSize(3, { message: '처음 작업할 역할은 최대 3개입니다.' })
+  @ArrayUnique({ message: '같은 역할을 중복 선택할 수 없습니다.' })
+  @IsEnum(ProjectRole, { each: true, message: '처음 작업할 역할이 올바르지 않습니다.' })
+  initialRoles?: ProjectRole[];
+
   @ApiPropertyOptional({ enum: ProjectRole })
   @IsOptional()
   @IsEnum(ProjectRole, { message: '프로젝트 역할이 올바르지 않습니다.' })
@@ -267,6 +283,9 @@ export class CreateFeatureIssueDto {
   @ApiProperty({ format: 'uuid' })
   projectId!: string;
 
+  @ApiPropertyOptional({ enum: ProjectRole, isArray: true, maxItems: 3, uniqueItems: true })
+  initialRoles?: ProjectRole[];
+
   @ApiPropertyOptional({ default: IssuePriority.NONE, enum: IssuePriority })
   priority?: IssuePriority;
 
@@ -275,6 +294,23 @@ export class CreateFeatureIssueDto {
 
   @ApiPropertyOptional({ format: 'uuid', isArray: true, type: String, uniqueItems: true })
   attachmentFileIds?: string[];
+}
+
+export class StartIssueDto {
+  @ApiProperty({
+    enum: ProjectRole,
+    isArray: true,
+    maxItems: 3,
+    minItems: 1,
+    required: true,
+    uniqueItems: true,
+  })
+  @IsOptional()
+  @IsArray({ message: '처음 작업할 역할 목록이 올바르지 않습니다.' })
+  @ArrayMaxSize(3, { message: '처음 작업할 역할은 최대 3개입니다.' })
+  @ArrayUnique({ message: '같은 역할을 중복 선택할 수 없습니다.' })
+  @IsEnum(ProjectRole, { each: true, message: '처음 작업할 역할이 올바르지 않습니다.' })
+  initialRoles?: ProjectRole[];
 }
 
 export class CreateTeamTaskIssueDto {
@@ -326,6 +362,22 @@ export class InlineHandoffDto {
   @IsNotEmpty({ message: '작업 전달 내용을 입력해 주세요.' })
   @MaxLength(50_000, { message: '작업 전달은 50,000자 이하여야 합니다.' })
   bodyMarkdown!: string;
+
+  @ApiPropertyOptional({
+    description:
+      '최초 전달로 생성·재사용할 프론트엔드 프로젝트 역할입니다. 프로젝트에 설정된 WEB_FRONTEND, APP_FRONTEND만 허용됩니다.',
+    enum: HANDOFF_DESTINATION_ROLES,
+    isArray: true,
+  })
+  @IsOptional()
+  @IsArray({ message: '작업 전달 대상 역할 목록이 올바르지 않습니다.' })
+  @ArrayMaxSize(2, { message: '작업 전달 대상 역할은 최대 2개입니다.' })
+  @ArrayUnique({ message: '같은 작업 전달 대상 역할을 중복 선택할 수 없습니다.' })
+  @IsIn(HANDOFF_DESTINATION_ROLES, {
+    each: true,
+    message: '작업 전달 대상 역할이 올바르지 않습니다.',
+  })
+  destinationRoles?: (typeof HANDOFF_DESTINATION_ROLES)[number][];
 }
 
 export class UpdateIssueDto {

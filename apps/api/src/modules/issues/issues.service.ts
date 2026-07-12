@@ -16,6 +16,7 @@ import {
   StateCategory,
 } from '@rivet/database';
 import {
+  API_HANDOFF_CREATED,
   ISSUE_CHANGED,
   ISSUE_CHANGED_SCHEMA_VERSION,
   ISSUE_CREATED,
@@ -43,12 +44,24 @@ import {
 import { IssueCollaborationService } from '../collaboration/issue-collaboration.service';
 import { isInlineDisplayable } from '../files/file-content';
 import { FilesService } from '../files/files.service';
-import type { CreateIssueDto, IssueListQueryDto, UpdateIssueDto } from './dto/issue-request.dto';
 import type {
+  CreateIssueDto,
+  IssueListQueryDto,
+  StartIssueDto,
+  UpdateIssueDto,
+} from './dto/issue-request.dto';
+import type {
+  CreateIssueResponseDto,
+  IssueCompletionBlockRelationResponseDto,
+  IssueCompletionHandoffResponseDto,
   IssueDetailResponseDto,
+  IssueHandoffFlowResponseDto,
   IssueListResponseDto,
   IssueMemberSummaryResponseDto,
+  IssueRelationIssueResponseDto,
   IssueSummaryResponseDto,
+  IssueWorkflowRelationResponseDto,
+  UpdateIssueResponseDto,
 } from './dto/issue-response.dto';
 
 const ISSUE_SELECT = {
@@ -174,6 +187,13 @@ type Transaction = Prisma.TransactionClient;
 type SortField = 'createdAt' | 'priority' | 'status' | 'updatedAt';
 type SortDirection = 'asc' | 'desc';
 
+interface AutomatedHandoffCompletionResult {
+  blockRelations: IssueCompletionBlockRelationResponseDto[];
+  downstreamIssueIds: string[];
+  handoff: IssueCompletionHandoffResponseDto;
+  parentIssueId: string;
+}
+
 interface TeamLockRow {
   archivedAt: Date | null;
   id: string;
@@ -209,11 +229,25 @@ interface ParentIssueLockRow {
   type: IssueType;
 }
 
+interface ProjectRoleTeamLockRow {
+  role: ProjectRole;
+  teamId: string;
+}
+
+interface FeatureStartLockRow {
+  id: string;
+  priority: IssuePriority;
+  projectId: string;
+  title: string;
+  type: IssueType;
+}
+
 interface IssueLockRow {
   assigneeMembershipId: string | null;
   descriptionMarkdown: string | null;
   featureStatus: FeatureIssueStatus | null;
   id: string;
+  identifier: string;
   priority: IssuePriority;
   projectId: string | null;
   projectRole: ProjectRole | null;
@@ -277,6 +311,7 @@ const STATE_CATEGORY_ORDER: StateCategory[] = [
   StateCategory.COMPLETED,
   StateCategory.CANCELED,
 ];
+const FRONTEND_PROJECT_ROLES = [ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND] as const;
 
 type StatusSortRow = {
   featureStatus: FeatureIssueStatus | null;
@@ -302,6 +337,28 @@ function versionConflict(currentVersion: number): never {
   });
 }
 
+function issueVersionConflict(currentVersion: number): never {
+  throw new ApiError({
+    code: 'ISSUE_VERSION_CONFLICT',
+    currentVersion,
+    message: '이슈가 다른 요청에서 변경되었습니다.',
+    status: HttpStatus.CONFLICT,
+  });
+}
+
+function conflict(code: string, message: string, details?: Record<string, unknown>): never {
+  throw new ApiError({
+    code,
+    ...(details === undefined ? {} : { details }),
+    message,
+    status: HttpStatus.CONFLICT,
+  });
+}
+
+function unprocessable(code: string, message: string): never {
+  throw new ApiError({ code, message, status: HttpStatus.UNPROCESSABLE_ENTITY });
+}
+
 function issueTypeFieldInvalid(message: string): never {
   throw new ApiError({
     code: 'ISSUE_TYPE_FIELD_INVALID',
@@ -324,6 +381,28 @@ function normalizeTitle(value: string): string {
   }
 
   return title;
+}
+
+function handoffChangeSummary(bodyMarkdown: string): string {
+  const heading = '## 변경 요약';
+  const nextHeading = '\n## API 명세 링크';
+  const start = bodyMarkdown.indexOf(heading);
+  const end = bodyMarkdown.indexOf(nextHeading, start + heading.length);
+  return start === -1
+    ? ''
+    : bodyMarkdown.slice(start + heading.length, end === -1 ? undefined : end).trim();
+}
+
+function jsonRecord(value: Prisma.JsonValue | null): Record<string, Prisma.JsonValue> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, Prisma.JsonValue>)
+    : null;
+}
+
+function jsonStringArray(value: Prisma.JsonValue | undefined): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
 }
 
 function parseCsv(
@@ -577,23 +656,25 @@ function toSummaryResponse(issue: IssueRow): IssueSummaryResponseDto {
   };
 }
 
-function toDetailResponse(issue: IssueRow): IssueDetailResponseDto {
-  const relationIssue = (related: {
-    featureStatus: FeatureIssueStatus | null;
-    id: string;
-    identifier: string;
-    projectRole: ProjectRole | null;
-    title: string;
-    workflowState: { category: StateCategory } | null;
-  }) => ({
+function toRelationIssueResponse(related: {
+  featureStatus: FeatureIssueStatus | null;
+  id: string;
+  identifier: string;
+  projectRole: ProjectRole | null;
+  title: string;
+  workflowState: { category: StateCategory } | null;
+}): IssueRelationIssueResponseDto {
+  return {
     category: issueCategory(related),
     featureStatus: related.featureStatus,
     id: related.id,
     identifier: related.identifier,
     projectRole: related.projectRole,
     title: related.title,
-  });
+  };
+}
 
+function toDetailResponse(issue: IssueRow): IssueDetailResponseDto {
   return {
     ...toSummaryResponse(issue),
     attachments: issue.fileAttachments.map((attachment) => ({
@@ -615,13 +696,13 @@ function toDetailResponse(issue: IssueRow): IssueDetailResponseDto {
     blockers: issue.blockedRelations.map(({ blockingIssue, createdAt, id }) => ({
       createdAt: createdAt.toISOString(),
       id,
-      issue: relationIssue(blockingIssue),
+      issue: toRelationIssueResponse(blockingIssue),
       resolved: isTerminalCategory(issueCategory(blockingIssue)),
     })),
     blocking: issue.blockingRelations.map(({ blockedIssue, createdAt, id }) => ({
       createdAt: createdAt.toISOString(),
       id,
-      issue: relationIssue(blockedIssue),
+      issue: toRelationIssueResponse(blockedIssue),
       resolved: isTerminalCategory(issueCategory(issue)),
     })),
     createdBy: toMemberResponse(issue.createdByMembership),
@@ -867,7 +948,7 @@ export class IssuesService {
   async create(
     context: { membershipId: string; userId: string; workspaceId: string },
     dto: CreateIssueDto,
-  ): Promise<IssueDetailResponseDto> {
+  ): Promise<CreateIssueResponseDto> {
     const title = normalizeTitle(dto.title);
     const labelIds = [...new Set(dto.labelIds ?? [])].sort();
     const attachmentFileIds = [...new Set(dto.attachmentFileIds ?? [])].sort();
@@ -901,6 +982,11 @@ export class IssuesService {
           return resourceNotFound('워크스페이스를 찾을 수 없습니다.');
         }
         await this.lockActiveProject(transaction, context.workspaceId, projectId);
+        const roleAssignments = await this.lockProjectRoleAssignments(
+          transaction,
+          context.workspaceId,
+          projectId,
+        );
         await this.lockActorMembership(transaction, context.workspaceId, context.membershipId);
         await this.lockLabels(transaction, context.workspaceId, labelIds);
         await assertActiveMentionMemberships(
@@ -942,6 +1028,17 @@ export class IssuesService {
         );
         await this.syncDescriptionReferences(transaction, context, issue.id, description);
         await this.files.attachIssueFiles(transaction, context, issue.id, attachmentFileIds);
+        const createdTeamTasks = await this.createAutomaticTeamTasks(
+          transaction,
+          context,
+          {
+            id: issue.id,
+            priority: dto.priority ?? IssuePriority.NONE,
+            projectId,
+            title,
+          },
+          this.selectedRoleAssignments(roleAssignments, dto.initialRoles ?? []),
+        );
         const created = await this.findIssue(transaction, context.workspaceId, issue.id);
         await notifyResourceChanged(transaction, {
           changeType: 'CREATED',
@@ -951,7 +1048,10 @@ export class IssuesService {
           version: created.version,
           workspaceId: context.workspaceId,
         });
-        return toDetailResponse(created);
+        return {
+          createdTeamTasks: createdTeamTasks.map(toSummaryResponse),
+          issue: toDetailResponse(created),
+        };
       });
     }
 
@@ -960,6 +1060,9 @@ export class IssuesService {
     }
     if (dto.featureStatus !== undefined) {
       issueTypeFieldInvalid('팀 작업에는 기능 이슈 상태를 사용할 수 없습니다.');
+    }
+    if (dto.initialRoles !== undefined) {
+      issueTypeFieldInvalid('팀 작업에는 처음 작업할 역할을 사용할 수 없습니다.');
     }
     if ((dto.projectId === undefined) !== (dto.projectRole === undefined)) {
       issueTypeFieldInvalid('프로젝트와 프로젝트 역할은 함께 지정해야 합니다.');
@@ -1056,7 +1159,79 @@ export class IssuesService {
         version: created.version,
         workspaceId: context.workspaceId,
       });
-      return toDetailResponse(created);
+      return { createdTeamTasks: [], issue: toDetailResponse(created) };
+    });
+  }
+
+  async start(
+    context: { membershipId: string; userId: string; workspaceId: string },
+    issueId: string,
+    dto: StartIssueDto,
+  ): Promise<CreateIssueResponseDto> {
+    const initialRoles = dto?.initialRoles;
+    if (!initialRoles || initialRoles.length === 0) {
+      unprocessable('INITIAL_ROLE_REQUIRED', '처음 작업할 역할을 하나 이상 선택해 주세요.');
+    }
+
+    return this.database.client.$transaction(async (transaction) => {
+      await this.lockWorkspace(transaction, context.workspaceId);
+      await this.lockActorMembership(transaction, context.workspaceId, context.membershipId);
+      const [feature] = await transaction.$queryRaw<FeatureStartLockRow[]>`
+        SELECT "id", "type", "title", "priority", "project_id" AS "projectId"
+        FROM "issues"
+        WHERE "workspace_id" = ${context.workspaceId}::uuid
+          AND "id" = ${issueId}::uuid
+          AND "deleted_at" IS NULL
+        FOR UPDATE
+      `;
+      if (!feature || feature.type !== IssueType.FEATURE) {
+        return resourceNotFound();
+      }
+
+      await this.lockActiveProject(transaction, context.workspaceId, feature.projectId);
+      const roleAssignments = await this.lockProjectRoleAssignments(
+        transaction,
+        context.workspaceId,
+        feature.projectId,
+      );
+      const selectedAssignments = this.selectedRoleAssignments(roleAssignments, initialRoles);
+      const existingRoles = await transaction.issue.findMany({
+        distinct: ['projectRole'],
+        select: { projectRole: true },
+        where: {
+          deletedAt: null,
+          parentIssueId: issueId,
+          projectRole: { in: initialRoles },
+          type: IssueType.TEAM_TASK,
+          workflowState: {
+            category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] },
+          },
+          workspaceId: context.workspaceId,
+        },
+      });
+      const existingRoleSet = new Set(existingRoles.map(({ projectRole }) => projectRole));
+      const missingAssignments = selectedAssignments.filter(
+        ({ role }) => !existingRoleSet.has(role),
+      );
+      const createdTeamTasks = await this.createAutomaticTeamTasks(
+        transaction,
+        context,
+        feature,
+        missingAssignments,
+      );
+      const updatedFeature = await this.findIssue(transaction, context.workspaceId, issueId);
+      await notifyResourceChanged(transaction, {
+        changeType: 'UPDATED',
+        resourceId: issueId,
+        resourceType: 'ISSUE',
+        version: updatedFeature.version,
+        workspaceId: context.workspaceId,
+      });
+
+      return {
+        createdTeamTasks: createdTeamTasks.map(toSummaryResponse),
+        issue: toDetailResponse(updatedFeature),
+      };
     });
   }
 
@@ -1076,14 +1251,231 @@ export class IssuesService {
     if (!issue) {
       return resourceNotFound();
     }
-    return toDetailResponse(issue);
+    return { ...toDetailResponse(issue), ...(await this.issueWorkflowContext(workspaceId, issue)) };
+  }
+
+  private async issueWorkflowContext(
+    workspaceId: string,
+    issue: IssueRow,
+  ): Promise<{
+    handoffFlows: IssueHandoffFlowResponseDto[];
+    workflowRelations: IssueWorkflowRelationResponseDto[];
+  }> {
+    const parentIssueId =
+      issue.type === IssueType.FEATURE
+        ? issue.id
+        : issue.type === IssueType.TEAM_TASK &&
+            issue.projectRole !== null &&
+            FRONTEND_PROJECT_ROLES.includes(
+              issue.projectRole as (typeof FRONTEND_PROJECT_ROLES)[number],
+            )
+          ? (issue.parentIssue?.id ?? null)
+          : null;
+    if (!parentIssueId) return { handoffFlows: [], workflowRelations: [] };
+
+    const [sources, relationRows] = await Promise.all([
+      this.database.client.issue.findMany({
+        orderBy: [{ identifier: 'asc' }, { id: 'asc' }],
+        select: {
+          blockingRelations: {
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            select: { blockedIssueId: true },
+            where: {
+              blockedIssue: {
+                deletedAt: null,
+                parentIssueId,
+                projectRole: { in: [...FRONTEND_PROJECT_ROLES] },
+                type: IssueType.TEAM_TASK,
+              },
+            },
+          },
+          featureStatus: true,
+          handoffs: {
+            orderBy: [{ sequenceNumber: 'asc' }, { id: 'asc' }],
+            select: {
+              authorMembership: {
+                select: {
+                  id: true,
+                  role: true,
+                  status: true,
+                  user: { select: { avatarFileId: true, displayName: true, id: true } },
+                },
+              },
+              bodyMarkdown: true,
+              createdAt: true,
+              id: true,
+              kind: true,
+              sequenceNumber: true,
+            },
+          },
+          id: true,
+          identifier: true,
+          projectRole: true,
+          title: true,
+          workflowState: { select: { category: true } },
+        },
+        where: {
+          deletedAt: null,
+          handoffs: { some: {} },
+          parentIssueId,
+          projectRole: ProjectRole.BACKEND,
+          type: IssueType.TEAM_TASK,
+          workspaceId,
+        },
+      }),
+      issue.type === IssueType.FEATURE
+        ? this.database.client.issueBlockRelation.findMany({
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            select: {
+              blockedIssueId: true,
+              blockingIssue: { select: { workflowState: { select: { category: true } } } },
+              blockingIssueId: true,
+              createdAt: true,
+              id: true,
+            },
+            where: {
+              blockedIssue: {
+                deletedAt: null,
+                parentIssueId,
+                type: IssueType.TEAM_TASK,
+              },
+              blockingIssue: {
+                deletedAt: null,
+                parentIssueId,
+                type: IssueType.TEAM_TASK,
+              },
+              workspaceId,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+    const workflowRelations = relationRows.map((relation) => ({
+      blockedIssueId: relation.blockedIssueId,
+      blockingIssueId: relation.blockingIssueId,
+      createdAt: relation.createdAt.toISOString(),
+      id: relation.id,
+      resolved:
+        relation.blockingIssue.workflowState !== null &&
+        isTerminalCategory(relation.blockingIssue.workflowState.category),
+    }));
+    if (sources.length === 0) return { handoffFlows: [], workflowRelations };
+
+    const sourceIds = sources.map(({ id }) => id);
+    const downstreamIdsBySource = new Map(
+      sources.map((source) => [
+        source.id,
+        new Set(source.blockingRelations.map(({ blockedIssueId }) => blockedIssueId)),
+      ]),
+    );
+    const [parentDeliveries, handoffActivities] = await Promise.all([
+      this.database.client.activityEvent.findMany({
+        select: { afterData: true },
+        where: { eventType: 'BACKEND_WORK_DELIVERED', issueId: parentIssueId, workspaceId },
+      }),
+      this.database.client.activityEvent.findMany({
+        select: { afterData: true, issueId: true },
+        where: { eventType: API_HANDOFF_CREATED, issueId: { in: sourceIds }, workspaceId },
+      }),
+    ]);
+    for (const delivery of parentDeliveries) {
+      const after = jsonRecord(delivery.afterData);
+      const backendIssue = jsonRecord(after?.backendIssue ?? null);
+      const sourceId = typeof backendIssue?.id === 'string' ? backendIssue.id : null;
+      const destinationIds = Array.isArray(after?.downstreamIssues)
+        ? after.downstreamIssues.flatMap((value) => {
+            const downstreamIssue = jsonRecord(value);
+            return typeof downstreamIssue?.id === 'string' ? [downstreamIssue.id] : [];
+          })
+        : [];
+      const target = sourceId ? downstreamIdsBySource.get(sourceId) : undefined;
+      if (target) destinationIds.forEach((id) => target.add(id));
+    }
+    for (const activity of handoffActivities) {
+      if (!activity.issueId) continue;
+      const after = jsonRecord(activity.afterData);
+      const target = downstreamIdsBySource.get(activity.issueId);
+      if (target) jsonStringArray(after?.downstreamIssueIds).forEach((id) => target.add(id));
+    }
+
+    const legacySources = sources.filter(
+      ({ id }) => (downstreamIdsBySource.get(id)?.size ?? 0) === 0,
+    );
+    if (legacySources.length > 0) {
+      const legacyDownstreamIssues = await this.database.client.issue.findMany({
+        orderBy: [{ projectRole: 'asc' }, { identifier: 'asc' }, { id: 'asc' }],
+        select: { id: true },
+        where: {
+          deletedAt: null,
+          parentIssueId,
+          projectRole: { in: [...FRONTEND_PROJECT_ROLES] },
+          type: IssueType.TEAM_TASK,
+          workspaceId,
+        },
+      });
+      for (const source of legacySources) {
+        const target = downstreamIdsBySource.get(source.id);
+        if (target) legacyDownstreamIssues.forEach(({ id }) => target.add(id));
+      }
+    }
+
+    const downstreamIds = [
+      ...new Set([...downstreamIdsBySource.values()].flatMap((ids) => [...ids])),
+    ];
+    const downstreamIssues =
+      downstreamIds.length === 0
+        ? []
+        : await this.database.client.issue.findMany({
+            orderBy: [{ projectRole: 'asc' }, { identifier: 'asc' }, { id: 'asc' }],
+            select: {
+              featureStatus: true,
+              id: true,
+              identifier: true,
+              projectRole: true,
+              title: true,
+              workflowState: { select: { category: true } },
+            },
+            where: {
+              deletedAt: null,
+              id: { in: downstreamIds },
+              parentIssueId,
+              projectRole: { in: [...FRONTEND_PROJECT_ROLES] },
+              type: IssueType.TEAM_TASK,
+              workspaceId,
+            },
+          });
+    const downstreamById = new Map(
+      downstreamIssues.map((downstream) => [downstream.id, downstream]),
+    );
+    const handoffFlows = sources.flatMap((source): IssueHandoffFlowResponseDto[] => {
+      const sourceDownstreamIds = downstreamIdsBySource.get(source.id) ?? new Set<string>();
+      if (issue.type === IssueType.TEAM_TASK && !sourceDownstreamIds.has(issue.id)) return [];
+      return [
+        {
+          downstreamIssues: [...sourceDownstreamIds].flatMap((id) => {
+            const downstream = downstreamById.get(id);
+            return downstream ? [toRelationIssueResponse(downstream)] : [];
+          }),
+          handoffs: source.handoffs.map((handoff) => ({
+            author: toMemberResponse(handoff.authorMembership),
+            bodyMarkdown: handoff.bodyMarkdown,
+            changeSummary: handoffChangeSummary(handoff.bodyMarkdown),
+            createdAt: handoff.createdAt.toISOString(),
+            id: handoff.id,
+            kind: handoff.kind,
+            sequenceNumber: handoff.sequenceNumber,
+          })),
+          sourceIssue: toRelationIssueResponse(source),
+        },
+      ];
+    });
+    return { handoffFlows, workflowRelations };
   }
 
   async update(
     context: { membershipId: string; userId: string; workspaceId: string },
     issueId: string,
     dto: UpdateIssueDto,
-  ): Promise<IssueDetailResponseDto> {
+  ): Promise<UpdateIssueResponseDto> {
     const preliminary = await this.database.client.issue.findFirst({
       select: {
         id: true,
@@ -1162,8 +1554,11 @@ export class IssuesService {
 
     return this.database.client.$transaction(async (transaction) => {
       // Preliminary read finds the immutable team. Reference rows are locked before the issue:
-      // workspace -> project/role/parent -> team -> state -> membership -> labels -> issue.
+      // workspace -> project/role(s) -> parent -> team -> state -> membership -> labels -> issue.
+      // The parent FOR UPDATE lock also serializes downstream inspection and creation across
+      // every backend task and manual child creation for the same feature.
       await this.lockWorkspace(transaction, context.workspaceId);
+      let lockedProjectRoleAssignments: ProjectRoleTeamLockRow[] | undefined;
       if (targetProjectId && targetProjectRole) {
         await this.lockProjectRoleTeam(
           transaction,
@@ -1171,6 +1566,17 @@ export class IssuesService {
           targetProjectId,
           targetProjectRole,
           teamId,
+        );
+      }
+      if (
+        preliminary.parentIssueId &&
+        preliminary.projectId &&
+        preliminary.projectRole === ProjectRole.BACKEND
+      ) {
+        lockedProjectRoleAssignments = await this.lockProjectRoleAssignments(
+          transaction,
+          context.workspaceId,
+          preliminary.projectId,
         );
       }
       if (targetParentIssueId && targetProjectId) {
@@ -1215,6 +1621,7 @@ export class IssuesService {
       const [current] = await transaction.$queryRaw<IssueLockRow[]>`
         SELECT
           "id",
+          "identifier",
           "type",
           "team_id" AS "teamId",
           "title",
@@ -1237,7 +1644,11 @@ export class IssuesService {
         return resourceNotFound();
       }
       if (current.version !== dto.version) {
-        return versionConflict(current.version);
+        return dto.handoff ||
+          (current.projectRole === ProjectRole.BACKEND &&
+            requestedState?.category === StateCategory.COMPLETED)
+          ? issueVersionConflict(current.version)
+          : versionConflict(current.version);
       }
 
       const currentSnapshot = await this.findIssue(transaction, context.workspaceId, issueId);
@@ -1286,6 +1697,7 @@ export class IssuesService {
         changesState &&
         currentSnapshot.workflowState.category !== StateCategory.COMPLETED &&
         requestedState?.category === StateCategory.COMPLETED;
+      let automatedCompletion: AutomatedHandoffCompletionResult | null = null;
       if (dto.handoff && !completesIssue) {
         throw new ApiError({
           code: 'HANDOFF_REQUIRES_COMPLETION',
@@ -1294,11 +1706,12 @@ export class IssuesService {
         });
       }
       if (completesIssue) {
-        await this.collaboration.ensureInitialHandoffForCompletion(
+        automatedCompletion = await this.prepareInitialHandoffForCompletion(
           transaction,
           context,
-          issueId,
+          current,
           dto.handoff,
+          lockedProjectRoleAssignments,
         );
       }
 
@@ -1503,7 +1916,40 @@ export class IssuesService {
         version: updated.version,
         workspaceId: context.workspaceId,
       });
-      return toDetailResponse(updated);
+      const response = toDetailResponse(updated);
+      if (!automatedCompletion) {
+        return response;
+      }
+
+      const downstreamTeamTasks: IssueSummaryResponseDto[] = [];
+      for (const downstreamIssueId of automatedCompletion.downstreamIssueIds) {
+        downstreamTeamTasks.push(
+          toSummaryResponse(
+            await this.findIssue(transaction, context.workspaceId, downstreamIssueId),
+          ),
+        );
+      }
+      const updatedParent = await this.findIssue(
+        transaction,
+        context.workspaceId,
+        automatedCompletion.parentIssueId,
+      );
+      await notifyResourceChanged(transaction, {
+        changeType: 'UPDATED',
+        resourceId: automatedCompletion.parentIssueId,
+        resourceType: 'ISSUE',
+        version: updatedParent.version,
+        workspaceId: context.workspaceId,
+      });
+      const updatedParentIssue = toSummaryResponse(updatedParent);
+
+      return {
+        ...response,
+        blockRelations: automatedCompletion.blockRelations,
+        downstreamTeamTasks,
+        handoff: automatedCompletion.handoff,
+        updatedParentIssue,
+      };
     });
   }
 
@@ -1641,6 +2087,7 @@ export class IssuesService {
       const [current] = await transaction.$queryRaw<IssueLockRow[]>`
         SELECT
           "id",
+          "identifier",
           "type",
           "team_id" AS "teamId",
           "title",
@@ -1871,6 +2318,490 @@ export class IssuesService {
       return resourceNotFound();
     }
     return issue;
+  }
+
+  private selectedRoleAssignments(
+    assignments: ProjectRoleTeamLockRow[],
+    roles: ProjectRole[],
+  ): ProjectRoleTeamLockRow[] {
+    const selected = new Set(roles);
+    if (
+      selected.size !== roles.length ||
+      roles.some((role) => !Object.values(ProjectRole).includes(role))
+    ) {
+      unprocessable('INITIAL_ROLE_NOT_AVAILABLE', '선택한 역할로 작업을 시작할 수 없습니다.');
+    }
+    const available = assignments.filter(({ role }) => selected.has(role));
+    if (available.length !== selected.size) {
+      unprocessable('INITIAL_ROLE_NOT_AVAILABLE', '프로젝트에 설정된 역할만 선택할 수 있습니다.');
+    }
+    return available;
+  }
+
+  private async lockProjectRoleAssignments(
+    transaction: Transaction,
+    workspaceId: string,
+    projectId: string,
+  ): Promise<ProjectRoleTeamLockRow[]> {
+    const assignments = await transaction.$queryRaw<ProjectRoleTeamLockRow[]>`
+      SELECT "role", "team_id" AS "teamId"
+      FROM "project_role_teams"
+      WHERE "workspace_id" = ${workspaceId}::uuid
+        AND "project_id" = ${projectId}::uuid
+      ORDER BY "role"
+      FOR UPDATE
+    `;
+    if (assignments.length === 0) {
+      return resourceNotFound('프로젝트 역할 설정을 찾을 수 없습니다.');
+    }
+    return assignments;
+  }
+
+  private async createAutomaticTeamTasks(
+    transaction: Transaction,
+    context: { membershipId: string; workspaceId: string },
+    parent: { id: string; priority: IssuePriority; projectId: string; title: string },
+    assignments: ProjectRoleTeamLockRow[],
+  ): Promise<IssueRow[]> {
+    const created: IssueRow[] = [];
+    for (const assignment of assignments) {
+      const team = await this.lockActiveTeam(transaction, context.workspaceId, assignment.teamId);
+      const workflowState = await this.lockWorkflowState(
+        transaction,
+        context.workspaceId,
+        team.id,
+        undefined,
+      );
+      await transaction.team.update({
+        data: { nextIssueNumber: { increment: 1 } },
+        where: { id: team.id },
+      });
+      const identifier = `${team.key}-${team.nextIssueNumber}`;
+      const issue = await transaction.issue.create({
+        data: {
+          assigneeMembershipId: null,
+          createdByMembershipId: context.membershipId,
+          descriptionMarkdown: null,
+          identifier,
+          parentIssueId: parent.id,
+          priority: parent.priority,
+          projectId: parent.projectId,
+          projectRole: assignment.role,
+          sequenceNumber: team.nextIssueNumber,
+          teamId: team.id,
+          title: parent.title,
+          type: IssueType.TEAM_TASK,
+          workflowStateId: workflowState.id,
+          workspaceId: context.workspaceId,
+        },
+        select: { id: true },
+      });
+      const changeEventId = await this.createIssueRelations(
+        transaction,
+        context,
+        issue.id,
+        identifier,
+        parent.title,
+        [],
+        null,
+        [],
+      );
+      const row = await this.findIssue(transaction, context.workspaceId, issue.id);
+      await notifyResourceChanged(transaction, {
+        changeType: 'CREATED',
+        eventId: changeEventId,
+        resourceId: issue.id,
+        resourceType: 'ISSUE',
+        version: row.version,
+        workspaceId: context.workspaceId,
+      });
+      created.push(row);
+    }
+    return created;
+  }
+
+  private async prepareInitialHandoffForCompletion(
+    transaction: Transaction,
+    context: { membershipId: string; userId: string; workspaceId: string },
+    issue: IssueLockRow,
+    handoff?: { bodyMarkdown: string; destinationRoles?: ProjectRole[] },
+    lockedProjectRoleAssignments?: ProjectRoleTeamLockRow[],
+  ): Promise<AutomatedHandoffCompletionResult | null> {
+    const handoffBody = handoff ? { bodyMarkdown: handoff.bodyMarkdown } : undefined;
+    if (
+      issue.type !== IssueType.TEAM_TASK ||
+      issue.projectRole !== ProjectRole.BACKEND ||
+      !issue.projectId ||
+      !issue.parentIssueId
+    ) {
+      await this.collaboration.ensureInitialHandoffForCompletion(
+        transaction,
+        context,
+        issue.id,
+        handoffBody,
+      );
+      return null;
+    }
+
+    const assignments =
+      lockedProjectRoleAssignments ??
+      (await this.lockProjectRoleAssignments(transaction, context.workspaceId, issue.projectId));
+    const frontendAssignments = assignments.filter(({ role }) =>
+      FRONTEND_PROJECT_ROLES.includes(role as (typeof FRONTEND_PROJECT_ROLES)[number]),
+    );
+    const initial = await transaction.apiHandoff.findFirst({
+      select: { id: true },
+      where: {
+        issueId: issue.id,
+        kind: HandoffKind.INITIAL,
+        workspaceId: context.workspaceId,
+      },
+    });
+    if (initial) {
+      await this.collaboration.ensureInitialHandoffForCompletion(
+        transaction,
+        context,
+        issue.id,
+        handoffBody,
+      );
+      return null;
+    }
+
+    if (frontendAssignments.length === 0) {
+      if ((handoff?.destinationRoles?.length ?? 0) > 0) {
+        unprocessable(
+          'PROJECT_FRONTEND_ROLE_REQUIRED',
+          '프로젝트에 설정된 프론트엔드 역할만 전달 대상으로 선택할 수 있습니다.',
+        );
+      }
+      await this.collaboration.ensureInitialHandoffForCompletion(
+        transaction,
+        context,
+        issue.id,
+        handoffBody,
+      );
+      return null;
+    }
+
+    if (!handoff) {
+      conflict('HANDOFF_REQUIRED', '후행 프론트 작업을 위해 최초 작업 전달이 필요합니다.');
+    }
+    const destinationRoles = [...new Set(handoff.destinationRoles ?? [])];
+    if (destinationRoles.length === 0) {
+      unprocessable(
+        'HANDOFF_DESTINATION_REQUIRED',
+        '최초 작업 전달에는 하나 이상의 프론트엔드 역할이 필요합니다.',
+      );
+    }
+    if (
+      destinationRoles.some(
+        (role) =>
+          !FRONTEND_PROJECT_ROLES.includes(role as (typeof FRONTEND_PROJECT_ROLES)[number]) ||
+          !frontendAssignments.some((assignment) => assignment.role === role),
+      )
+    ) {
+      unprocessable(
+        'PROJECT_FRONTEND_ROLE_REQUIRED',
+        '프로젝트에 설정된 프론트엔드 역할만 전달 대상으로 선택할 수 있습니다.',
+      );
+    }
+    const selectedAssignments = frontendAssignments.filter(({ role }) =>
+      destinationRoles.includes(role),
+    );
+    const parent = await this.findIssue(transaction, context.workspaceId, issue.parentIssueId);
+    const existingTasks = await transaction.issue.findMany({
+      orderBy: [{ projectRole: 'asc' }, { identifier: 'asc' }, { id: 'asc' }],
+      select: {
+        assigneeMembershipId: true,
+        id: true,
+        identifier: true,
+        projectId: true,
+        projectRole: true,
+        subscriptions: {
+          orderBy: { membershipId: 'asc' },
+          select: { membershipId: true },
+        },
+        teamId: true,
+        title: true,
+        workflowState: { select: { category: true } },
+      },
+      where: {
+        deletedAt: null,
+        parentIssueId: issue.parentIssueId,
+        projectRole: { in: destinationRoles },
+        type: IssueType.TEAM_TASK,
+        workspaceId: context.workspaceId,
+      },
+    });
+
+    const reusableByRole = new Map<ProjectRole, typeof existingTasks>();
+    const missingAssignments: ProjectRoleTeamLockRow[] = [];
+    for (const assignment of selectedAssignments) {
+      const roleTasks = existingTasks.filter(({ projectRole }) => projectRole === assignment.role);
+      const scopeConflicts = roleTasks.filter(
+        ({ projectId, teamId }) => projectId !== issue.projectId || teamId !== assignment.teamId,
+      );
+      if (scopeConflicts.length > 0) {
+        conflict(
+          'DOWNSTREAM_TASK_SCOPE_CONFLICT',
+          '기존 후행 작업의 프로젝트 역할과 팀 설정이 일치하지 않습니다.',
+          {
+            issues: scopeConflicts.map(({ id, identifier, projectRole, teamId, title }) => ({
+              id,
+              identifier,
+              projectRole,
+              teamId,
+              title,
+            })),
+          },
+        );
+      }
+      const reusable = roleTasks.filter(
+        ({ workflowState }) => workflowState && !isTerminalCategory(workflowState.category),
+      );
+      if (roleTasks.length > 0 && reusable.length === 0) {
+        conflict(
+          'DOWNSTREAM_TASK_ALREADY_CLOSED',
+          '선택한 역할에 완료 또는 취소된 후행 작업만 있습니다.',
+          {
+            issues: roleTasks.map(
+              ({ id, identifier, projectRole, teamId, title, workflowState }) => ({
+                category: workflowState?.category ?? null,
+                id,
+                identifier,
+                projectRole,
+                teamId,
+                title,
+              }),
+            ),
+          },
+        );
+      }
+      if (reusable.length > 0) {
+        reusableByRole.set(assignment.role, reusable);
+      } else {
+        missingAssignments.push(assignment);
+      }
+    }
+
+    const createdTasks = await this.createAutomaticTeamTasks(
+      transaction,
+      context,
+      {
+        id: parent.id,
+        priority: parent.priority,
+        projectId: issue.projectId,
+        title: parent.title,
+      },
+      missingAssignments,
+    );
+    const createdByRole = new Map<ProjectRole, IssueRow>();
+    for (const createdTask of createdTasks) {
+      if (createdTask.projectRole) createdByRole.set(createdTask.projectRole, createdTask);
+    }
+    const downstreamIssueIds = selectedAssignments.flatMap(({ role }) => {
+      const reusable = reusableByRole.get(role);
+      if (reusable) return reusable.map(({ id }) => id);
+      const createdTask = createdByRole.get(role);
+      return createdTask ? [createdTask.id] : [];
+    });
+    const createdIssueIds = new Set(createdTasks.map(({ id }) => id));
+
+    const existingRelations = await transaction.issueBlockRelation.findMany({
+      select: {
+        blockedIssueId: true,
+        blockingIssueId: true,
+        createdAt: true,
+        id: true,
+      },
+      where: {
+        blockedIssueId: { in: downstreamIssueIds },
+        blockingIssueId: issue.id,
+        workspaceId: context.workspaceId,
+      },
+    });
+    const relationByBlockedIssueId = new Map(
+      existingRelations.map((relation) => [relation.blockedIssueId, relation]),
+    );
+    const createdRelations: typeof existingRelations = [];
+    for (const blockedIssueId of downstreamIssueIds) {
+      if (relationByBlockedIssueId.has(blockedIssueId) || !createdIssueIds.has(blockedIssueId)) {
+        continue;
+      }
+      const relation = await transaction.issueBlockRelation.create({
+        data: {
+          blockedIssueId,
+          blockingIssueId: issue.id,
+          createdByMembershipId: context.membershipId,
+          workspaceId: context.workspaceId,
+        },
+        select: {
+          blockedIssueId: true,
+          blockingIssueId: true,
+          createdAt: true,
+          id: true,
+        },
+      });
+      relationByBlockedIssueId.set(blockedIssueId, relation);
+      createdRelations.push(relation);
+    }
+    if (createdRelations.length > 0) {
+      await transaction.activityEvent.createMany({
+        data: createdRelations.flatMap((relation) => [
+          {
+            actorMembershipId: context.membershipId,
+            afterData: {
+              direction: 'BLOCKING',
+              issueId: relation.blockedIssueId,
+              relationId: relation.id,
+            },
+            beforeData: Prisma.JsonNull,
+            eventType: 'ISSUE_BLOCK_RELATION_ADDED',
+            fieldName: 'blockRelations',
+            issueId: issue.id,
+            workspaceId: context.workspaceId,
+          },
+          {
+            actorMembershipId: context.membershipId,
+            afterData: {
+              direction: 'BLOCKED_BY',
+              issueId: issue.id,
+              relationId: relation.id,
+            },
+            beforeData: Prisma.JsonNull,
+            eventType: 'ISSUE_BLOCK_RELATION_ADDED',
+            fieldName: 'blockRelations',
+            issueId: relation.blockedIssueId,
+            workspaceId: context.workspaceId,
+          },
+        ]),
+      });
+    }
+    for (const relation of createdRelations) {
+      if (createdIssueIds.has(relation.blockedIssueId)) continue;
+      const updated = await transaction.issue.update({
+        data: { version: { increment: 1 } },
+        select: { id: true, version: true },
+        where: { id: relation.blockedIssueId },
+      });
+      await notifyResourceChanged(transaction, {
+        changeType: 'UPDATED',
+        resourceId: updated.id,
+        resourceType: 'ISSUE',
+        version: updated.version,
+        workspaceId: context.workspaceId,
+      });
+    }
+
+    const recipientIssues = await transaction.issue.findMany({
+      select: {
+        assigneeMembershipId: true,
+        id: true,
+        identifier: true,
+        projectRole: true,
+        subscriptions: { select: { membershipId: true } },
+        teamId: true,
+        title: true,
+      },
+      where: { id: { in: downstreamIssueIds }, workspaceId: context.workspaceId },
+    });
+    const newTeamIds = [
+      ...new Set(
+        recipientIssues
+          .filter(({ id }) => createdIssueIds.has(id))
+          .flatMap(({ teamId }) => (teamId ? [teamId] : [])),
+      ),
+    ];
+    const activeNewTeamMembers =
+      newTeamIds.length === 0
+        ? []
+        : await transaction.teamMember.findMany({
+            select: { membershipId: true },
+            where: {
+              membership: { status: MembershipStatus.ACTIVE },
+              removedAt: null,
+              teamId: { in: newTeamIds },
+              workspaceId: context.workspaceId,
+            },
+          });
+    const candidateRecipientMembershipIds = [
+      ...new Set([
+        ...activeNewTeamMembers.map(({ membershipId }) => membershipId),
+        ...recipientIssues
+          .filter(({ id }) => !createdIssueIds.has(id))
+          .flatMap(({ assigneeMembershipId, subscriptions }) => [
+            ...(assigneeMembershipId ? [assigneeMembershipId] : []),
+            ...subscriptions.map(({ membershipId }) => membershipId),
+          ]),
+      ]),
+    ]
+      .filter((membershipId) => membershipId !== context.membershipId)
+      .sort();
+    const createdHandoff = await this.collaboration.createHandoffInTransaction(
+      transaction,
+      context,
+      issue.id,
+      { bodyMarkdown: handoff.bodyMarkdown, kind: HandoffKind.INITIAL },
+      {
+        allowManagedInitial: true,
+        notificationSnapshot: { candidateRecipientMembershipIds, downstreamIssueIds },
+      },
+    );
+    const recipientIssueById = new Map(recipientIssues.map((item) => [item.id, item]));
+    const relationIds = downstreamIssueIds.flatMap((downstreamIssueId) => {
+      const relation = relationByBlockedIssueId.get(downstreamIssueId);
+      return relation ? [relation.id] : [];
+    });
+    await transaction.activityEvent.create({
+      data: {
+        actorMembershipId: context.membershipId,
+        afterData: {
+          backendIssue: {
+            id: issue.id,
+            identifier: issue.identifier,
+            title: issue.title,
+          },
+          downstreamIssues: downstreamIssueIds.map((downstreamIssueId) => {
+            const downstreamIssue = recipientIssueById.get(downstreamIssueId);
+            if (!downstreamIssue?.projectRole) {
+              throw new Error('DOWNSTREAM_ISSUE_INVARIANT_VIOLATION');
+            }
+            return {
+              id: downstreamIssue.id,
+              identifier: downstreamIssue.identifier,
+              role: downstreamIssue.projectRole,
+              title: downstreamIssue.title,
+            };
+          }),
+          handoffId: createdHandoff.id,
+          relationIds,
+        },
+        beforeData: Prisma.JsonNull,
+        eventType: 'BACKEND_WORK_DELIVERED',
+        issueId: parent.id,
+        workspaceId: context.workspaceId,
+      },
+    });
+
+    return {
+      blockRelations: downstreamIssueIds.flatMap((blockedIssueId) => {
+        const relation = relationByBlockedIssueId.get(blockedIssueId);
+        return relation
+          ? [
+              {
+                blockedIssueId: relation.blockedIssueId,
+                blockingIssueId: relation.blockingIssueId,
+                createdAt: relation.createdAt.toISOString(),
+                id: relation.id,
+                resolved: true,
+              },
+            ]
+          : [];
+      }),
+      downstreamIssueIds,
+      handoff: createdHandoff,
+      parentIssueId: parent.id,
+    };
   }
 
   private async createIssueRelations(

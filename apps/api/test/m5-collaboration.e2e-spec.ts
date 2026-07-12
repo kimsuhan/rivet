@@ -338,8 +338,9 @@ describe('M5 issue Markdown and comments', () => {
         type: IssueType.TEAM_TASK,
       })
       .expect(201);
-    const issueId = createdIssue.body.id as string;
-    expect(createdIssue.body).toMatchObject({
+    const issueId = createdIssue.body.issue.id as string;
+    expect(createdIssue.body.createdTeamTasks).toEqual([]);
+    expect(createdIssue.body.issue).toMatchObject({
       attachments: [
         {
           file: { id: attachmentFileId, linked: true },

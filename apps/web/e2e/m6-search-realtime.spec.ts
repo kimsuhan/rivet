@@ -4,7 +4,7 @@ import { expect, type Page, type Route, test } from '@playwright/test';
 
 import type {
   AuthenticatedSessionDto,
-  IssueDetailResponseDto,
+  CreateIssueResponseDto,
   TeamListResponseDto,
   WorkflowStateListResponseDto,
 } from '@rivet/api-client';
@@ -120,28 +120,32 @@ test('SEARCH-01 전역 검색과 SSE 재연결 뒤 REST 수렴을 검증한다',
     const defaultState = states.items.find((state) => state.isDefault);
     if (!defaultState) throw new Error('M6 E2E 기본 상태를 찾지 못했습니다.');
 
-    const exactIssue = await apiRequest<IssueDetailResponseDto>(page, '/issues', {
-      body: {
-        assigneeMembershipId: session.membership.id,
-        priority: 'MEDIUM',
-        teamId: team.id,
-        title: `M6 정확 ID 검색 ${runId}`,
-        type: 'TEAM_TASK',
-        workflowStateId: defaultState.id,
-      },
-      method: 'POST',
-    });
-    const titleIssue = await apiRequest<IssueDetailResponseDto>(page, '/issues', {
-      body: {
-        assigneeMembershipId: session.membership.id,
-        priority: 'LOW',
-        teamId: team.id,
-        title: `${exactIssue.identifier} 후속 검색 ${runId}`,
-        type: 'TEAM_TASK',
-        workflowStateId: defaultState.id,
-      },
-      method: 'POST',
-    });
+    const exactIssue = (
+      await apiRequest<CreateIssueResponseDto>(page, '/issues', {
+        body: {
+          assigneeMembershipId: session.membership.id,
+          priority: 'MEDIUM',
+          teamId: team.id,
+          title: `M6 정확 ID 검색 ${runId}`,
+          type: 'TEAM_TASK',
+          workflowStateId: defaultState.id,
+        },
+        method: 'POST',
+      })
+    ).issue;
+    const titleIssue = (
+      await apiRequest<CreateIssueResponseDto>(page, '/issues', {
+        body: {
+          assigneeMembershipId: session.membership.id,
+          priority: 'LOW',
+          teamId: team.id,
+          title: `${exactIssue.identifier} 후속 검색 ${runId}`,
+          type: 'TEAM_TASK',
+          workflowStateId: defaultState.id,
+        },
+        method: 'POST',
+      })
+    ).issue;
     expect(exactIssue.identifier).toBe('WEB-1');
     expect(titleIssue.identifier).toBe('WEB-2');
 
@@ -231,7 +235,7 @@ test('SEARCH-01 전역 검색과 SSE 재연결 뒤 REST 수렴을 검증한다',
     await expect(page.getByRole('link', { exact: true, name: exactIssue.title })).toBeVisible();
 
     const convergedTitle = `M6 재연결 수렴 ${runId}`;
-    await apiRequest<IssueDetailResponseDto>(page, '/issues', {
+    await apiRequest<CreateIssueResponseDto>(page, '/issues', {
       body: {
         assigneeMembershipId: session.membership.id,
         priority: 'HIGH',

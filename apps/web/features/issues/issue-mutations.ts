@@ -20,6 +20,7 @@ import {
   type IssueSummaryResponseDto,
   type IssueWorkflowStateSummaryResponseDto,
   type UpdateIssueDto,
+  type UpdateIssueResponseDto,
 } from '@rivet/api-client';
 
 export type IssueOptimisticChange =
@@ -27,7 +28,10 @@ export type IssueOptimisticChange =
   | { kind: 'description'; value: string | null }
   | {
       kind: 'workflowState';
-      handoff?: { bodyMarkdown: string };
+      handoff?: {
+        bodyMarkdown: string;
+        destinationRoles?: Array<'APP_FRONTEND' | 'WEB_FRONTEND'>;
+      };
       value: IssueWorkflowStateSummaryResponseDto;
     }
   | {
@@ -177,13 +181,27 @@ function setIssueInCaches(
     { queryKey: getIssuesControllerListQueryKey() },
     (data) => updateIssueListCache(data, issue.id, () => issue),
   );
-  queryClient.setQueryData(getIssuesControllerGetQueryKey(issue.id), issue);
-  queryClient.setQueryData(getIssuesControllerGetQueryKey(issue.identifier), issue);
+  for (const issueRef of [issue.id, issue.identifier]) {
+    queryClient.setQueryData<IssueDetailResponseDto>(
+      getIssuesControllerGetQueryKey(issueRef),
+      (current) => ({
+        ...issue,
+        ...(issue.handoffFlows === undefined && current?.handoffFlows !== undefined
+          ? { handoffFlows: current.handoffFlows }
+          : {}),
+        ...(issue.workflowRelations === undefined && current?.workflowRelations !== undefined
+          ? { workflowRelations: current.workflowRelations }
+          : {}),
+      }),
+    );
+  }
 }
 
 function isVersionConflict(error: unknown): error is ApiError<ApiErrorResponseDto> {
   return (
-    error instanceof ApiError && error.status === 409 && error.body.code === 'VERSION_CONFLICT'
+    error instanceof ApiError &&
+    error.status === 409 &&
+    (error.body.code === 'VERSION_CONFLICT' || error.body.code === 'ISSUE_VERSION_CONFLICT')
   );
 }
 
@@ -206,7 +224,7 @@ export function useIssueInlineMutation({
   const [conflict, setConflict] = useState<ConflictState | null>(null);
   const [latestRecoveryFailed, setLatestRecoveryFailed] = useState(false);
   const mutation = useMutation<
-    IssueDetailResponseDto,
+    UpdateIssueResponseDto,
     ApiError<ApiErrorResponseDto>,
     IssueMutationVariables,
     IssueMutationContext

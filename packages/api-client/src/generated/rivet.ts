@@ -40,6 +40,7 @@ import type {
   CreateInvitationsResponseDto,
   CreateIssueBlockRelationDto,
   CreateIssueHandoffDto,
+  CreateIssueResponseDto,
   CreateLabelDto,
   CreateProjectDto,
   CreateTeamDto,
@@ -87,6 +88,7 @@ import type {
   SearchIssueListResponseDto,
   SessionUserDto,
   SignUpDto,
+  StartIssueDto,
   TeamListResponseDto,
   TeamResponseDto,
   TeamsControllerDeleteWorkflowStateParams,
@@ -100,6 +102,7 @@ import type {
   UnauthenticatedSessionDto,
   UpdateCommentDto,
   UpdateIssueDto,
+  UpdateIssueResponseDto,
   UpdateLabelDto,
   UpdateNotificationReadDto,
   UpdateProjectDto,
@@ -3313,9 +3316,9 @@ export const getIssuesControllerCreateUrl = () => {
 /**
  * @summary 기능 이슈 또는 팀 작업 생성
  */
-export const issuesControllerCreate = async (createFeatureIssueDtoCreateTeamTaskIssueDto: CreateFeatureIssueDto | CreateTeamTaskIssueDto, options?: RequestInit): Promise<IssueDetailResponseDto> => {
+export const issuesControllerCreate = async (createFeatureIssueDtoCreateTeamTaskIssueDto: CreateFeatureIssueDto | CreateTeamTaskIssueDto, options?: RequestInit): Promise<CreateIssueResponseDto> => {
 
-  return rivetFetch<IssueDetailResponseDto>(getIssuesControllerCreateUrl(),
+  return rivetFetch<CreateIssueResponseDto>(getIssuesControllerCreateUrl(),
   {
     ...options,
     method: 'POST',
@@ -3371,6 +3374,78 @@ export const useIssuesControllerCreate = <TError = ErrorType<ApiErrorResponseDto
         TContext
       > => {
       return useMutation(getIssuesControllerCreateMutationOptions(options), queryClient);
+    }
+
+export const getIssuesControllerStartUrl = (issueId: string,) => {
+
+
+
+
+  return `/api/v1/issues/${issueId}/start`
+}
+
+/**
+ * @summary 기존 기능 이슈의 최초 팀 작업 시작
+ */
+export const issuesControllerStart = async (issueId: string,
+    startIssueDto: StartIssueDto, options?: RequestInit): Promise<CreateIssueResponseDto> => {
+
+  return rivetFetch<CreateIssueResponseDto>(getIssuesControllerStartUrl(issueId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(startIssueDto)
+  }
+);}
+
+
+
+
+
+export const getIssuesControllerStartMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issuesControllerStart>>, TError,{issueId: string;data: BodyType<StartIssueDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof issuesControllerStart>>, TError,{issueId: string;data: BodyType<StartIssueDto>}, TContext> => {
+
+const mutationKey = ['issuesControllerStart'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof issuesControllerStart>>, {issueId: string;data: BodyType<StartIssueDto>}> = (props) => {
+          const {issueId,data} = props ?? {};
+
+          return  issuesControllerStart(issueId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type IssuesControllerStartMutationResult = NonNullable<Awaited<ReturnType<typeof issuesControllerStart>>>
+    export type IssuesControllerStartMutationBody = BodyType<StartIssueDto>
+    export type IssuesControllerStartMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 기존 기능 이슈의 최초 팀 작업 시작
+ */
+export const useIssuesControllerStart = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issuesControllerStart>>, TError,{issueId: string;data: BodyType<StartIssueDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof issuesControllerStart>>,
+        TError,
+        {issueId: string;data: BodyType<StartIssueDto>},
+        TContext
+      > => {
+      return useMutation(getIssuesControllerStartMutationOptions(options), queryClient);
     }
 
 export const getIssuesControllerGetUrl = (issueRef: string,) => {
@@ -3486,9 +3561,9 @@ export const getIssuesControllerUpdateUrl = (issueId: string,) => {
  * @summary 이슈 제목과 유형별 속성 수정
  */
 export const issuesControllerUpdate = async (issueId: string,
-    updateIssueDto: UpdateIssueDto, options?: RequestInit): Promise<IssueDetailResponseDto> => {
+    updateIssueDto: UpdateIssueDto, options?: RequestInit): Promise<UpdateIssueResponseDto> => {
 
-  return rivetFetch<IssueDetailResponseDto>(getIssuesControllerUpdateUrl(issueId),
+  return rivetFetch<UpdateIssueResponseDto>(getIssuesControllerUpdateUrl(issueId),
   {
     ...options,
     method: 'PATCH',

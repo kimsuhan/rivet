@@ -164,7 +164,7 @@ export class IssueCollaborationController {
   @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
   @ApiUnprocessableEntityResponse({
     description:
-      'VALIDATION_ERROR, HANDOFF_NOT_ALLOWED, HANDOFF_CONTENT_REQUIRED, MARKDOWN_INVALID 또는 FILE_REFERENCE_INVALID',
+      'VALIDATION_ERROR, HANDOFF_NOT_ALLOWED, HANDOFF_REQUIRES_COMPLETION, HANDOFF_CONTENT_REQUIRED, MARKDOWN_INVALID 또는 FILE_REFERENCE_INVALID',
     type: ApiErrorResponseDto,
   })
   @ApiUnsupportedMediaTypeResponse({

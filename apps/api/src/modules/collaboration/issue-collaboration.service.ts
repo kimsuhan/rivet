@@ -87,6 +87,8 @@ interface AffectedIssueRow extends IssueLockRow {
 
 interface HandoffIssueLockRow {
   id: string;
+  parentIssueId: string | null;
+  projectId: string | null;
   projectRole: ProjectRole | null;
   type: IssueType;
 }
@@ -737,6 +739,13 @@ export class IssueCollaborationService {
     context: Context,
     issueId: string,
     dto: { bodyMarkdown: string; kind: HandoffKind },
+    options?: {
+      allowManagedInitial?: boolean;
+      notificationSnapshot?: {
+        candidateRecipientMembershipIds: string[];
+        downstreamIssueIds: string[];
+      };
+    },
   ): Promise<HandoffResourceResponseDto> {
     const markdown = parseHandoffMarkdown(dto.bodyMarkdown);
     const issue = await this.lockHandoffIssue(transaction, context.workspaceId, issueId);
@@ -758,6 +767,27 @@ export class IssueCollaborationService {
     }
     if (dto.kind === HandoffKind.FOLLOW_UP && !hasInitial) {
       conflict('INITIAL_HANDOFF_REQUIRED', '최초 작업 전달을 먼저 작성해 주세요.');
+    }
+    if (
+      dto.kind === HandoffKind.INITIAL &&
+      !options?.allowManagedInitial &&
+      issue.parentIssueId &&
+      issue.projectId
+    ) {
+      const frontendRole = await transaction.projectRoleTeam.findFirst({
+        select: { role: true },
+        where: {
+          projectId: issue.projectId,
+          role: { in: [...FRONTEND_ROLES] },
+          workspaceId: context.workspaceId,
+        },
+      });
+      if (frontendRole) {
+        unprocessable(
+          'HANDOFF_REQUIRES_COMPLETION',
+          '상위 이슈의 백엔드 작업은 전달하고 완료 동작을 사용해 주세요.',
+        );
+      }
     }
 
     const created = await transaction.apiHandoff.create({
@@ -793,21 +823,67 @@ export class IssueCollaborationService {
       markdown.fileIds,
       { apiHandoffId: created.id },
     );
-    const downstream = await this.downstreamTargets(transaction, context.workspaceId, issueId);
-    const downstreamIssueIds = downstream.map(({ blockedIssue }) => blockedIssue.id);
-    const candidateRecipientMembershipIds = [
-      ...new Set(
-        downstream.flatMap(({ blockedIssue }) => [
-          ...(blockedIssue.assigneeMembershipId ? [blockedIssue.assigneeMembershipId] : []),
-          ...blockedIssue.subscriptions.map(({ membershipId }) => membershipId),
-        ]),
-      ),
-    ].sort();
+    const notificationSnapshot = options?.notificationSnapshot;
+    const relationDownstream = notificationSnapshot
+      ? []
+      : await this.downstreamTargets(transaction, context.workspaceId, issueId);
+    const managedFollowUpSiblings =
+      !notificationSnapshot &&
+      dto.kind === HandoffKind.FOLLOW_UP &&
+      issue.parentIssueId &&
+      issue.projectId
+        ? await transaction.issue.findMany({
+            orderBy: { id: 'asc' },
+            select: {
+              assigneeMembershipId: true,
+              id: true,
+              subscriptions: {
+                orderBy: { membershipId: 'asc' },
+                select: { membershipId: true },
+              },
+            },
+            where: {
+              deletedAt: null,
+              parentIssueId: issue.parentIssueId,
+              projectId: issue.projectId,
+              projectRole: { in: [...FRONTEND_ROLES] },
+              type: IssueType.TEAM_TASK,
+              workflowState: { category: { notIn: [...TERMINAL_CATEGORIES] } },
+              workspaceId: context.workspaceId,
+            },
+          })
+        : [];
+    const downstream = [
+      ...new Map(
+        [
+          ...relationDownstream.map(({ blockedIssue }) => blockedIssue),
+          ...managedFollowUpSiblings,
+        ].map((item) => [item.id, item]),
+      ).values(),
+    ].sort((left, right) => left.id.localeCompare(right.id));
+    const downstreamIssueIds = notificationSnapshot
+      ? [...new Set(notificationSnapshot.downstreamIssueIds)].sort()
+      : downstream.map(({ id }) => id);
+    const candidateRecipientMembershipIds = (
+      notificationSnapshot
+        ? [...new Set(notificationSnapshot.candidateRecipientMembershipIds)]
+        : [
+            ...new Set(
+              downstream.flatMap(({ assigneeMembershipId, subscriptions }) => [
+                ...(assigneeMembershipId ? [assigneeMembershipId] : []),
+                ...subscriptions.map(({ membershipId }) => membershipId),
+              ]),
+            ),
+          ]
+    )
+      .filter((membershipId) => membershipId !== context.membershipId)
+      .sort();
 
     await transaction.activityEvent.create({
       data: {
         actorMembershipId: context.membershipId,
         afterData: {
+          downstreamIssueIds,
           handoffId: created.id,
           kind: created.kind,
           sequenceNumber: created.sequenceNumber,
@@ -1192,7 +1268,12 @@ export class IssueCollaborationService {
     issueId: string,
   ): Promise<HandoffIssueLockRow> {
     const [issue] = await transaction.$queryRaw<HandoffIssueLockRow[]>`
-      SELECT "id", "type", "project_role" AS "projectRole"
+      SELECT
+        "id",
+        "type",
+        "project_id" AS "projectId",
+        "project_role" AS "projectRole",
+        "parent_issue_id" AS "parentIssueId"
       FROM "issues"
       WHERE "workspace_id" = ${workspaceId}::uuid
         AND "id" = ${issueId}::uuid

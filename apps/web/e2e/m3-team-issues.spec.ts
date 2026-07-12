@@ -4,6 +4,7 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import type {
   AuthenticatedSessionDto,
+  CreateIssueResponseDto,
   IssueDetailResponseDto,
   LabelResponseDto,
   TeamListResponseDto,
@@ -148,18 +149,20 @@ test('UF-03과 UF-07 팀 이슈 기본 루프를 완료한다', async ({ page, i
     let issue: IssueDetailResponseDto;
 
     if (isMobile) {
-      issue = await apiRequest<IssueDetailResponseDto>(page, '/issues', {
-        body: {
-          assigneeMembershipId: session.membership.id,
-          labelIds: [label.id],
-          priority: 'HIGH',
-          teamId: team.id,
-          title,
-          type: 'TEAM_TASK',
-          workflowStateId: defaultState.id,
-        },
-        method: 'POST',
-      });
+      issue = (
+        await apiRequest<CreateIssueResponseDto>(page, '/issues', {
+          body: {
+            assigneeMembershipId: session.membership.id,
+            labelIds: [label.id],
+            priority: 'HIGH',
+            teamId: team.id,
+            title,
+            type: 'TEAM_TASK',
+            workflowStateId: defaultState.id,
+          },
+          method: 'POST',
+        })
+      ).issue;
 
       await page.goto('/my-issues');
       await expect(page.getByRole('link', { name: title })).toBeVisible();
@@ -192,9 +195,9 @@ test('UF-03과 UF-07 팀 이슈 기본 루프를 완료한다', async ({ page, i
     } else {
       await page.goto('/teams/WEB/issues');
       await expect(page.getByRole('heading', { name: '웹 이슈' })).toBeVisible();
-      await page.getByRole('button', { name: '이슈 만들기 열기' }).click();
+      await page.getByRole('link', { name: '팀 작업 만들기' }).first().click();
 
-      const createDialog = page.getByRole('dialog', { name: '이슈 만들기' });
+      const createDialog = page.getByRole('dialog', { name: '팀 작업 만들기' });
       await expect(createDialog).toBeVisible();
       await expect(createDialog.getByLabel('팀')).toContainText('웹');
       await expect(createDialog.getByLabel('상태')).toContainText('미분류');
@@ -204,7 +207,7 @@ test('UF-03과 UF-07 팀 이슈 기본 루프를 완료한다', async ({ page, i
       const labelCheckbox = createDialog.getByRole('checkbox', { name: 'M3 핵심' });
       await labelCheckbox.click();
       await expect(labelCheckbox).toBeChecked();
-      await createDialog.getByRole('button', { name: '이슈 만들기', exact: true }).click();
+      await createDialog.getByRole('button', { name: '팀 작업 만들기', exact: true }).click();
 
       await expect(page).toHaveURL(/\/issues\/WEB-1$/);
       await expect(createDialog).toBeHidden();

@@ -252,6 +252,74 @@ describe('issue inline optimistic mutation', () => {
     ).toMatchObject({ descriptionMarkdown: '## 새 설명', version: 2 });
   });
 
+  it('상세 전용 전달과 작업 순서는 인라인 수정 응답에서 생략돼도 캐시에 유지한다', async () => {
+    const handoffFlows: NonNullable<IssueDetailResponseDto['handoffFlows']> = [
+      {
+        downstreamIssues: [
+          {
+            category: 'UNSTARTED',
+            featureStatus: null,
+            id: issue.id,
+            identifier: issue.identifier,
+            projectRole: 'WEB_FRONTEND',
+            title: issue.title,
+          },
+        ],
+        handoffs: [
+          {
+            author: issue.createdBy,
+            bodyMarkdown: '이메일 API를 전달합니다.',
+            changeSummary: '이메일 API 추가',
+            createdAt: '2026-07-02T00:00:00.000Z',
+            id: 'handoff-id',
+            kind: 'INITIAL',
+            sequenceNumber: 1,
+          },
+        ],
+        sourceIssue: {
+          category: 'COMPLETED',
+          featureStatus: null,
+          id: 'backend-task-id',
+          identifier: 'API-0',
+          projectRole: 'BACKEND',
+          title: '이메일 API 구현',
+        },
+      },
+    ];
+    const workflowRelations: NonNullable<IssueDetailResponseDto['workflowRelations']> = [
+      {
+        blockedIssueId: issue.id,
+        blockingIssueId: 'backend-task-id',
+        createdAt: '2026-07-02T00:00:00.000Z',
+        id: 'relation-id',
+        resolved: true,
+      },
+    ];
+    const detail = { ...issue, handoffFlows, workflowRelations };
+    queryClient.setQueryData(getIssuesControllerGetQueryKey(issue.identifier), detail);
+    queryClient.setQueryData(getIssuesControllerGetQueryKey(issue.id), detail);
+    vi.mocked(issuesControllerUpdate).mockResolvedValueOnce({
+      ...issue,
+      priority: 'HIGH',
+      version: 2,
+    });
+    const { result } = renderHook(() => useIssueInlineMutation(), { wrapper: QueryWrapper });
+
+    act(() => {
+      result.current.mutate({
+        change: { kind: 'priority', value: 'HIGH' },
+        issue: detail,
+      });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    for (const issueRef of [issue.id, issue.identifier]) {
+      expect(
+        queryClient.getQueryData<IssueDetailResponseDto>(getIssuesControllerGetQueryKey(issueRef)),
+      ).toMatchObject({ handoffFlows, priority: 'HIGH', workflowRelations });
+    }
+  });
+
   it('실패하면 모든 목록과 상세 캐시를 스냅샷으로 되돌린다', async () => {
     vi.mocked(issuesControllerUpdate).mockRejectedValueOnce(
       new ApiError(

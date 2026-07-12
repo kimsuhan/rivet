@@ -1120,7 +1120,7 @@
             }
           },
           "422": {
-            "description": "VALIDATION_ERROR, HANDOFF_NOT_ALLOWED, HANDOFF_CONTENT_REQUIRED, MARKDOWN_INVALID 또는 FILE_REFERENCE_INVALID",
+            "description": "VALIDATION_ERROR, HANDOFF_NOT_ALLOWED, HANDOFF_REQUIRES_COMPLETION, HANDOFF_CONTENT_REQUIRED, MARKDOWN_INVALID 또는 FILE_REFERENCE_INVALID",
             "content": {
               "application/json": {
                 "schema": {
@@ -3074,7 +3074,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueDetailResponseDto"
+                  "$ref": "#/components/schemas/CreateIssueResponseDto"
                 }
               }
             }
@@ -3130,7 +3130,7 @@
             }
           },
           "422": {
-            "description": "VALIDATION_ERROR, ISSUE_TYPE_FIELD_INVALID, ASSIGNEE_NOT_TEAM_MEMBER, PROJECT_ROLE_TEAM_MISMATCH, PARENT_ISSUE_PROJECT_MISMATCH, MARKDOWN_INVALID, MENTION_INVALID 또는 FILE_REFERENCE_INVALID",
+            "description": "VALIDATION_ERROR, ISSUE_TYPE_FIELD_INVALID, INITIAL_ROLE_NOT_AVAILABLE, ASSIGNEE_NOT_TEAM_MEMBER, PROJECT_ROLE_TEAM_MISMATCH, PARENT_ISSUE_PROJECT_MISMATCH, MARKDOWN_INVALID, MENTION_INVALID 또는 FILE_REFERENCE_INVALID",
             "content": {
               "application/json": {
                 "schema": {
@@ -3156,6 +3156,93 @@
           }
         ],
         "summary": "기능 이슈 또는 팀 작업 생성",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
+    "/api/v1/issues/{issueId}/start": {
+      "post": {
+        "operationId": "IssuesController_start",
+        "parameters": [
+          {
+            "name": "issueId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartIssueDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateIssueResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "VALIDATION_ERROR, INITIAL_ROLE_REQUIRED 또는 INITIAL_ROLE_NOT_AVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "기존 기능 이슈의 최초 팀 작업 시작",
         "tags": [
           "issues"
         ]
@@ -3257,7 +3344,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueDetailResponseDto"
+                  "$ref": "#/components/schemas/UpdateIssueResponseDto"
                 }
               }
             }
@@ -3293,7 +3380,7 @@
             }
           },
           "409": {
-            "description": "VERSION_CONFLICT, ISSUE_TEAM_IMMUTABLE, ISSUE_PROJECT_IMMUTABLE, HANDOFF_REQUIRED, INITIAL_HANDOFF_EXISTS 또는 FILE_ALREADY_LINKED",
+            "description": "VERSION_CONFLICT, ISSUE_VERSION_CONFLICT, ISSUE_TEAM_IMMUTABLE, ISSUE_PROJECT_IMMUTABLE, HANDOFF_REQUIRED, INITIAL_HANDOFF_EXISTS, DOWNSTREAM_TASK_SCOPE_CONFLICT, DOWNSTREAM_TASK_ALREADY_CLOSED 또는 FILE_ALREADY_LINKED",
             "content": {
               "application/json": {
                 "schema": {
@@ -3313,7 +3400,7 @@
             }
           },
           "422": {
-            "description": "VALIDATION_ERROR, ISSUE_TYPE_FIELD_INVALID, ASSIGNEE_NOT_TEAM_MEMBER, PROJECT_ROLE_TEAM_MISMATCH, PARENT_ISSUE_PROJECT_MISMATCH, HANDOFF_NOT_ALLOWED, HANDOFF_REQUIRES_COMPLETION, MARKDOWN_INVALID, MENTION_INVALID 또는 FILE_REFERENCE_INVALID",
+            "description": "VALIDATION_ERROR, ISSUE_TYPE_FIELD_INVALID, ASSIGNEE_NOT_TEAM_MEMBER, PROJECT_ROLE_TEAM_MISMATCH, PARENT_ISSUE_PROJECT_MISMATCH, HANDOFF_NOT_ALLOWED, HANDOFF_REQUIRES_COMPLETION, HANDOFF_DESTINATION_REQUIRED, PROJECT_FRONTEND_ROLE_REQUIRED, MARKDOWN_INVALID, MENTION_INVALID 또는 FILE_REFERENCE_INVALID",
             "content": {
               "application/json": {
                 "schema": {
@@ -7698,6 +7785,19 @@
             "type": "string",
             "format": "uuid"
           },
+          "initialRoles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "BACKEND",
+                "WEB_FRONTEND",
+                "APP_FRONTEND"
+              ]
+            },
+            "maxItems": 3,
+            "uniqueItems": true
+          },
           "priority": {
             "enum": [
               "NONE",
@@ -8404,6 +8504,104 @@
           "latestCreatedAt"
         ]
       },
+      "IssueHandoffFlowHandoffResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "enum": [
+              "INITIAL",
+              "FOLLOW_UP"
+            ],
+            "type": "string"
+          },
+          "sequenceNumber": {
+            "type": "number",
+            "minimum": 1
+          },
+          "changeSummary": {
+            "type": "string"
+          },
+          "bodyMarkdown": {
+            "type": "string"
+          },
+          "author": {
+            "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "sequenceNumber",
+          "changeSummary",
+          "bodyMarkdown",
+          "author",
+          "createdAt"
+        ]
+      },
+      "IssueHandoffFlowResponseDto": {
+        "type": "object",
+        "properties": {
+          "sourceIssue": {
+            "$ref": "#/components/schemas/IssueRelationIssueResponseDto"
+          },
+          "downstreamIssues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueRelationIssueResponseDto"
+            }
+          },
+          "handoffs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueHandoffFlowHandoffResponseDto"
+            }
+          }
+        },
+        "required": [
+          "sourceIssue",
+          "downstreamIssues",
+          "handoffs"
+        ]
+      },
+      "IssueWorkflowRelationResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blockingIssueId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blockedIssueId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resolved": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "blockingIssueId",
+          "blockedIssueId",
+          "resolved",
+          "createdAt"
+        ]
+      },
       "IssueDetailResponseDto": {
         "type": "object",
         "properties": {
@@ -8546,6 +8744,18 @@
                 "$ref": "#/components/schemas/IssueHandoffSummaryResponseDto"
               }
             ]
+          },
+          "handoffFlows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueHandoffFlowResponseDto"
+            }
+          },
+          "workflowRelations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueWorkflowRelationResponseDto"
+            }
           }
         },
         "required": [
@@ -8574,6 +8784,46 @@
           "handoffSummary"
         ]
       },
+      "CreateIssueResponseDto": {
+        "type": "object",
+        "properties": {
+          "issue": {
+            "$ref": "#/components/schemas/IssueDetailResponseDto"
+          },
+          "createdTeamTasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueSummaryResponseDto"
+            }
+          }
+        },
+        "required": [
+          "issue",
+          "createdTeamTasks"
+        ]
+      },
+      "StartIssueDto": {
+        "type": "object",
+        "properties": {
+          "initialRoles": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 3,
+            "items": {
+              "type": "string",
+              "enum": [
+                "BACKEND",
+                "WEB_FRONTEND",
+                "APP_FRONTEND"
+              ]
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "initialRoles"
+        ]
+      },
       "InlineHandoffDto": {
         "type": "object",
         "properties": {
@@ -8582,6 +8832,19 @@
             "maxLength": 50000,
             "description": "고정 순서의 H2 섹션 7개(변경 요약, API 명세 링크, 사용 가능 환경, 추가·변경 API, 요청·응답 변경, 오류·권한, 프론트 주의사항)를 모두 작성해야 합니다. 각 섹션에는 내용 또는 `해당 없음`을 입력하고, API 명세 링크 섹션은 `해당 없음`이 아니면 사용자 정보가 없는 유효한 HTTP(S) URL을 하나 이상 포함해야 합니다.",
             "example": "## 변경 요약\n\n로그인 응답에 워크스페이스 정보를 추가했습니다.\n\n## API 명세 링크\n\nhttps://api.example.com/openapi.json\n\n## 사용 가능 환경\n\n개발 환경\n\n## 추가·변경 API\n\nPOST /sessions\n\n## 요청·응답 변경\n\n응답에 workspaceId를 추가했습니다.\n\n## 오류·권한\n\n401 응답 계약은 동일합니다.\n\n## 프론트 주의사항\n\n기존 필드는 유지됩니다."
+          },
+          "destinationRoles": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 2,
+            "items": {
+              "type": "string",
+              "enum": [
+                "WEB_FRONTEND",
+                "APP_FRONTEND"
+              ]
+            },
+            "description": "최초 전달로 생성·재사용할 프론트엔드 프로젝트 역할입니다. 프로젝트에 설정된 WEB_FRONTEND, APP_FRONTEND만 허용됩니다."
           }
         },
         "required": [
@@ -8675,6 +8938,275 @@
         },
         "required": [
           "version"
+        ]
+      },
+      "IssueCompletionHandoffResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "enum": [
+              "INITIAL",
+              "FOLLOW_UP"
+            ],
+            "type": "string"
+          },
+          "sequenceNumber": {
+            "type": "number",
+            "minimum": 1
+          },
+          "bodyMarkdown": {
+            "type": "string"
+          },
+          "author": {
+            "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "sequenceNumber",
+          "bodyMarkdown",
+          "author",
+          "createdAt"
+        ]
+      },
+      "IssueCompletionBlockRelationResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blockingIssueId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blockedIssueId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resolved": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "blockingIssueId",
+          "blockedIssueId",
+          "resolved",
+          "createdAt"
+        ]
+      },
+      "UpdateIssueResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "identifier": {
+            "type": "string",
+            "example": "API-42"
+          },
+          "type": {
+            "enum": [
+              "FEATURE",
+              "TEAM_TASK"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/IssueStatusResponseDto"
+          },
+          "priority": {
+            "enum": [
+              "NONE",
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "URGENT"
+            ],
+            "type": "string"
+          },
+          "team": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IssueTeamSummaryResponseDto"
+              }
+            ]
+          },
+          "assignee": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
+              }
+            ]
+          },
+          "project": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IssueProjectSummaryResponseDto"
+              }
+            ]
+          },
+          "projectRole": {
+            "nullable": true,
+            "enum": [
+              "BACKEND",
+              "WEB_FRONTEND",
+              "APP_FRONTEND"
+            ],
+            "type": "string"
+          },
+          "parentIssue": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IssueParentSummaryResponseDto"
+              }
+            ]
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueLabelSummaryResponseDto"
+            }
+          },
+          "blocked": {
+            "type": "boolean"
+          },
+          "progress": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IssueProgressResponseDto"
+              }
+            ]
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "descriptionMarkdown": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdBy": {
+            "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueBlockRelationResponseDto"
+            }
+          },
+          "blocking": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueBlockRelationResponseDto"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueDetailAttachmentResponseDto"
+            }
+          },
+          "handoffSummary": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IssueHandoffSummaryResponseDto"
+              }
+            ]
+          },
+          "handoffFlows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueHandoffFlowResponseDto"
+            }
+          },
+          "workflowRelations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueWorkflowRelationResponseDto"
+            }
+          },
+          "handoff": {
+            "$ref": "#/components/schemas/IssueCompletionHandoffResponseDto"
+          },
+          "downstreamTeamTasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueSummaryResponseDto"
+            }
+          },
+          "blockRelations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueCompletionBlockRelationResponseDto"
+            }
+          },
+          "updatedParentIssue": {
+            "$ref": "#/components/schemas/IssueSummaryResponseDto"
+          }
+        },
+        "required": [
+          "id",
+          "identifier",
+          "type",
+          "title",
+          "status",
+          "priority",
+          "team",
+          "assignee",
+          "project",
+          "projectRole",
+          "parentIssue",
+          "labels",
+          "blocked",
+          "progress",
+          "version",
+          "createdAt",
+          "updatedAt",
+          "descriptionMarkdown",
+          "createdBy",
+          "blockers",
+          "blocking",
+          "attachments",
+          "handoffSummary"
         ]
       },
       "TrashIssueDto": {

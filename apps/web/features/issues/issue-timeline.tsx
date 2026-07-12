@@ -1,16 +1,9 @@
 'use client';
 
 import { type InfiniteData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ActivityIcon,
-  ExternalLinkIcon,
-  MessageSquareIcon,
-  PencilIcon,
-  SendIcon,
-  Trash2Icon,
-} from 'lucide-react';
+import { ActivityIcon, MessageSquareIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   ApiError,
@@ -35,15 +28,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { UserAvatar } from '@/components/user-avatar';
 import { MarkdownEditor, type MentionOption } from '@/features/collaboration/markdown-editor';
 import { MarkdownRenderer } from '@/features/collaboration/markdown-renderer';
+import { Link } from '@/i18n/navigation';
 
 import { markdownEditorLabels } from './issue-collaboration-labels';
-import { extractHandoffApiSpecificationUrl } from './issue-handoff-validation';
+import { IssueHandoffCard } from './issue-handoff-card';
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('ko-KR', {
@@ -58,8 +51,11 @@ function activityLabel(
   t: ReturnType<typeof useTranslations<'IssueDetail'>>,
 ): string {
   if (eventType === 'ISSUE_CREATED') return t('timeline.activity.created');
+  if (eventType === 'ISSUE_TRASHED') return t('timeline.activity.trashed');
+  if (eventType === 'ISSUE_RESTORED') return t('timeline.activity.restored');
   if (eventType === 'ISSUE_BLOCK_RELATION_ADDED') return t('timeline.activity.blockAdded');
   if (eventType === 'ISSUE_BLOCK_RELATION_REMOVED') return t('timeline.activity.blockRemoved');
+  if (eventType === 'BACKEND_WORK_DELIVERED') return t('timeline.activity.backendDelivered');
   if (eventType !== 'ISSUE_UPDATED') return t('timeline.activity.updated');
 
   const fields: Record<string, string> = {
@@ -75,6 +71,26 @@ function activityLabel(
     workflowStateId: 'state',
   };
   return t(`timeline.activity.fields.${fields[fieldName ?? ''] ?? 'default'}` as never);
+}
+
+function linkedDownstreamIssues(after: Record<string, unknown> | null): Array<{
+  identifier: string;
+  title: string;
+}> {
+  const downstreamIssues = after?.downstreamIssues;
+  if (!Array.isArray(downstreamIssues)) return [];
+
+  return downstreamIssues.flatMap((value) => {
+    if (!value || typeof value !== 'object') return [];
+    const { identifier, title } = value as Record<string, unknown>;
+    return typeof identifier === 'string' && typeof title === 'string'
+      ? [{ identifier, title }]
+      : [];
+  });
+}
+
+function handoffIdFromActivity(after: Record<string, unknown> | null): string | null {
+  return typeof after?.handoffId === 'string' ? after.handoffId : null;
 }
 
 function commentError(error: unknown, t: (key: string) => string): string {
@@ -349,11 +365,15 @@ function timelineItemId(item: TimelineResponseDto['items'][number]): string {
 export function IssueTimeline({
   currentMembershipId,
   issueId,
+  issueIdentifier = issueId,
   mentionOptions,
+  mode = 'comments',
 }: {
   currentMembershipId: string | null;
   issueId: string;
+  issueIdentifier?: string;
   mentionOptions: MentionOption[];
+  mode?: 'activity' | 'comments' | 'handoffs' | 'latest-handoff';
 }) {
   const t = useTranslations('IssueDetail');
   const markdownT = useTranslations('Markdown');
@@ -361,18 +381,20 @@ export function IssueTimeline({
   const [commentDraft, setCommentDraft] = useState('');
   const [canSubmitComment, setCanSubmitComment] = useState(true);
   const createComment = useIssueCollaborationControllerCreateComment();
+  const sortDirection = mode === 'latest-handoff' ? 'desc' : 'asc';
+  const pageLimit = mode === 'latest-handoff' ? 100 : 20;
   const timeline = useInfiniteQuery({
     initialPageParam: null as string | null,
     queryKey: getIssueCollaborationControllerTimelineQueryKey(issueId, {
-      limit: 20,
-      sortDirection: 'asc',
+      limit: pageLimit,
+      sortDirection,
     }),
     queryFn: ({ pageParam, signal }) =>
       issueCollaborationControllerTimeline(
         issueId,
         {
-          limit: 20,
-          sortDirection: 'asc',
+          limit: pageLimit,
+          sortDirection,
           ...(pageParam ? { cursor: pageParam } : {}),
         },
         { signal },
@@ -416,7 +438,7 @@ export function IssueTimeline({
   }
 
   const seen = new Set<string>();
-  const items = (timeline.data?.pages ?? []).flatMap((page) =>
+  const allItems = (timeline.data?.pages ?? []).flatMap((page) =>
     page.items.filter((item) => {
       const id = timelineItemId(item);
       if (seen.has(id)) return false;
@@ -424,12 +446,86 @@ export function IssueTimeline({
       return true;
     }),
   );
+  const items = allItems.filter((item) => {
+    if (mode === 'comments') return item.type === 'COMMENT';
+    if (mode === 'activity') return item.type !== 'COMMENT';
+    return item.type === 'HANDOFF';
+  });
+  const visibleItems = mode === 'latest-handoff' ? items.slice(0, 1) : items;
   const commentBody = commentDraft.trim().length ? commentDraft : null;
+  const {
+    fetchNextPage,
+    hasNextPage,
+    isError: isTimelineError,
+    isFetchingNextPage,
+    isPending: isTimelinePending,
+  } = timeline;
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(hash.slice(1));
+      if (target && !target.closest('[hidden]')) {
+        target.querySelector('details')?.setAttribute('open', '');
+        target.scrollIntoView?.({ block: 'center' });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [mode, visibleItems.length]);
+
+  useEffect(() => {
+    if (
+      mode !== 'latest-handoff' ||
+      isTimelinePending ||
+      isFetchingNextPage ||
+      isTimelineError ||
+      visibleItems.length > 0 ||
+      !hasNextPage
+    ) {
+      return;
+    }
+
+    void fetchNextPage();
+  }, [
+    fetchNextPage,
+    hasNextPage,
+    isTimelineError,
+    isFetchingNextPage,
+    isTimelinePending,
+    mode,
+    visibleItems.length,
+  ]);
+
+  const loadingLabel =
+    mode === 'comments'
+      ? t('timeline.comments.loading')
+      : mode === 'activity'
+        ? t('timeline.activity.loading')
+        : t('handoff.loading');
+  const errorTitle =
+    mode === 'comments'
+      ? t('timeline.comments.errorTitle')
+      : mode === 'activity'
+        ? t('timeline.activity.errorTitle')
+        : t('handoff.errorTitle');
+  const errorDescription =
+    mode === 'comments'
+      ? t('timeline.comments.errorDescription')
+      : mode === 'activity'
+        ? t('timeline.activity.errorDescription')
+        : t('handoff.errorDescription');
+  const loadMoreLabel =
+    mode === 'comments'
+      ? t('timeline.comments.loadMore')
+      : mode === 'activity'
+        ? t('timeline.activity.loadMore')
+        : t('handoff.loadMore');
   const timelineError = timeline.isError ? (
     <Alert variant="destructive" className="mt-3">
-      <AlertTitle>{t('timeline.errorTitle')}</AlertTitle>
+      <AlertTitle>{errorTitle}</AlertTitle>
       <AlertDescription className="flex items-center justify-between gap-3">
-        <span>{t('timeline.errorDescription')}</span>
+        <span>{errorDescription}</span>
         <Button type="button" size="sm" variant="outline" onClick={() => void timeline.refetch()}>
           {t('retry')}
         </Button>
@@ -437,12 +533,50 @@ export function IssueTimeline({
     </Alert>
   ) : null;
 
+  if (mode === 'latest-handoff') {
+    return (
+      <div className="mt-4">
+        {timeline.data ? timelineError : null}
+        {timeline.isError && !timeline.data ? (
+          timelineError
+        ) : timeline.isPending || timeline.isFetchingNextPage ? (
+          <p role="status" className="text-muted-foreground text-sm">
+            {loadingLabel}
+          </p>
+        ) : visibleItems[0]?.type === 'HANDOFF' ? (
+          <IssueHandoffCard anchor={false} handoff={visibleItems[0].handoff} />
+        ) : null}
+      </div>
+    );
+  }
+
+  const title =
+    mode === 'comments'
+      ? t('timeline.comments.title')
+      : mode === 'handoffs'
+        ? t('handoff.historyTitle')
+        : t('timeline.activity.title');
+  const titleId =
+    mode === 'comments'
+      ? 'issue-comments-title'
+      : mode === 'handoffs'
+        ? 'handoff-history-title'
+        : 'issue-activity-title';
+
   return (
-    <section aria-labelledby="issue-timeline-title" className="mt-8">
+    <section
+      id={mode === 'handoffs' ? 'handoff-history' : undefined}
+      aria-labelledby={titleId}
+      className={mode === 'activity' ? 'scroll-mt-20' : 'mt-8 scroll-mt-20'}
+    >
       <div className="flex items-center gap-2">
-        <ActivityIcon aria-hidden="true" className="text-muted-foreground size-4" />
-        <h2 id="issue-timeline-title" className="text-base font-semibold">
-          {t('timeline.title')}
+        {mode === 'comments' ? (
+          <MessageSquareIcon aria-hidden="true" className="text-muted-foreground size-4" />
+        ) : (
+          <ActivityIcon aria-hidden="true" className="text-muted-foreground size-4" />
+        )}
+        <h2 id={titleId} className="text-base font-semibold">
+          {title}
         </h2>
       </div>
 
@@ -451,185 +585,199 @@ export function IssueTimeline({
         timelineError
       ) : timeline.isPending ? (
         <p role="status" className="text-muted-foreground mt-3 text-sm">
-          {t('timeline.loading')}
+          {loadingLabel}
         </p>
-      ) : items.length === 0 ? (
-        <p className="text-muted-foreground mt-3 border-y py-4 text-sm">{t('timeline.empty')}</p>
-      ) : (
-        <>
-          <ol className="mt-4 border-l pl-4">
-            {items.map((item) => {
-              if (item.type === 'COMMENT') {
-                return (
-                  <CommentItem
-                    key={item.comment.id}
-                    comment={item.comment}
-                    currentMembershipId={currentMembershipId}
-                    imageUnavailableLabel={markdownT('imageUnavailable')}
-                    mentionOptions={mentionOptions}
-                    onDeleted={cacheDeletedComment}
-                    onUpdated={cacheUpdatedComment}
-                    refresh={refresh}
-                  />
-                );
-              }
-
-              if (item.type === 'HANDOFF') {
-                const url = extractHandoffApiSpecificationUrl(item.handoff.bodyMarkdown);
-                return (
-                  <li
-                    id={`handoff-${item.handoff.id}`}
-                    key={item.handoff.id}
-                    className="relative scroll-mt-20 pb-4 last:pb-0"
-                  >
-                    <span className="bg-primary absolute top-2 -left-[1.31rem] size-2 rounded-full" />
-                    <article className="bg-surface-1 min-w-0 rounded-xl border p-3">
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <SendIcon aria-hidden="true" className="text-primary size-4" />
-                        <h3 className="text-sm font-semibold">
-                          {item.handoff.kind === 'INITIAL'
-                            ? t('handoff.initial')
-                            : t('handoff.followUp')}
-                        </h3>
-                        <Badge variant="secondary">#{item.handoff.sequenceNumber}</Badge>
-                        <time
-                          dateTime={item.createdAt}
-                          className="text-muted-foreground ml-auto text-xs"
-                        >
-                          {formatDate(item.createdAt)}
-                        </time>
-                      </div>
-                      <div className="text-muted-foreground mt-2 flex min-w-0 items-center gap-1.5 text-xs">
-                        <UserAvatar
-                          avatarFileId={item.handoff.author.user.avatarFileId}
-                          displayName={item.handoff.author.user.displayName}
-                          size="sm"
-                        />
-                        <span className="truncate">{item.handoff.author.user.displayName}</span>
-                      </div>
-                      {url ? (
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary mt-3 inline-flex max-w-full items-center gap-1 truncate text-sm underline underline-offset-4"
-                        >
-                          <ExternalLinkIcon aria-hidden="true" className="size-3.5 shrink-0" />
-                          {url}
-                        </a>
-                      ) : null}
-                      <details className="mt-3">
-                        <summary className="text-muted-foreground cursor-pointer text-sm">
-                          {t('handoff.showBody')}
-                        </summary>
-                        <MarkdownRenderer
-                          className="mt-2"
-                          imageUnavailableLabel={markdownT('imageUnavailable')}
-                          markdown={item.handoff.bodyMarkdown}
-                        />
-                      </details>
-                    </article>
-                  </li>
-                );
-              }
-
+      ) : visibleItems.length === 0 && !timeline.hasNextPage ? (
+        <p className="text-muted-foreground mt-3 border-y py-4 text-sm">
+          {mode === 'comments'
+            ? t('timeline.comments.empty')
+            : mode === 'handoffs'
+              ? t('handoff.emptyHistory')
+              : t('timeline.activity.empty')}
+        </p>
+      ) : visibleItems.length > 0 ? (
+        <ol className="mt-4 border-l pl-4">
+          {visibleItems.map((item) => {
+            if (item.type === 'COMMENT') {
               return (
-                <li key={item.activity.id} className="relative pb-4 last:pb-0">
-                  <span className="bg-border absolute top-2 -left-[1.31rem] size-2 rounded-full" />
+                <CommentItem
+                  key={item.comment.id}
+                  comment={item.comment}
+                  currentMembershipId={currentMembershipId}
+                  imageUnavailableLabel={markdownT('imageUnavailable')}
+                  mentionOptions={mentionOptions}
+                  onDeleted={cacheDeletedComment}
+                  onUpdated={cacheUpdatedComment}
+                  refresh={refresh}
+                />
+              );
+            }
+
+            if (item.type === 'HANDOFF' && mode === 'handoffs') {
+              return (
+                <li key={item.handoff.id} className="relative pb-4 last:pb-0">
+                  <span className="bg-primary absolute top-2 -left-[1.31rem] size-2 rounded-full" />
+                  <IssueHandoffCard handoff={item.handoff} />
+                </li>
+              );
+            }
+
+            if (item.type === 'HANDOFF') {
+              return (
+                <li key={item.handoff.id} className="relative pb-4 last:pb-0">
+                  <span className="bg-primary absolute top-2 -left-[1.31rem] size-2 rounded-full" />
                   <div className="min-w-0 py-1 text-sm">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      {item.activity.actor ? (
-                        <UserAvatar
-                          avatarFileId={item.activity.actor.user.avatarFileId}
-                          displayName={item.activity.actor.user.displayName}
-                          size="sm"
-                        />
-                      ) : null}
+                      <UserAvatar
+                        avatarFileId={item.handoff.author.user.avatarFileId}
+                        displayName={item.handoff.author.user.displayName}
+                        size="sm"
+                      />
                       <span className="font-medium">
-                        {activityLabel(item.activity.eventType, item.activity.fieldName, t)}
+                        {item.handoff.kind === 'INITIAL'
+                          ? t('timeline.activity.handoffInitial')
+                          : t('timeline.activity.handoffFollowUp')}
                       </span>
                       <time dateTime={item.createdAt} className="text-muted-foreground text-xs">
                         {formatDate(item.createdAt)}
                       </time>
                     </div>
-                    {item.activity.actor ? (
-                      <p className="text-muted-foreground mt-0.5 pl-8 text-xs">
-                        {item.activity.actor.user.displayName}
-                      </p>
-                    ) : null}
+                    <Link
+                      href={`/issues/${encodeURIComponent(issueIdentifier)}?tab=relations#handoff-${item.handoff.id}`}
+                      className="mt-1 inline-flex pl-8 text-sm font-medium underline-offset-4 hover:underline"
+                    >
+                      {t('timeline.activity.openHandoff')}
+                    </Link>
                   </div>
                 </li>
               );
-            })}
-          </ol>
-          {timeline.hasNextPage ? (
+            }
+
+            const downstreamIssues =
+              item.activity.eventType === 'BACKEND_WORK_DELIVERED'
+                ? linkedDownstreamIssues(item.activity.after)
+                : [];
+            const handoffId = handoffIdFromActivity(item.activity.after);
+            return (
+              <li key={item.activity.id} className="relative pb-4 last:pb-0">
+                <span className="bg-border absolute top-2 -left-[1.31rem] size-2 rounded-full" />
+                <div className="min-w-0 py-1 text-sm">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    {item.activity.actor ? (
+                      <UserAvatar
+                        avatarFileId={item.activity.actor.user.avatarFileId}
+                        displayName={item.activity.actor.user.displayName}
+                        size="sm"
+                      />
+                    ) : null}
+                    <span className="font-medium">
+                      {activityLabel(item.activity.eventType, item.activity.fieldName, t)}
+                    </span>
+                    <time dateTime={item.createdAt} className="text-muted-foreground text-xs">
+                      {formatDate(item.createdAt)}
+                    </time>
+                  </div>
+                  {item.activity.actor ? (
+                    <p className="text-muted-foreground mt-0.5 pl-8 text-xs">
+                      {item.activity.actor.user.displayName}
+                    </p>
+                  ) : null}
+                  {handoffId ? (
+                    <Link
+                      href={`/issues/${encodeURIComponent(issueIdentifier)}?tab=relations#handoff-${handoffId}`}
+                      className="mt-1 inline-flex pl-8 text-sm font-medium underline-offset-4 hover:underline"
+                    >
+                      {t('timeline.activity.openHandoff')}
+                    </Link>
+                  ) : null}
+                  {downstreamIssues.length > 0 ? (
+                    <ul className="mt-2 flex flex-col gap-1 pl-8">
+                      {downstreamIssues.map((issue) => (
+                        <li key={issue.identifier}>
+                          <Link
+                            href={`/issues/${encodeURIComponent(issue.identifier)}?tab=work`}
+                            className="text-sm font-medium underline-offset-4 hover:underline"
+                          >
+                            {issue.identifier} · {issue.title}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      ) : null}
+      {timeline.hasNextPage ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-3"
+          disabled={timeline.isFetchingNextPage}
+          onClick={() => void timeline.fetchNextPage()}
+        >
+          {timeline.isFetchingNextPage ? (
+            <Spinner data-icon="inline-start" aria-hidden="true" />
+          ) : null}
+          {loadMoreLabel}
+        </Button>
+      ) : null}
+
+      {mode === 'comments' ? (
+        <div className="mt-6 flex flex-col gap-3" aria-labelledby="new-comment-title">
+          <div className="flex items-center gap-2">
+            <MessageSquareIcon aria-hidden="true" className="text-muted-foreground size-4" />
+            <h3 id="new-comment-title" className="text-sm font-semibold">
+              {t('timeline.comments.write')}
+            </h3>
+          </div>
+          <MarkdownEditor
+            charLimit={50_000}
+            disabled={createComment.isPending}
+            error={
+              createComment.isError
+                ? commentError(createComment.error, (key) => t(key as never))
+                : null
+            }
+            labels={markdownEditorLabels(
+              (key) => markdownT(key as never),
+              (key) => String(markdownT.raw(key as never)),
+            )}
+            mentionOptions={mentionOptions}
+            status={createComment.isPending ? t('timeline.comments.saving') : null}
+            value={commentDraft}
+            onCanSubmitChange={setCanSubmitComment}
+            onChange={setCommentDraft}
+          />
+          <div className="flex justify-end">
             <Button
               type="button"
-              size="sm"
-              variant="outline"
-              className="mt-3"
-              disabled={timeline.isFetchingNextPage}
-              onClick={() => void timeline.fetchNextPage()}
+              disabled={!commentBody || !canSubmitComment || createComment.isPending}
+              onClick={() => {
+                if (!commentBody) return;
+                createComment.mutate(
+                  { data: { bodyMarkdown: commentDraft }, issueId },
+                  {
+                    onSuccess: (created) => {
+                      setTimelineData((data) => appendComment(data, created));
+                      setCommentDraft('');
+                      void refresh().catch(() => undefined);
+                    },
+                  },
+                );
+              }}
             >
-              {timeline.isFetchingNextPage ? (
+              {createComment.isPending ? (
                 <Spinner data-icon="inline-start" aria-hidden="true" />
               ) : null}
-              {t('timeline.loadMore')}
+              {t('timeline.comments.submit')}
             </Button>
-          ) : null}
-        </>
-      )}
-
-      <div className="mt-6 flex flex-col gap-3" aria-labelledby="new-comment-title">
-        <div className="flex items-center gap-2">
-          <MessageSquareIcon aria-hidden="true" className="text-muted-foreground size-4" />
-          <h3 id="new-comment-title" className="text-sm font-semibold">
-            {t('timeline.comments.write')}
-          </h3>
+          </div>
         </div>
-        <MarkdownEditor
-          charLimit={50_000}
-          disabled={createComment.isPending}
-          error={
-            createComment.isError
-              ? commentError(createComment.error, (key) => t(key as never))
-              : null
-          }
-          labels={markdownEditorLabels(
-            (key) => markdownT(key as never),
-            (key) => String(markdownT.raw(key as never)),
-          )}
-          mentionOptions={mentionOptions}
-          status={createComment.isPending ? t('timeline.comments.saving') : null}
-          value={commentDraft}
-          onCanSubmitChange={setCanSubmitComment}
-          onChange={setCommentDraft}
-        />
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            disabled={!commentBody || !canSubmitComment || createComment.isPending}
-            onClick={() => {
-              if (!commentBody) return;
-              createComment.mutate(
-                { data: { bodyMarkdown: commentDraft }, issueId },
-                {
-                  onSuccess: (created) => {
-                    setTimelineData((data) => appendComment(data, created));
-                    setCommentDraft('');
-                    void refresh().catch(() => undefined);
-                  },
-                },
-              );
-            }}
-          >
-            {createComment.isPending ? (
-              <Spinner data-icon="inline-start" aria-hidden="true" />
-            ) : null}
-            {t('timeline.comments.submit')}
-          </Button>
-        </div>
-      </div>
+      ) : null}
     </section>
   );
 }

@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   FileQuestion,
+  MoreHorizontal,
   Pencil,
   Plus,
   Trash2,
@@ -421,19 +422,31 @@ function ProjectDetailContent({
         {!project.archived ? (
           <>
             <Link
-              href={`${pathname}?create=1&type=FEATURE&projectId=${project.id}`}
+              href={`${pathname}?create=1&projectId=${project.id}`}
               className={buttonVariants({ size: 'sm' })}
             >
               <Plus aria-hidden="true" data-icon="inline-start" />
-              {t('issues.createFeature')}
+              {t('issues.createIssue')}
             </Link>
-            <Link
-              href={`${pathname}?create=1&type=TEAM_TASK&projectId=${project.id}`}
-              className={buttonVariants({ size: 'sm', variant: 'outline' })}
+            <Select
+              items={[{ label: t('issues.createStandalone'), value: 'STANDALONE' }]}
+              value={null}
+              onValueChange={(value) => {
+                if (value === 'STANDALONE') {
+                  router.push(`${pathname}?create=1&type=TEAM_TASK&projectId=${project.id}`);
+                }
+              }}
             >
-              <Plus aria-hidden="true" data-icon="inline-start" />
-              {t('issues.createStandalone')}
-            </Link>
+              <SelectTrigger size="sm" aria-label={t('issues.moreActions')}>
+                <MoreHorizontal aria-hidden="true" />
+                <SelectValue placeholder={t('issues.moreActions')} />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  <SelectItem value="STANDALONE">{t('issues.createStandalone')}</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </>
         ) : null}
       </div>
@@ -505,7 +518,28 @@ function ProjectDetailContent({
               </h2>
               <div className="flex flex-col gap-3">
                 {visibleFeatures.map((feature) => {
-                  const children = (tasksByParent.get(feature.id) ?? []).filter(matches);
+                  const allChildren = tasksByParent.get(feature.id) ?? [];
+                  const children = allChildren.filter(matches);
+                  const currentTasks = allChildren.filter(
+                    (task) =>
+                      task.status.category !== 'COMPLETED' && task.status.category !== 'CANCELED',
+                  );
+                  const backendInProgress = currentTasks.some(
+                    (task) => task.projectRole === 'BACKEND',
+                  );
+                  const hasFrontendTask = allChildren.some(
+                    (task) =>
+                      task.projectRole === 'WEB_FRONTEND' || task.projectRole === 'APP_FRONTEND',
+                  );
+                  const expectedRoles =
+                    backendInProgress && !hasFrontendTask
+                      ? project.roleTeams
+                          .map(({ role }) => role)
+                          .filter((projectRole) => projectRole !== 'BACKEND')
+                      : [];
+                  const visibleExpectedRoles = expectedRoles.filter(
+                    (projectRole) => !role || projectRole === role,
+                  );
                   const isCollapsed = collapsed.has(feature.id);
                   return (
                     <Card key={feature.id} size="sm">
@@ -539,13 +573,30 @@ function ProjectDetailContent({
                             {feature.title}
                           </Link>
                         </CardTitle>
-                        <CardDescription>
-                          {feature.status.featureStatus
-                            ? t(`featureStatus.${feature.status.featureStatus}`)
-                            : t(`stateCategory.${feature.status.category}`)}
+                        <CardDescription className="flex flex-col gap-1">
+                          <span>
+                            {feature.status.featureStatus
+                              ? t(`featureStatus.${feature.status.featureStatus}`)
+                              : t(`stateCategory.${feature.status.category}`)}
+                          </span>
+                          {currentTasks.length > 0 ? (
+                            <span>
+                              {t('issues.currentStage', {
+                                roles: [
+                                  ...new Set(
+                                    currentTasks
+                                      .map((task) => task.projectRole)
+                                      .filter((value) => value !== null),
+                                  ),
+                                ]
+                                  .map((value) => labels.roles[value])
+                                  .join(' · '),
+                              })}
+                            </span>
+                          ) : null}
                         </CardDescription>
                         <CardAction>
-                          {feature.progress ? (
+                          {feature.progress && feature.progress.total > 0 ? (
                             <span className="text-muted-foreground text-xs tabular-nums">
                               {t('progress.compact', {
                                 completed: feature.progress.completed,
@@ -559,27 +610,26 @@ function ProjectDetailContent({
                       {!isCollapsed ? (
                         <CardContent className="flex flex-col gap-3">
                           {children.length > 0 ? (
-                            <div className="border-border ml-3 flex flex-col gap-2 border-l pl-5">
+                            <div className="flex flex-col gap-2">
                               {children.map((task) => (
                                 <ProjectTaskRow key={task.id} task={task} labels={labels} />
                               ))}
                             </div>
-                          ) : (
+                          ) : visibleExpectedRoles.length === 0 ? (
                             <p className="text-muted-foreground text-sm">
                               {t('issues.noChildren')}
                             </p>
-                          )}
-                          {!project.archived ? (
-                            <div className="hidden flex-wrap gap-2 lg:flex">
-                              {project.roleTeams.map(({ role }) => (
-                                <Link
-                                  key={role}
-                                  href={`${pathname}?create=1&type=TEAM_TASK&projectId=${project.id}&projectRole=${role}&parentIssueId=${feature.id}`}
-                                  className={buttonVariants({ size: 'sm', variant: 'ghost' })}
+                          ) : null}
+                          {visibleExpectedRoles.length > 0 ? (
+                            <div className="border-border ml-3 flex flex-col gap-2 border-l border-dashed pl-5">
+                              {visibleExpectedRoles.map((projectRole) => (
+                                <div
+                                  key={projectRole}
+                                  className="text-muted-foreground flex min-h-10 items-center justify-between gap-3 py-1 text-sm"
                                 >
-                                  <Plus aria-hidden="true" data-icon="inline-start" />
-                                  {t('issues.addRoleTask', { role: labels.roles[role] })}
-                                </Link>
+                                  <span>{labels.roles[projectRole]}</span>
+                                  <Badge variant="outline">{t('issues.expectedStage')}</Badge>
+                                </div>
                               ))}
                             </div>
                           ) : null}

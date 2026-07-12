@@ -1,7 +1,8 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 import {
   FeatureIssueStatus,
+  HandoffKind,
   IssuePriority,
   IssueType,
   MembershipRole,
@@ -272,6 +273,57 @@ export class IssueDetailAttachmentResponseDto {
   createdAt!: string;
 }
 
+export class IssueHandoffFlowHandoffResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ enum: HandoffKind })
+  kind!: HandoffKind;
+
+  @ApiProperty({ minimum: 1 })
+  sequenceNumber!: number;
+
+  @ApiProperty()
+  changeSummary!: string;
+
+  @ApiProperty()
+  bodyMarkdown!: string;
+
+  @ApiProperty({ type: IssueMemberSummaryResponseDto })
+  author!: IssueMemberSummaryResponseDto;
+
+  @ApiProperty({ format: 'date-time' })
+  createdAt!: string;
+}
+
+export class IssueHandoffFlowResponseDto {
+  @ApiProperty({ type: IssueRelationIssueResponseDto })
+  sourceIssue!: IssueRelationIssueResponseDto;
+
+  @ApiProperty({ isArray: true, type: IssueRelationIssueResponseDto })
+  downstreamIssues!: IssueRelationIssueResponseDto[];
+
+  @ApiProperty({ isArray: true, type: IssueHandoffFlowHandoffResponseDto })
+  handoffs!: IssueHandoffFlowHandoffResponseDto[];
+}
+
+export class IssueWorkflowRelationResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  blockingIssueId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  blockedIssueId!: string;
+
+  @ApiProperty()
+  resolved!: boolean;
+
+  @ApiProperty({ format: 'date-time' })
+  createdAt!: string;
+}
+
 export class IssueDetailResponseDto extends IssueSummaryResponseDto {
   @ApiProperty({ nullable: true, type: String })
   descriptionMarkdown!: string | null;
@@ -290,6 +342,71 @@ export class IssueDetailResponseDto extends IssueSummaryResponseDto {
 
   @ApiProperty({ nullable: true, type: IssueHandoffSummaryResponseDto })
   handoffSummary!: IssueHandoffSummaryResponseDto | null;
+
+  @ApiPropertyOptional({ isArray: true, type: IssueHandoffFlowResponseDto })
+  handoffFlows?: IssueHandoffFlowResponseDto[];
+
+  @ApiPropertyOptional({ isArray: true, type: IssueWorkflowRelationResponseDto })
+  workflowRelations?: IssueWorkflowRelationResponseDto[];
+}
+
+export class CreateIssueResponseDto {
+  @ApiProperty({ type: IssueDetailResponseDto })
+  issue!: IssueDetailResponseDto;
+
+  @ApiProperty({ isArray: true, type: IssueSummaryResponseDto })
+  createdTeamTasks!: IssueSummaryResponseDto[];
+}
+
+export class IssueCompletionHandoffResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ enum: HandoffKind })
+  kind!: HandoffKind;
+
+  @ApiProperty({ minimum: 1 })
+  sequenceNumber!: number;
+
+  @ApiProperty()
+  bodyMarkdown!: string;
+
+  @ApiProperty({ type: IssueMemberSummaryResponseDto })
+  author!: IssueMemberSummaryResponseDto;
+
+  @ApiProperty({ format: 'date-time' })
+  createdAt!: string;
+}
+
+export class IssueCompletionBlockRelationResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  blockingIssueId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  blockedIssueId!: string;
+
+  @ApiProperty()
+  resolved!: boolean;
+
+  @ApiProperty({ format: 'date-time' })
+  createdAt!: string;
+}
+
+export class UpdateIssueResponseDto extends IssueDetailResponseDto {
+  @ApiPropertyOptional({ type: IssueCompletionHandoffResponseDto })
+  handoff?: IssueCompletionHandoffResponseDto;
+
+  @ApiPropertyOptional({ isArray: true, type: IssueSummaryResponseDto })
+  downstreamTeamTasks?: IssueSummaryResponseDto[];
+
+  @ApiPropertyOptional({ isArray: true, type: IssueCompletionBlockRelationResponseDto })
+  blockRelations?: IssueCompletionBlockRelationResponseDto[];
+
+  @ApiPropertyOptional({ type: IssueSummaryResponseDto })
+  updatedParentIssue?: IssueSummaryResponseDto;
 }
 
 export class IssueListResponseDto {

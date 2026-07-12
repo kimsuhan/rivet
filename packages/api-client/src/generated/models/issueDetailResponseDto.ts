@@ -10,6 +10,7 @@ import type { IssueDetailAttachmentResponseDto } from './issueDetailAttachmentRe
 import type { IssueDetailResponseDtoPriority } from './issueDetailResponseDtoPriority';
 import type { IssueDetailResponseDtoProjectRole } from './issueDetailResponseDtoProjectRole';
 import type { IssueDetailResponseDtoType } from './issueDetailResponseDtoType';
+import type { IssueHandoffFlowResponseDto } from './issueHandoffFlowResponseDto';
 import type { IssueHandoffSummaryResponseDto } from './issueHandoffSummaryResponseDto';
 import type { IssueLabelSummaryResponseDto } from './issueLabelSummaryResponseDto';
 import type { IssueMemberSummaryResponseDto } from './issueMemberSummaryResponseDto';
@@ -18,6 +19,7 @@ import type { IssueProgressResponseDto } from './issueProgressResponseDto';
 import type { IssueProjectSummaryResponseDto } from './issueProjectSummaryResponseDto';
 import type { IssueStatusResponseDto } from './issueStatusResponseDto';
 import type { IssueTeamSummaryResponseDto } from './issueTeamSummaryResponseDto';
+import type { IssueWorkflowRelationResponseDto } from './issueWorkflowRelationResponseDto';
 
 export interface IssueDetailResponseDto {
   id: string;
@@ -52,4 +54,6 @@ export interface IssueDetailResponseDto {
   attachments: IssueDetailAttachmentResponseDto[];
   /** @nullable */
   handoffSummary: IssueHandoffSummaryResponseDto | null;
+  handoffFlows?: IssueHandoffFlowResponseDto[];
+  workflowRelations?: IssueWorkflowRelationResponseDto[];
 }

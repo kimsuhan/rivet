@@ -4,11 +4,12 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import type {
   AuthenticatedSessionDto,
-  IssueBlockRelationMutationResponseDto,
+  CreateIssueResponseDto,
   IssueDetailResponseDto,
   ProjectResponseDto,
   TeamListResponseDto,
   TeamResponseDto,
+  UpdateIssueResponseDto,
   WorkflowStateListResponseDto,
 } from '@rivet/api-client';
 
@@ -61,27 +62,6 @@ async function apiRequest<T>(
   expect(result.status, JSON.stringify(result.body)).toBeGreaterThanOrEqual(200);
   expect(result.status, JSON.stringify(result.body)).toBeLessThan(300);
   return result.body as T;
-}
-
-async function createBlockRelation(
-  page: Page,
-  blockingIssueId: string,
-  blockedIssueId: string,
-): Promise<IssueBlockRelationMutationResponseDto> {
-  const [blockingIssue, blockedIssue] = await Promise.all([
-    apiRequest<IssueDetailResponseDto>(page, `/issues/${encodeURIComponent(blockingIssueId)}`),
-    apiRequest<IssueDetailResponseDto>(page, `/issues/${encodeURIComponent(blockedIssueId)}`),
-  ]);
-
-  return apiRequest<IssueBlockRelationMutationResponseDto>(page, '/issue-block-relations', {
-    body: {
-      blockedIssueId,
-      blockedIssueVersion: blockedIssue.version,
-      blockingIssueId,
-      blockingIssueVersion: blockingIssue.version,
-    },
-    method: 'POST',
-  });
 }
 
 async function completeOnboarding(
@@ -145,43 +125,39 @@ async function seedProjectHierarchy(
   feature: IssueDetailResponseDto;
   web: IssueDetailResponseDto;
 }> {
-  const feature = await apiRequest<IssueDetailResponseDto>(page, '/issues', {
+  const created = await apiRequest<CreateIssueResponseDto>(page, '/issues', {
     body: {
       featureStatus: 'IN_PROGRESS',
+      initialRoles: ['BACKEND'],
       projectId: input.projectId,
       title: `M4 결제 기능 ${input.runId}`,
       type: 'FEATURE',
     },
     method: 'POST',
   });
-  const backend = await apiRequest<IssueDetailResponseDto>(page, '/issues', {
-    body: {
-      assigneeMembershipId: input.assigneeMembershipId,
-      parentIssueId: feature.id,
-      priority: 'HIGH',
-      projectId: input.projectId,
-      projectRole: 'BACKEND',
-      teamId: input.teamId,
-      title: `M4 결제 API ${input.runId}`,
-      type: 'TEAM_TASK',
-      workflowStateId: input.defaultStateId,
-    },
-    method: 'POST',
-  });
-  const web = await apiRequest<IssueDetailResponseDto>(page, '/issues', {
-    body: {
-      assigneeMembershipId: input.assigneeMembershipId,
-      parentIssueId: feature.id,
-      priority: 'MEDIUM',
-      projectId: input.projectId,
-      projectRole: 'WEB_FRONTEND',
-      teamId: input.teamId,
-      title: `M4 결제 화면 ${input.runId}`,
-      type: 'TEAM_TASK',
-      workflowStateId: input.completedStateId,
-    },
-    method: 'POST',
-  });
+  const feature = created.issue;
+  const backendSummary = created.createdTeamTasks.find((task) => task.projectRole === 'BACKEND');
+  if (!backendSummary) throw new Error('M4 E2E 자동 생성 백엔드 작업을 찾지 못했습니다.');
+  const backend = await apiRequest<IssueDetailResponseDto>(
+    page,
+    `/issues/${encodeURIComponent(backendSummary.id)}`,
+  );
+  const web = (
+    await apiRequest<CreateIssueResponseDto>(page, '/issues', {
+      body: {
+        assigneeMembershipId: input.assigneeMembershipId,
+        parentIssueId: feature.id,
+        priority: 'MEDIUM',
+        projectId: input.projectId,
+        projectRole: 'WEB_FRONTEND',
+        teamId: input.teamId,
+        title: `M4 결제 화면 ${input.runId}`,
+        type: 'TEAM_TASK',
+        workflowStateId: input.completedStateId,
+      },
+      method: 'POST',
+    })
+  ).issue;
 
   return { backend, feature, web };
 }
@@ -275,15 +251,58 @@ test('UF-04~05 프로젝트 생성, 계층, 충돌 복구와 보관을 완료한
         '50',
       );
       await expect(
-        page.getByRole('link', { name: new RegExp(hierarchy.feature.title) }),
+        page.getByRole('link', {
+          name: new RegExp(`^${hierarchy.feature.identifier}.*${hierarchy.feature.title}$`),
+        }),
       ).toBeVisible();
       await expect(
-        page.getByRole('link', { name: new RegExp(hierarchy.backend.title) }),
+        page.getByRole('link', {
+          name: new RegExp(`^${hierarchy.backend.identifier}.*${hierarchy.backend.title}$`),
+        }),
       ).toBeVisible();
-      await expect(page.getByRole('link', { name: new RegExp(hierarchy.web.title) })).toBeVisible();
+      await expect(
+        page.getByRole('link', {
+          name: new RegExp(`^${hierarchy.web.identifier}.*${hierarchy.web.title}$`),
+        }),
+      ).toBeVisible();
       await expect(page.getByRole('link', { name: '프로젝트 편집' })).toHaveCount(0);
-      await expect(page.getByRole('link', { name: '기능 이슈 만들기' })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: '이슈 만들기' })).toHaveCount(0);
       await checkLayout(page, testInfo.project.name, 'detail-mobile');
+
+      await page.goto(`/issues/${hierarchy.feature.identifier}`);
+      const featureTabs = page.getByRole('tablist', { name: '상세 화면' });
+      await expect(featureTabs.getByRole('tab')).toHaveCount(3);
+      await expect(featureTabs.getByRole('tab', { name: '업무' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      await expect(page.getByRole('heading', { name: '속성' })).toBeVisible();
+      await featureTabs.getByRole('tab', { name: '연결' }).click();
+      await expect(page).toHaveURL(
+        new RegExp(`/issues/${hierarchy.feature.identifier}\\?tab=relations$`),
+      );
+      await expect(page.getByRole('region', { name: '작업 흐름' })).toBeVisible();
+      await expect(page.getByText(/0\/0 완료/)).toHaveCount(0);
+      await checkLayout(page, testInfo.project.name, 'workflow-mobile');
+
+      await page.goto(`/issues/${hierarchy.backend.identifier}`);
+      const taskTabs = page.getByRole('tablist', { name: '상세 화면' });
+      await expect(taskTabs.getByRole('tab')).toHaveCount(3);
+      await expect(taskTabs.getByRole('tab', { name: '업무' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      await expect(
+        page.getByText('작업 전달 작성과 전달을 포함한 완료는 데스크톱에서 사용할 수 있습니다.'),
+      ).toBeVisible();
+      await taskTabs.getByRole('tab', { name: '연결' }).click();
+      await expect(page).toHaveURL(
+        new RegExp(`/issues/${hierarchy.backend.identifier}\\?tab=relations$`),
+      );
+      await expect(page.getByRole('heading', { name: '작업 순서' })).toBeVisible();
+      await expect(page.getByText('연결된 선행·후행 작업이 없습니다.')).toBeVisible();
+      await expect(page.getByRole('heading', { name: '속성' })).toBeVisible();
+      await checkLayout(page, testInfo.project.name, 'order-mobile');
 
       await page.goto('/projects/new');
       await expect(
@@ -354,39 +373,173 @@ test('UF-04~05 프로젝트 생성, 계층, 충돌 복구와 보관을 완료한
       'value',
       '50',
     );
-    const featureCard = page
-      .locator('[data-slot="card"]')
-      .filter({ has: page.getByRole('link', { name: new RegExp(hierarchy.feature.title) }) });
+    const featureCard = page.locator('[data-slot="card"]').filter({
+      has: page.getByRole('link', {
+        name: new RegExp(`^${hierarchy.feature.identifier}.*${hierarchy.feature.title}$`),
+      }),
+    });
     await expect(featureCard.getByText('1/2 · 50%')).toBeVisible();
     await expect(
-      featureCard.getByRole('link', { name: new RegExp(hierarchy.backend.title) }),
+      featureCard.getByRole('link', {
+        name: new RegExp(`^${hierarchy.backend.identifier}.*${hierarchy.backend.title}$`),
+      }),
     ).toBeVisible();
     await expect(
-      featureCard.getByRole('link', { name: new RegExp(hierarchy.web.title) }),
+      featureCard.getByRole('link', {
+        name: new RegExp(`^${hierarchy.web.identifier}.*${hierarchy.web.title}$`),
+      }),
     ).toBeVisible();
 
-    await page.getByRole('link', { name: '기능 이슈 만들기' }).click();
+    await page.getByRole('link', { name: '이슈 만들기' }).click();
     const featureCreateDialog = page.getByRole('dialog', { name: '이슈 만들기' });
-    await expect(featureCreateDialog.getByRole('combobox', { name: '이슈 유형' })).toContainText(
-      '기능 이슈',
-    );
+    await expect(featureCreateDialog.getByRole('combobox', { name: '이슈 유형' })).toHaveCount(0);
     await expect(featureCreateDialog.getByRole('combobox', { name: '프로젝트' })).toContainText(
       uiProjectName,
     );
-    await featureCreateDialog.getByRole('button', { name: '이슈 만들기 닫기' }).click();
+    const backendStart = featureCreateDialog.getByRole('checkbox', { name: '백엔드' });
+    await backendStart.focus();
+    await page.keyboard.press('Space');
+    await expect(backendStart).toBeChecked();
+    await expect(featureCreateDialog.getByText('선택됨')).toHaveCount(1);
+    const webStart = featureCreateDialog.getByRole('checkbox', { name: '웹 프론트' });
+    await webStart.focus();
+    await page.keyboard.press('Space');
+    await expect(webStart).toBeChecked();
+    await expect(featureCreateDialog.getByText('선택됨')).toHaveCount(2);
+    await featureCreateDialog.getByRole('textbox', { name: '제목' }).fill(`M4 병렬 시작 ${runId}`);
+    const parallelCreateResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().endsWith('/api/v1/issues') &&
+        response.status() === 201,
+    );
+    await featureCreateDialog.getByRole('button', { exact: true, name: '이슈 만들기' }).click();
+    const parallelCreated = (await (await parallelCreateResponse).json()) as CreateIssueResponseDto;
+    expect(parallelCreated.createdTeamTasks.map((task) => task.projectRole).sort()).toEqual([
+      'BACKEND',
+      'WEB_FRONTEND',
+    ]);
+    await expect(page).toHaveURL(new RegExp(`/issues/${parallelCreated.issue.identifier}$`));
+    const parallelTabs = page.getByRole('tablist', { name: '상세 화면' });
+    await expect(parallelTabs.getByRole('tab', { name: '업무' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await page.goto(`/issues/${parallelCreated.issue.identifier}?tab=relations`);
+    await expect(page.getByRole('tab', { name: '연결' })).toHaveAttribute('aria-selected', 'true');
+    const parallelWorkflow = page.getByRole('region', { name: '작업 흐름' });
+    await expect(parallelWorkflow.getByRole('heading', { name: '현재 작업' })).toBeVisible();
+    await expect(parallelWorkflow.getByText('백엔드', { exact: true })).toBeVisible();
+    await expect(parallelWorkflow.getByText('웹 프론트', { exact: true })).toBeVisible();
+    await expect(parallelWorkflow.locator('li.border-l')).toHaveCount(0);
 
-    await featureCard.getByRole('link', { name: '백엔드 작업 추가' }).click();
-    const taskCreateDialog = page.getByRole('dialog', { name: '이슈 만들기' });
-    await expect(taskCreateDialog.getByRole('combobox', { name: '이슈 유형' })).toContainText(
-      '팀 작업',
+    const originalViewport = page.viewportSize();
+    if (!originalViewport) throw new Error('M4 E2E viewport를 확인하지 못했습니다.');
+    await page.setViewportSize({
+      height: Math.max(360, Math.floor(originalViewport.height / 2)),
+      width: Math.max(640, Math.floor(originalViewport.width / 2)),
+    });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+      .toBe(true);
+    await page.evaluate(() => window.scrollTo(0, Math.min(320, document.body.scrollHeight)));
+    const relationScrollY = await page.evaluate(() => window.scrollY);
+    expect(relationScrollY).toBeGreaterThan(0);
+    const parallelTaskLink = parallelWorkflow
+      .getByRole('link', { name: new RegExp(parallelCreated.createdTeamTasks[0]!.identifier) })
+      .first();
+    await parallelTaskLink.evaluate((element: HTMLElement) => element.click());
+    await expect(page).toHaveURL(/\/issues\/(API|WEB|APP)-\d+$/);
+    await page.goBack();
+    await expect(page).toHaveURL(
+      new RegExp(`/issues/${parallelCreated.issue.identifier}\\?tab=relations$`),
     );
-    await expect(taskCreateDialog.getByRole('combobox', { name: '프로젝트 역할' })).toContainText(
-      '백엔드 · 웹',
+    await expect(page.getByRole('tab', { name: '연결' })).toHaveAttribute('aria-selected', 'true');
+    await expect
+      .poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - relationScrollY))
+      .toBeLessThanOrEqual(8);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 2 });
+    await expect
+      .poll(() => page.evaluate(() => window.visualViewport?.scale ?? 1))
+      .toBeGreaterThanOrEqual(2);
+    await expect(page.getByRole('tablist', { name: '상세 화면' })).toBeVisible();
+    await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 1 });
+    await cdp.detach();
+    await page.setViewportSize(originalViewport);
+
+    await page.goto(`/projects/${uiProject.id}`);
+    await page.getByRole('link', { name: '이슈 만들기' }).click();
+    const analysisCreateDialog = page.getByRole('dialog', { name: '이슈 만들기' });
+    await analysisCreateDialog
+      .getByRole('textbox', { name: '제목' })
+      .fill(`M4 분석 후 시작 ${runId}`);
+    const analysisCreateResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().endsWith('/api/v1/issues') &&
+        response.status() === 201,
     );
-    await expect(taskCreateDialog.getByRole('combobox', { name: '상위 기능 이슈' })).toContainText(
-      hierarchy.feature.title,
+    await analysisCreateDialog.getByRole('button', { exact: true, name: '이슈 만들기' }).click();
+    const analysisCreated = (await (await analysisCreateResponse).json()) as CreateIssueResponseDto;
+    expect(analysisCreated.createdTeamTasks).toHaveLength(0);
+    await expect(page).toHaveURL(new RegExp(`/issues/${analysisCreated.issue.identifier}$`));
+
+    const analysisSummary = page
+      .getByRole('heading', { name: '현재 작업 요약' })
+      .locator('xpath=ancestor::section[1]');
+    await expect(
+      analysisSummary.getByRole('heading', { name: '아직 시작된 팀 작업이 없습니다' }),
+    ).toBeVisible();
+    await expect(
+      analysisSummary.getByText('분석이 끝났다면 작업을 시작할 팀을 선택해 주세요.'),
+    ).toBeVisible();
+    await expect(analysisSummary.getByText(/0\/0 완료/)).toHaveCount(0);
+    const openStart = analysisSummary.getByRole('button', { name: '작업 시작' });
+    await expect(openStart).toBeEnabled();
+    await openStart.click();
+
+    const startDialog = page.getByRole('dialog', { name: '작업을 시작할 팀 선택' });
+    const startBackend = startDialog.getByRole('checkbox', { name: '백엔드' });
+    await startBackend.focus();
+    await page.keyboard.press('Space');
+    const startWeb = startDialog.getByRole('checkbox', { name: '웹 프론트' });
+    await startWeb.focus();
+    await page.keyboard.press('Space');
+    await expect(startBackend).toBeChecked();
+    await expect(startWeb).toBeChecked();
+    const startResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().endsWith(`/api/v1/issues/${analysisCreated.issue.id}/start`) &&
+        response.status() === 200,
     );
-    await taskCreateDialog.getByRole('button', { name: '이슈 만들기 닫기' }).click();
+    await startDialog.getByRole('button', { exact: true, name: '작업 시작' }).click();
+    const started = (await (await startResponse).json()) as CreateIssueResponseDto;
+    expect(started.createdTeamTasks.map((task) => task.projectRole).sort()).toEqual([
+      'BACKEND',
+      'WEB_FRONTEND',
+    ]);
+    await expect(startDialog).toBeHidden();
+    await page.getByRole('tab', { name: '연결' }).click();
+    const analysisWorkflow = page.getByRole('region', { name: '작업 흐름' });
+    const startedWork = analysisWorkflow.getByRole('region', { name: '현재 작업' });
+    for (const task of started.createdTeamTasks) {
+      await expect(
+        startedWork.getByRole('link', { name: `${task.identifier} · ${task.title}` }),
+      ).toBeVisible();
+    }
+    await expect(startedWork.locator('li.border-l')).toHaveCount(0);
+
+    await page.goto(`/projects/${uiProject.id}`);
+
+    await selectOption(page, '추가 작업', '단독 팀 작업 만들기');
+    const taskCreateDialog = page.getByRole('dialog', { name: '팀 작업 만들기' });
+    await expect(taskCreateDialog.getByRole('combobox', { name: '이슈 유형' })).toHaveCount(0);
+    await expect(
+      taskCreateDialog.getByRole('combobox', { exact: true, name: '프로젝트' }),
+    ).toContainText(uiProjectName);
+    await taskCreateDialog.getByRole('button', { name: '팀 작업 만들기 닫기' }).click();
     const discardTaskCreate = page.getByRole('alertdialog', {
       name: '작성 중인 이슈를 닫을까요?',
     });
@@ -398,9 +551,15 @@ test('UF-04~05 프로젝트 생성, 계층, 충돌 복구와 보관을 완료한
     await selectOption(page, '프로젝트 역할', '웹 프론트');
     await expect(page).toHaveURL(/role=WEB_FRONTEND/);
     await expect(
-      page.getByRole('link', { name: new RegExp(hierarchy.backend.title) }),
+      page.getByRole('link', {
+        name: new RegExp(`^${hierarchy.backend.identifier}.*${hierarchy.backend.title}$`),
+      }),
     ).toBeHidden();
-    await expect(page.getByRole('link', { name: new RegExp(hierarchy.web.title) })).toBeVisible();
+    await expect(
+      page.getByRole('link', {
+        name: new RegExp(`^${hierarchy.web.identifier}.*${hierarchy.web.title}$`),
+      }),
+    ).toBeVisible();
     await selectOption(page, '프로젝트 역할', '모든 역할');
     await checkLayout(page, testInfo.project.name, 'detail-hierarchy');
 
@@ -551,113 +710,44 @@ test('E05 백엔드 완료와 최초 작업 전달이 웹·앱 후행 작업을 
       },
       method: 'POST',
     });
-    const feature = await apiRequest<IssueDetailResponseDto>(page, '/issues', {
+    const createdFeature = await apiRequest<CreateIssueResponseDto>(page, '/issues', {
       body: {
         featureStatus: 'IN_PROGRESS',
+        initialRoles: ['BACKEND'],
         projectId: project.id,
         title: `E05 결제 기능 ${runId}`,
         type: 'FEATURE',
       },
       method: 'POST',
     });
-    const [backend, web, app] = await Promise.all([
-      apiRequest<IssueDetailResponseDto>(page, '/issues', {
-        body: {
-          assigneeMembershipId: session.membership.id,
-          parentIssueId: feature.id,
-          priority: 'HIGH',
-          projectId: project.id,
-          projectRole: 'BACKEND',
-          teamId: apiTeam.id,
-          title: `E05 결제 API ${runId}`,
-          type: 'TEAM_TASK',
-          workflowStateId: apiDefault.id,
-        },
-        method: 'POST',
-      }),
-      apiRequest<IssueDetailResponseDto>(page, '/issues', {
-        body: {
-          assigneeMembershipId: session.membership.id,
-          parentIssueId: feature.id,
-          priority: 'MEDIUM',
-          projectId: project.id,
-          projectRole: 'WEB_FRONTEND',
-          teamId: webTeam.id,
-          title: `E05 결제 웹 ${runId}`,
-          type: 'TEAM_TASK',
-          workflowStateId: webDefault.id,
-        },
-        method: 'POST',
-      }),
-      apiRequest<IssueDetailResponseDto>(page, '/issues', {
-        body: {
-          assigneeMembershipId: session.membership.id,
-          parentIssueId: feature.id,
-          priority: 'MEDIUM',
-          projectId: project.id,
-          projectRole: 'APP_FRONTEND',
-          teamId: appTeam.id,
-          title: `E05 결제 앱 ${runId}`,
-          type: 'TEAM_TASK',
-          workflowStateId: appDefault.id,
-        },
-        method: 'POST',
-      }),
-    ]);
-
-    await page.goto(`/issues/${backend.identifier}`);
-    await expect(page.getByLabel('이슈 제목')).toHaveValue(backend.title);
-    const backendRelations = page
-      .getByRole('heading', { name: '차단 관계' })
-      .locator('xpath=ancestor::section[1]');
-    const webRelationName = `${web.identifier} · ${web.title}`;
-    await selectOption(page, '관계 방향', '차단함', backendRelations);
-    await selectOption(page, '연결할 팀 작업', webRelationName, backendRelations);
-    await backendRelations.getByRole('button', { name: '관계 추가' }).click();
-    await expect(backendRelations.getByRole('link', { name: webRelationName })).toBeVisible();
-
-    await backendRelations.getByRole('button', { name: `${web.identifier} 관계 해제` }).click();
-    await expect(backendRelations.getByRole('link', { name: webRelationName })).toHaveCount(0);
-    await selectOption(page, '연결할 팀 작업', webRelationName, backendRelations);
-    await backendRelations.getByRole('button', { name: '관계 추가' }).click();
-    await expect(backendRelations.getByRole('link', { name: webRelationName })).toBeVisible();
-
-    await page.goto(`/issues/${web.identifier}`);
-    await expect(page.getByLabel('이슈 제목')).toHaveValue(web.title);
-    const webRelations = page
-      .getByRole('heading', { name: '차단 관계' })
-      .locator('xpath=ancestor::section[1]');
-    await selectOption(page, '관계 방향', '차단함', webRelations);
-    await selectOption(
+    const feature = createdFeature.issue;
+    expect(createdFeature.createdTeamTasks).toHaveLength(1);
+    const backendSummary = createdFeature.createdTeamTasks.find(
+      (task) => task.projectRole === 'BACKEND',
+    );
+    if (!backendSummary) throw new Error('E05 자동 생성 백엔드 작업을 찾지 못했습니다.');
+    const backend = await apiRequest<IssueDetailResponseDto>(
       page,
-      '연결할 팀 작업',
-      `${backend.identifier} · ${backend.title}`,
-      webRelations,
+      `/issues/${encodeURIComponent(backendSummary.id)}`,
     );
-    await webRelations.getByRole('button', { name: '관계 추가' }).click();
-    await expect(webRelations.getByRole('alert')).toContainText(
-      '순환하는 차단 관계는 만들 수 없습니다.',
+    expect(backend.status.workflowState?.id).toBe(apiDefault.id);
+
+    await page.goto(`/issues/${feature.identifier}`);
+    await expect(page.getByRole('progressbar', { name: '0/1 완료 · 0%' })).toHaveAttribute(
+      'value',
+      '0',
     );
-
-    await createBlockRelation(page, backend.id, app.id);
-    const [blockedWeb, blockedApp] = await Promise.all([
-      apiRequest<IssueDetailResponseDto>(page, `/issues/${encodeURIComponent(web.id)}`),
-      apiRequest<IssueDetailResponseDto>(page, `/issues/${encodeURIComponent(app.id)}`),
-    ]);
-    expect(blockedWeb.blocked).toBe(true);
-    expect(blockedApp.blocked).toBe(true);
-
-    await page.goto(`/issues/${backend.identifier}`);
+    await page.getByRole('tab', { name: '연결' }).click();
+    await expect(page.getByText('전달 후 생성')).toHaveCount(2);
+    await expect(page.getByText(/0\/0 완료/)).toHaveCount(0);
+    await page.getByRole('link', { name: `${backend.identifier} · ${backend.title}` }).click();
     await expect(page.getByLabel('이슈 제목')).toHaveValue(backend.title);
+    await expect(page.getByRole('button', { name: '전달하고 완료' })).toBeEnabled();
     await selectOption(page, '상태', apiCompleted.name);
 
     const handoffDialog = page.getByRole('dialog', { name: '작업 전달 후 완료' });
-    await expect(handoffDialog).toContainText(
-      '미완료 프론트 작업의 차단을 해제하려면 최초 전달을 같은 변경에서 저장해야 합니다.',
-    );
-    await expect(
-      page.getByRole('alert').filter({ hasText: '변경을 저장하지 못했습니다' }),
-    ).toHaveCount(0);
+    await expect(handoffDialog.getByRole('checkbox', { name: '웹 프론트' })).toBeChecked();
+    await expect(handoffDialog.getByRole('checkbox', { name: '앱 프론트' })).toBeChecked();
     const handoffEditor = handoffDialog.getByRole('textbox', {
       name: 'Markdown 본문 편집기',
     });
@@ -680,30 +770,103 @@ test('E05 백엔드 완료와 최초 작업 전달이 웹·앱 후행 작업을 
     if (!response) throw new Error('E05 이슈 완료 응답을 받지 못했습니다.');
     const responseBody: unknown = await response.json();
     expect(response.status(), JSON.stringify(responseBody)).toBe(200);
-    const completedBackend = responseBody as IssueDetailResponseDto;
+    const completedBackend = responseBody as UpdateIssueResponseDto;
     expect(completedBackend.status.category).toBe('COMPLETED');
     expect(completedBackend.handoffSummary).toMatchObject({ count: 1, hasInitial: true });
+    if (!completedBackend.handoff) throw new Error('E05 최초 전달 응답을 찾지 못했습니다.');
+    expect(completedBackend.blockRelations).toHaveLength(2);
+    expect(completedBackend.updatedParentIssue?.progress).toEqual({
+      completed: 1,
+      percentage: 33,
+      total: 3,
+    });
+    const webSummary = completedBackend.downstreamTeamTasks?.find(
+      (task) => task.projectRole === 'WEB_FRONTEND',
+    );
+    const appSummary = completedBackend.downstreamTeamTasks?.find(
+      (task) => task.projectRole === 'APP_FRONTEND',
+    );
+    if (!webSummary || !appSummary) throw new Error('E05 자동 생성 후행 작업을 찾지 못했습니다.');
     await expect(handoffDialog).toBeHidden();
 
-    const [unblockedWeb, unblockedApp] = await Promise.all([
-      apiRequest<IssueDetailResponseDto>(page, `/issues/${encodeURIComponent(web.id)}`),
-      apiRequest<IssueDetailResponseDto>(page, `/issues/${encodeURIComponent(app.id)}`),
+    const [web, app] = await Promise.all([
+      apiRequest<IssueDetailResponseDto>(page, `/issues/${encodeURIComponent(webSummary.id)}`),
+      apiRequest<IssueDetailResponseDto>(page, `/issues/${encodeURIComponent(appSummary.id)}`),
     ]);
-    expect(unblockedWeb.blocked).toBe(false);
-    expect(unblockedApp.blocked).toBe(false);
-    expect(unblockedWeb.status.workflowState?.id).toBe(webDefault.id);
-    expect(unblockedApp.status.workflowState?.id).toBe(appDefault.id);
+    expect(web.blocked).toBe(false);
+    expect(app.blocked).toBe(false);
+    expect(web.status.workflowState?.id).toBe(webDefault.id);
+    expect(app.status.workflowState?.id).toBe(appDefault.id);
 
-    await page.goto(`/issues/${web.identifier}`);
+    await expect(page).toHaveURL(
+      new RegExp(`/issues/${feature.identifier}\\?tab=relations#feature-progress-title$`),
+    );
+    await expect(page.getByRole('progressbar', { name: '1/3 완료 · 33%' })).toHaveAttribute(
+      'value',
+      '33',
+    );
+    await expect(page.getByText('완료 작업')).toBeVisible();
+    const workflow = page.getByRole('region', { name: '작업 흐름' });
+    await expect(workflow.getByText('현재 작업')).toHaveCount(3);
+    const currentWork = workflow.getByRole('region', { name: '현재 작업' });
+    await expect(
+      currentWork.getByRole('link', { name: `${web.identifier} · ${web.title}` }),
+    ).toBeVisible();
+    await expect(
+      currentWork.getByRole('link', { name: `${app.identifier} · ${app.title}` }),
+    ).toBeVisible();
+    await expect(workflow.getByRole('heading', { name: '작업 전달' })).toBeVisible();
+    const workflowHandoff = workflow
+      .getByRole('heading', { name: '최초 전달' })
+      .locator('xpath=ancestor::article[1]');
+    await expect(workflowHandoff).toContainText('M4 브라우저 사용자');
+    await expect(workflowHandoff.getByRole('link', { name: /API-/ })).toBeVisible();
+    await expect(workflowHandoff.getByRole('link', { name: /WEB-/ })).toBeVisible();
+    await workflowHandoff.getByText('전체 전달 내용 보기').click();
+    await expect(workflowHandoff.getByText(handoffNote, { exact: false })).toBeVisible();
+    await page.getByRole('tab', { name: '활동' }).click();
+    const featureActivity = page
+      .getByRole('heading', { name: '활동' })
+      .locator('xpath=ancestor::section[1]');
+    await expect(featureActivity.getByText('백엔드 작업을 전달했습니다')).toBeVisible();
+    await featureActivity.getByRole('link', { name: '전달 내용 보기' }).click();
+    await expect(page.getByRole('tab', { name: '연결' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator(`#handoff-${completedBackend.handoff.id} details`)).toHaveAttribute(
+      'open',
+      '',
+    );
+
+    await page.goto(
+      `/issues/${web.identifier}?tab=relations#handoff-${completedBackend.handoff.id}`,
+    );
+    await expect(page).toHaveURL(
+      new RegExp(`/issues/${web.identifier}\\?tab=work#handoff-${completedBackend.handoff.id}$`),
+    );
     await expect(page.getByLabel('이슈 제목')).toHaveValue(web.title);
+    await expect(page.getByRole('tab', { name: '업무' })).toHaveAttribute('aria-selected', 'true');
+    const receivedHandoff = page
+      .getByRole('heading', { name: '전달받은 내용' })
+      .locator('xpath=ancestor::section[1]');
+    await expect(receivedHandoff.getByRole('heading', { name: '최초 전달' })).toBeVisible();
+    await expect(
+      receivedHandoff.getByRole('link', { name: `${backend.identifier} · ${backend.title}` }),
+    ).toBeVisible();
+    await expect(
+      receivedHandoff.getByRole('link', { name: `${feature.identifier} · ${feature.title}` }),
+    ).toBeVisible();
+    await expect(
+      receivedHandoff.locator(`#handoff-${completedBackend.handoff.id} details`),
+    ).toHaveAttribute('open', '');
+    await expect(receivedHandoff.getByText(handoffNote, { exact: false })).toBeVisible();
     await page.goto(`/issues/${backend.identifier}`);
     await expect(page.getByLabel('이슈 제목')).toHaveValue(backend.title);
-    const timeline = page
-      .getByRole('heading', { name: '댓글과 활동' })
+    await page.getByRole('tab', { name: '연결' }).click();
+    const handoffHistory = page
+      .getByRole('heading', { name: '전체 작업 전달 이력' })
       .locator('xpath=ancestor::section[1]');
-    await expect(timeline.getByRole('heading', { name: '최초 전달' })).toBeVisible();
-    await timeline.getByText('전체 전달 내용 보기', { exact: true }).click();
-    await expect(timeline.getByText(handoffNote, { exact: false })).toBeVisible();
+    await expect(handoffHistory.getByRole('heading', { name: '최초 전달' })).toBeVisible();
+    await handoffHistory.getByText('전체 전달 내용 보기', { exact: true }).click();
+    await expect(handoffHistory.getByText(handoffNote, { exact: false })).toBeVisible();
 
     await page.goto(`/issues/${web.identifier}`);
     const webStartedResponse = page.waitForResponse(

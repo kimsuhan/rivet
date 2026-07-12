@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { PropsWithChildren } from 'react';
+import type { PropsWithChildren, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HANDOFF_TEMPLATE } from './issue-handoff-validation';
@@ -171,6 +171,14 @@ vi.mock('@/features/collaboration/markdown-renderer', () => ({
   ),
 }));
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ children, href, ...props }: { children: ReactNode; href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
 const ownComment = {
   author: {
     id: 'membership-me',
@@ -216,6 +224,11 @@ function Wrapper({ children }: PropsWithChildren) {
 
 describe('IssueTimeline', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/issues/API-1');
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     mocks.timeline.mockResolvedValue({
       items: [{ comment: ownComment, createdAt: ownComment.createdAt, type: 'COMMENT' }],
@@ -254,7 +267,7 @@ describe('IssueTimeline', () => {
     expect(await screen.findByText('첫 댓글')).toBeVisible();
     expect(screen.getByText('다른 댓글')).toBeVisible();
     expect(screen.getAllByRole('button', { name: 'timeline.comments.edit' })).toHaveLength(1);
-    await user.click(screen.getByRole('button', { name: 'timeline.loadMore' }));
+    await user.click(screen.getByRole('button', { name: 'timeline.comments.loadMore' }));
 
     expect(await screen.findByText('timeline.comments.deleted')).toBeVisible();
     expect(screen.getAllByText('첫 댓글')).toHaveLength(1);
@@ -282,7 +295,7 @@ describe('IssueTimeline', () => {
       queryKey: ['/api/v1/issues/issue-id/timeline'],
     });
 
-    expect(await screen.findByText('timeline.errorTitle')).toBeVisible();
+    expect(await screen.findByText('timeline.comments.errorTitle')).toBeVisible();
     expect(screen.getByText('첫 댓글')).toBeVisible();
     expect(screen.getByRole('button', { name: 'retry' })).toBeVisible();
   });
@@ -333,6 +346,7 @@ describe('IssueTimeline', () => {
   });
 
   it('작업 전달 앵커와 API 링크를 유지하고 본문은 공용 Markdown 렌더러로 표시한다', async () => {
+    window.history.replaceState({}, '', '/issues/API-1#handoff-handoff-id');
     const bodyMarkdown = HANDOFF_TEMPLATE.replace(
       '## API 명세 링크\n\n해당 없음',
       '## API 명세 링크\n\nhttps://api.example.com/openapi.json',
@@ -360,7 +374,12 @@ describe('IssueTimeline', () => {
       nextCursor: null,
     });
     render(
-      <IssueTimeline currentMembershipId="membership-me" issueId="issue-id" mentionOptions={[]} />,
+      <IssueTimeline
+        currentMembershipId="membership-me"
+        issueId="issue-id"
+        mentionOptions={[]}
+        mode="handoffs"
+      />,
       { wrapper: Wrapper },
     );
 
@@ -368,10 +387,298 @@ describe('IssueTimeline', () => {
     const handoff = document.getElementById('handoff-handoff-id');
     expect(handoff).not.toBeNull();
     if (!handoff) return;
+    await waitFor(() => expect(handoff.querySelector('details')).toHaveAttribute('open'));
+    expect(document.activeElement).toBe(document.body);
     expect(within(handoff).getByTestId('markdown-renderer')).toHaveTextContent('프론트 주의사항');
     expect(within(handoff).getByRole('link')).toHaveAttribute(
       'href',
       'https://api.example.com/openapi.json',
     );
+  });
+
+  it('최근 항목에 전달이 없어도 다음 커서에서 백엔드의 최근 전달을 찾는다', async () => {
+    mocks.timeline
+      .mockResolvedValueOnce({
+        items: [
+          {
+            activity: {
+              actor: null,
+              after: null,
+              before: null,
+              eventType: 'ISSUE_UPDATED',
+              fieldName: 'state',
+              id: 'newer-activity-id',
+            },
+            createdAt: '2026-07-02T00:00:00.000Z',
+            type: 'ACTIVITY',
+          },
+        ],
+        nextCursor: 'older-page',
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            createdAt: '2026-07-01T00:00:00.000Z',
+            handoff: {
+              author: ownComment.author,
+              bodyMarkdown: HANDOFF_TEMPLATE,
+              createdAt: '2026-07-01T00:00:00.000Z',
+              id: 'older-handoff-id',
+              kind: 'INITIAL',
+              sequenceNumber: 1,
+            },
+            type: 'HANDOFF',
+          },
+        ],
+        nextCursor: null,
+      });
+
+    render(
+      <IssueTimeline
+        currentMembershipId="membership-me"
+        issueId="issue-id"
+        mentionOptions={[]}
+        mode="latest-handoff"
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(await screen.findByRole('heading', { name: 'handoff.initial' })).toBeVisible();
+    expect(mocks.timeline).toHaveBeenLastCalledWith(
+      'issue-id',
+      { cursor: 'older-page', limit: 100, sortDirection: 'desc' },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('최근 전달의 다음 커서 조회가 실패하면 자동 재시도하지 않는다', async () => {
+    mocks.timeline
+      .mockResolvedValueOnce({
+        items: [
+          {
+            activity: {
+              actor: null,
+              after: null,
+              before: null,
+              eventType: 'ISSUE_UPDATED',
+              fieldName: 'state',
+              id: 'newer-activity-id',
+            },
+            createdAt: '2026-07-02T00:00:00.000Z',
+            type: 'ACTIVITY',
+          },
+        ],
+        nextCursor: 'older-page',
+      })
+      .mockRejectedValueOnce(new Error('older page failed'));
+
+    render(
+      <IssueTimeline
+        currentMembershipId="membership-me"
+        issueId="issue-id"
+        mentionOptions={[]}
+        mode="latest-handoff"
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(await screen.findByText('handoff.errorTitle')).toBeVisible();
+    await waitFor(() => expect(mocks.timeline).toHaveBeenCalledTimes(2));
+  });
+
+  it('휴지통 이동과 복구 활동을 서로 다른 의미로 표시한다', async () => {
+    mocks.timeline.mockResolvedValueOnce({
+      items: [
+        {
+          activity: {
+            actor: ownComment.author,
+            after: null,
+            before: null,
+            eventType: 'ISSUE_TRASHED',
+            fieldName: null,
+            id: 'trashed-activity-id',
+          },
+          createdAt: '2026-07-01T00:00:00.000Z',
+          type: 'ACTIVITY',
+        },
+        {
+          activity: {
+            actor: ownComment.author,
+            after: null,
+            before: null,
+            eventType: 'ISSUE_RESTORED',
+            fieldName: null,
+            id: 'restored-activity-id',
+          },
+          createdAt: '2026-07-01T01:00:00.000Z',
+          type: 'ACTIVITY',
+        },
+      ],
+      nextCursor: null,
+    });
+
+    render(
+      <IssueTimeline
+        currentMembershipId="membership-me"
+        issueId="issue-id"
+        mentionOptions={[]}
+        mode="activity"
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(await screen.findByText('timeline.activity.trashed')).toBeVisible();
+    expect(screen.getByText('timeline.activity.restored')).toBeVisible();
+  });
+
+  it('백엔드 전달 활동의 후행 작업을 한 카드 안의 이슈 링크로 표시한다', async () => {
+    mocks.timeline.mockResolvedValueOnce({
+      items: [
+        {
+          activity: {
+            actor: ownComment.author,
+            after: {
+              backendIssue: { identifier: 'API-1', title: '백엔드 구현' },
+              handoffId: 'handoff-id',
+              downstreamIssues: [
+                { id: 'web-id', identifier: 'WEB-2', title: '웹 연결' },
+                { id: 'app-id', identifier: 'APP-3', title: '앱 연결' },
+                { identifier: null, title: '잘못된 항목' },
+              ],
+            },
+            before: null,
+            eventType: 'BACKEND_WORK_DELIVERED',
+            fieldName: null,
+            id: 'delivery-activity-id',
+          },
+          createdAt: '2026-07-01T03:00:00.000Z',
+          type: 'ACTIVITY',
+        },
+      ],
+      nextCursor: null,
+    });
+
+    render(
+      <IssueTimeline
+        currentMembershipId="membership-me"
+        issueId="feature-id"
+        issueIdentifier="FEAT-1"
+        mentionOptions={[]}
+        mode="activity"
+      />,
+      { wrapper: Wrapper },
+    );
+
+    const label = await screen.findByText('timeline.activity.backendDelivered');
+    const activity = label.closest('li');
+    expect(activity).not.toBeNull();
+    if (!activity) return;
+    expect(within(activity).getByRole('link', { name: 'WEB-2 · 웹 연결' })).toHaveAttribute(
+      'href',
+      '/issues/WEB-2?tab=work',
+    );
+    expect(within(activity).getByRole('link', { name: 'APP-3 · 앱 연결' })).toHaveAttribute(
+      'href',
+      '/issues/APP-3?tab=work',
+    );
+    expect(
+      within(activity).getByRole('link', { name: 'timeline.activity.openHandoff' }),
+    ).toHaveAttribute('href', '/issues/FEAT-1?tab=relations#handoff-handoff-id');
+    expect(within(activity).queryByText('잘못된 항목')).not.toBeInTheDocument();
+  });
+
+  it('댓글 모드와 활동 모드는 같은 응답에서 서로의 항목을 섞어 표시하지 않는다', async () => {
+    mocks.timeline.mockResolvedValue({
+      items: [
+        { comment: ownComment, createdAt: ownComment.createdAt, type: 'COMMENT' },
+        {
+          activity: {
+            actor: ownComment.author,
+            after: null,
+            before: null,
+            eventType: 'ISSUE_CREATED',
+            fieldName: null,
+            id: 'activity-id',
+          },
+          createdAt: '2026-07-01T00:01:00.000Z',
+          type: 'ACTIVITY',
+        },
+        {
+          createdAt: '2026-07-01T00:02:00.000Z',
+          handoff: {
+            author: ownComment.author,
+            bodyMarkdown: HANDOFF_TEMPLATE,
+            createdAt: '2026-07-01T00:02:00.000Z',
+            id: 'handoff-id',
+            kind: 'INITIAL',
+            sequenceNumber: 1,
+          },
+          type: 'HANDOFF',
+        },
+      ],
+      nextCursor: null,
+    });
+
+    const comments = render(
+      <IssueTimeline currentMembershipId="membership-me" issueId="issue-id" mentionOptions={[]} />,
+      { wrapper: Wrapper },
+    );
+    expect(await screen.findByText('첫 댓글')).toBeVisible();
+    expect(screen.queryByText('timeline.activity.created')).not.toBeInTheDocument();
+    expect(screen.queryByText('timeline.activity.handoffInitial')).not.toBeInTheDocument();
+    comments.unmount();
+    queryClient.clear();
+
+    render(
+      <IssueTimeline
+        currentMembershipId="membership-me"
+        issueId="issue-id"
+        issueIdentifier="API-1"
+        mentionOptions={[]}
+        mode="activity"
+      />,
+      { wrapper: Wrapper },
+    );
+    expect(await screen.findByText('timeline.activity.created')).toBeVisible();
+    expect(screen.getByText('timeline.activity.handoffInitial')).toBeVisible();
+    expect(screen.queryByText('첫 댓글')).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'mock-editor' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('markdown-renderer')).not.toBeInTheDocument();
+  });
+
+  it('현재 페이지에 댓글이 없어도 다음 혼합 커서 페이지를 불러올 수 있다', async () => {
+    mocks.timeline
+      .mockResolvedValueOnce({
+        items: [
+          {
+            activity: {
+              actor: null,
+              after: null,
+              before: null,
+              eventType: 'ISSUE_CREATED',
+              fieldName: null,
+              id: 'activity-id',
+            },
+            createdAt: '2026-07-01T00:00:00.000Z',
+            type: 'ACTIVITY',
+          },
+        ],
+        nextCursor: 'next-page',
+      })
+      .mockResolvedValueOnce({
+        items: [{ comment: ownComment, createdAt: ownComment.createdAt, type: 'COMMENT' }],
+        nextCursor: null,
+      });
+    const user = userEvent.setup();
+
+    render(
+      <IssueTimeline currentMembershipId="membership-me" issueId="issue-id" mentionOptions={[]} />,
+      { wrapper: Wrapper },
+    );
+
+    const loadMore = await screen.findByRole('button', { name: 'timeline.comments.loadMore' });
+    expect(screen.queryByText('timeline.comments.empty')).not.toBeInTheDocument();
+    await user.click(loadMore);
+    expect(await screen.findByText('첫 댓글')).toBeVisible();
   });
 });

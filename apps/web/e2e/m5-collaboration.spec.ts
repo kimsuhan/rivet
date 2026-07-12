@@ -4,6 +4,7 @@ import { expect, type Locator, type Page, type Route, test } from '@playwright/t
 
 import type {
   AuthenticatedSessionDto,
+  CreateIssueResponseDto,
   IssueDetailResponseDto,
   TeamListResponseDto,
   WorkflowStateListResponseDto,
@@ -186,22 +187,24 @@ test('UF-08·UF-11 설명, 댓글과 첨부 흐름을 갱신 실패에도 보존
     let issue: IssueDetailResponseDto;
 
     if (isMobile) {
-      issue = await apiRequest<IssueDetailResponseDto>(page, '/issues', {
-        body: {
-          attachmentFileIds: [],
-          descriptionMarkdown: initialDescription,
-          teamId: team.id,
-          title,
-          type: 'TEAM_TASK',
-          workflowStateId: defaultState.id,
-        },
-        method: 'POST',
-      });
+      issue = (
+        await apiRequest<CreateIssueResponseDto>(page, '/issues', {
+          body: {
+            attachmentFileIds: [],
+            descriptionMarkdown: initialDescription,
+            teamId: team.id,
+            title,
+            type: 'TEAM_TASK',
+            workflowStateId: defaultState.id,
+          },
+          method: 'POST',
+        })
+      ).issue;
       await page.goto(`/issues/${issue.identifier}`);
     } else {
       await page.goto('/teams/WEB/issues');
-      await page.getByRole('button', { name: '이슈 만들기 열기' }).click();
-      const createDialog = page.getByRole('dialog', { name: '이슈 만들기' });
+      await page.getByRole('link', { name: '팀 작업 만들기' }).first().click();
+      const createDialog = page.getByRole('dialog', { name: '팀 작업 만들기' });
       await createDialog.getByRole('textbox', { name: '제목' }).fill(title);
       await createDialog
         .getByRole('textbox', { name: 'Markdown 본문 편집기' })
@@ -218,7 +221,7 @@ test('UF-08·UF-11 설명, 댓글과 첨부 흐름을 갱신 실패에도 보존
       await expect(createDialog.getByText('업로드 완료')).toBeVisible();
 
       const failedListRefresh = await failGets(page, /\/api\/v1\/issues(?:\?.*)?$/);
-      await createDialog.getByRole('button', { exact: true, name: '이슈 만들기' }).click();
+      await createDialog.getByRole('button', { exact: true, name: '팀 작업 만들기' }).click();
       await expect(page).toHaveURL(/\/issues\/WEB-\d+$/);
       await expect.poll(failedListRefresh.didFail).toBe(true);
       await failedListRefresh.stop();
@@ -232,6 +235,13 @@ test('UF-08·UF-11 설명, 댓글과 첨부 흐름을 갱신 실패에도 보존
     }
 
     await expect(page.getByLabel('이슈 제목')).toHaveValue(title);
+    const detailTabs = page.getByRole('tablist', { name: '상세 화면' });
+    await expect(detailTabs.getByRole('tab')).toHaveCount(3);
+    await expect(detailTabs.getByRole('tab', { name: '업무' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByRole('heading', { name: '속성' })).toBeVisible();
     await expect(sectionByHeading(page, '설명').getByText(initialDescription)).toBeVisible();
     if (!isMobile) {
       await expect(
@@ -262,30 +272,42 @@ test('UF-08·UF-11 설명, 댓글과 첨부 흐름을 갱신 실패에도 보존
     );
     await expect(description.getByRole('img', { name: inlineImageAlt })).toBeVisible();
 
-    const timeline = sectionByHeading(page, '댓글과 활동');
-    await timeline.getByRole('textbox', { name: 'Markdown 본문 편집기' }).fill(initialComment);
+    const comments = sectionByHeading(page, '댓글');
+    await comments.getByRole('textbox', { name: 'Markdown 본문 편집기' }).fill(initialComment);
     const failedTimelineRefresh = await failGets(
       page,
       new RegExp(`/api/v1/issues/${issue.id}/timeline(?:\\?.*)?$`),
     );
-    await timeline.getByRole('button', { name: '댓글 남기기' }).click();
-    await expect(timeline.getByText(initialComment)).toBeVisible();
+    await comments.getByRole('button', { name: '댓글 남기기' }).click();
+    await expect(comments.getByText(initialComment)).toBeVisible();
     await expect.poll(failedTimelineRefresh.didFail).toBe(true);
-    await expect(timeline.getByText('활동을 불러오지 못했습니다')).toBeVisible();
+    await expect(comments.getByText('댓글을 불러오지 못했습니다')).toBeVisible();
     await failedTimelineRefresh.stop();
-    await timeline.getByRole('button', { name: '다시 시도' }).click();
-    await expect(timeline.getByText('활동을 불러오지 못했습니다')).toBeHidden();
+    await comments.getByRole('button', { name: '다시 시도' }).click();
+    await expect(comments.getByText('댓글을 불러오지 못했습니다')).toBeHidden();
 
-    const commentElementId = await timeline
+    await page.goto(`/issues/${issue.identifier}?tab=activity`);
+    await expect(page).toHaveURL(new RegExp(`/issues/${issue.identifier}\\?tab=activity$`));
+    await expect(page.getByRole('tab', { name: '활동' })).toHaveAttribute('aria-selected', 'true');
+    const activity = sectionByHeading(page, '활동');
+    await expect(activity.getByText(initialComment)).toHaveCount(0);
+    await expect(
+      activity.getByText(/이슈를 만들었습니다|설명을 변경했습니다/).first(),
+    ).toBeVisible();
+    await detailTabs.getByRole('tab', { name: '업무' }).click();
+    await expect(page).toHaveURL(new RegExp(`/issues/${issue.identifier}\\?tab=work$`));
+    await expect(comments.getByText(initialComment)).toBeVisible();
+
+    const commentElementId = await comments
       .getByText(initialComment)
       .locator('xpath=ancestor::li[1]')
       .getAttribute('id');
     if (!commentElementId) throw new Error('M5 E2E 댓글 요소 ID를 찾지 못했습니다.');
-    const commentItem = timeline.locator(`[id="${commentElementId}"]`);
+    const commentItem = comments.locator(`[id="${commentElementId}"]`);
     await commentItem.getByRole('button', { name: '댓글 편집' }).click();
     await commentItem.getByRole('textbox', { name: 'Markdown 본문 편집기' }).fill(updatedComment);
     await commentItem.getByRole('button', { name: '댓글 저장' }).click();
-    await expect(timeline.getByText(updatedComment)).toBeVisible();
+    await expect(comments.getByText(updatedComment)).toBeVisible();
 
     await commentItem.getByRole('button', { name: '댓글 삭제' }).click();
     const deleteComment = page.getByRole('alertdialog', { name: '댓글을 삭제할까요?' });

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 import type { CreateFeatureIssueDtoFeatureStatus } from './createFeatureIssueDtoFeatureStatus';
+import type { CreateFeatureIssueDtoInitialRolesItem } from './createFeatureIssueDtoInitialRolesItem';
 import type { CreateFeatureIssueDtoPriority } from './createFeatureIssueDtoPriority';
 import type { CreateFeatureIssueDtoType } from './createFeatureIssueDtoType';
 
@@ -23,6 +24,8 @@ export interface CreateFeatureIssueDto {
   descriptionMarkdown?: string | null;
   featureStatus: CreateFeatureIssueDtoFeatureStatus;
   projectId: string;
+  /** @maxItems 3 */
+  initialRoles?: CreateFeatureIssueDtoInitialRolesItem[];
   priority?: CreateFeatureIssueDtoPriority;
   labelIds?: string[];
   attachmentFileIds?: string[];
