@@ -141,7 +141,57 @@ export function IssueRow({
   ]);
   const labelOptions = uniqueById([...issue.labels, ...activeLabels.map(toIssueLabel)]);
   const updatedAt = relativeUpdatedAt(issue.updatedAt);
-  const isPending = mutation.isPending;
+
+  function isPendingFor(kind: 'assignee' | 'labels' | 'priority' | 'workflowState') {
+    return (
+      mutation.isPendingFor?.(issue.id, kind) ??
+      (mutation.isPending &&
+        mutation.variables?.issue.id === issue.id &&
+        mutation.variables.change.kind === kind)
+    );
+  }
+
+  function cellFailure(kind: 'assignee' | 'labels' | 'priority' | 'workflowState') {
+    const failure = mutation.failureFor?.(issue.id, kind);
+    if (failure) return failure;
+
+    const variables = mutation.variables;
+    if (!variables || variables.issue.id !== issue.id || variables.change.kind !== kind) {
+      return undefined;
+    }
+    if (!mutation.conflict && !mutation.isError) return undefined;
+
+    return { isConflict: Boolean(mutation.conflict) };
+  }
+
+  function retryCell(kind: 'assignee' | 'labels' | 'priority' | 'workflowState') {
+    if (mutation.retryFor) mutation.retryFor(issue.id, kind);
+    else mutation.retry();
+  }
+
+  function reapplyCellConflict(kind: 'assignee' | 'labels' | 'priority' | 'workflowState') {
+    if (mutation.reapplyConflictFor) void mutation.reapplyConflictFor(issue.id, kind);
+    else void mutation.reapplyConflict();
+  }
+
+  function errorFor(kind: 'assignee' | 'priority' | 'workflowState') {
+    const failure = cellFailure(kind);
+    if (!failure) return undefined;
+
+    if (failure.isConflict) {
+      return {
+        actionLabel: labels.reapply,
+        description: labels.conflictDescription,
+        onAction: () => reapplyCellConflict(kind),
+      };
+    }
+
+    return {
+      actionLabel: labels.retry,
+      description: labels.errorDescription,
+      onAction: () => retryCell(kind),
+    };
+  }
 
   function changeLabels(ids: string[]) {
     mutation.mutate({
@@ -158,13 +208,15 @@ export function IssueRow({
 
   function stateEditor(className?: string) {
     const currentState = issue.status.workflowState;
+    const busy = isPendingFor('workflowState');
     return (
       <div className={cn('pointer-events-auto relative z-10', className)}>
         <IssueInlineSelect
           appearance="compact"
           ariaLabel={`${issue.identifier} ${labels.state}: ${currentState.name}`}
-          busy={isPending && mutation.variables?.change.kind === 'workflowState'}
-          disabled={isPending}
+          busy={busy}
+          disabled={busy}
+          error={errorFor('workflowState')}
           onValueChange={(stateId) => {
             const state = stateOptions.find((candidate) => candidate.id === stateId);
             if (state) mutation.mutate({ change: { kind: 'workflowState', value: state }, issue });
@@ -182,13 +234,15 @@ export function IssueRow({
 
   function assigneeEditor(className?: string) {
     const currentAssignee = issue.assignee?.user.displayName ?? labels.unassigned;
+    const busy = isPendingFor('assignee');
     return (
       <div className={cn('pointer-events-auto relative z-10', className)}>
         <IssueInlineSelect
           appearance="compact"
           ariaLabel={`${issue.identifier} ${labels.assignee}: ${currentAssignee}`}
-          busy={isPending && mutation.variables?.change.kind === 'assignee'}
-          disabled={isPending}
+          busy={busy}
+          disabled={busy}
+          error={errorFor('assignee')}
           onValueChange={(memberId) => {
             const assignee =
               memberId === 'unassigned'
@@ -218,13 +272,15 @@ export function IssueRow({
 
   function priorityEditor(className?: string) {
     const currentPriority = labels.priorities[issue.priority];
+    const busy = isPendingFor('priority');
     return (
       <div className={cn('pointer-events-auto relative z-10', className)}>
         <IssueInlineSelect
           appearance="compact"
           ariaLabel={`${issue.identifier} ${labels.priority}: ${currentPriority}`}
-          busy={isPending && mutation.variables?.change.kind === 'priority'}
-          disabled={isPending}
+          busy={busy}
+          disabled={busy}
+          error={errorFor('priority')}
           onValueChange={(priority) => {
             if (ISSUE_PRIORITIES.includes(priority as (typeof ISSUE_PRIORITIES)[number])) {
               mutation.mutate({
@@ -248,12 +304,13 @@ export function IssueRow({
   }
 
   function labelsEditor(className?: string, interactionOnly = false) {
+    const busy = isPendingFor('labels');
     return (
       <div className={cn('pointer-events-auto relative z-10 min-w-0', className)}>
         <IssueFilterMenu
           ariaLabel={`${issue.identifier} ${labels.labels}: ${issue.labels.map((label) => label.name).join(', ') || labels.noLabels}`}
-          busy={isPending && mutation.variables?.change.kind === 'labels'}
-          disabled={isPending}
+          busy={busy}
+          disabled={busy}
           emptyLabel={labels.noLabels}
           label={labels.labels}
           onChange={changeLabels}
@@ -274,7 +331,8 @@ export function IssueRow({
     );
   }
 
-  const notice = mutation.conflict ? (
+  const labelFailure = cellFailure('labels');
+  const notice = labelFailure?.isConflict ? (
     <div
       role="alert"
       className="bg-warning/10 text-foreground flex items-center gap-2 border-t px-3 py-2 text-xs"
@@ -286,13 +344,14 @@ export function IssueRow({
         variant="ghost"
         size="xs"
         className="hover:before:bg-muted/60 relative isolate min-h-11 bg-transparent px-2 before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-8 before:-translate-y-1/2 before:rounded-md before:bg-transparent hover:bg-transparent lg:min-h-10"
-        onClick={mutation.reapplyConflict}
+        disabled={isPendingFor('labels')}
+        onClick={() => reapplyCellConflict('labels')}
       >
         <RotateCcw aria-hidden="true" data-icon="inline-start" />
         {labels.reapply}
       </Button>
     </div>
-  ) : mutation.isError ? (
+  ) : labelFailure ? (
     <div
       role="alert"
       className="bg-destructive/10 text-destructive flex items-center gap-2 border-t px-3 py-2 text-xs"
@@ -304,7 +363,8 @@ export function IssueRow({
         variant="ghost"
         size="xs"
         className="hover:before:bg-muted/60 relative isolate min-h-11 bg-transparent px-2 before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-8 before:-translate-y-1/2 before:rounded-md before:bg-transparent hover:bg-transparent lg:min-h-10"
-        onClick={mutation.retry}
+        disabled={isPendingFor('labels')}
+        onClick={() => retryCell('labels')}
       >
         <RotateCcw aria-hidden="true" data-icon="inline-start" />
         {labels.retry}
@@ -313,10 +373,7 @@ export function IssueRow({
   ) : null;
 
   return (
-    <li
-      className="group/issue-row border-border/60 hover:bg-muted/40 focus-within:bg-muted/20 border-b transition-colors"
-      aria-busy={isPending || undefined}
-    >
+    <li className="group/issue-row border-border/60 hover:bg-muted/40 focus-within:bg-muted/20 border-b transition-colors">
       <div className="relative">
         <Link
           href={`/issues/${encodeURIComponent(issue.identifier)}`}

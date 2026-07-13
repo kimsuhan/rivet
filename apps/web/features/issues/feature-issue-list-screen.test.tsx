@@ -13,6 +13,10 @@ import {
 
 import messages from '@/messages/ko.json';
 
+import {
+  FEATURE_ISSUE_LIST_GRID_CLASS,
+  FEATURE_ISSUE_LIST_GRID_ORDER,
+} from './feature-issue-list-layout';
 import { FeatureIssueListScreen } from './feature-issue-list-screen';
 
 const mocks = vi.hoisted(() => ({
@@ -211,6 +215,33 @@ describe('FeatureIssueListScreen', () => {
     );
     expect(screen.getByText('업데이트')).toBeVisible();
     expect(screen.queryByText('만든 사람')).not.toBeInTheDocument();
+    const grid = document.querySelector(
+      '[aria-hidden="true"][data-layout="feature-issue-list-grid"]',
+    );
+    expect(grid).not.toBeNull();
+    expect(grid).toHaveClass('hidden', 'xl:grid', ...FEATURE_ISSUE_LIST_GRID_CLASS.split(' '));
+    expect(
+      Array.from(grid?.querySelectorAll(':scope > [data-column]') ?? []).map((element) =>
+        element.getAttribute('data-column'),
+      ),
+    ).toEqual([
+      'issue',
+      'status',
+      'priority',
+      'current-work',
+      'progress',
+      'updated-at',
+      'next-action',
+    ]);
+    expect(grid?.querySelector('[data-column="priority"]')).toHaveClass(
+      FEATURE_ISSUE_LIST_GRID_ORDER.priority,
+    );
+    expect(grid?.querySelector('[data-column="issue"]')).toHaveClass(
+      FEATURE_ISSUE_LIST_GRID_ORDER.issue,
+    );
+    expect(grid?.querySelector('[data-column="status"]')).toHaveClass(
+      FEATURE_ISSUE_LIST_GRID_ORDER.status,
+    );
   });
 
   it('모바일 필터 닫기 조작에 44px 최소 영역을 지정한다', async () => {

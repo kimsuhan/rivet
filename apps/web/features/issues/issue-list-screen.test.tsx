@@ -258,6 +258,18 @@ describe('IssueListScreen', () => {
     expect(mocks.issueRefetch).toHaveBeenCalledOnce();
   });
 
+  it('background refetch 중에도 기존 행을 유지하고 목록 로딩 화면으로 바꾸지 않는다', () => {
+    vi.mocked(useIssuePages).mockReturnValue({
+      ...issuePages({ items: [issue] }),
+      isFetching: true,
+    } as never);
+
+    renderScreen();
+
+    expect(screen.getAllByText('목록 속성 일관성')).toHaveLength(2);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('팀 키를 활성 팀 ID로 해석하고 현재 쿼리를 보드 링크에 보존한다', () => {
     mocks.pathname = '/teams/WEB/issues';
     mocks.search = 'tab=backlog&sort=priority';

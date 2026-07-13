@@ -73,15 +73,6 @@ import { readLastTeamKey, rememberTeamKey } from '../teams/team-selector-storage
 import { fileUploadQueueLabels, markdownEditorLabels } from './issue-collaboration-labels';
 
 const PRIORITIES = ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
-const FEATURE_STATUSES = [
-  'UNSORTED',
-  'TODO',
-  'IN_PROGRESS',
-  'REVIEW',
-  'DONE',
-  'PAUSED',
-  'CANCELED',
-] as const;
 const PROJECT_ROLES = ['BACKEND', 'WEB_FRONTEND', 'APP_FRONTEND'] as const;
 
 export type IssueCreateSeed = {
@@ -102,7 +93,7 @@ export type IssueCreateLabels = {
   discardTitle: string;
   errorDescription: string;
   errorTitle: string;
-  featureStatuses: Record<(typeof FEATURE_STATUSES)[number], string>;
+  featureStatuses: Record<string, string>;
   featureType: string;
   initialRoleSelected: string;
   initialRolesDescription: string;
@@ -192,7 +183,6 @@ export function GlobalIssueCreate({
           assigneeMembershipId: z.string().nullable(),
           attachmentFileIds: z.array(z.string()),
           descriptionMarkdown: z.string().max(100_000),
-          featureStatus: z.enum(FEATURE_STATUSES),
           initialRoles: z.array(z.enum(PROJECT_ROLES)),
           labelIds: z.array(z.string()),
           parentIssueId: z.string().nullable(),
@@ -241,7 +231,6 @@ export function GlobalIssueCreate({
       assigneeMembershipId: null,
       attachmentFileIds: [],
       descriptionMarkdown: '',
-      featureStatus: 'UNSORTED',
       initialRoles: [],
       labelIds: [],
       parentIssueId: null,
@@ -333,7 +322,6 @@ export function GlobalIssueCreate({
       assigneeMembershipId: null,
       attachmentFileIds: [],
       descriptionMarkdown: '',
-      featureStatus: 'UNSORTED',
       initialRoles: [],
       labelIds: [],
       parentIssueId: seed?.parentIssueId ?? null,
@@ -428,7 +416,6 @@ export function GlobalIssueCreate({
     const data: CreateFeatureIssueDto | CreateTeamTaskIssueDto = !manualTeamTask
       ? {
           ...common,
-          featureStatus: values.featureStatus,
           initialRoles: values.initialRoles,
           projectId: values.projectId!,
           type: 'FEATURE',
@@ -473,7 +460,6 @@ export function GlobalIssueCreate({
             'parentIssueId',
             'teamId',
             'workflowStateId',
-            'featureStatus',
             'assigneeMembershipId',
             'priority',
             'labelIds',
@@ -686,38 +672,7 @@ export function GlobalIssueCreate({
                   )}
                 />
 
-                {!manualTeamTask ? (
-                  <Controller
-                    control={form.control}
-                    name="featureStatus"
-                    render={({ field }) => (
-                      <Field>
-                        <FieldLabel htmlFor="issue-feature-status">{labels.stateLabel}</FieldLabel>
-                        <Select
-                          items={FEATURE_STATUSES.map((status) => ({
-                            label: labels.featureStatuses[status],
-                            value: status,
-                          }))}
-                          value={field.value}
-                          onValueChange={(value) => value && field.onChange(value)}
-                        >
-                          <SelectTrigger id="issue-feature-status" className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent alignItemWithTrigger={false}>
-                            <SelectGroup>
-                              {FEATURE_STATUSES.map((status) => (
-                                <SelectItem key={status} value={status}>
-                                  {labels.featureStatuses[status]}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                    )}
-                  />
-                ) : selectedProjectId ? (
+                {manualTeamTask && selectedProjectId ? (
                   <Controller
                     control={form.control}
                     name="projectRole"

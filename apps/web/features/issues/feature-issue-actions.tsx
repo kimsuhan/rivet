@@ -400,8 +400,8 @@ export function FeatureIssueActions({
     complete.mutate(
       {
         change: {
+          action: 'COMPLETE',
           kind: 'featureStatus',
-          requireCompletedTeamTasks: true,
           value: 'DONE',
         },
         issue: completionIssue,

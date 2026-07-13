@@ -294,8 +294,37 @@ test('UF-03과 UF-07 팀 이슈 기본 루프를 완료한다', async ({ page, i
 
       await selectOption(page, 'WEB-1 상태', '진행 중');
       await expect(page.getByRole('combobox', { name: /^WEB-1 상태:/u })).toContainText('진행 중');
+      let releasePriorityPatch: (() => void) | undefined;
+      let priorityPatchPending = false;
+      await page.route(issueUpdatePattern, async (route) => {
+        if (route.request().method() !== 'PATCH' || priorityPatchPending) {
+          await route.continue();
+          return;
+        }
+
+        priorityPatchPending = true;
+        await new Promise<void>((resolve) => {
+          releasePriorityPatch = resolve;
+        });
+        await route.continue();
+      });
+      const listRow = page
+        .getByRole('listitem')
+        .filter({ has: page.getByRole('link', { name: updatedTitle }) });
+      await expect(listRow).toBeVisible();
+      const rowBeforeUpdate = await listRow.boundingBox();
       await selectOption(page, 'WEB-1 우선순위', '높음');
-      await expect(page.getByRole('combobox', { name: /^WEB-1 우선순위:/u })).toContainText('높음');
+      const priorityTrigger = page.getByRole('combobox', { name: /^WEB-1 우선순위:/u });
+      await expect(priorityTrigger).toContainText('높음');
+      await expect(priorityTrigger).toHaveAttribute('aria-busy', 'true');
+      await expect(page.locator('[data-slot="inline-select-spinner"]')).toHaveCount(0);
+      expect(await listRow.boundingBox()).toEqual(rowBeforeUpdate);
+      expect(priorityPatchPending).toBe(true);
+      if (!releasePriorityPatch) throw new Error('우선순위 저장 요청을 지연하지 못했습니다.');
+      releasePriorityPatch();
+      await expect(priorityTrigger).not.toHaveAttribute('aria-busy', 'true');
+      await expect(listRow).toBeVisible();
+      await page.unroute(issueUpdatePattern);
 
       await page.goto('/teams/WEB/issues');
       await expect(page.getByRole('link', { name: updatedTitle })).toBeVisible();

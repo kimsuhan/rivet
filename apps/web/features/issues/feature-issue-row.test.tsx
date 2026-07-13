@@ -8,6 +8,11 @@ import type { LabelResponseDto } from '@rivet/api-client';
 
 import messages from '@/messages/ko.json';
 
+import {
+  FEATURE_ISSUE_LIST_GRID_CELL_CLASS,
+  FEATURE_ISSUE_LIST_GRID_CLASS,
+  FEATURE_ISSUE_LIST_GRID_ORDER,
+} from './feature-issue-list-layout';
 import { type FeatureIssueListItem, FeatureIssueRow } from './feature-issue-row';
 import { useIssueInlineMutation } from './issue-mutations';
 
@@ -290,7 +295,6 @@ describe('FeatureIssueRow', () => {
     await user.tab();
     expect(screen.getByRole('button', { name: /^ISSUE-12 라벨:/ })).toHaveFocus();
 
-    await user.click(screen.getByRole('button', { name: 'ISSUE-12 상태: 진행 중' }));
     await user.click(screen.getByRole('button', { name: 'ISSUE-12 우선순위: 높음' }));
     await user.click(screen.getByRole('button', { name: /^ISSUE-12 라벨:/ }));
     expect(onAction).not.toHaveBeenCalled();
@@ -382,6 +386,7 @@ describe('FeatureIssueRow', () => {
       screen.getByText('결제 수단 추가'),
       screen.getByText('결제 프로젝트'),
       screen.getByText('진행 중'),
+      screen.getByRole('button', { name: 'ISSUE-12 우선순위: 높음' }),
       screen.getByText('백엔드 담당 필요'),
       screen.getByText('1/2 · 50%'),
       screen.getByText('4시간 전'),
@@ -396,7 +401,7 @@ describe('FeatureIssueRow', () => {
     }
   });
 
-  it('상태와 우선순위를 같은 compact 수평 그룹에 두고 지정 아이콘을 일관되게 전달한다', () => {
+  it('상태와 우선순위를 독립 열로 두고 지정 아이콘을 일관되게 전달한다', () => {
     vi.mocked(useIssueInlineMutation).mockReturnValue({
       conflict: null,
       isError: false,
@@ -405,19 +410,44 @@ describe('FeatureIssueRow', () => {
     } as never);
     renderRow(issue);
 
-    expect(screen.getByTestId('feature-issue-status-priority')).toHaveClass(
+    const grid = screen.getByTestId('feature-issue-row').querySelector('[data-layout]');
+    expect(grid).toHaveClass(
       'grid',
-      'grid-cols-[6.75rem_5rem]',
+      'grid-cols-2',
+      'gap-x-3',
+      'gap-y-3',
+      ...FEATURE_ISSUE_LIST_GRID_CLASS.split(' '),
+    );
+    expect(screen.getByTestId('feature-issue-status')).toHaveClass(
+      'flex',
       'items-center',
+      ...FEATURE_ISSUE_LIST_GRID_CELL_CLASS.status.split(' '),
     );
-    expect(screen.getByRole('button', { name: 'ISSUE-12 상태: 진행 중' })).toHaveAttribute(
-      'data-appearance',
-      'compact',
+    expect(screen.getByTestId('feature-issue-priority')).toHaveClass(
+      ...FEATURE_ISSUE_LIST_GRID_CELL_CLASS.priority.split(' '),
     );
+    expect(
+      Array.from(grid?.querySelectorAll(':scope > [data-column]') ?? []).map((element) =>
+        element.getAttribute('data-column'),
+      ),
+    ).toEqual([
+      'issue',
+      'status',
+      'priority',
+      'current-work',
+      'progress',
+      'updated-at',
+      'next-action',
+    ]);
+    expect(screen.getByText('진행 중')).toBeVisible();
     expect(screen.getByRole('button', { name: 'ISSUE-12 우선순위: 높음' })).toHaveAttribute(
       'data-appearance',
       'compact',
     );
+    expect(screen.getByRole('button', { name: 'ISSUE-12 우선순위: 높음' })).toHaveClass('w-full');
+    expect(
+      screen.queryByRole('combobox', { name: 'ISSUE-12 상태: 진행 중' }),
+    ).not.toBeInTheDocument();
 
     const mappings = {
       CANCELED: { iconClass: 'lucide-circle-x', label: '취소' },
@@ -428,20 +458,91 @@ describe('FeatureIssueRow', () => {
       MEDIUM: { iconClass: 'lucide-signal-medium', label: '보통' },
       NONE: { iconClass: 'lucide-minus', label: '없음' },
       PAUSED: { iconClass: 'lucide-circle-pause', label: '일시 중지' },
-      REVIEW: { iconClass: 'lucide-circle-dot', label: '검토' },
+      REVIEW: { iconClass: 'lucide-circle-dot', label: '완료 확인' },
       TODO: { iconClass: 'lucide-circle', label: '할 일' },
-      UNSORTED: { iconClass: 'lucide-circle-dashed', label: '미분류' },
+      UNSORTED: { iconClass: 'lucide-circle-dashed', label: '접수됨' },
       URGENT: { iconClass: 'lucide-circle-alert', label: '긴급' },
     } as const;
 
-    for (const [value, { iconClass, label }] of Object.entries(mappings)) {
-      expect(screen.getByTestId(`inline-option-${value}`)).toHaveClass(iconClass);
-      expect(screen.getByTestId(`inline-option-${value}`)).toHaveAttribute(
-        'data-option-label',
-        label,
-      );
-    }
+    expect(screen.getByLabelText('ISSUE-12 상태: 진행 중').querySelector('svg')).toHaveClass(
+      mappings.IN_PROGRESS.iconClass,
+    );
+    expect(screen.getByRole('button', { name: 'ISSUE-12 우선순위: 높음' })).toHaveTextContent(
+      mappings.HIGH.label,
+    );
+    expect(screen.getByTestId('feature-issue-status')).toHaveClass(
+      FEATURE_ISSUE_LIST_GRID_ORDER.status,
+    );
+    expect(screen.getByTestId('feature-issue-priority')).toHaveClass(
+      FEATURE_ISSUE_LIST_GRID_ORDER.priority,
+    );
   });
+
+  for (const combination of [
+    {
+      category: 'BACKLOG' as const,
+      featureStatus: 'UNSORTED' as const,
+      priority: 'LOW' as const,
+      priorityLabel: '낮음',
+      statusLabel: '접수됨',
+    },
+    {
+      category: 'BACKLOG' as const,
+      featureStatus: 'UNSORTED' as const,
+      priority: 'URGENT' as const,
+      priorityLabel: '긴급',
+      statusLabel: '접수됨',
+    },
+    {
+      category: 'STARTED' as const,
+      featureStatus: 'IN_PROGRESS' as const,
+      priority: 'MEDIUM' as const,
+      priorityLabel: '보통',
+      statusLabel: '진행 중',
+    },
+    {
+      category: 'COMPLETED' as const,
+      featureStatus: 'DONE' as const,
+      priority: 'NONE' as const,
+      priorityLabel: '없음',
+      statusLabel: '완료',
+    },
+    {
+      category: 'COMPLETED' as const,
+      featureStatus: 'DONE' as const,
+      priority: 'HIGH' as const,
+      priorityLabel: '높음',
+      statusLabel: '완료',
+    },
+  ] as const) {
+    it(`${combination.statusLabel} · ${combination.priorityLabel}을 독립 열의 아이콘·한글 이름으로 표시한다`, () => {
+      const identifier = `ISSUE-${combination.featureStatus}-${combination.priority}`;
+      vi.mocked(useIssueInlineMutation).mockReturnValue({
+        conflict: null,
+        isError: false,
+        isPending: false,
+        mutate: vi.fn(),
+      } as never);
+      renderRow({
+        ...issue,
+        identifier,
+        priority: combination.priority,
+        status: {
+          category: combination.category,
+          featureStatus: combination.featureStatus,
+          workflowState: null,
+        },
+      });
+
+      expect(screen.getByLabelText(`${identifier} 상태: ${combination.statusLabel}`)).toBeVisible();
+      expect(
+        screen.getByRole('button', {
+          name: `${identifier} 우선순위: ${combination.priorityLabel}`,
+        }),
+      ).toBeVisible();
+      expect(screen.getByTestId(`inline-current-${combination.priority}`)).toBeVisible();
+    });
+  }
 
   it('주요 행동은 32px 시각 표면과 40px 이상 조작 영역을 분리하고 더보기 이름을 구체화한다', () => {
     vi.mocked(useIssueInlineMutation).mockReturnValue({

@@ -213,4 +213,73 @@ describe('IssueRow', () => {
       expect(editor).toHaveClass('pointer-events-none', 'opacity-0');
     }
   });
+
+  it('우선순위 저장 중에는 해당 셀만 busy로 두고 상태 편집은 유지한다', () => {
+    vi.mocked(useIssueInlineMutation).mockReturnValue({
+      conflict: null,
+      isError: false,
+      isPending: true,
+      isPendingFor: (_issueId: string, kind?: string) => kind === 'priority',
+      mutate: vi.fn(),
+      variables: { change: { kind: 'priority', value: 'HIGH' }, issue },
+    } as never);
+
+    const { container } = render(
+      <ul>
+        <IssueRow
+          activeLabels={[]}
+          currentMembershipId={assignee.id}
+          currentQueryKey={['issues']}
+          issue={issue}
+          labels={labels}
+          members={[assignee]}
+          mode="team"
+          workflowStates={[doing, todo]}
+        />
+      </ul>,
+    );
+
+    for (const trigger of screen.getAllByRole('combobox', { name: 'WEB-42 우선순위: 높음' })) {
+      expect(trigger).toHaveAttribute('aria-busy', 'true');
+      expect(trigger).toHaveAttribute('aria-disabled', 'true');
+    }
+    for (const trigger of screen.getAllByRole('combobox', { name: 'WEB-42 상태: 진행 중' })) {
+      expect(trigger).not.toHaveAttribute('aria-busy');
+      expect(trigger).not.toHaveAttribute('aria-disabled');
+    }
+    expect(container.querySelector('li')).not.toHaveAttribute('aria-busy');
+  });
+
+  it('우선순위 저장 실패는 행 높이를 늘리지 않고 해당 선택기 가까이에 재시도를 둔다', async () => {
+    const user = userEvent.setup();
+    const retry = vi.fn();
+    vi.mocked(useIssueInlineMutation).mockReturnValue({
+      conflict: null,
+      isError: true,
+      isPending: false,
+      mutate: vi.fn(),
+      retry,
+      variables: { change: { kind: 'priority', value: 'HIGH' }, issue },
+    } as never);
+
+    const { container } = render(
+      <ul>
+        <IssueRow
+          activeLabels={[]}
+          currentMembershipId={assignee.id}
+          currentQueryKey={['issues']}
+          issue={issue}
+          labels={labels}
+          members={[assignee]}
+          mode="team"
+          workflowStates={[doing, todo]}
+        />
+      </ul>,
+    );
+
+    expect(screen.getAllByRole('alert')).toHaveLength(2);
+    expect(container.querySelector('li > [role="alert"]')).toBeNull();
+    await user.click(screen.getAllByRole('button', { name: '다시 시도' })[0]!);
+    expect(retry).toHaveBeenCalledOnce();
+  });
 });

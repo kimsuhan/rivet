@@ -48,6 +48,7 @@ import type {
   AssignTeamTasksDto,
   ClaimIssueDto,
   CreateIssueDto,
+  FeatureIssueStatusAction,
   IssueListQueryDto,
   StartIssueDto,
   UpdateIssueDto,
@@ -251,6 +252,7 @@ interface ProjectLockRow {
 }
 
 interface ParentIssueLockRow {
+  featureStatus: FeatureIssueStatus;
   id: string;
   projectId: string | null;
   type: IssueType;
@@ -266,6 +268,7 @@ interface AutomaticTeamTaskAssignment extends ProjectRoleTeamLockRow {
 }
 
 interface FeatureStartLockRow {
+  featureStatus: FeatureIssueStatus;
   id: string;
   priority: IssuePriority;
   projectId: string;
@@ -348,6 +351,21 @@ const STATE_CATEGORY_ORDER: StateCategory[] = [
   StateCategory.CANCELED,
 ];
 const FRONTEND_PROJECT_ROLES = [ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND] as const;
+const CLOSED_FEATURE_STATUSES: FeatureIssueStatus[] = [
+  FeatureIssueStatus.PAUSED,
+  FeatureIssueStatus.CANCELED,
+  FeatureIssueStatus.DONE,
+];
+const REOPENABLE_FEATURE_STATUSES: FeatureIssueStatus[] = [
+  FeatureIssueStatus.DONE,
+  FeatureIssueStatus.CANCELED,
+];
+const AUTOMATIC_FEATURE_STATUSES: FeatureIssueStatus[] = [
+  FeatureIssueStatus.UNSORTED,
+  FeatureIssueStatus.TODO,
+  FeatureIssueStatus.IN_PROGRESS,
+  FeatureIssueStatus.REVIEW,
+];
 
 type StatusSortRow = {
   featureStatus: FeatureIssueStatus | null;
@@ -636,8 +654,7 @@ export function buildFeatureWorkQueueWhere(workQueue: string): Prisma.IssueWhere
   switch (workQueue) {
     case 'REVIEW_REQUIRED':
       return {
-        childIssues: { none: { deletedAt: null, type: IssueType.TEAM_TASK } },
-        featureStatus: { notIn: [FeatureIssueStatus.DONE, FeatureIssueStatus.CANCELED] },
+        featureStatus: FeatureIssueStatus.UNSORTED,
         type: IssueType.FEATURE,
       };
     case 'ASSIGNMENT_REQUIRED':
@@ -646,32 +663,10 @@ export function buildFeatureWorkQueueWhere(workQueue: string): Prisma.IssueWhere
         type: IssueType.FEATURE,
       };
     case 'IN_PROGRESS':
-      return { childIssues: { some: activeTask }, type: IssueType.FEATURE };
+      return { featureStatus: FeatureIssueStatus.IN_PROGRESS, type: IssueType.FEATURE };
     case 'COMPLETION_REQUIRED':
       return {
-        AND: [
-          {
-            childIssues: {
-              some: {
-                deletedAt: null,
-                type: IssueType.TEAM_TASK,
-                workflowState: { category: { not: StateCategory.CANCELED } },
-              },
-            },
-          },
-          {
-            childIssues: {
-              none: {
-                deletedAt: null,
-                type: IssueType.TEAM_TASK,
-                workflowState: {
-                  category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] },
-                },
-              },
-            },
-          },
-        ],
-        featureStatus: { notIn: [FeatureIssueStatus.DONE, FeatureIssueStatus.CANCELED] },
+        featureStatus: FeatureIssueStatus.REVIEW,
         type: IssueType.FEATURE,
       };
     case 'COMPLETED':
@@ -1469,8 +1464,8 @@ export class IssuesService {
     const description = parseOptionalMarkdown(dto.descriptionMarkdown, 100_000);
 
     if (dto.type === IssueType.FEATURE) {
-      if (!dto.projectId || !dto.featureStatus) {
-        issueTypeFieldInvalid('기능 이슈에는 프로젝트와 기능 상태가 필요합니다.');
+      if (!dto.projectId) {
+        issueTypeFieldInvalid('기능 이슈에는 프로젝트가 필요합니다.');
       }
       if (
         dto.teamId !== undefined ||
@@ -1482,7 +1477,6 @@ export class IssuesService {
         issueTypeFieldInvalid('기능 이슈에는 팀 작업 전용 필드를 사용할 수 없습니다.');
       }
       const projectId = dto.projectId;
-      const featureStatus = dto.featureStatus;
 
       return this.database.client.$transaction(async (transaction) => {
         // Lock order: workspace counter -> project -> actor -> labels -> inserted issue.
@@ -1518,7 +1512,7 @@ export class IssuesService {
           data: {
             createdByMembershipId: context.membershipId,
             descriptionMarkdown: description.bodyMarkdown,
-            featureStatus,
+            featureStatus: FeatureIssueStatus.UNSORTED,
             identifier,
             priority: dto.priority ?? IssuePriority.NONE,
             projectId,
@@ -1553,6 +1547,7 @@ export class IssuesService {
           },
           this.selectedRoleAssignments(roleAssignments, dto.initialRoles ?? []),
         );
+        await this.recalculateParentFeature(transaction, context, issue.id);
         const created = await this.findIssue(transaction, context.workspaceId, issue.id);
         await notifyResourceChanged(transaction, {
           changeType: 'CREATED',
@@ -1603,6 +1598,7 @@ export class IssuesService {
           context.workspaceId,
           dto.projectId,
           dto.parentIssueId,
+          true,
         );
       }
       const team = await this.lockActiveTeam(transaction, context.workspaceId, dto.teamId!);
@@ -1664,6 +1660,10 @@ export class IssuesService {
       await this.syncDescriptionReferences(transaction, context, issue.id, description);
       await this.files.attachIssueFiles(transaction, context, issue.id, attachmentFileIds);
 
+      if (dto.parentIssueId) {
+        await this.recalculateParentFeature(transaction, context, dto.parentIssueId);
+      }
+
       const created = await this.findIssue(transaction, context.workspaceId, issue.id);
       await notifyResourceChanged(transaction, {
         changeType: 'CREATED',
@@ -1703,7 +1703,7 @@ export class IssuesService {
       await this.lockWorkspace(transaction, context.workspaceId);
       await this.lockActorMembership(transaction, context.workspaceId, context.membershipId);
       const [feature] = await transaction.$queryRaw<FeatureStartLockRow[]>`
-        SELECT "id", "type", "title", "priority", "project_id" AS "projectId"
+        SELECT "id", "type", "title", "priority", "project_id" AS "projectId", "feature_status" AS "featureStatus"
         FROM "issues"
         WHERE "workspace_id" = ${context.workspaceId}::uuid
           AND "id" = ${issueId}::uuid
@@ -1712,6 +1712,12 @@ export class IssuesService {
       `;
       if (!feature || feature.type !== IssueType.FEATURE) {
         return resourceNotFound();
+      }
+      if (CLOSED_FEATURE_STATUSES.includes(feature.featureStatus)) {
+        conflict(
+          'ISSUE_REOPEN_REQUIRED',
+          '기능 이슈를 재개하거나 다시 연 뒤 작업을 시작해 주세요.',
+        );
       }
 
       await this.lockActiveProject(transaction, context.workspaceId, feature.projectId);
@@ -1801,7 +1807,7 @@ export class IssuesService {
         missingAssignments,
       );
       if (changedExistingTask || createdTeamTasks.length > 0) {
-        await this.touchParentFeature(transaction, context.workspaceId, issueId);
+        await this.recalculateParentFeature(transaction, context, issueId);
       }
       const updatedFeature = await this.findIssue(transaction, context.workspaceId, issueId);
       await notifyResourceChanged(transaction, {
@@ -1840,7 +1846,7 @@ export class IssuesService {
       await this.lockWorkspace(transaction, context.workspaceId);
       await this.lockActorMembership(transaction, context.workspaceId, context.membershipId);
       const [feature] = await transaction.$queryRaw<FeatureStartLockRow[]>`
-        SELECT "id", "type", "title", "priority", "project_id" AS "projectId"
+        SELECT "id", "type", "title", "priority", "project_id" AS "projectId", "feature_status" AS "featureStatus"
         FROM "issues"
         WHERE "workspace_id" = ${context.workspaceId}::uuid
           AND "id" = ${issueId}::uuid
@@ -1849,6 +1855,12 @@ export class IssuesService {
       `;
       if (!feature || feature.type !== IssueType.FEATURE) {
         return resourceNotFound();
+      }
+      if (CLOSED_FEATURE_STATUSES.includes(feature.featureStatus)) {
+        conflict(
+          'ISSUE_REOPEN_REQUIRED',
+          '기능 이슈를 재개하거나 다시 연 뒤 작업을 시작해 주세요.',
+        );
       }
       await this.lockActiveProject(transaction, context.workspaceId, feature.projectId);
       const [roleAssignment] = this.selectedRoleAssignments(
@@ -1934,7 +1946,7 @@ export class IssuesService {
         teamTask = await this.assignExistingTeamTask(transaction, context, teamTask, assignee);
       }
 
-      await this.touchParentFeature(transaction, context.workspaceId, issueId);
+      await this.recalculateParentFeature(transaction, context, issueId);
       const parent = await this.findIssue(transaction, context.workspaceId, issueId);
       const currentUserTeamRoles = await this.currentUserProjectRoles(
         transaction,
@@ -2091,7 +2103,7 @@ export class IssuesService {
         );
       }
 
-      await this.touchParentFeature(transaction, context.workspaceId, issueId);
+      await this.recalculateParentFeature(transaction, context, issueId);
       const parent = await this.findIssue(transaction, context.workspaceId, issueId);
       const parentSummary = toSummaryResponse(
         parent,
@@ -2394,13 +2406,20 @@ export class IssuesService {
           status: HttpStatus.CONFLICT,
         });
       }
+      if (dto.featureStatusAction !== undefined && dto.featureStatus !== undefined) {
+        issueTypeFieldInvalid('기능 이슈 상태는 행동 또는 호환 입력 중 하나만 보낼 수 있습니다.');
+      }
       if (dto.requireCompletedTeamTasks === true && dto.featureStatus !== FeatureIssueStatus.DONE) {
         issueTypeFieldInvalid('팀 작업 완료 확인은 이슈 완료 상태 변경에만 사용할 수 있습니다.');
       }
       return this.updateFeatureIssue(context, issueId, dto);
     }
 
-    if (dto.featureStatus !== undefined || dto.requireCompletedTeamTasks !== undefined) {
+    if (
+      dto.featureStatus !== undefined ||
+      dto.featureStatusAction !== undefined ||
+      dto.requireCompletedTeamTasks !== undefined
+    ) {
       issueTypeFieldInvalid('팀 작업에는 기능 이슈 상태를 사용할 수 없습니다.');
     }
     if (!preliminary.teamId) {
@@ -2796,6 +2815,9 @@ export class IssuesService {
         await this.createIssueUnblockedOutboxEvents(transaction, context, issueId);
       }
 
+      if (current.parentIssueId && (changesState || changesParent)) {
+        await this.recalculateParentFeature(transaction, context, current.parentIssueId);
+      }
       const updated = await this.findIssue(transaction, context.workspaceId, issueId);
       await notifyResourceChanged(transaction, {
         changeType: 'UPDATED',
@@ -2950,6 +2972,27 @@ export class IssuesService {
     dto: UpdateIssueDto,
   ): Promise<IssueDetailResponseDto> {
     const title = dto.title === undefined ? undefined : normalizeTitle(dto.title);
+    if (dto.featureStatus !== undefined && AUTOMATIC_FEATURE_STATUSES.includes(dto.featureStatus)) {
+      unprocessable(
+        'FEATURE_STATUS_DERIVED',
+        '기능 이슈 상태는 하위 팀 작업에서 자동으로 계산됩니다.',
+      );
+    }
+    const statusAction: FeatureIssueStatusAction | undefined =
+      dto.featureStatusAction ??
+      (dto.featureStatus === FeatureIssueStatus.DONE && dto.requireCompletedTeamTasks
+        ? 'COMPLETE'
+        : dto.featureStatus === FeatureIssueStatus.PAUSED
+          ? 'PAUSE'
+          : dto.featureStatus === FeatureIssueStatus.CANCELED
+            ? 'CANCEL'
+            : undefined);
+    if (dto.featureStatus !== undefined && statusAction === undefined) {
+      conflict(
+        'FEATURE_STATUS_ACTION_INVALID',
+        '기능 이슈 상태 변경은 명시적인 행동으로 요청해 주세요.',
+      );
+    }
     const requestedLabelIds =
       dto.labelIds === undefined ? undefined : [...new Set(dto.labelIds)].sort();
     const requestedDescription =
@@ -3001,8 +3044,41 @@ export class IssuesService {
       if (current.version !== dto.version) {
         return versionConflict(current.version);
       }
+      const actionTaskStates = statusAction
+        ? await transaction.issue.findMany({
+            select: { workflowState: { select: { category: true } } },
+            where: {
+              deletedAt: null,
+              parentIssueId: issueId,
+              type: IssueType.TEAM_TASK,
+              workspaceId: context.workspaceId,
+            },
+          })
+        : [];
+      const derivedStatus = this.deriveFeatureStatus(
+        actionTaskStates
+          .map(({ workflowState }) => workflowState?.category)
+          .filter((category): category is StateCategory => category !== undefined),
+      );
+      let requestedFeatureStatus = current.featureStatus;
+      if (statusAction === 'PAUSE' && !AUTOMATIC_FEATURE_STATUSES.includes(current.featureStatus)) {
+        conflict('FEATURE_STATUS_ACTION_INVALID', '현재 이슈는 일시 중지할 수 없습니다.');
+      } else if (statusAction === 'PAUSE') requestedFeatureStatus = FeatureIssueStatus.PAUSED;
+      else if (statusAction === 'RESUME' && current.featureStatus === FeatureIssueStatus.PAUSED)
+        requestedFeatureStatus = derivedStatus;
+      else if (statusAction === 'CANCEL' && current.featureStatus !== FeatureIssueStatus.DONE)
+        requestedFeatureStatus = FeatureIssueStatus.CANCELED;
+      else if (
+        statusAction === 'REOPEN' &&
+        REOPENABLE_FEATURE_STATUSES.includes(current.featureStatus)
+      )
+        requestedFeatureStatus = derivedStatus;
+      else if (statusAction === 'COMPLETE' && current.featureStatus === FeatureIssueStatus.REVIEW)
+        requestedFeatureStatus = FeatureIssueStatus.DONE;
+      else if (statusAction !== undefined)
+        conflict('FEATURE_STATUS_ACTION_INVALID', '현재 이슈에서 실행할 수 없는 상태 행동입니다.');
 
-      if (dto.requireCompletedTeamTasks === true) {
+      if (statusAction === 'COMPLETE') {
         const teamTasks = await transaction.issue.findMany({
           select: { workflowState: { select: { category: true } } },
           where: {
@@ -3055,8 +3131,7 @@ export class IssuesService {
       const changesDescription =
         requestedDescription !== undefined &&
         requestedDescription.bodyMarkdown !== current.descriptionMarkdown;
-      const changesStatus =
-        dto.featureStatus !== undefined && dto.featureStatus !== current.featureStatus;
+      const changesStatus = requestedFeatureStatus !== current.featureStatus;
       const changesPriority = dto.priority !== undefined && dto.priority !== current.priority;
       const changesLabels =
         requestedLabelIds !== undefined &&
@@ -3074,7 +3149,7 @@ export class IssuesService {
 
       await transaction.issue.update({
         data: {
-          ...(changesStatus ? { featureStatus: dto.featureStatus } : {}),
+          ...(changesStatus ? { featureStatus: requestedFeatureStatus } : {}),
           ...(changesPriority ? { priority: dto.priority } : {}),
           ...(changesTitle ? { title } : {}),
           ...(changesDescription
@@ -3139,7 +3214,7 @@ export class IssuesService {
             issueId,
             'featureStatus',
             current.featureStatus,
-            dto.featureStatus!,
+            requestedFeatureStatus,
           ),
         );
       }
@@ -3168,7 +3243,7 @@ export class IssuesService {
       ];
       const currentCategory = FEATURE_STATUS_CATEGORY[current.featureStatus];
       const requestedCategory = changesStatus
-        ? FEATURE_STATUS_CATEGORY[dto.featureStatus!]
+        ? FEATURE_STATUS_CATEGORY[requestedFeatureStatus]
         : currentCategory;
       const terminalCategory =
         changesStatus &&
@@ -3283,11 +3358,10 @@ export class IssuesService {
     const created: IssueRow[] = [];
     for (const assignment of assignments) {
       const team = await this.lockActiveTeam(transaction, context.workspaceId, assignment.teamId);
-      const workflowState = await this.lockWorkflowState(
+      const workflowState = await this.lockAutomaticWorkflowState(
         transaction,
         context.workspaceId,
         team.id,
-        undefined,
       );
       if (assignment.assigneeMembershipId) {
         await this.lockMemberships(
@@ -3393,23 +3467,80 @@ export class IssuesService {
     return updated;
   }
 
-  private async touchParentFeature(
+  private async recalculateParentFeature(
     transaction: Transaction,
-    workspaceId: string,
+    context: { membershipId: string; workspaceId: string },
     issueId: string,
   ): Promise<void> {
-    const updated = await transaction.issue.updateMany({
-      data: { version: { increment: 1 } },
-      where: {
-        deletedAt: null,
-        id: issueId,
-        type: IssueType.FEATURE,
-        workspaceId,
-      },
-    });
-    if (updated.count !== 1) {
-      return resourceNotFound();
+    const [parent] = await transaction.$queryRaw<
+      Array<{ featureStatus: FeatureIssueStatus; id: string }>
+    >`
+      SELECT "id", "feature_status" AS "featureStatus"
+      FROM "issues"
+      WHERE "workspace_id" = ${context.workspaceId}::uuid
+        AND "id" = ${issueId}::uuid
+        AND "type" = 'FEATURE'::"IssueType"
+        AND "deleted_at" IS NULL
+      FOR UPDATE
+    `;
+    if (!parent) return resourceNotFound();
+    if (CLOSED_FEATURE_STATUSES.includes(parent.featureStatus)) {
+      return;
     }
+    const rows = await transaction.$queryRaw<Array<{ category: StateCategory }>>`
+      SELECT state."category"
+      FROM "issues" child
+      INNER JOIN "workflow_states" state
+        ON state."workspace_id" = child."workspace_id"
+       AND state."team_id" = child."team_id"
+       AND state."id" = child."workflow_state_id"
+      WHERE child."workspace_id" = ${context.workspaceId}::uuid
+        AND child."parent_issue_id" = ${issueId}::uuid
+        AND child."type" = 'TEAM_TASK'::"IssueType"
+        AND child."deleted_at" IS NULL
+        AND state."category" <> 'CANCELED'::"StateCategory"
+      FOR SHARE
+    `;
+    const next = this.deriveFeatureStatus(rows.map(({ category }) => category));
+    if (next === parent.featureStatus) return;
+    await transaction.issue.update({
+      data: { featureStatus: next, version: { increment: 1 } },
+      where: { id: parent.id },
+    });
+    await transaction.activityEvent.create({
+      data: this.activity(context, parent.id, 'featureStatus', parent.featureStatus, next),
+    });
+    const eventId = await this.createIssueChangedOutbox(transaction, context, parent.id, {
+      assigneeMembershipId: null,
+      changedFields: ['FEATURE_STATUS'],
+      mentionedMembershipIds: [],
+      terminalCategory: null,
+    });
+    const updated = await this.findIssue(transaction, context.workspaceId, parent.id);
+    await notifyResourceChanged(transaction, {
+      changeType: 'UPDATED',
+      eventId,
+      resourceId: parent.id,
+      resourceType: 'ISSUE',
+      version: updated.version,
+      workspaceId: context.workspaceId,
+    });
+  }
+
+  private deriveFeatureStatus(categories: StateCategory[]): FeatureIssueStatus {
+    const active = categories.filter((category) => category !== StateCategory.CANCELED);
+    if (active.length === 0) return FeatureIssueStatus.UNSORTED;
+    if (active.every((category) => category === StateCategory.COMPLETED)) {
+      return FeatureIssueStatus.REVIEW;
+    }
+    if (
+      active.some(
+        (category) => category === StateCategory.STARTED || category === StateCategory.COMPLETED,
+      )
+    ) {
+      return FeatureIssueStatus.IN_PROGRESS;
+    }
+    return FeatureIssueStatus.TODO;
   }
 
   private async currentUserProjectRoles(
@@ -4151,9 +4282,10 @@ export class IssuesService {
     workspaceId: string,
     projectId: string,
     parentIssueId: string,
+    requireOpen = false,
   ): Promise<ParentIssueLockRow> {
     const [parent] = await transaction.$queryRaw<ParentIssueLockRow[]>`
-      SELECT "id", "project_id" AS "projectId", "type"
+      SELECT "id", "project_id" AS "projectId", "type", "feature_status" AS "featureStatus"
       FROM "issues"
       WHERE "workspace_id" = ${workspaceId}::uuid
         AND "id" = ${parentIssueId}::uuid
@@ -4165,6 +4297,13 @@ export class IssuesService {
         code: 'PARENT_ISSUE_PROJECT_MISMATCH',
         message: '상위 기능 이슈는 같은 프로젝트에 속해야 합니다.',
         status: HttpStatus.UNPROCESSABLE_ENTITY,
+      });
+    }
+    if (requireOpen && CLOSED_FEATURE_STATUSES.includes(parent.featureStatus)) {
+      throw new ApiError({
+        code: 'ISSUE_REOPEN_REQUIRED',
+        message: '현재 기능 이슈를 재개하거나 다시 연 뒤 팀 작업을 시작해 주세요.',
+        status: HttpStatus.CONFLICT,
       });
     }
     return parent;
@@ -4230,6 +4369,37 @@ export class IssuesService {
     const [state] = rows;
     if (!state) {
       return resourceNotFound('워크플로 상태를 찾을 수 없습니다.');
+    }
+    return state;
+  }
+
+  private async lockAutomaticWorkflowState(
+    transaction: Transaction,
+    workspaceId: string,
+    teamId: string,
+  ): Promise<WorkflowStateLockRow> {
+    const [state] = await transaction.$queryRaw<WorkflowStateLockRow[]>`
+      SELECT
+        "id",
+        "name",
+        "category",
+        "position",
+        "is_default" AS "isDefault",
+        "version"
+      FROM "workflow_states"
+      WHERE "workspace_id" = ${workspaceId}::uuid
+        AND "team_id" = ${teamId}::uuid
+        AND "category" = 'UNSTARTED'::"StateCategory"
+      ORDER BY "position" ASC, "id" ASC
+      LIMIT 1
+      FOR UPDATE
+    `;
+    if (!state) {
+      throw new ApiError({
+        code: 'TEAM_UNSTARTED_STATE_REQUIRED',
+        message: '기능 이슈 하위 작업을 만들 팀에 시작 전 상태가 필요합니다.',
+        status: HttpStatus.CONFLICT,
+      });
     }
     return state;
   }

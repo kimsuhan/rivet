@@ -326,7 +326,6 @@ describe('GlobalIssueCreate', () => {
         data: {
           attachmentFileIds: [],
           descriptionMarkdown: null,
-          featureStatus: 'UNSORTED',
           initialRoles: [],
           labelIds: [],
           priority: 'NONE',

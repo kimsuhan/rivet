@@ -24,6 +24,16 @@ import {
 
 import { FeatureIssueStatus, IssuePriority, IssueType, ProjectRole } from '@rivet/database';
 
+export const FEATURE_ISSUE_STATUS_ACTIONS = [
+  'PAUSE',
+  'RESUME',
+  'CANCEL',
+  'COMPLETE',
+  'REOPEN',
+] as const;
+
+export type FeatureIssueStatusAction = (typeof FEATURE_ISSUE_STATUS_ACTIONS)[number];
+
 const HANDOFF_DESTINATION_ROLES = [ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND] as const;
 const FEATURE_WORK_QUEUES = [
   'REVIEW_REQUIRED',
@@ -262,7 +272,11 @@ export class CreateIssueDto {
   @IsUUID('4', { message: '워크플로 상태 식별자가 올바르지 않습니다.' })
   workflowStateId?: string;
 
-  @ApiPropertyOptional({ enum: FeatureIssueStatus })
+  @ApiPropertyOptional({
+    deprecated: true,
+    description: '호환 기간에만 받으며 기능 이슈 생성 상태는 서버가 계산합니다.',
+    enum: FeatureIssueStatus,
+  })
   @IsOptional()
   @IsEnum(FeatureIssueStatus, { message: '기능 이슈 상태가 올바르지 않습니다.' })
   featureStatus?: FeatureIssueStatus;
@@ -337,8 +351,8 @@ export class CreateFeatureIssueDto {
   @ApiPropertyOptional({ maxLength: 100_000, nullable: true, type: String })
   descriptionMarkdown?: string | null;
 
-  @ApiProperty({ enum: FeatureIssueStatus })
-  featureStatus!: FeatureIssueStatus;
+  @ApiPropertyOptional({ deprecated: true, enum: FeatureIssueStatus })
+  featureStatus?: FeatureIssueStatus;
 
   @ApiProperty({ format: 'uuid' })
   projectId!: string;
@@ -557,12 +571,18 @@ export class UpdateIssueDto {
   @IsUUID('4', { message: '워크플로 상태 식별자가 올바르지 않습니다.' })
   workflowStateId?: string;
 
-  @ApiPropertyOptional({ enum: FeatureIssueStatus })
+  @ApiPropertyOptional({ deprecated: true, enum: FeatureIssueStatus })
   @IsOptional()
   @IsEnum(FeatureIssueStatus, { message: '기능 이슈 상태가 올바르지 않습니다.' })
   featureStatus?: FeatureIssueStatus;
 
+  @ApiPropertyOptional({ enum: FEATURE_ISSUE_STATUS_ACTIONS })
+  @IsOptional()
+  @IsIn(FEATURE_ISSUE_STATUS_ACTIONS, { message: '기능 이슈 상태 행동이 올바르지 않습니다.' })
+  featureStatusAction?: FeatureIssueStatusAction;
+
   @ApiPropertyOptional({
+    deprecated: true,
     description: '빠른 이슈 완료 시 취소 제외 하위 팀 작업이 모두 완료됐는지 재검증합니다.',
   })
   @IsOptional()

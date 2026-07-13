@@ -24,10 +24,10 @@ import { Link } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
 import {
-  FEATURE_ISSUE_PRIORITIES,
-  FEATURE_ISSUE_STATUSES,
-  type FeatureProjectRole,
-} from './feature-issue-list-state';
+  FEATURE_ISSUE_LIST_GRID_CELL_CLASS,
+  FEATURE_ISSUE_LIST_GRID_CLASS,
+} from './feature-issue-list-layout';
+import { FEATURE_ISSUE_PRIORITIES, type FeatureProjectRole } from './feature-issue-list-state';
 import {
   type FeatureIssueAction,
   type FeatureIssueNextAction,
@@ -241,6 +241,55 @@ export function FeatureIssueRow({
       : []),
   ];
 
+  const priorityBusy =
+    mutation.isPendingFor?.(issue.id, 'priority') ??
+    (mutation.isPending &&
+      mutation.variables?.issue.id === issue.id &&
+      mutation.variables.change.kind === 'priority');
+  const labelsBusy =
+    mutation.isPendingFor?.(issue.id, 'labels') ??
+    (mutation.isPending &&
+      mutation.variables?.issue.id === issue.id &&
+      mutation.variables.change.kind === 'labels');
+
+  function cellFailure(kind: 'labels' | 'priority') {
+    const failure = mutation.failureFor?.(issue.id, kind);
+    if (failure) return failure;
+
+    const variables = mutation.variables;
+    if (!variables || variables.issue.id !== issue.id || variables.change.kind !== kind) {
+      return undefined;
+    }
+    if (!mutation.conflict && !mutation.isError) return undefined;
+
+    return { isConflict: Boolean(mutation.conflict) };
+  }
+
+  function retryCell(kind: 'labels' | 'priority') {
+    if (mutation.retryFor) mutation.retryFor(issue.id, kind);
+    else mutation.retry();
+  }
+
+  function reapplyCellConflict(kind: 'labels' | 'priority') {
+    if (mutation.reapplyConflictFor) void mutation.reapplyConflictFor(issue.id, kind);
+    else void mutation.reapplyConflict();
+  }
+
+  const priorityFailure = cellFailure('priority');
+  const priorityError = priorityFailure
+    ? priorityFailure.isConflict
+      ? {
+          actionLabel: t('inline.reapply'),
+          description: t('inline.conflict'),
+          onAction: () => reapplyCellConflict('priority'),
+        }
+      : {
+          actionLabel: t('retry'),
+          description: t('inline.error'),
+          onAction: () => retryCell('priority'),
+        }
+    : undefined;
+
   function changeLabels(ids: string[]) {
     mutation.mutate({
       change: {
@@ -256,36 +305,24 @@ export function FeatureIssueRow({
 
   function statusEditor(className?: string) {
     const currentLabel = t(`statuses.${issue.status.featureStatus}`);
+    const presentation = FEATURE_STATUS_PRESENTATION[issue.status.featureStatus];
+    const Icon = presentation.icon;
 
     return (
-      <IssueInlineSelect
-        appearance="compact"
-        ariaLabel={t('inline.currentValue', {
+      <span
+        className={cn(
+          'inline-flex min-h-7 items-center gap-1.5 text-xs font-medium whitespace-nowrap',
+          className,
+        )}
+        aria-label={t('inline.currentValue', {
           identifier: issue.identifier,
           property: t('columns.status'),
           value: currentLabel,
         })}
-        disabled={mutation.isPending}
-        busy={mutation.isPending && mutation.variables?.change.kind === 'featureStatus'}
-        onValueChange={(value) => {
-          if (FEATURE_ISSUE_STATUSES.includes(value as (typeof FEATURE_ISSUE_STATUSES)[number])) {
-            mutation.mutate({
-              change: {
-                kind: 'featureStatus',
-                value: value as (typeof FEATURE_ISSUE_STATUSES)[number],
-              },
-              issue,
-            });
-          }
-        }}
-        options={FEATURE_ISSUE_STATUSES.map((status) => ({
-          ...FEATURE_STATUS_PRESENTATION[status],
-          label: t(`statuses.${status}`),
-          value: status,
-        }))}
-        {...(className ? { triggerClassName: className } : {})}
-        value={issue.status.featureStatus}
-      />
+      >
+        <Icon aria-hidden="true" className={cn('size-4 shrink-0', presentation.iconClassName)} />
+        {currentLabel}
+      </span>
     );
   }
 
@@ -300,8 +337,9 @@ export function FeatureIssueRow({
           property: t('columns.priority'),
           value: currentLabel,
         })}
-        disabled={mutation.isPending}
-        busy={mutation.isPending && mutation.variables?.change.kind === 'priority'}
+        disabled={priorityBusy}
+        busy={priorityBusy}
+        error={priorityError}
         onValueChange={(value) => {
           if (
             FEATURE_ISSUE_PRIORITIES.includes(value as (typeof FEATURE_ISSUE_PRIORITIES)[number])
@@ -334,8 +372,8 @@ export function FeatureIssueRow({
           property: t('columns.labels'),
           value: issue.labels.map((label) => label.name).join(', ') || t('filters.noOptions'),
         })}
-        busy={mutation.isPending && mutation.variables?.change.kind === 'labels'}
-        disabled={mutation.isPending}
+        busy={labelsBusy}
+        disabled={labelsBusy}
         emptyLabel={t('filters.noOptions')}
         label={t('columns.labels')}
         onChange={changeLabels}
@@ -351,7 +389,8 @@ export function FeatureIssueRow({
     );
   }
 
-  const notice = mutation.conflict ? (
+  const labelFailure = cellFailure('labels');
+  const notice = labelFailure?.isConflict ? (
     <div role="alert" className="bg-warning/10 flex items-center gap-2 border-t px-3 py-2 text-xs">
       <AlertCircle aria-hidden="true" className="text-warning size-4 shrink-0" />
       <span className="min-w-0 flex-1">{t('inline.conflict')}</span>
@@ -360,13 +399,14 @@ export function FeatureIssueRow({
         size="xs"
         variant="ghost"
         className="hover:before:bg-muted/60 relative isolate min-h-11 bg-transparent px-2 before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-8 before:-translate-y-1/2 before:rounded-md before:bg-transparent hover:bg-transparent lg:min-h-10"
-        onClick={mutation.reapplyConflict}
+        disabled={labelsBusy}
+        onClick={() => reapplyCellConflict('labels')}
       >
         <RotateCcw aria-hidden="true" data-icon="inline-start" />
         {t('inline.reapply')}
       </Button>
     </div>
-  ) : mutation.isError ? (
+  ) : labelFailure ? (
     <div
       role="alert"
       className="bg-destructive/10 text-destructive flex items-center gap-2 border-t px-3 py-2 text-xs"
@@ -378,7 +418,8 @@ export function FeatureIssueRow({
         size="xs"
         variant="ghost"
         className="hover:before:bg-muted/60 relative isolate min-h-11 bg-transparent px-2 before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-8 before:-translate-y-1/2 before:rounded-md before:bg-transparent hover:bg-transparent lg:min-h-10"
-        onClick={mutation.retry}
+        disabled={labelsBusy}
+        onClick={() => retryCell('labels')}
       >
         <RotateCcw aria-hidden="true" data-icon="inline-start" />
         {t('retry')}
@@ -387,7 +428,7 @@ export function FeatureIssueRow({
   ) : null;
 
   const actionControls = (
-    <div className="flex min-w-0 items-center justify-end gap-1 max-lg:w-full">
+    <div className="flex min-w-0 items-center justify-end gap-1 max-xl:w-full">
       <FeatureIssuePrimaryAction
         accessibleLabel={actionLabel}
         action={action}
@@ -436,7 +477,6 @@ export function FeatureIssueRow({
     <li
       data-testid="feature-issue-row"
       className="group/issue-row border-border/60 hover:bg-muted/40 focus-within:bg-muted/20 border-b transition-colors"
-      aria-busy={mutation.isPending || undefined}
     >
       <div className="relative">
         <Link
@@ -444,14 +484,23 @@ export function FeatureIssueRow({
           aria-label={issue.title}
           className="focus-visible:ring-ring/50 absolute inset-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-inset"
         />
-        <div className="pointer-events-none grid grid-cols-1 gap-3 px-3 py-4 lg:min-h-20 lg:grid-cols-[minmax(11rem,1.55fr)_12rem_minmax(7rem,1fr)_5.25rem_3.5rem_minmax(6rem,auto)] lg:items-center lg:gap-2 lg:py-2">
-          <div className="min-w-0">
+        <div
+          data-layout="feature-issue-list-grid"
+          className={cn(
+            'pointer-events-none grid grid-cols-2 gap-x-3 gap-y-3 px-3 py-4 xl:min-h-20 xl:py-2',
+            FEATURE_ISSUE_LIST_GRID_CLASS,
+          )}
+        >
+          <div
+            data-column="issue"
+            className={cn('min-w-0', FEATURE_ISSUE_LIST_GRID_CELL_CLASS.issue)}
+          >
             <div className="flex min-w-0 items-start gap-2 lg:items-baseline">
               <span className="text-muted-foreground shrink-0 font-mono text-xs">
                 {issue.identifier}
               </span>
               <span
-                className="min-w-0 text-sm font-semibold break-words lg:truncate"
+                className="min-w-0 text-sm font-semibold break-words xl:truncate"
                 title={issue.title}
               >
                 {issue.title}
@@ -466,23 +515,34 @@ export function FeatureIssueRow({
               </span>
               <IssueLabelChips emptyLabel={t('filters.noOptions')} labels={issue.labels} />
               {labelOptions.length > 0 ? (
-                <div className="pointer-events-auto relative z-10 ml-auto shrink-0">
-                  {labelsEditor()}
-                </div>
+                <div className="pointer-events-auto relative z-10 shrink-0">{labelsEditor()}</div>
               ) : null}
             </div>
           </div>
 
           <div
-            data-testid="feature-issue-status-priority"
-            className="grid min-w-0 grid-cols-[6.75rem_5rem] items-center gap-1"
+            data-column="status"
+            data-testid="feature-issue-status"
+            className={cn('flex min-w-0 items-center', FEATURE_ISSUE_LIST_GRID_CELL_CLASS.status)}
           >
-            {statusEditor('pointer-events-auto relative z-10 w-[6.75rem] text-muted-foreground')}
-            {priorityEditor('pointer-events-auto relative z-10 w-20 text-muted-foreground')}
+            {statusEditor('relative z-10 min-w-0 text-muted-foreground')}
           </div>
 
-          <div className="min-w-0">
-            <p className="text-sm font-medium lg:truncate">{currentWork}</p>
+          <div
+            data-column="priority"
+            data-testid="feature-issue-priority"
+            className={cn('min-w-0', FEATURE_ISSUE_LIST_GRID_CELL_CLASS.priority)}
+          >
+            {priorityEditor('pointer-events-auto relative z-10 w-full text-muted-foreground')}
+          </div>
+
+          <div
+            data-column="current-work"
+            className={cn('min-w-0', FEATURE_ISSUE_LIST_GRID_CELL_CLASS.currentWork)}
+          >
+            <p className="truncate text-sm font-medium tracking-[-0.01em]" title={currentWork}>
+              {currentWork}
+            </p>
             {summary.activeRoleTeams[0] ? (
               <p
                 className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1 text-xs"
@@ -518,7 +578,11 @@ export function FeatureIssueRow({
 
           <Progress
             value={progress}
-            className="[&_[data-slot=progress-track]]:bg-muted/60 w-full max-w-56 gap-1.5 lg:max-w-24"
+            data-column="progress"
+            className={cn(
+              '[&_[data-slot=progress-track]]:bg-muted/60 w-full max-w-56 gap-1.5 xl:max-w-none',
+              FEATURE_ISSUE_LIST_GRID_CELL_CLASS.progress,
+            )}
             aria-label={t('row.progress', {
               completed: summary.completedCount,
               percentage: progress,
@@ -526,20 +590,26 @@ export function FeatureIssueRow({
             })}
           >
             <ProgressLabel className="sr-only">{t('columns.progress')}</ProgressLabel>
-            <ProgressValue className="text-foreground ml-0 text-xs font-medium">
+            <ProgressValue className="text-foreground ml-0 text-xs font-medium whitespace-nowrap tabular-nums">
               {() => `${summary.completedCount}/${targetTaskCount} · ${progress}%`}
             </ProgressValue>
           </Progress>
 
           <time
-            className="text-muted-foreground text-xs lg:text-right"
+            data-column="updated-at"
+            className={cn(
+              'text-muted-foreground text-xs xl:text-right',
+              FEATURE_ISSUE_LIST_GRID_CELL_CLASS.updatedAt,
+            )}
             dateTime={issue.updatedAt}
             title={updatedAt.full}
           >
             {updatedAt.short}
           </time>
 
-          {actionControls}
+          <div data-column="next-action" className={FEATURE_ISSUE_LIST_GRID_CELL_CLASS.nextAction}>
+            {actionControls}
+          </div>
         </div>
       </div>
       {notice}

@@ -6,6 +6,9 @@
  * OpenAPI spec version: 1.0
  */
 
+/**
+ * @deprecated
+ */
 export type UpdateIssueDtoFeatureStatus = typeof UpdateIssueDtoFeatureStatus[keyof typeof UpdateIssueDtoFeatureStatus];
 
 

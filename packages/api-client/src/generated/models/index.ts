@@ -248,6 +248,7 @@ export * from './unauthenticatedSessionDto';
 export * from './updateCommentDto';
 export * from './updateIssueDto';
 export * from './updateIssueDtoFeatureStatus';
+export * from './updateIssueDtoFeatureStatusAction';
 export * from './updateIssueDtoPriority';
 export * from './updateIssueDtoProjectRole';
 export * from './updateIssueResponseDto';

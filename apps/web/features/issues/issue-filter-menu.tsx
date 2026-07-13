@@ -5,7 +5,6 @@ import type { KeyboardEvent } from 'react';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
-import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 export type IssueFilterOption = {
@@ -161,7 +160,6 @@ export function IssueFilterMenu({
           <Tag aria-hidden="true" className="text-muted-foreground size-3.5" />
           <span>{label}</span>
           {selected.length > 0 ? <span>{selected.length}</span> : null}
-          {busy ? <Spinner aria-hidden="true" className="size-3" /> : null}
         </PopoverTrigger>
         <PopoverContent
           align="start"
@@ -214,7 +212,6 @@ export function IssueFilterMenu({
             {selected.length}
           </span>
         ) : null}
-        {busy ? <Spinner aria-hidden="true" className="size-3" /> : null}
         <ChevronDown
           aria-hidden="true"
           className="text-muted-foreground size-3.5 transition-transform group-data-[popup-open]/filter:rotate-180"

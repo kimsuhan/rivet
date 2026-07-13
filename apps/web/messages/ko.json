@@ -374,10 +374,10 @@
       "WEB_FRONTEND": "웹 프론트"
     },
     "featureStatuses": {
-      "UNSORTED": "미분류",
+      "UNSORTED": "접수됨",
       "TODO": "할 일",
       "IN_PROGRESS": "진행 중",
-      "REVIEW": "검토",
+      "REVIEW": "완료 확인",
       "DONE": "완료",
       "PAUSED": "일시 중지",
       "CANCELED": "취소"
@@ -500,10 +500,10 @@
     "statePlaceholder": "상태 선택",
     "stateRequired": "상태를 선택해 주세요.",
     "featureStatuses": {
-      "UNSORTED": "미분류",
+      "UNSORTED": "접수됨",
       "TODO": "할 일",
       "IN_PROGRESS": "진행 중",
-      "REVIEW": "검토",
+      "REVIEW": "완료 확인",
       "DONE": "완료",
       "PAUSED": "일시 중지",
       "CANCELED": "취소"
@@ -1073,10 +1073,10 @@
       "CANCELED": "취소"
     },
     "featureStatuses": {
-      "UNSORTED": "미분류",
+      "UNSORTED": "접수됨",
       "TODO": "할 일",
       "IN_PROGRESS": "진행 중",
-      "REVIEW": "검토",
+      "REVIEW": "완료 확인",
       "DONE": "완료",
       "PAUSED": "일시 중지",
       "CANCELED": "취소"
@@ -1380,10 +1380,10 @@
       "APP_FRONTEND": "앱 프론트"
     },
     "statuses": {
-      "UNSORTED": "미분류",
+      "UNSORTED": "접수됨",
       "TODO": "할 일",
       "IN_PROGRESS": "진행 중",
-      "REVIEW": "검토",
+      "REVIEW": "완료 확인",
       "DONE": "완료",
       "PAUSED": "일시 중지",
       "CANCELED": "취소"
@@ -1734,10 +1734,10 @@
       "CANCELED": "취소"
     },
     "featureStatus": {
-      "UNSORTED": "미분류",
+      "UNSORTED": "접수됨",
       "TODO": "할 일",
       "IN_PROGRESS": "진행 중",
-      "REVIEW": "검토",
+      "REVIEW": "완료 확인",
       "DONE": "완료",
       "PAUSED": "일시 중지",
       "CANCELED": "취소"

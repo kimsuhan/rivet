@@ -18,15 +18,20 @@ const options = [
 
 function PendingSelect() {
   const [busy, setBusy] = useState(false);
+  const [value, setValue] = useState('UNSORTED');
+  const label = options.find((option) => option.value === value)?.label ?? '';
   return (
     <IssueInlineSelect
       appearance="compact"
-      ariaLabel="ISSUE-12 상태: 미분류"
+      ariaLabel={`ISSUE-12 상태: ${label}`}
       busy={busy}
       disabled={busy}
-      onValueChange={() => setBusy(true)}
+      onValueChange={(nextValue) => {
+        setValue(nextValue);
+        setBusy(true);
+      }}
       options={options}
-      value="UNSORTED"
+      value={value}
     />
   );
 }
@@ -94,7 +99,7 @@ describe('IssueInlineSelect', () => {
       'focus-visible:ring-ring',
       'focus-visible:ring-offset-2',
     );
-    expect(trigger.querySelector('[data-slot="inline-select-spinner"]')).toBeInTheDocument();
+    expect(trigger.querySelector('[data-slot="inline-select-spinner"]')).not.toBeInTheDocument();
   });
 
   it('트리거와 메뉴에서 같은 아이콘·이름을 쓰고 선택 기능을 유지한다', async () => {
@@ -153,7 +158,7 @@ describe('IssueInlineSelect', () => {
     expect(trigger).toHaveFocus();
   });
 
-  it('저장 전환 중에는 값과 포커스를 유지하면서 다시 열기만 막는다', async () => {
+  it('저장 전환 중에는 새 값과 기존 아이콘을 유지하면서 다시 열기만 막는다', async () => {
     const user = userEvent.setup();
     render(<PendingSelect />);
 
@@ -162,7 +167,9 @@ describe('IssueInlineSelect', () => {
     await user.click(await screen.findByRole('option', { name: '할 일' }));
 
     await waitFor(() => expect(trigger).toHaveFocus());
-    expect(trigger).toHaveTextContent('미분류');
+    expect(trigger).toHaveTextContent('할 일');
+    expect(trigger.querySelector('[data-slot="inline-select-icon"]')).toHaveClass('lucide-circle');
+    expect(trigger.querySelector('[data-slot="inline-select-spinner"]')).not.toBeInTheDocument();
     expect(trigger).toHaveAttribute('aria-busy', 'true');
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
     expect(trigger).not.toBeDisabled();

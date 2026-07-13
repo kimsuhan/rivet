@@ -150,7 +150,7 @@ async function expectMobileFullScreen(page: Page, dialog: Locator): Promise<void
   if (!box) throw new Error('M8 모바일 패널 크기를 확인하지 못했습니다.');
   expect(box.x).toBeLessThanOrEqual(viewport.width * 0.03);
   expect(box.y).toBeLessThanOrEqual(viewport.height * 0.03);
-  expect(box.width / viewport.width).toBeGreaterThanOrEqual(0.95);
+  expect(Math.round((box.width / viewport.width) * 1_000) / 1_000).toBeGreaterThanOrEqual(0.95);
   expect(box.height / viewport.height).toBeGreaterThanOrEqual(0.9);
 }
 
@@ -186,7 +186,6 @@ async function createFeature(
 ): Promise<CreateIssueResponseDto> {
   return apiRequest<CreateIssueResponseDto>(page, '/issues', {
     body: {
-      featureStatus: 'UNSORTED',
       initialRoles: [],
       projectId: input.projectId,
       title: input.title,
@@ -194,6 +193,69 @@ async function createFeature(
     },
     method: 'POST',
   });
+}
+
+async function expectFeatureListGridAlignment(page: Page, targetRows?: Locator[]): Promise<void> {
+  const header = page.locator('[aria-hidden="true"][data-layout="feature-issue-list-grid"]');
+  const allRows = page
+    .getByTestId('feature-issue-row')
+    .locator('[data-layout="feature-issue-list-grid"]');
+  const rows =
+    targetRows?.map((row) => row.locator('[data-layout="feature-issue-list-grid"]')) ??
+    Array.from({ length: 2 }, (_, index) => allRows.nth(index));
+
+  await expect(header).toBeVisible();
+  if (!targetRows)
+    expect(await allRows.count(), '전역 이슈 목록 그리드 행 수').toBeGreaterThanOrEqual(2);
+
+  const gridMetrics = await Promise.all(
+    [header, ...rows].map((grid) =>
+      grid.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          columns: getComputedStyle(element).gridTemplateColumns,
+          starts: Object.fromEntries(
+            Array.from(element.children).map((child) => [
+              child.getAttribute('data-column'),
+              Math.round((child.getBoundingClientRect().left - rect.left) * 100) / 100,
+            ]),
+          ),
+        };
+      }),
+    ),
+  );
+  const [headerMetrics, ...rowMetrics] = gridMetrics;
+  if (!headerMetrics) throw new Error('전역 이슈 목록 헤더 그리드를 측정하지 못했습니다.');
+
+  const columnOrder = [
+    'priority',
+    'issue',
+    'status',
+    'current-work',
+    'progress',
+    'updated-at',
+    'next-action',
+  ] as const;
+  expect(headerMetrics.columns, '전역 이슈 목록 헤더 열 정의').not.toBe('none');
+  expect(Object.keys(headerMetrics.starts), '전역 이슈 목록 헤더 열').toHaveLength(7);
+  expect(rowMetrics, '전역 이슈 목록 비교 행 수').toHaveLength(2);
+  for (const [index, column] of columnOrder.entries()) {
+    const previousColumn = columnOrder[index - 1];
+    if (previousColumn) {
+      expect(headerMetrics.starts[previousColumn]!).toBeLessThan(headerMetrics.starts[column]!);
+    }
+  }
+
+  for (const metrics of rowMetrics) {
+    expect(metrics.columns, '이슈 행과 헤더의 열 정의').toBe(headerMetrics.columns);
+    expect(Object.keys(metrics.starts), '이슈 행 열 수').toHaveLength(columnOrder.length);
+    for (const column of columnOrder) {
+      expect(
+        Math.abs(metrics.starts[column]! - headerMetrics.starts[column]!),
+        `헤더와 이슈 행 ${column} 열 시작점`,
+      ).toBeLessThanOrEqual(1);
+    }
+  }
 }
 
 test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복원한다', async ({
@@ -279,7 +341,31 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
     }
 
     if (densityTitles.length > 0) {
-      await page.setViewportSize({ width: 2560, height: 1200 });
+      const desktopViewports = [
+        { height: 800, width: 1280 },
+        { height: 900, width: 1440 },
+        { height: 1200, width: 2048 },
+      ];
+      for (const viewport of desktopViewports) {
+        await page.setViewportSize(viewport);
+        await page.goto('/issues');
+        await expect(page.getByTestId('feature-issue-row')).toHaveCount(21);
+        await expectFeatureListGridAlignment(page);
+        expect(
+          await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+          `${viewport.width}px 전역 이슈 목록 가로 overflow`,
+        ).toBe(true);
+        if (process.env.RIVET_VISUAL_QA_PREFIX) {
+          await page.screenshot({
+            animations: 'disabled',
+            caret: 'hide',
+            fullPage: true,
+            path: `${process.env.RIVET_VISUAL_QA_PREFIX}-desktop-${viewport.width}-m8-grid.png`,
+          });
+        }
+      }
+
+      await page.setViewportSize({ width: 2048, height: 1200 });
       await page.goto('/issues');
       const content = page.getByTestId('feature-issue-list-content');
       const main = page.locator('#workspace-main-content');
@@ -315,19 +401,25 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
       expect(Math.max(...rowHeights)).toBeLessThanOrEqual(84);
 
       const densityRow = featureRow(page, featureTitle);
-      const statusTrigger = densityRow.getByRole('combobox', {
-        name: new RegExp(`^${created.issue.identifier} 상태:`, 'u'),
-      });
+      const statusPresentation = densityRow.locator(
+        `span[aria-label="${created.issue.identifier} 상태: 접수됨"]`,
+      );
       const priorityTrigger = densityRow.getByRole('combobox', {
         name: new RegExp(`^${created.issue.identifier} 우선순위:`, 'u'),
       });
-      const [statusBox, priorityBox, statusStyle, priorityStyle] = await Promise.all([
-        statusTrigger.boundingBox(),
-        priorityTrigger.boundingBox(),
-        statusTrigger.evaluate((element) => {
-          const style = getComputedStyle(element);
-          return { backgroundColor: style.backgroundColor, borderColor: style.borderColor };
+      await expect(
+        densityRow.getByRole('combobox', {
+          name: new RegExp(`^${created.issue.identifier} 상태:`, 'u'),
         }),
+      ).toHaveCount(0);
+      const [statusBox, priorityBox, statusAttributes, priorityStyle] = await Promise.all([
+        statusPresentation.boundingBox(),
+        priorityTrigger.boundingBox(),
+        statusPresentation.evaluate((element) => ({
+          ariaHasPopup: element.getAttribute('aria-haspopup'),
+          role: element.getAttribute('role'),
+          tagName: element.tagName,
+        })),
         priorityTrigger.evaluate((element) => {
           const style = getComputedStyle(element);
           return { backgroundColor: style.backgroundColor, borderColor: style.borderColor };
@@ -336,13 +428,15 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
       expect(statusBox).not.toBeNull();
       expect(priorityBox).not.toBeNull();
       if (!statusBox || !priorityBox)
-        throw new Error('M8 인라인 선택기 위치를 측정하지 못했습니다.');
-      expect(Math.abs(statusBox.y - priorityBox.y)).toBeLessThanOrEqual(1);
-      expect(statusBox.height).toBeGreaterThanOrEqual(40);
+        throw new Error('M8 상태·우선순위 위치를 측정하지 못했습니다.');
+      expect(
+        Math.abs(statusBox.y + statusBox.height / 2 - (priorityBox.y + priorityBox.height / 2)),
+      ).toBeLessThanOrEqual(1);
       expect(priorityBox.height).toBeGreaterThanOrEqual(40);
-      expect(statusStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+      expect(statusAttributes.tagName).toBe('SPAN');
+      expect(statusAttributes.role).toBeNull();
+      expect(statusAttributes.ariaHasPopup).toBeNull();
       expect(priorityStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
-      expect(statusStyle.borderColor).toBe('rgba(0, 0, 0, 0)');
       expect(priorityStyle.borderColor).toBe('rgba(0, 0, 0, 0)');
 
       const labelTrigger = densityRow.getByRole('button', {
@@ -543,9 +637,6 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
         const keyboardLabelEditor = keyboardRow.getByLabel(
           new RegExp(`^${created.issue.identifier} 라벨:`, 'u'),
         );
-        const keyboardStatusEditor = keyboardRow.getByRole('combobox', {
-          name: new RegExp(`^${created.issue.identifier} 상태:`, 'u'),
-        });
         const keyboardPriorityEditor = keyboardRow.getByRole('combobox', {
           name: new RegExp(`^${created.issue.identifier} 우선순위:`, 'u'),
         });
@@ -562,34 +653,13 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
         await keyboardPage.keyboard.press('Escape');
         await expect(keyboardLabelEditor).toBeFocused();
         await keyboardPage.keyboard.press('Tab');
-        await expect(keyboardStatusEditor).toBeFocused();
+        await expect(keyboardPriorityEditor).toBeFocused();
         if (process.env.RIVET_VISUAL_QA_PREFIX) {
           await keyboardPage.screenshot({
             fullPage: true,
             path: `${process.env.RIVET_VISUAL_QA_PREFIX}-desktop-keyboard-focus-m8.png`,
           });
         }
-        const keyboardStatusResponse = keyboardPage.waitForResponse(
-          (response) =>
-            response.request().method() === 'PATCH' &&
-            response.url().endsWith(`/api/v1/issues/${created.issue.id}`) &&
-            response.status() === 200,
-        );
-        await keyboardPage.keyboard.press('Enter');
-        const keyboardStatusListbox = await controlledListbox(keyboardPage, keyboardStatusEditor);
-        await expect(keyboardStatusListbox).toBeVisible();
-        await keyboardPage.keyboard.press('ArrowDown');
-        await keyboardPage.keyboard.press('Enter');
-        await keyboardStatusResponse;
-        await expect(keyboardStatusListbox).toBeHidden();
-        await expect(keyboardStatusEditor).toBeFocused();
-        await keyboardPage.keyboard.press('Enter');
-        await expect(keyboardStatusListbox).toBeVisible();
-        await keyboardPage.keyboard.press('Escape');
-        await expect(keyboardStatusListbox).toBeHidden();
-        await expect(keyboardStatusEditor).toBeFocused();
-        await keyboardPage.keyboard.press('Tab');
-        await expect(keyboardPriorityEditor).toBeFocused();
         await keyboardPage.keyboard.press('Space');
         const keyboardPriorityListbox = await controlledListbox(
           keyboardPage,
@@ -648,12 +718,6 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
       ['정렬 기준', page.getByRole('combobox', { name: '정렬 기준' })],
       ['정렬 방향', page.getByRole('combobox', { name: /^정렬 방향:/u })],
       [
-        '상태',
-        reviewRow.getByRole('combobox', {
-          name: new RegExp(`^${created.issue.identifier} 상태:`, 'u'),
-        }),
-      ],
-      [
         '우선순위',
         reviewRow.getByRole('combobox', {
           name: new RegExp(`^${created.issue.identifier} 우선순위:`, 'u'),
@@ -675,6 +739,9 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
     }
 
     if (isMobile) {
+      await expect(
+        page.locator('[aria-hidden="true"][data-layout="feature-issue-list-grid"]'),
+      ).toBeHidden();
       await expect(reviewRow).toBeVisible();
       await page.getByRole('button', { name: '세부 필터' }).click();
       const filterDialog = page.getByRole('dialog', { name: '세부 필터' });
@@ -694,22 +761,6 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
       });
     }
     const listUrl = page.url();
-    if (testInfo.project.name === 'desktop-chromium') {
-      const statusResponse = page.waitForResponse(
-        (response) =>
-          response.request().method() === 'PATCH' &&
-          response.url().endsWith(`/api/v1/issues/${created.issue.id}`) &&
-          response.status() === 200,
-      );
-      await selectOption(
-        page,
-        new RegExp(`^${created.issue.identifier} 상태:`, 'u'),
-        '검토',
-        reviewRow,
-      );
-      await statusResponse;
-      await expect(page).toHaveURL(listUrl);
-    }
 
     const priorityResponse = page.waitForResponse(
       (response) =>
@@ -729,7 +780,7 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
     if (testInfo.project.name === 'desktop-chromium') {
       await reviewRow
         .getByRole('link', { name: featureTitle, exact: true })
-        .click({ position: { x: 20, y: 20 } });
+        .click({ position: { x: 120, y: 20 } });
       await expect(page).toHaveURL(new RegExp(`/issues/${created.issue.identifier}$`));
       await page.goBack();
       await expect(page).toHaveURL(/workQueue=REVIEW_REQUIRED/);
@@ -976,8 +1027,31 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
     await page.goto('/issues');
     await chooseQuickFilter(page, isMobile, '완료 확인');
     await expect(page).toHaveURL(/workQueue=COMPLETION_REQUIRED/, { timeout: 15_000 });
+    await expect(featureRow(page, featureTitle)).toBeVisible();
+
+    if (testInfo.project.name === 'desktop-chromium') {
+      await page.setViewportSize({ width: 2048, height: 1200 });
+      await page.goto('/issues');
+      const reviewRow = featureRow(page, featureTitle);
+      const unsortedRow = featureRow(page, densityTitles[0]!);
+      await expect(
+        reviewRow.getByLabel(new RegExp(`^${created.issue.identifier} 상태: 완료 확인$`, 'u')),
+      ).toBeVisible();
+      await expect(unsortedRow.getByLabel(/상태: 접수됨$/u)).toBeVisible();
+      await expectFeatureListGridAlignment(page, [reviewRow, unsortedRow]);
+      if (process.env.RIVET_VISUAL_QA_PREFIX) {
+        await page.screenshot({
+          animations: 'disabled',
+          caret: 'hide',
+          fullPage: true,
+          path: `${process.env.RIVET_VISUAL_QA_PREFIX}-desktop-2048-status-pair-m8-grid.png`,
+        });
+      }
+      await page.goto('/issues');
+      await chooseQuickFilter(page, isMobile, '완료 확인');
+    }
+
     const completionRow = featureRow(page, featureTitle);
-    await expect(completionRow).toBeVisible();
     await completionRow.getByRole('button', { name: '이슈 완료', exact: true }).click();
     const completionDialog = page.getByRole('dialog', { name: '이슈 완료' });
     await expect(completionDialog.getByText('완료된 팀 작업')).toBeVisible();
@@ -1015,7 +1089,7 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
     );
     await page
       .getByRole('link', { name: featureTitle, exact: true })
-      .click({ position: { x: 20, y: 20 } });
+      .click({ position: { x: 120, y: 20 } });
     await expect(page).toHaveURL(new RegExp(`/issues/${created.issue.identifier}$`));
     await page.goBack();
     await expect
@@ -1045,7 +1119,7 @@ test('전역 이슈 접수부터 작업 배정과 완료까지 M8 흐름을 복�
       page,
       `/issues/${encodeURIComponent(created.issue.id)}`,
       {
-        body: { featureStatus: 'REVIEW', version: latestFeature.version },
+        body: { featureStatusAction: 'REOPEN', version: latestFeature.version },
         method: 'PATCH',
       },
     );

@@ -1296,14 +1296,10 @@ describe('IssueDetailScreen', () => {
       '/issues/FEAT-1?tab=relations&create=1&type=TEAM_TASK&projectId=project-id&parentIssueId=7c8fc5da-cccb-4478-b9b0-78ec539e9271#feature-progress-title',
     );
 
-    await user.click(screen.getByRole('combobox', { name: new RegExp(`^${translations.state}:`) }));
-    await user.click(
-      await screen.findByRole('option', { name: translations['featureStatuses.DONE'] }),
-    );
-    expect(mocks.mutate).toHaveBeenLastCalledWith({
-      change: { kind: 'featureStatus', value: 'DONE' },
-      issue: featureIssue,
-    });
+    expect(
+      screen.queryByRole('combobox', { name: new RegExp(`^${translations.state}:`) }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(translations['featureStatuses.UNSORTED'])).toBeVisible();
   });
 
   it('팀 작업이 없는 이슈에서 시작 역할을 키보드로 복수 선택해 작업을 시작한다', async () => {

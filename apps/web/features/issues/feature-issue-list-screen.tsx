@@ -49,6 +49,10 @@ import { cn } from '@/lib/utils';
 
 import { FeatureIssueActions } from './feature-issue-actions';
 import {
+  FEATURE_ISSUE_LIST_GRID_CLASS,
+  FEATURE_ISSUE_LIST_GRID_ORDER,
+} from './feature-issue-list-layout';
+import {
   buildFeatureIssueListParams,
   clearFeatureIssueDetailFilters,
   clearFeatureIssueListState,
@@ -614,14 +618,39 @@ export function FeatureIssueListScreen() {
         <div className="min-w-0">
           <div
             aria-hidden="true"
-            className="text-muted-foreground hidden min-h-9 grid-cols-[minmax(11rem,1.55fr)_12rem_minmax(7rem,1fr)_5.25rem_3.5rem_minmax(6rem,auto)] items-center gap-2 border-b px-3 text-xs font-medium lg:grid"
+            data-layout="feature-issue-list-grid"
+            className={cn(
+              'text-muted-foreground hidden min-h-9 border-b px-3 text-xs font-medium xl:grid',
+              FEATURE_ISSUE_LIST_GRID_CLASS,
+            )}
           >
-            <span>{t('columns.issue')}</span>
-            <span>{t('columns.status')}</span>
-            <span>{t('columns.currentWork')}</span>
-            <span>{t('columns.progress')}</span>
-            <span className="text-right">{t('columns.updatedAt')}</span>
-            <span className="text-right">{t('columns.nextAction')}</span>
+            <span data-column="issue" className={FEATURE_ISSUE_LIST_GRID_ORDER.issue}>
+              {t('columns.issue')}
+            </span>
+            <span data-column="status" className={FEATURE_ISSUE_LIST_GRID_ORDER.status}>
+              {t('columns.status')}
+            </span>
+            <span data-column="priority" className={FEATURE_ISSUE_LIST_GRID_ORDER.priority}>
+              {t('columns.priority')}
+            </span>
+            <span data-column="current-work" className={FEATURE_ISSUE_LIST_GRID_ORDER.currentWork}>
+              {t('columns.currentWork')}
+            </span>
+            <span data-column="progress" className={FEATURE_ISSUE_LIST_GRID_ORDER.progress}>
+              {t('columns.progress')}
+            </span>
+            <span
+              data-column="updated-at"
+              className={cn('text-right', FEATURE_ISSUE_LIST_GRID_ORDER.updatedAt)}
+            >
+              {t('columns.updatedAt')}
+            </span>
+            <span
+              data-column="next-action"
+              className={cn('text-right', FEATURE_ISSUE_LIST_GRID_ORDER.nextAction)}
+            >
+              {t('columns.nextAction')}
+            </span>
           </div>
           <ul>
             {items.map((issue) => (

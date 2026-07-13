@@ -22,7 +22,8 @@ export interface CreateFeatureIssueDto {
      * @nullable
      */
   descriptionMarkdown?: string | null;
-  featureStatus: CreateFeatureIssueDtoFeatureStatus;
+  /** @deprecated */
+  featureStatus?: CreateFeatureIssueDtoFeatureStatus;
   projectId: string;
   /** @maxItems 3 */
   initialRoles?: CreateFeatureIssueDtoInitialRolesItem[];

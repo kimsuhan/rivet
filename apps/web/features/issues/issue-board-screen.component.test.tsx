@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import type { AnchorHTMLAttributes, ReactNode } from 'react';
@@ -186,7 +186,7 @@ describe('IssueBoardScreen card', () => {
     );
   });
 
-  it('저장 중에도 현재 값을 유지하고 해당 카드만 busy로 표시한다', () => {
+  it('저장 중에도 현재 값을 유지하고 변경한 셀만 busy로 표시한다', () => {
     vi.mocked(useIssueInlineMutation).mockReturnValue({
       conflict: null,
       isError: false,
@@ -200,10 +200,108 @@ describe('IssueBoardScreen card', () => {
     const card = screen
       .getByRole('link', { name: '보드 카드 속성' })
       .closest<HTMLElement>('[data-slot="card"]');
-    expect(card).toHaveAttribute('aria-busy', 'true');
+    expect(card).not.toHaveAttribute('aria-busy');
     const priority = screen.getByRole('combobox', { name: 'WEB-1 우선순위: 높음' });
     expect(priority).toHaveTextContent('높음');
     expect(priority).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('다른 카드 요청이 시작돼도 실패한 셀의 재시도 안내를 유지한다', async () => {
+    const user = userEvent.setup();
+    const secondIssue = {
+      ...issue,
+      id: 'issue-web-2',
+      identifier: 'WEB-2',
+      title: '다른 보드 카드',
+    };
+    const retryFor = vi.fn();
+    vi.mocked(useIssuePages).mockReturnValue({
+      data: { pageParams: [undefined], pages: [{ items: [issue, secondIssue], nextCursor: null }] },
+      error: null,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isError: false,
+      isFetchNextPageError: false,
+      isFetchingNextPage: false,
+      isPending: false,
+      refetch: vi.fn(),
+    } as never);
+    vi.mocked(useIssueInlineMutation).mockReturnValue({
+      conflict: null,
+      failureFor: (issueId: string, kind: string) =>
+        issueId === issue.id && kind === 'priority' ? { isConflict: false } : undefined,
+      isError: false,
+      isPending: false,
+      mutate: vi.fn(),
+      retryFor,
+      variables: { change: { kind: 'priority', value: 'LOW' }, issue: secondIssue },
+    } as never);
+
+    render(<IssueBoardScreen teamKey="WEB" />, { wrapper: Wrapper });
+
+    const card = screen
+      .getByRole('link', { name: '보드 카드 속성' })
+      .closest<HTMLElement>('[data-slot="card"]');
+    if (!card) throw new Error('issue board card missing');
+    expect(within(card).getByRole('alert')).toHaveTextContent(
+      '이전 값으로 되돌렸습니다. 다시 시도해 주세요.',
+    );
+
+    await user.click(within(card).getByRole('button', { name: '다시 시도' }));
+    expect(retryFor).toHaveBeenCalledWith(issue.id, 'priority');
+  });
+
+  it('다른 카드의 상태 저장은 현재 드래그 카드의 열 이동을 막지 않는다', () => {
+    const secondIssue = {
+      ...issue,
+      id: 'issue-web-2',
+      identifier: 'WEB-2',
+      title: '다른 보드 카드',
+    };
+    const dataTransfer = {
+      dropEffect: '',
+      effectAllowed: '',
+      getData: vi.fn(() => secondIssue.id),
+      setData: vi.fn(),
+    };
+    vi.mocked(useTeamsControllerListWorkflowStates).mockReturnValue(
+      queryResult({ items: [todo, started], nextCursor: null }) as never,
+    );
+    vi.mocked(useIssuePages).mockReturnValue({
+      data: { pageParams: [undefined], pages: [{ items: [issue, secondIssue], nextCursor: null }] },
+      error: null,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isError: false,
+      isFetchNextPageError: false,
+      isFetchingNextPage: false,
+      isPending: false,
+      refetch: vi.fn(),
+    } as never);
+    vi.mocked(useIssueInlineMutation).mockReturnValue({
+      conflict: null,
+      isError: false,
+      isPending: true,
+      isPendingFor: (issueId: string, kind?: string) =>
+        issueId === issue.id && kind === 'workflowState',
+      mutate: vi.fn(),
+      variables: { change: { kind: 'workflowState', value: started }, issue },
+    } as never);
+
+    render(<IssueBoardScreen teamKey="WEB" />, { wrapper: Wrapper });
+
+    const card = screen
+      .getByRole('link', { name: secondIssue.title })
+      .closest<HTMLElement>('[data-slot="card"]');
+    const startedColumn = screen
+      .getByRole('heading', { level: 2, name: started.name })
+      .closest<HTMLElement>('section');
+    if (!card || !startedColumn) throw new Error('board test targets missing');
+
+    fireEvent.dragStart(card, { dataTransfer });
+    fireEvent.dragOver(startedColumn, { dataTransfer });
+
+    expect(startedColumn).toHaveClass('ring-2');
   });
 
   it('라벨이 없는 보드 카드는 추가 편집기를 상시 노출하지 않는다', () => {

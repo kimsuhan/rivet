@@ -534,8 +534,8 @@ describe('FeatureIssueActions', () => {
       ...mutation(mocks.complete),
       conflict: {
         attemptedChange: {
+          action: 'COMPLETE',
           kind: 'featureStatus',
-          requireCompletedTeamTasks: true,
           value: 'DONE',
         },
         issueRef: issue.identifier,
@@ -550,8 +550,8 @@ describe('FeatureIssueActions', () => {
     expect(mocks.complete).toHaveBeenCalledWith(
       {
         change: {
+          action: 'COMPLETE',
           kind: 'featureStatus',
-          requireCompletedTeamTasks: true,
           value: 'DONE',
         },
         issue: expect.objectContaining({ id: issue.id, version: 5 }),

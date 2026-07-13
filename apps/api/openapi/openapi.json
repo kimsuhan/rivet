@@ -8067,7 +8067,8 @@
               "PAUSED",
               "CANCELED"
             ],
-            "type": "string"
+            "type": "string",
+            "deprecated": true
           },
           "projectId": {
             "type": "string",
@@ -8117,7 +8118,6 @@
         "required": [
           "type",
           "title",
-          "featureStatus",
           "projectId"
         ]
       },
@@ -9525,10 +9525,22 @@
               "PAUSED",
               "CANCELED"
             ],
+            "type": "string",
+            "deprecated": true
+          },
+          "featureStatusAction": {
+            "enum": [
+              "PAUSE",
+              "RESUME",
+              "CANCEL",
+              "COMPLETE",
+              "REOPEN"
+            ],
             "type": "string"
           },
           "requireCompletedTeamTasks": {
             "type": "boolean",
+            "deprecated": true,
             "description": "빠른 이슈 완료 시 취소 제외 하위 팀 작업이 모두 완료됐는지 재검증합니다."
           },
           "projectId": {

@@ -765,9 +765,16 @@ export class TeamsService {
       }
 
       const targets = await transaction.$queryRaw<
-        Array<{ id: string; isDefault: boolean; name: string; teamId: string; version: number }>
+        Array<{
+          category: StateCategory;
+          id: string;
+          isDefault: boolean;
+          name: string;
+          teamId: string;
+          version: number;
+        }>
       >`
-        SELECT state."id", state."is_default" AS "isDefault", state."name",
+        SELECT state."id", state."category", state."is_default" AS "isDefault", state."name",
                state."team_id" AS "teamId", state."version"
         FROM "workflow_states" state
         INNER JOIN "teams" team
@@ -784,6 +791,35 @@ export class TeamsService {
       }
       if (target.version !== query.version) {
         throw versionConflict(target.version);
+      }
+
+      if (target.category === StateCategory.UNSTARTED) {
+        const [usage] = await transaction.$queryRaw<
+          Array<{ activeRoleCount: number; unstartedCount: number }>
+        >`
+          SELECT
+            COUNT(DISTINCT role."project_id")::int AS "activeRoleCount",
+            COUNT(state."id")::int AS "unstartedCount"
+          FROM "workflow_states" state
+          LEFT JOIN "project_role_teams" role
+            ON role."workspace_id" = state."workspace_id"
+           AND role."team_id" = state."team_id"
+          LEFT JOIN "projects" project
+            ON project."workspace_id" = role."workspace_id"
+           AND project."id" = role."project_id"
+           AND project."archived_at" IS NULL
+           AND project."deleted_at" IS NULL
+          WHERE state."workspace_id" = ${context.workspaceId}::uuid
+            AND state."team_id" = ${target.teamId}::uuid
+            AND state."category" = 'UNSTARTED'::"StateCategory"
+        `;
+        if ((usage?.activeRoleCount ?? 0) > 0 && (usage?.unstartedCount ?? 0) <= 1) {
+          throw new ApiError({
+            code: 'TEAM_UNSTARTED_STATE_REQUIRED',
+            message: '활성 프로젝트 역할에 연결된 팀은 시작 전 상태를 하나 이상 유지해야 합니다.',
+            status: HttpStatus.CONFLICT,
+          });
+        }
       }
 
       const states = await transaction.$queryRaw<

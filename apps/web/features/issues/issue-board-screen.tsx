@@ -99,7 +99,6 @@ type IssueBoardCardLabels = {
   reapply: string;
   retry: string;
   role: string;
-  saving: string;
   state: string;
   unassigned: string;
 };
@@ -203,15 +202,49 @@ function IssueBoardCard({
   workflowStates: WorkflowStateResponseDto[];
 }) {
   const isCurrentMutation = mutation.variables?.issue.id === issue.id;
-  const isPending = isCurrentMutation && mutation.isPending;
-  const conflict = mutation.conflict?.issueRef === issue.identifier ? mutation.conflict : null;
+  const isPendingFor = (kind?: 'assignee' | 'labels' | 'priority' | 'workflowState') =>
+    mutation.isPendingFor?.(issue.id, kind) ??
+    (isCurrentMutation &&
+      mutation.isPending &&
+      (kind === undefined || mutation.variables?.change.kind === kind));
+  const isPending = isPendingFor();
+
+  function cellFailure(kind: 'assignee' | 'labels' | 'priority' | 'workflowState') {
+    const failure = mutation.failureFor?.(issue.id, kind);
+    if (failure) return failure;
+
+    const variables = mutation.variables;
+    if (!variables || variables.issue.id !== issue.id || variables.change.kind !== kind) {
+      return undefined;
+    }
+    if (!mutation.conflict && !mutation.isError) return undefined;
+
+    return {
+      attemptedChange: variables.change,
+      isConflict: Boolean(mutation.conflict),
+      latest: mutation.conflict?.latest ?? null,
+    };
+  }
+
+  function retryCell(kind: 'assignee' | 'labels' | 'priority' | 'workflowState') {
+    if (mutation.retryFor) mutation.retryFor(issue.id, kind);
+    else mutation.retry();
+  }
+
+  function reapplyCellConflict(kind: 'assignee' | 'labels' | 'priority' | 'workflowState') {
+    if (mutation.reapplyConflictFor) void mutation.reapplyConflictFor(issue.id, kind);
+    else void mutation.reapplyConflict();
+  }
+
+  const labelFailure = cellFailure('labels');
+  const conflict = labelFailure?.isConflict ? labelFailure : null;
   const attemptedChange = conflict
     ? describeAttemptedChange(conflict.attemptedChange, labels)
     : labels.conflictUnknown;
   const latestChange = conflict
     ? describeLatestChange(conflict.attemptedChange, conflict.latest, labels)
     : labels.conflictUnknown;
-  const hasError = isCurrentMutation && mutation.isError && !conflict;
+  const hasError = Boolean(labelFailure && !labelFailure.isConflict);
   const memberOptions = [
     ...new Map(
       [...(issue.assignee ? [issue.assignee] : []), ...members].map((member) => [
@@ -237,6 +270,25 @@ function IssueBoardCard({
     });
   }
 
+  function errorFor(kind: 'assignee' | 'priority' | 'workflowState') {
+    const failure = cellFailure(kind);
+    if (!failure) return undefined;
+
+    if (failure.isConflict) {
+      return {
+        actionLabel: labels.reapply,
+        description: labels.conflictDescription,
+        onAction: () => reapplyCellConflict(kind),
+      };
+    }
+
+    return {
+      actionLabel: labels.retry,
+      description: labels.errorDescription,
+      onAction: () => retryCell(kind),
+    };
+  }
+
   function startDragging(event: DragEvent<HTMLDivElement>) {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', issue.id);
@@ -246,8 +298,7 @@ function IssueBoardCard({
   return (
     <Card
       size="sm"
-      draggable={!mutation.isPending}
-      aria-busy={isPending || undefined}
+      draggable={!isPendingFor('workflowState')}
       title={labels.dragHint}
       onDragStart={startDragging}
       onDragEnd={onDragEnd}
@@ -271,8 +322,9 @@ function IssueBoardCard({
             <IssueInlineSelect
               appearance="compact"
               ariaLabel={`${issue.identifier} ${labels.state}: ${issue.status.workflowState.name}`}
-              busy={isPending && mutation.variables?.change.kind === 'workflowState'}
-              disabled={mutation.isPending}
+              busy={isPendingFor('workflowState')}
+              disabled={isPendingFor('workflowState')}
+              error={errorFor('workflowState')}
               value={issue.status.workflowState.id}
               onValueChange={(stateId) => {
                 const nextState = workflowStates.find((state) => state.id === stateId);
@@ -295,8 +347,9 @@ function IssueBoardCard({
             <IssueInlineSelect
               appearance="compact"
               ariaLabel={`${issue.identifier} ${labels.assignee}: ${issue.assignee?.user.displayName ?? labels.unassigned}`}
-              busy={isPending && mutation.variables?.change.kind === 'assignee'}
-              disabled={mutation.isPending}
+              busy={isPendingFor('assignee')}
+              disabled={isPendingFor('assignee')}
+              error={errorFor('assignee')}
               onValueChange={(memberId) => {
                 const assignee =
                   memberId === 'unassigned'
@@ -325,8 +378,9 @@ function IssueBoardCard({
           <IssueInlineSelect
             appearance="compact"
             ariaLabel={`${issue.identifier} ${labels.priority}: ${labels.priorities[issue.priority]}`}
-            busy={isPending && mutation.variables?.change.kind === 'priority'}
-            disabled={mutation.isPending}
+            busy={isPendingFor('priority')}
+            disabled={isPendingFor('priority')}
+            error={errorFor('priority')}
             onValueChange={(priority) => {
               if (ISSUE_PRIORITIES.includes(priority as (typeof ISSUE_PRIORITIES)[number])) {
                 mutation.mutate({
@@ -362,8 +416,8 @@ function IssueBoardCard({
           {labelOptions.length > 0 ? (
             <IssueFilterMenu
               ariaLabel={`${issue.identifier} ${labels.labels}: ${issue.labels.map((label) => label.name).join(', ') || labels.noLabels}`}
-              busy={isPending && mutation.variables?.change.kind === 'labels'}
-              disabled={mutation.isPending}
+              busy={isPendingFor('labels')}
+              disabled={isPendingFor('labels')}
               emptyLabel={labels.labelOptionsEmpty}
               label={labels.labels}
               onChange={changeLabels}
@@ -378,13 +432,6 @@ function IssueBoardCard({
             />
           ) : null}
         </div>
-
-        {isPending ? (
-          <span role="status" className="text-muted-foreground flex items-center gap-1.5 text-xs">
-            <Spinner aria-hidden="true" className="size-3" />
-            {labels.saving}
-          </span>
-        ) : null}
 
         {conflict ? (
           <Alert className="mt-1">
@@ -403,8 +450,8 @@ function IssueBoardCard({
                 variant="outline"
                 size="xs"
                 className="mt-1 w-fit"
-                disabled={mutation.isPending}
-                onClick={() => void mutation.reapplyConflict()}
+                disabled={isPending}
+                onClick={() => reapplyCellConflict('labels')}
               >
                 <RotateCcw aria-hidden="true" data-icon="inline-start" />
                 {labels.reapply}
@@ -422,8 +469,8 @@ function IssueBoardCard({
                 variant="outline"
                 size="xs"
                 className="w-fit"
-                disabled={mutation.isPending}
-                onClick={mutation.retry}
+                disabled={isPending}
+                onClick={() => retryCell('labels')}
               >
                 <RotateCcw aria-hidden="true" data-icon="inline-start" />
                 {labels.retry}
@@ -528,7 +575,6 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
     reapply: t('board.reapply'),
     retry: t('retry'),
     role: t('board.role'),
-    saving: t('board.saving'),
     state: t('columns.state'),
     unassigned: t('unassigned'),
   };
@@ -565,7 +611,12 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
     nextState: WorkflowStateResponseDto,
     restoreFocus = false,
   ) {
-    if (mutation.isPending || issue.status.workflowState.id === nextState.id) return;
+    const stateChangePending =
+      mutation.isPendingFor?.(issue.id, 'workflowState') ??
+      (mutation.isPending &&
+        mutation.variables?.issue.id === issue.id &&
+        mutation.variables.change.kind === 'workflowState');
+    if (stateChangePending || issue.status.workflowState.id === nextState.id) return;
     if (restoreFocus) {
       stateFocusTargetRef.current = { issueId: issue.id, stateId: nextState.id };
     }
@@ -867,7 +918,13 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
                     key={column.state.id}
                     aria-labelledby={columnId}
                     onDragOver={(event) => {
-                      if (!draggedIssueId || mutation.isPending) return;
+                      const draggedIssueStatePending =
+                        draggedIssueId &&
+                        (mutation.isPendingFor?.(draggedIssueId, 'workflowState') ??
+                          (mutation.isPending &&
+                            mutation.variables?.issue.id === draggedIssueId &&
+                            mutation.variables.change.kind === 'workflowState'));
+                      if (!draggedIssueId || draggedIssueStatePending) return;
                       event.preventDefault();
                       event.dataTransfer.dropEffect = 'move';
                       setDragOverStateId(column.state.id);

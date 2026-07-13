@@ -118,6 +118,13 @@ function listedIssue() {
     ?.items[0];
 }
 
+function listedIssueById(issueId: string) {
+  return queryClient
+    .getQueryData<InfiniteData<IssueListResponseDto>>(listQueryKey)
+    ?.pages.flatMap((page) => page.items)
+    .find((item) => item.id === issueId);
+}
+
 function regularlyListedIssue() {
   return queryClient.getQueryData<IssueListResponseDto>(regularListQueryKey)?.items[0];
 }
@@ -162,7 +169,11 @@ describe('issue inline optimistic mutation', () => {
     };
 
     expect(
-      applyIssueChange(feature, { kind: 'featureStatus', value: featureStatus }, false).status,
+      applyIssueChange(
+        feature,
+        { action: 'COMPLETE', kind: 'featureStatus', value: featureStatus },
+        false,
+      ).status,
     ).toEqual({ category, featureStatus, workflowState: null });
   });
 
@@ -203,6 +214,225 @@ describe('issue inline optimistic mutation', () => {
       version: 1,
     });
     expect(listedIssue()).toMatchObject({ priority: 'HIGH', version: 2 });
+  });
+
+  it('같은 셀을 연속 변경하면 서버 요청을 순서대로 보내고 최신 선택값을 유지한다', async () => {
+    let resolveFirst: ((value: IssueDetailResponseDto) => void) | undefined;
+    let resolveSecond: ((value: IssueDetailResponseDto) => void) | undefined;
+    vi.mocked(issuesControllerUpdate)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+    const { result } = renderHook(() => useIssueInlineMutation(), { wrapper: QueryWrapper });
+
+    act(() => {
+      result.current.mutate({ change: { kind: 'priority', value: 'LOW' }, issue });
+      result.current.mutate({ change: { kind: 'priority', value: 'HIGH' }, issue });
+    });
+
+    await waitFor(() => expect(listedIssue()).toMatchObject({ priority: 'HIGH', version: 3 }));
+    await act(async () => {
+      resolveFirst?.({ ...issue, priority: 'LOW', version: 2 });
+    });
+    await waitFor(() =>
+      expect(issuesControllerUpdate).toHaveBeenNthCalledWith(2, issue.id, {
+        priority: 'HIGH',
+        version: 2,
+      }),
+    );
+    await act(async () => {
+      resolveSecond?.({ ...issue, priority: 'HIGH', version: 3 });
+    });
+
+    expect(listedIssue()).toMatchObject({ priority: 'HIGH', version: 3 });
+  });
+
+  it('같은 이슈의 서로 다른 셀도 앞선 저장 결과의 버전으로 순서대로 전송한다', async () => {
+    let resolvePriority: ((value: IssueDetailResponseDto) => void) | undefined;
+    vi.mocked(issuesControllerUpdate)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolvePriority = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ ...issue, priority: 'HIGH', title: '새 제목', version: 3 });
+    const { result } = renderHook(() => useIssueInlineMutation(), { wrapper: QueryWrapper });
+
+    act(() => {
+      result.current.mutate({ change: { kind: 'priority', value: 'HIGH' }, issue });
+      result.current.mutate({ change: { kind: 'title', value: '새 제목' }, issue });
+    });
+
+    await waitFor(() => expect(listedIssue()).toMatchObject({ title: '새 제목', version: 3 }));
+    await waitFor(() =>
+      expect(issuesControllerUpdate).toHaveBeenNthCalledWith(1, issue.id, {
+        priority: 'HIGH',
+        version: 1,
+      }),
+    );
+    await act(async () => {
+      resolvePriority?.({ ...issue, priority: 'HIGH', version: 2 });
+    });
+    await waitFor(() =>
+      expect(issuesControllerUpdate).toHaveBeenNthCalledWith(2, issue.id, {
+        title: '새 제목',
+        version: 2,
+      }),
+    );
+    await waitFor(() => expect(listedIssue()).toMatchObject({ title: '새 제목', version: 3 }));
+  });
+
+  it('같은 셀의 연속 저장이 모두 실패하면 마지막 낙관 값까지 원래 값으로 되돌린다', async () => {
+    let rejectFirst: ((reason?: unknown) => void) | undefined;
+    let rejectSecond: ((reason?: unknown) => void) | undefined;
+    vi.mocked(issuesControllerUpdate)
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectFirst = reject;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectSecond = reject;
+          }),
+      );
+    const { result } = renderHook(() => useIssueInlineMutation(), { wrapper: QueryWrapper });
+    const error = new ApiError(
+      500,
+      {
+        code: 'INTERNAL_ERROR',
+        fieldErrors: {},
+        message: '실패',
+        requestId: 'request-id',
+      },
+      'request-id',
+    );
+
+    act(() => {
+      result.current.mutate({ change: { kind: 'priority', value: 'LOW' }, issue });
+      result.current.mutate({ change: { kind: 'priority', value: 'HIGH' }, issue });
+    });
+
+    await waitFor(() => expect(listedIssue()).toMatchObject({ priority: 'HIGH', version: 3 }));
+    await act(async () => {
+      rejectFirst?.(error);
+    });
+    expect(listedIssue()).toMatchObject({ priority: 'HIGH', version: 3 });
+
+    await waitFor(() => expect(issuesControllerUpdate).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      rejectSecond?.(error);
+    });
+    await waitFor(() => expect(listedIssue()).toMatchObject({ priority: 'NONE', version: 1 }));
+    expect(result.current.failureFor(issue.id, 'priority')?.attemptedChange).toEqual({
+      kind: 'priority',
+      value: 'HIGH',
+    });
+  });
+
+  it('같은 행의 서로 다른 셀 실패를 각각 보관한다', async () => {
+    const error = new ApiError(
+      500,
+      {
+        code: 'INTERNAL_ERROR',
+        fieldErrors: {},
+        message: '실패',
+        requestId: 'request-id',
+      },
+      'request-id',
+    );
+    vi.mocked(issuesControllerUpdate).mockRejectedValue(error);
+    const { result } = renderHook(() => useIssueInlineMutation(), { wrapper: QueryWrapper });
+
+    act(() => {
+      result.current.mutate({ change: { kind: 'priority', value: 'HIGH' }, issue });
+      result.current.mutate({ change: { kind: 'labels', value: [] }, issue });
+    });
+
+    await waitFor(() => {
+      expect(result.current.failureFor(issue.id, 'priority')).toMatchObject({
+        attemptedChange: { kind: 'priority', value: 'HIGH' },
+      });
+      expect(result.current.failureFor(issue.id, 'labels')).toMatchObject({
+        attemptedChange: { kind: 'labels', value: [] },
+      });
+    });
+  });
+
+  it('서로 다른 두 행의 저장 상태와 낙관 값을 독립적으로 유지한다', async () => {
+    const secondIssue = {
+      ...issue,
+      id: 'e1d47515-f22b-44b4-9d6d-3bcb963af4ae',
+      identifier: 'WEB-2',
+      priority: 'LOW' as const,
+    };
+    queryClient.setQueryData<InfiniteData<IssueListResponseDto>>(listQueryKey, (data) => {
+      if (!data) return data;
+      return {
+        ...data,
+        pages: data.pages.map((page) => ({ ...page, items: [...page.items, secondIssue] })),
+      };
+    });
+    let resolveFirst: ((value: IssueDetailResponseDto) => void) | undefined;
+    let resolveSecond: ((value: IssueDetailResponseDto) => void) | undefined;
+    vi.mocked(issuesControllerUpdate)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useIssueInlineMutation(), { wrapper: QueryWrapper });
+
+    act(() => {
+      result.current.mutate({ change: { kind: 'priority', value: 'HIGH' }, issue });
+      result.current.mutate({ change: { kind: 'priority', value: 'URGENT' }, issue: secondIssue });
+    });
+
+    await waitFor(() => {
+      expect(listedIssueById(issue.id)).toMatchObject({ priority: 'HIGH', version: 2 });
+      expect(listedIssueById(secondIssue.id)).toMatchObject({ priority: 'URGENT', version: 2 });
+      expect(result.current.isPendingFor(issue.id, 'priority')).toBe(true);
+      expect(result.current.isPendingFor(secondIssue.id, 'priority')).toBe(true);
+    });
+    await act(async () => {
+      resolveFirst?.({ ...issue, priority: 'HIGH', version: 2 });
+    });
+    await waitFor(() => expect(result.current.isPendingFor(issue.id, 'priority')).toBe(false));
+    expect(result.current.isPendingFor(secondIssue.id, 'priority')).toBe(true);
+    expect(invalidateQueries).not.toHaveBeenCalled();
+    await act(async () => {
+      resolveSecond?.({ ...secondIssue, priority: 'URGENT', version: 2 });
+    });
+    await waitFor(() => {
+      expect(result.current.isPendingFor(issue.id, 'priority')).toBe(false);
+      expect(result.current.isPendingFor(secondIssue.id, 'priority')).toBe(false);
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: getIssuesControllerListQueryKey(),
+    });
+    expect(listedIssueById(issue.id)).toMatchObject({ priority: 'HIGH', version: 2 });
+    expect(listedIssueById(secondIssue.id)).toMatchObject({ priority: 'URGENT', version: 2 });
   });
 
   it('라벨 변경은 선택한 ID를 전송하고 목록과 상세에 낙관적으로 반영한다', async () => {

@@ -7,6 +7,7 @@
  */
 import type { InlineHandoffDto } from './inlineHandoffDto';
 import type { UpdateIssueDtoFeatureStatus } from './updateIssueDtoFeatureStatus';
+import type { UpdateIssueDtoFeatureStatusAction } from './updateIssueDtoFeatureStatusAction';
 import type { UpdateIssueDtoPriority } from './updateIssueDtoPriority';
 import type { UpdateIssueDtoProjectRole } from './updateIssueDtoProjectRole';
 
@@ -26,8 +27,13 @@ export interface UpdateIssueDto {
   /** 팀 작업의 팀은 변경할 수 없으며 현재 팀 ID만 허용됩니다. */
   teamId?: string;
   workflowStateId?: string;
+  /** @deprecated */
   featureStatus?: UpdateIssueDtoFeatureStatus;
-  /** 빠른 이슈 완료 시 취소 제외 하위 팀 작업이 모두 완료됐는지 재검증합니다. */
+  featureStatusAction?: UpdateIssueDtoFeatureStatusAction;
+  /**
+     * 빠른 이슈 완료 시 취소 제외 하위 팀 작업이 모두 완료됐는지 재검증합니다.
+     * @deprecated
+     */
   requireCompletedTeamTasks?: boolean;
   /** @nullable */
   projectId?: string | null;

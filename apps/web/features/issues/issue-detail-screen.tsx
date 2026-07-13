@@ -98,11 +98,9 @@ import { cn } from '@/lib/utils';
 
 import {
   FEATURE_ISSUE_PRIORITIES as PRIORITIES,
-  FEATURE_ISSUE_STATUSES as FEATURE_STATUSES,
 } from './feature-issue-list-state';
 import { IssueAttachments } from './issue-attachments';
 import {
-  FEATURE_STATUS_PRESENTATION,
   ISSUE_PRIORITY_PRESENTATION,
   WORKFLOW_STATE_PRESENTATION,
 } from './issue-attribute-presentation';
@@ -1163,7 +1161,7 @@ function FeatureIssueBody({
                   <ProgressValue className="sr-only" />
                 </Progress>
               ) : null}
-              {allTasksComplete && issue.status.featureStatus !== 'DONE' ? (
+              {allTasksComplete && issue.status.featureStatus === 'REVIEW' ? (
                 <Alert className="mt-4">
                   <Check aria-hidden="true" />
                   <AlertTitle>{t('workflow.allComplete')}</AlertTitle>
@@ -1174,7 +1172,10 @@ function FeatureIssueBody({
                       size="sm"
                       disabled={mutation.isPending}
                       onClick={() =>
-                        mutation.mutate({ change: { kind: 'featureStatus', value: 'DONE' }, issue })
+                        mutation.mutate({
+                          change: { action: 'COMPLETE', kind: 'featureStatus', value: 'DONE' },
+                          issue,
+                        })
                       }
                     >
                       {t('workflow.completeIssue')}
@@ -1522,30 +1523,9 @@ function FeatureIssueBody({
           </h2>
           <dl className="mt-3 grid gap-1">
             <PropertyRow label={t('state')}>
-              <IssueInlineSelect
-                appearance="comfortable"
-                ariaLabel={`${t('state')}: ${t(`featureStatuses.${issue.status.featureStatus}`)}`}
-                busy={mutation.isPending && mutation.variables?.change.kind === 'featureStatus'}
-                disabled={mutation.isPending}
-                value={issue.status.featureStatus}
-                onValueChange={(value) => {
-                  if (FEATURE_STATUSES.includes(value as (typeof FEATURE_STATUSES)[number])) {
-                    mutation.mutate({
-                      change: {
-                        kind: 'featureStatus',
-                        value: value as (typeof FEATURE_STATUSES)[number],
-                      },
-                      issue,
-                    });
-                  }
-                }}
-                options={FEATURE_STATUSES.map((status) => ({
-                  ...FEATURE_STATUS_PRESENTATION[status],
-                  label: t(`featureStatuses.${status}`),
-                  value: status,
-                }))}
-                triggerClassName="min-w-36 max-w-full"
-              />
+              <span className="inline-flex min-h-11 items-center text-sm">
+                {t(`featureStatuses.${issue.status.featureStatus}`)}
+              </span>
             </PropertyRow>
             <PropertyRow label={t('priority')}>
               <PriorityEditor issue={issue} mutation={mutation} />
