@@ -5,11 +5,13 @@ import {
   Check,
   CircleDot,
   FileQuestion,
+  FolderKanban,
   GitBranch,
   MoreHorizontal,
   RotateCcw,
   Send,
   Trash2,
+  UserRound,
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -78,6 +80,7 @@ import {
   FieldSet,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -93,11 +96,23 @@ import { MarkdownEditor, type MentionOption } from '@/features/collaboration/mar
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
+import {
+  FEATURE_ISSUE_PRIORITIES as PRIORITIES,
+  FEATURE_ISSUE_STATUSES as FEATURE_STATUSES,
+} from './feature-issue-list-state';
 import { IssueAttachments } from './issue-attachments';
+import {
+  FEATURE_STATUS_PRESENTATION,
+  ISSUE_PRIORITY_PRESENTATION,
+  WORKFLOW_STATE_PRESENTATION,
+} from './issue-attribute-presentation';
 import { markdownEditorLabels } from './issue-collaboration-labels';
 import { IssueDescription } from './issue-description';
+import { IssueFilterMenu } from './issue-filter-menu';
 import { IssueHandoffCard } from './issue-handoff-card';
 import { HANDOFF_TEMPLATE, handoffBodyError } from './issue-handoff-validation';
+import { IssueInlineSelect } from './issue-inline-select';
+import { IssueLabelChips } from './issue-label-chips';
 import { useIssueInlineMutation } from './issue-mutations';
 import { IssueRelations } from './issue-relations';
 import { IssueTimeline } from './issue-timeline';
@@ -108,16 +123,6 @@ import {
   type TeamTaskIssue,
 } from './issue-types';
 
-const PRIORITIES = ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
-const FEATURE_STATUSES = [
-  'UNSORTED',
-  'TODO',
-  'IN_PROGRESS',
-  'REVIEW',
-  'DONE',
-  'PAUSED',
-  'CANCELED',
-] as const;
 const START_ROLES = ['BACKEND', 'WEB_FRONTEND', 'APP_FRONTEND'] as const;
 
 type DetailMutation = ReturnType<typeof useIssueInlineMutation>;
@@ -212,10 +217,60 @@ function affectedHandoffIssues(error: unknown): Array<{ identifier: string; titl
 
 function PropertyRow({ children, label }: { children: React.ReactNode; label: string }) {
   return (
-    <div className="grid min-h-10 grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-3">
+    <div className="grid min-h-11 grid-cols-[6rem_minmax(0,1fr)] items-center gap-3">
       <dt className="text-muted-foreground text-sm">{label}</dt>
       <dd className="min-w-0">{children}</dd>
     </div>
+  );
+}
+
+function isPropertyMutation(mutation: DetailMutation): boolean {
+  const change = mutation.variables?.change;
+  if (!change || (change.kind === 'workflowState' && change.handoff)) return false;
+  return ['assignee', 'featureStatus', 'labels', 'priority', 'workflowState'].includes(change.kind);
+}
+
+function PropertyMutationError({ mutation }: { mutation: DetailMutation }) {
+  const t = useTranslations('IssueDetail');
+  if (!mutation.isError || mutation.conflict || !isPropertyMutation(mutation)) return null;
+  const errorCode = mutation.error instanceof ApiError ? mutation.error.body.code : null;
+
+  return (
+    <Alert variant="destructive" className="mt-3">
+      <AlertTitle>
+        {errorCode === 'ISSUE_PROJECT_IMMUTABLE'
+          ? t('projectImmutableErrorTitle')
+          : t('saveErrorTitle')}
+      </AlertTitle>
+      <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+        <span>
+          {errorCode === 'ISSUE_PROJECT_IMMUTABLE'
+            ? t('projectImmutableErrorDescription')
+            : t('saveErrorDescription')}
+        </span>
+        {errorCode === 'ISSUE_PROJECT_IMMUTABLE' && mutation.latestRecoveryFailed ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="min-h-11 lg:min-h-9"
+            onClick={() => void mutation.refreshLatest()}
+          >
+            {t('refreshLatest')}
+          </Button>
+        ) : errorCode !== 'ISSUE_PROJECT_IMMUTABLE' ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="min-h-11 lg:min-h-9"
+            onClick={mutation.retry}
+          >
+            {t('retry')}
+          </Button>
+        ) : null}
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -676,7 +731,8 @@ function IssueDetailContent({
       !mutation.conflict &&
       !isHandoffMutation &&
       mutationErrorCode !== 'HANDOFF_REQUIRES_COMPLETION' &&
-      mutation.variables?.change.kind !== 'description' ? (
+      mutation.variables?.change.kind !== 'description' &&
+      !isPropertyMutation(mutation) ? (
         <Alert variant="destructive" className="mt-5">
           <AlertTitle>
             {mutationErrorCode === 'ISSUE_PROJECT_IMMUTABLE'
@@ -817,58 +873,45 @@ function IssueLabels({
   mutation: DetailMutation;
 }) {
   const t = useTranslations('IssueDetail');
+  const selectedIds = issue.labels.map((label) => label.id);
 
   return (
-    <details className="group/labels relative">
-      <summary
-        aria-label={t('labels')}
-        className={cn(
-          'border-input hover:bg-muted focus-visible:border-ring focus-visible:ring-ring/50 flex min-h-8 cursor-pointer list-none items-center rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-2 [&::-webkit-details-marker]:hidden',
-          mutation.isPending && 'pointer-events-none opacity-50',
-        )}
-      >
-        <span className="truncate">
-          {issue.labels.map((label) => label.name).join(', ') || t('noLabels')}
-        </span>
-      </summary>
-      <div className="bg-popover absolute right-0 z-20 mt-1 max-h-64 w-64 overflow-y-auto rounded-lg border p-2 shadow-md">
-        {labelItems.map((label) => {
-          const checked = issue.labels.some((selected) => selected.id === label.id);
-          const disabled = label.archived && !checked;
-          return (
-            <label
-              key={label.id}
-              className={cn(
-                'hover:bg-muted flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
-                disabled && 'text-muted-foreground cursor-not-allowed opacity-60',
-              )}
-            >
-              <Checkbox
-                checked={checked}
-                disabled={disabled}
-                aria-disabled={disabled}
-                onCheckedChange={(nextChecked) =>
-                  mutation.mutate({
-                    change: {
-                      kind: 'labels',
-                      value: nextChecked
-                        ? [...issue.labels, label]
-                        : issue.labels.filter((item) => item.id !== label.id),
-                    },
-                    issue,
-                  })
-                }
-              />
-              <span className="size-2 rounded-full" style={{ backgroundColor: label.color }} />
-              <span className="min-w-0 flex-1 truncate">{label.name}</span>
-              {label.archived ? (
-                <span className="text-muted-foreground text-xs">{t('archived')}</span>
-              ) : null}
-            </label>
-          );
-        })}
+    <div className="flex min-w-0 items-center gap-1">
+      <div className="min-w-0 flex-1">
+        <IssueLabelChips emptyLabel={t('noLabels')} labels={issue.labels} showEmpty />
       </div>
-    </details>
+      {labelItems.length > 0 ? (
+        <IssueFilterMenu
+          ariaLabel={`${t('labels')}: ${issue.labels.map((label) => label.name).join(', ') || t('noLabels')}`}
+          busy={mutation.isPending && mutation.variables?.change.kind === 'labels'}
+          disabled={mutation.isPending}
+          emptyLabel={t('noLabels')}
+          label={t('labels')}
+          onChange={(ids) => {
+            mutation.mutate({
+              change: {
+                kind: 'labels',
+                value: ids.flatMap((id) => {
+                  const label = labelItems.find((item) => item.id === id);
+                  return label ? [label] : [];
+                }),
+              },
+              issue,
+            });
+          }}
+          options={labelItems.map((label) => ({
+            disabled: label.archived && !selectedIds.includes(label.id),
+            id: label.id,
+            label: label.name,
+            ...(label.archived ? { suffix: t('archived') } : {}),
+            swatch: label.color,
+          }))}
+          presentation="popover"
+          selected={selectedIds}
+          triggerClassName="shrink-0 border-transparent bg-transparent px-1.5 [&>span]:sr-only"
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -880,35 +923,29 @@ function PriorityEditor({
   mutation: DetailMutation;
 }) {
   const t = useTranslations('IssueDetail');
+  const currentLabel = t(`priorities.${issue.priority}`);
   return (
-    <Select
-      items={PRIORITIES.map((priority) => ({
-        label: t(`priorities.${priority}`),
-        value: priority,
-      }))}
+    <IssueInlineSelect
+      appearance="comfortable"
+      ariaLabel={`${t('priority')}: ${currentLabel}`}
+      busy={mutation.isPending && mutation.variables?.change.kind === 'priority'}
+      disabled={mutation.isPending}
       value={issue.priority}
       onValueChange={(value) => {
-        if (value && PRIORITIES.includes(value as (typeof PRIORITIES)[number])) {
+        if (PRIORITIES.includes(value as (typeof PRIORITIES)[number])) {
           mutation.mutate({
             change: { kind: 'priority', value: value as (typeof PRIORITIES)[number] },
             issue,
           });
         }
       }}
-    >
-      <SelectTrigger aria-label={t('priority')} className="w-full" disabled={mutation.isPending}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent alignItemWithTrigger={false}>
-        <SelectGroup>
-          {PRIORITIES.map((priority) => (
-            <SelectItem key={priority} value={priority}>
-              {t(`priorities.${priority}`)}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
+      options={PRIORITIES.map((priority) => ({
+        ...ISSUE_PRIORITY_PRESENTATION[priority],
+        label: t(`priorities.${priority}`),
+        value: priority,
+      }))}
+      triggerClassName="min-w-36 max-w-full"
+    />
   );
 }
 
@@ -1107,16 +1144,24 @@ function FeatureIssueBody({
                 ) : null}
               </div>
               {issue.progress && issue.progress.total > 0 ? (
-                <progress
+                <Progress
+                  value={issue.progress.percentage}
                   aria-label={t('workflow.progress', {
                     completed: issue.progress.completed,
                     percentage: issue.progress.percentage,
                     total: issue.progress.total,
                   })}
-                  className="accent-primary mt-3 h-1.5 w-full overflow-hidden rounded-full"
-                  max={100}
-                  value={issue.progress.percentage}
-                />
+                  className="mt-3 w-full gap-1.5"
+                >
+                  <ProgressLabel className="sr-only">
+                    {t('workflow.progress', {
+                      completed: issue.progress.completed,
+                      percentage: issue.progress.percentage,
+                      total: issue.progress.total,
+                    })}
+                  </ProgressLabel>
+                  <ProgressValue className="sr-only" />
+                </Progress>
               ) : null}
               {allTasksComplete && issue.status.featureStatus !== 'DONE' ? (
                 <Alert className="mt-4">
@@ -1243,13 +1288,24 @@ function FeatureIssueBody({
                         }
                       }}
                     >
-                      <SelectTrigger size="sm" aria-label={t('workflow.moreActions')}>
+                      <SelectTrigger
+                        size="sm"
+                        variant="inline"
+                        aria-label={t('workflow.moreActions')}
+                        title={t('workflow.moreActions')}
+                        className="min-w-11 justify-center p-0 [&_[data-slot=select-value]]:sr-only [&>svg:last-child]:hidden"
+                      >
                         <MoreHorizontal aria-hidden="true" />
                         <SelectValue placeholder={t('workflow.moreActions')} />
                       </SelectTrigger>
                       <SelectContent alignItemWithTrigger={false}>
                         <SelectGroup>
-                          <SelectItem value="TEAM_TASK">{t('workflow.addTask')}</SelectItem>
+                          <SelectItem
+                            className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
+                            value="TEAM_TASK"
+                          >
+                            {t('workflow.addTask')}
+                          </SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>
@@ -1257,16 +1313,24 @@ function FeatureIssueBody({
                 </div>
               </div>
               {issue.progress && issue.progress.total > 0 ? (
-                <progress
+                <Progress
+                  value={issue.progress.percentage}
                   aria-label={t('workflow.progress', {
                     completed: issue.progress.completed,
                     percentage: issue.progress.percentage,
                     total: issue.progress.total,
                   })}
-                  className="accent-primary mt-3 h-1.5 w-full overflow-hidden rounded-full"
-                  max={100}
-                  value={issue.progress.percentage}
-                />
+                  className="mt-3 w-full gap-1.5"
+                >
+                  <ProgressLabel className="sr-only">
+                    {t('workflow.progress', {
+                      completed: issue.progress.completed,
+                      percentage: issue.progress.percentage,
+                      total: issue.progress.total,
+                    })}
+                  </ProgressLabel>
+                  <ProgressValue className="sr-only" />
+                </Progress>
               ) : null}
               {children.isError ? (
                 <Alert variant="destructive" className="mt-3">
@@ -1449,23 +1513,23 @@ function FeatureIssueBody({
           </TabsContent>
         </div>
 
-        <aside aria-labelledby="issue-properties-title" className="min-w-0 lg:border-l lg:pl-6">
+        <aside
+          aria-labelledby="issue-properties-title"
+          className="min-w-0 border-t pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
+        >
           <h2 id="issue-properties-title" className="text-sm font-semibold">
             {t('properties')}
           </h2>
-          <dl className="mt-3 space-y-1">
+          <dl className="mt-3 grid gap-1">
             <PropertyRow label={t('state')}>
-              <Select
-                items={FEATURE_STATUSES.map((status) => ({
-                  label: t(`featureStatuses.${status}`),
-                  value: status,
-                }))}
+              <IssueInlineSelect
+                appearance="comfortable"
+                ariaLabel={`${t('state')}: ${t(`featureStatuses.${issue.status.featureStatus}`)}`}
+                busy={mutation.isPending && mutation.variables?.change.kind === 'featureStatus'}
+                disabled={mutation.isPending}
                 value={issue.status.featureStatus}
                 onValueChange={(value) => {
-                  if (
-                    value &&
-                    FEATURE_STATUSES.includes(value as (typeof FEATURE_STATUSES)[number])
-                  ) {
+                  if (FEATURE_STATUSES.includes(value as (typeof FEATURE_STATUSES)[number])) {
                     mutation.mutate({
                       change: {
                         kind: 'featureStatus',
@@ -1475,35 +1539,31 @@ function FeatureIssueBody({
                     });
                   }
                 }}
-              >
-                <SelectTrigger
-                  aria-label={t('state')}
-                  className="w-full"
-                  disabled={mutation.isPending}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent alignItemWithTrigger={false}>
-                  <SelectGroup>
-                    {FEATURE_STATUSES.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {t(`featureStatuses.${status}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+                options={FEATURE_STATUSES.map((status) => ({
+                  ...FEATURE_STATUS_PRESENTATION[status],
+                  label: t(`featureStatuses.${status}`),
+                  value: status,
+                }))}
+                triggerClassName="min-w-36 max-w-full"
+              />
             </PropertyRow>
             <PropertyRow label={t('priority')}>
               <PriorityEditor issue={issue} mutation={mutation} />
             </PropertyRow>
             <PropertyRow label={t('project')}>
-              <span className="block truncate text-sm font-medium">{issue.project?.name}</span>
+              <span className="flex min-w-0 items-center gap-2 text-sm">
+                <FolderKanban
+                  aria-hidden="true"
+                  className="text-muted-foreground size-4 shrink-0"
+                />
+                <span className="truncate">{issue.project?.name}</span>
+              </span>
             </PropertyRow>
             <PropertyRow label={t('labels')}>
               <IssueLabels issue={issue} labelItems={labelItems} mutation={mutation} />
             </PropertyRow>
           </dl>
+          <PropertyMutationError mutation={mutation} />
           <IssueInformation issue={issue} />
         </aside>
       </div>
@@ -1577,13 +1637,13 @@ function FeatureIssueBody({
 function IssueInformation({ issue }: { issue: IssueDetailResponseDto }) {
   const t = useTranslations('IssueDetail');
   return (
-    <section aria-labelledby="issue-information-title" className="mt-5 border-t pt-5">
+    <section aria-labelledby="issue-information-title" className="mt-4 border-t pt-4">
       <h3 id="issue-information-title" className="text-sm font-semibold">
         {t('information')}
       </h3>
-      <dl className="mt-3 space-y-1">
+      <dl className="mt-2 grid gap-0.5">
         <PropertyRow label={t('createdBy')}>
-          <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+          <span className="flex min-w-0 items-center gap-2 text-sm">
             <UserAvatar
               avatarFileId={issue.createdBy.user.avatarFileId}
               displayName={issue.createdBy.user.displayName}
@@ -1593,12 +1653,12 @@ function IssueInformation({ issue }: { issue: IssueDetailResponseDto }) {
           </span>
         </PropertyRow>
         <PropertyRow label={t('createdAt')}>
-          <time dateTime={issue.createdAt} className="text-sm font-medium">
+          <time dateTime={issue.createdAt} className="text-sm">
             {formatDate(issue.createdAt)}
           </time>
         </PropertyRow>
         <PropertyRow label={t('updatedAt')}>
-          <time dateTime={issue.updatedAt} className="text-sm font-medium">
+          <time dateTime={issue.updatedAt} className="text-sm">
             {formatDate(issue.updatedAt)}
           </time>
         </PropertyRow>
@@ -1702,7 +1762,10 @@ function TeamTaskIssueBody({
   const [handoffCanSubmit, setHandoffCanSubmit] = useState(true);
   const [destinationRoles, setDestinationRoles] = useState<FrontendRole[]>([]);
   const [destinationError, setDestinationError] = useState(false);
-  const stateItems = uniqueById([issue.status.workflowState, ...(states.data?.items ?? [])]);
+  const stateItems = uniqueById([
+    ...(states.data?.items ?? []),
+    issue.status.workflowState,
+  ]).toSorted((left, right) => left.position - right.position);
   const memberItems = uniqueById([
     ...(issue.assignee ? [issue.assignee] : []),
     ...(members.data?.items ?? []),
@@ -2132,7 +2195,10 @@ function TeamTaskIssueBody({
           </TabsContent>
         </div>
 
-        <aside aria-labelledby="issue-properties-title" className="min-w-0 lg:border-l lg:pl-6">
+        <aside
+          aria-labelledby="issue-properties-title"
+          className="min-w-0 border-t pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
+        >
           <h2 id="issue-properties-title" className="text-sm font-semibold">
             {t('properties')}
           </h2>
@@ -2156,98 +2222,81 @@ function TeamTaskIssueBody({
               </AlertDescription>
             </Alert>
           ) : null}
-          <dl className="mt-3 space-y-1">
+          <dl className="mt-3 grid gap-1">
             <PropertyRow label={t('state')}>
-              <Select
-                items={stateItems.map((state) => ({ label: state.name, value: state.id }))}
+              <IssueInlineSelect
+                appearance="comfortable"
+                ariaLabel={`${t('state')}: ${issue.status.workflowState.name}`}
+                busy={mutation.isPending && mutation.variables?.change.kind === 'workflowState'}
+                disabled={
+                  states.isPending ||
+                  mutation.isPending ||
+                  (issue.projectRole === 'BACKEND' &&
+                    issue.parentIssue !== null &&
+                    issue.handoffSummary?.hasInitial !== true &&
+                    project.isPending)
+                }
                 value={issue.status.workflowState.id}
                 onValueChange={(value) => {
                   const state = stateItems.find((item) => item.id === value);
                   if (state) changeState(state);
                 }}
-              >
-                <SelectTrigger
-                  aria-label={t('state')}
-                  className="w-full"
-                  disabled={
-                    states.isPending ||
-                    mutation.isPending ||
-                    (issue.projectRole === 'BACKEND' &&
-                      issue.parentIssue !== null &&
-                      issue.handoffSummary?.hasInitial !== true &&
-                      project.isPending)
-                  }
-                >
-                  <SelectValue placeholder={t('loadingOptions')} />
-                </SelectTrigger>
-                <SelectContent alignItemWithTrigger={false}>
-                  <SelectGroup>
-                    {stateItems.map((state) => (
-                      <SelectItem key={state.id} value={state.id}>
-                        {state.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+                options={stateItems.map((state) => ({
+                  ...WORKFLOW_STATE_PRESENTATION[state.category],
+                  label: state.name,
+                  value: state.id,
+                }))}
+                triggerClassName="min-w-36 max-w-full"
+              />
             </PropertyRow>
             <PropertyRow label={t('assignee')}>
-              <div className="flex min-w-0 items-center gap-2">
-                {issue.assignee ? (
-                  <UserAvatar
-                    avatarFileId={issue.assignee.user.avatarFileId}
-                    displayName={issue.assignee.user.displayName}
-                    size="sm"
-                  />
-                ) : null}
-                <Select
-                  items={[
-                    { label: t('unassigned'), value: 'unassigned' },
-                    ...memberItems.map((member) => ({
-                      label: member.user.displayName,
-                      value: member.id,
-                    })),
-                  ]}
-                  value={issue.assignee?.id ?? 'unassigned'}
-                  onValueChange={(value) => {
-                    const assignee =
-                      value === 'unassigned'
-                        ? null
-                        : (memberItems.find((item) => item.id === value) ?? null);
-                    mutation.mutate({ change: { kind: 'assignee', value: assignee }, issue });
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label={t('assignee')}
-                    className="min-w-0 flex-1"
-                    disabled={members.isPending || mutation.isPending}
-                  >
-                    <SelectValue placeholder={t('loadingOptions')} />
-                  </SelectTrigger>
-                  <SelectContent alignItemWithTrigger={false}>
-                    <SelectGroup>
-                      <SelectItem value="unassigned">{t('unassigned')}</SelectItem>
-                      {memberItems.map((member) => (
-                        <SelectItem key={member.id} value={member.id}>
-                          {member.user.displayName}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
+              <IssueInlineSelect
+                appearance="comfortable"
+                ariaLabel={`${t('assignee')}: ${issue.assignee?.user.displayName ?? t('unassigned')}`}
+                busy={mutation.isPending && mutation.variables?.change.kind === 'assignee'}
+                disabled={members.isPending || mutation.isPending}
+                options={[
+                  {
+                    icon: UserRound,
+                    iconClassName: 'text-muted-foreground',
+                    label: t('unassigned'),
+                    value: 'unassigned',
+                  },
+                  ...memberItems.map((member) => ({
+                    icon: UserRound,
+                    iconClassName: 'text-muted-foreground',
+                    label: member.user.displayName,
+                    value: member.id,
+                  })),
+                ]}
+                onValueChange={(value) => {
+                  const assignee =
+                    value === 'unassigned'
+                      ? null
+                      : (memberItems.find((item) => item.id === value) ?? null);
+                  mutation.mutate({ change: { kind: 'assignee', value: assignee }, issue });
+                }}
+                triggerClassName="min-w-36 max-w-full"
+                value={issue.assignee?.id ?? 'unassigned'}
+              />
             </PropertyRow>
             <PropertyRow label={t('priority')}>
               <PriorityEditor issue={issue} mutation={mutation} />
             </PropertyRow>
             <PropertyRow label={t('team')}>
-              <span className="block truncate text-sm font-medium">
+              <span className="block truncate text-sm">
                 {issue.team.name} ({issue.team.key})
               </span>
             </PropertyRow>
             {issue.project ? (
               <PropertyRow label={t('project')}>
-                <span className="block truncate text-sm font-medium">{issue.project.name}</span>
+                <span className="flex min-w-0 items-center gap-2 text-sm">
+                  <FolderKanban
+                    aria-hidden="true"
+                    className="text-muted-foreground size-4 shrink-0"
+                  />
+                  <span className="truncate">{issue.project.name}</span>
+                </span>
               </PropertyRow>
             ) : null}
             {issue.projectRole ? (
@@ -2259,6 +2308,7 @@ function TeamTaskIssueBody({
               <IssueLabels issue={issue} labelItems={labelItems} mutation={mutation} />
             </PropertyRow>
           </dl>
+          <PropertyMutationError mutation={mutation} />
           <IssueInformation issue={issue} />
         </aside>
       </div>

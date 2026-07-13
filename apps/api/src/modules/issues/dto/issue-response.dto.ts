@@ -132,6 +132,71 @@ export class IssueLabelSummaryResponseDto {
   archived!: boolean;
 }
 
+export class IssueWorkflowWaitingOnResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  issueId!: string;
+
+  @ApiProperty()
+  identifier!: string;
+
+  @ApiProperty()
+  title!: string;
+}
+
+export class IssueActiveRoleTeamResponseDto {
+  @ApiProperty({ enum: ProjectRole })
+  projectRole!: ProjectRole;
+
+  @ApiProperty({ type: IssueTeamSummaryResponseDto })
+  team!: IssueTeamSummaryResponseDto;
+
+  @ApiProperty({ minimum: 0 })
+  unassignedCount!: number;
+}
+
+export class CurrentUserAssignedTeamTaskResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty()
+  identifier!: string;
+
+  @ApiProperty({ enum: ProjectRole })
+  projectRole!: ProjectRole;
+}
+
+export class FeatureWorkflowSummaryResponseDto {
+  @ApiProperty({ minimum: 0 })
+  teamTaskCount!: number;
+
+  @ApiProperty({ minimum: 0 })
+  completedCount!: number;
+
+  @ApiProperty({ minimum: 0 })
+  canceledCount!: number;
+
+  @ApiProperty({ minimum: 0 })
+  unassignedCount!: number;
+
+  @ApiProperty({ enum: ProjectRole, isArray: true })
+  activeRoles!: ProjectRole[];
+
+  @ApiProperty({ isArray: true, type: IssueActiveRoleTeamResponseDto })
+  activeRoleTeams!: IssueActiveRoleTeamResponseDto[];
+
+  @ApiProperty({ isArray: true, type: IssueWorkflowWaitingOnResponseDto })
+  waitingOn!: IssueWorkflowWaitingOnResponseDto[];
+
+  @ApiProperty()
+  allTargetTasksCompleted!: boolean;
+
+  @ApiProperty({ enum: ProjectRole, isArray: true })
+  currentUserTeamRoles!: ProjectRole[];
+
+  @ApiProperty({ isArray: true, type: CurrentUserAssignedTeamTaskResponseDto })
+  currentUserAssignedTeamTasks!: CurrentUserAssignedTeamTaskResponseDto[];
+}
+
 export class IssueSummaryResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -174,6 +239,12 @@ export class IssueSummaryResponseDto {
 
   @ApiProperty({ nullable: true, type: IssueProgressResponseDto })
   progress!: IssueProgressResponseDto | null;
+
+  @ApiProperty({ type: IssueMemberSummaryResponseDto })
+  createdBy!: IssueMemberSummaryResponseDto;
+
+  @ApiProperty({ nullable: true, type: FeatureWorkflowSummaryResponseDto })
+  workflowSummary!: FeatureWorkflowSummaryResponseDto | null;
 
   @ApiProperty({ minimum: 1 })
   version!: number;
@@ -328,9 +399,6 @@ export class IssueDetailResponseDto extends IssueSummaryResponseDto {
   @ApiProperty({ nullable: true, type: String })
   descriptionMarkdown!: string | null;
 
-  @ApiProperty({ type: IssueMemberSummaryResponseDto })
-  createdBy!: IssueMemberSummaryResponseDto;
-
   @ApiProperty({ isArray: true, type: IssueBlockRelationResponseDto })
   blockers!: IssueBlockRelationResponseDto[];
 
@@ -409,10 +477,58 @@ export class UpdateIssueResponseDto extends IssueDetailResponseDto {
   updatedParentIssue?: IssueSummaryResponseDto;
 }
 
+export class FeatureWorkQueueCountsResponseDto {
+  @ApiProperty({ minimum: 0 })
+  ALL!: number;
+
+  @ApiProperty({ minimum: 0 })
+  REVIEW_REQUIRED!: number;
+
+  @ApiProperty({ minimum: 0 })
+  ASSIGNMENT_REQUIRED!: number;
+
+  @ApiProperty({ minimum: 0 })
+  IN_PROGRESS!: number;
+
+  @ApiProperty({ minimum: 0 })
+  COMPLETION_REQUIRED!: number;
+
+  @ApiProperty({ minimum: 0 })
+  COMPLETED!: number;
+}
+
 export class IssueListResponseDto {
   @ApiProperty({ isArray: true, type: IssueSummaryResponseDto })
   items!: IssueSummaryResponseDto[];
 
   @ApiProperty({ nullable: true, type: String })
   nextCursor!: string | null;
+
+  @ApiProperty({ minimum: 0 })
+  totalCount!: number;
+
+  @ApiPropertyOptional({ type: FeatureWorkQueueCountsResponseDto })
+  workQueueCounts?: FeatureWorkQueueCountsResponseDto;
+}
+
+export class ClaimIssueResponseDto {
+  @ApiProperty({ type: IssueSummaryResponseDto })
+  issue!: IssueSummaryResponseDto;
+
+  @ApiProperty({ type: IssueSummaryResponseDto })
+  teamTask!: IssueSummaryResponseDto;
+
+  @ApiProperty({ type: FeatureWorkflowSummaryResponseDto })
+  workflowSummary!: FeatureWorkflowSummaryResponseDto;
+}
+
+export class AssignTeamTasksResponseDto {
+  @ApiProperty({ type: IssueSummaryResponseDto })
+  issue!: IssueSummaryResponseDto;
+
+  @ApiProperty({ isArray: true, type: IssueSummaryResponseDto })
+  teamTasks!: IssueSummaryResponseDto[];
+
+  @ApiProperty({ type: FeatureWorkflowSummaryResponseDto })
+  workflowSummary!: FeatureWorkflowSummaryResponseDto;
 }

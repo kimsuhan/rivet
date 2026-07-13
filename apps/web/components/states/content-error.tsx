@@ -9,12 +9,14 @@ export function ContentError({
   title,
   description,
   retryLabel,
+  retryButtonClassName,
   onRetry,
   headingLevel = 2,
 }: {
   title: string;
   description: string;
   retryLabel: string;
+  retryButtonClassName?: string;
   onRetry: () => void;
   headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
 }) {
@@ -29,7 +31,13 @@ export function ContentError({
       </AlertTitle>
       <AlertDescription>{description}</AlertDescription>
       <AlertAction className="top-3 right-3">
-        <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={retryButtonClassName}
+          onClick={onRetry}
+        >
           {retryLabel}
         </Button>
       </AlertAction>

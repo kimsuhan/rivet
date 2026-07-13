@@ -9,8 +9,16 @@ import type { IssuesControllerListBlocked } from './issuesControllerListBlocked'
 import type { IssuesControllerListSort } from './issuesControllerListSort';
 import type { IssuesControllerListSortDirection } from './issuesControllerListSortDirection';
 import type { IssuesControllerListType } from './issuesControllerListType';
+import type { IssuesControllerListUnassigned } from './issuesControllerListUnassigned';
+import type { IssuesControllerListWorkQueue } from './issuesControllerListWorkQueue';
 
 export type IssuesControllerListParams = {
+/**
+ * 표시 ID 또는 제목 검색
+ * @maxLength 500
+ */
+query?: string;
+workQueue?: IssuesControllerListWorkQueue;
 /**
  * @maxLength 20
  */
@@ -30,6 +38,11 @@ projectId?: string;
  * @maxLength 100
  */
 projectRole?: string;
+/**
+ * 쉼표로 구분한 현재 작업 프로젝트 역할
+ * @maxLength 100
+ */
+activeProjectRole?: string;
 parentIssueId?: string;
 /**
  * 쉼표로 구분한 기능 이슈 상태
@@ -51,6 +64,16 @@ stateCategory?: string;
  * @maxLength 2048
  */
 assigneeMembershipId?: string;
+unassigned?: IssuesControllerListUnassigned;
+/**
+ * 쉼표로 구분한 만든 사람 멤버십 ID
+ * @maxLength 2048
+ */
+createdByMembershipId?: string;
+createdFrom?: string;
+createdTo?: string;
+updatedFrom?: string;
+updatedTo?: string;
 /**
  * 쉼표로 구분한 우선순위
  * @maxLength 100

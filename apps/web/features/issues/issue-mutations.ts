@@ -36,6 +36,7 @@ export type IssueOptimisticChange =
     }
   | {
       kind: 'featureStatus';
+      requireCompletedTeamTasks?: boolean;
       value: NonNullable<IssueSummaryResponseDto['status']['featureStatus']>;
     }
   | { kind: 'assignee'; value: IssueSummaryResponseDto['assignee'] }
@@ -73,7 +74,11 @@ function changeToDto(change: IssueOptimisticChange, version: number): UpdateIssu
         workflowStateId: change.value.id,
       };
     case 'featureStatus':
-      return { featureStatus: change.value, version };
+      return {
+        featureStatus: change.value,
+        ...(change.requireCompletedTeamTasks ? { requireCompletedTeamTasks: true } : {}),
+        version,
+      };
     case 'assignee':
       return { assigneeMembershipId: change.value?.id ?? null, version };
     case 'priority':

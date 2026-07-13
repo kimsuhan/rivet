@@ -14,4 +14,5 @@ export const IssuesControllerListSort = {
   updatedAt: 'updatedAt',
   status: 'status',
   priority: 'priority',
+  progress: 'progress',
 } as const;

@@ -103,7 +103,11 @@ async function selectOption(
   optionName: string,
   triggerRoot: Locator | Page = page,
 ): Promise<void> {
-  await triggerRoot.getByRole('combobox', { name: triggerName, exact: true }).click();
+  const accessibleName = new RegExp(
+    `^${triggerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?::|$)`,
+    'u',
+  );
+  await triggerRoot.getByRole('combobox', { name: accessibleName }).click();
   const listbox = page.getByRole('listbox');
   await expect(listbox).toBeVisible();
   await listbox.getByRole('option', { name: optionName, exact: true }).click();
@@ -734,7 +738,7 @@ test('E05 백엔드 완료와 최초 작업 전달이 웹·앱 후행 작업을 
 
     await page.goto(`/issues/${feature.identifier}`);
     await expect(page.getByRole('progressbar', { name: '0/1 완료 · 0%' })).toHaveAttribute(
-      'value',
+      'aria-valuenow',
       '0',
     );
     await page.getByRole('tab', { name: '연결' }).click();
@@ -802,7 +806,7 @@ test('E05 백엔드 완료와 최초 작업 전달이 웹·앱 후행 작업을 
       new RegExp(`/issues/${feature.identifier}\\?tab=relations#feature-progress-title$`),
     );
     await expect(page.getByRole('progressbar', { name: '1/3 완료 · 33%' })).toHaveAttribute(
-      'value',
+      'aria-valuenow',
       '33',
     );
     await expect(page.getByText('완료 작업')).toBeVisible();

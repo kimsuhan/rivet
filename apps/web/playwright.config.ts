@@ -9,9 +9,13 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error('Playwright E2E requires DATABASE_URL in .env.test.local.');
 }
+const apiPort = process.env.PLAYWRIGHT_API_PORT ?? '4000';
+const webPort = process.env.PLAYWRIGHT_WEB_PORT ?? '3000';
+const apiOrigin = `http://127.0.0.1:${apiPort}`;
+const webOrigin = `http://127.0.0.1:${webPort}`;
 
 const apiEnvironment = {
-  API_PORT: '4000',
+  API_PORT: apiPort,
   CSRF_HMAC_KEY: 'test-csrf-hmac-key-with-at-least-32-bytes',
   DATABASE_URL: databaseUrl,
   FILE_STORAGE_ROOT: '/tmp/rivet-playwright-files',
@@ -21,7 +25,7 @@ const apiEnvironment = {
   RATE_LIMIT_HMAC_KEY: 'test-rate-hmac-key-with-at-least-32-bytes',
   RELEASE_ID: 'playwright-e2e',
   SLACK_ALERT_WEBHOOK_URL: '',
-  WEB_ORIGIN: 'http://127.0.0.1:3000',
+  WEB_ORIGIN: webOrigin,
 };
 
 const workerEnvironment = {
@@ -50,7 +54,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   workers: 1,
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: webOrigin,
     trace: 'on-first-retry',
   },
   projects: [
@@ -74,7 +78,7 @@ export default defineConfig({
       env: apiEnvironment,
       reuseExistingServer: false,
       timeout: 180_000,
-      url: 'http://127.0.0.1:4000/api/v1/health/live',
+      url: `${apiOrigin}/api/v1/health/live`,
     },
     {
       command: 'pnpm --filter @rivet/worker build && pnpm --filter @rivet/worker start',
@@ -88,13 +92,14 @@ export default defineConfig({
     {
       command: 'pnpm build && pnpm start',
       env: {
-        API_INTERNAL_ORIGIN: 'http://127.0.0.1:4000',
+        API_INTERNAL_ORIGIN: apiOrigin,
         PLAYWRIGHT_API_PROXY: 'true',
         RELEASE_ID: apiEnvironment.RELEASE_ID,
+        WEB_PORT: webPort,
       },
       reuseExistingServer: false,
       timeout: 180_000,
-      url: 'http://127.0.0.1:3000/login',
+      url: `${webOrigin}/login`,
     },
   ],
 });

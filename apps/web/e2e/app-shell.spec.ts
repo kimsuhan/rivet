@@ -87,12 +87,12 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('기본 경로에서 내 이슈로 이동하고 주 탐색 상태를 표시한다', async ({ page }) => {
+test('기본 경로에서 내 작업으로 이동하고 주 탐색 상태를 표시한다', async ({ page }) => {
   await page.goto('/');
 
   await expect(page).toHaveURL(/\/my-issues$/);
-  await expect(page.getByRole('heading', { name: '내 이슈' })).toBeVisible();
-  await expect(page.getByRole('link', { name: '내 이슈' }).first()).toHaveAttribute(
+  await expect(page.getByRole('heading', { name: '내 작업' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '내 작업' }).first()).toHaveAttribute(
     'aria-current',
     'page',
   );
@@ -123,11 +123,20 @@ test('모바일에서는 5개 하단 탐색 항목을 제공한다', async ({ pa
   await page.goto('/my-issues');
 
   const navigation = page.getByRole('navigation', { name: '모바일 주 탐색' });
-  await expect(navigation.getByText('내 이슈', { exact: true })).toBeVisible();
+  await expect(navigation.getByText('이슈', { exact: true })).toBeVisible();
+  await expect(navigation.getByText('내 작업', { exact: true })).toBeVisible();
   await expect(navigation.getByText('알림함', { exact: true })).toBeVisible();
   await expect(navigation.getByText('팀', { exact: true })).toBeVisible();
   await expect(navigation.getByText('프로젝트', { exact: true })).toBeVisible();
-  await expect(navigation.getByText('검색', { exact: true })).toBeVisible();
+  await expect(navigation.locator(':scope > *')).toHaveText([
+    '이슈',
+    '내 작업',
+    '알림함',
+    '프로젝트',
+    '팀',
+  ]);
+  await expect(navigation.getByText('검색', { exact: true })).toBeHidden();
+  await expect(page.getByRole('button', { name: '검색 열기' })).toBeVisible();
 });
 
 test('PROFILE-01 프로필 사진을 데스크톱과 모바일 셸에서 교체한다', async ({ page }) => {

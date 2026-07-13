@@ -2,11 +2,7 @@
 
 import {
   AlertCircle,
-  Circle,
-  CircleCheck,
-  CircleDot,
   CircleOff,
-  CircleX,
   Info,
   List,
   ListTodo,
@@ -18,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { type DragEvent, useState } from 'react';
+import { type DragEvent, useEffect, useRef, useState } from 'react';
 
 import {
   type IssueDetailResponseDto,
@@ -60,9 +56,14 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
+import {
+  ISSUE_PRIORITY_PRESENTATION,
+  WORKFLOW_STATE_PRESENTATION,
+} from './issue-attribute-presentation';
 import { buildTeamIssueViewHref, groupIssueBoardColumns } from './issue-board-state';
 import { IssueFilterMenu } from './issue-filter-menu';
 import { IssueInlineSelect } from './issue-inline-select';
+import { IssueLabelChips } from './issue-label-chips';
 import { getIssuePagesQueryKey, useIssuePages } from './issue-list-queries';
 import {
   buildIssueListParams,
@@ -94,6 +95,7 @@ type IssueBoardCardLabels = {
   errorTitle: string;
   priorities: Record<(typeof ISSUE_PRIORITIES)[number], string>;
   priority: string;
+  projectRoles: Record<'APP_FRONTEND' | 'BACKEND' | 'WEB_FRONTEND', string>;
   reapply: string;
   retry: string;
   role: string;
@@ -146,18 +148,8 @@ function describeLatestChange(
 }
 
 function WorkflowStateMark({ category }: { category: WorkflowStateResponseDto['category'] }) {
-  switch (category) {
-    case 'BACKLOG':
-      return <CircleOff aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />;
-    case 'UNSTARTED':
-      return <Circle aria-hidden="true" className="text-foreground size-4 shrink-0" />;
-    case 'STARTED':
-      return <CircleDot aria-hidden="true" className="text-primary size-4 shrink-0" />;
-    case 'COMPLETED':
-      return <CircleCheck aria-hidden="true" className="text-success size-4 shrink-0" />;
-    case 'CANCELED':
-      return <CircleX aria-hidden="true" className="text-disabled size-4 shrink-0" />;
-  }
+  const { icon: Icon, iconClassName } = WORKFLOW_STATE_PRESENTATION[category];
+  return <Icon aria-hidden="true" className={cn('size-4 shrink-0', iconClassName)} />;
 }
 
 function IssueBoardLoading({ label }: { label: string }) {
@@ -207,7 +199,7 @@ function IssueBoardCard({
   mutation: ReturnType<typeof useIssueInlineMutation>;
   onDragEnd: () => void;
   onDragStart: (issueId: string) => void;
-  onMove: (issue: TeamTaskIssue, state: WorkflowStateResponseDto) => void;
+  onMove: (issue: TeamTaskIssue, state: WorkflowStateResponseDto, restoreFocus?: boolean) => void;
   workflowStates: WorkflowStateResponseDto[];
 }) {
   const isCurrentMutation = mutation.variables?.issue.id === issue.id;
@@ -272,41 +264,38 @@ function IssueBoardCard({
           </Link>
         </CardTitle>
         <CardAction>
-          <Select
-            items={workflowStates.map((state) => ({ label: state.name, value: state.id }))}
-            value={issue.status.workflowState.id}
-            onValueChange={(stateId) => {
-              const nextState = workflowStates.find((state) => state.id === stateId);
-              if (nextState) onMove(issue, nextState);
-            }}
+          <div
+            data-board-state-trigger={issue.id}
+            data-board-state-id={issue.status.workflowState.id}
           >
-            <SelectTrigger
-              size="sm"
-              aria-label={`${issue.identifier} ${labels.state}`}
+            <IssueInlineSelect
+              appearance="compact"
+              ariaLabel={`${issue.identifier} ${labels.state}: ${issue.status.workflowState.name}`}
+              busy={isPending && mutation.variables?.change.kind === 'workflowState'}
               disabled={mutation.isPending}
-              className="max-w-28"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectGroup>
-                {workflowStates.map((state) => (
-                  <SelectItem key={state.id} value={state.id}>
-                    {state.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+              value={issue.status.workflowState.id}
+              onValueChange={(stateId) => {
+                const nextState = workflowStates.find((state) => state.id === stateId);
+                if (nextState) onMove(issue, nextState, true);
+              }}
+              options={workflowStates.map((state) => ({
+                ...WORKFLOW_STATE_PRESENTATION[state.category],
+                label: state.name,
+                value: state.id,
+              }))}
+              triggerClassName="max-w-28"
+            />
+          </div>
         </CardAction>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-2">
         <div className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
           <span className="flex min-w-0 flex-1 items-center gap-1">
-            <UserRound aria-hidden="true" className="size-3.5 shrink-0" />
             <IssueInlineSelect
-              ariaLabel={`${issue.identifier} ${labels.assignee}`}
+              appearance="compact"
+              ariaLabel={`${issue.identifier} ${labels.assignee}: ${issue.assignee?.user.displayName ?? labels.unassigned}`}
+              busy={isPending && mutation.variables?.change.kind === 'assignee'}
               disabled={mutation.isPending}
               onValueChange={(memberId) => {
                 const assignee =
@@ -316,18 +305,27 @@ function IssueBoardCard({
                 mutation.mutate({ change: { kind: 'assignee', value: assignee }, issue });
               }}
               options={[
-                { label: labels.unassigned, value: 'unassigned' },
+                {
+                  icon: UserRound,
+                  iconClassName: 'text-muted-foreground',
+                  label: labels.unassigned,
+                  value: 'unassigned',
+                },
                 ...memberOptions.map((member) => ({
+                  icon: UserRound,
+                  iconClassName: 'text-muted-foreground',
                   label: member.user.displayName,
                   value: member.id,
                 })),
               ]}
-              triggerClassName="h-6 text-xs"
+              labelClassName="max-w-20"
               value={issue.assignee?.id ?? 'unassigned'}
             />
           </span>
           <IssueInlineSelect
-            ariaLabel={`${issue.identifier} ${labels.priority}`}
+            appearance="compact"
+            ariaLabel={`${issue.identifier} ${labels.priority}: ${labels.priorities[issue.priority]}`}
+            busy={isPending && mutation.variables?.change.kind === 'priority'}
             disabled={mutation.isPending}
             onValueChange={(priority) => {
               if (ISSUE_PRIORITIES.includes(priority as (typeof ISSUE_PRIORITIES)[number])) {
@@ -338,52 +336,47 @@ function IssueBoardCard({
               }
             }}
             options={ISSUE_PRIORITIES.map((priority) => ({
+              ...ISSUE_PRIORITY_PRESENTATION[priority],
               label: labels.priorities[priority],
               value: priority,
             }))}
-            triggerClassName="h-6 max-w-20 text-xs"
+            labelClassName="sr-only xl:not-sr-only"
+            triggerClassName="max-w-20"
             value={issue.priority}
           />
           {issue.projectRole ? (
-            <Badge variant="secondary" aria-label={`${labels.role}: ${issue.projectRole}`}>
-              {issue.projectRole}
+            <Badge
+              variant="secondary"
+              aria-label={`${labels.role}: ${labels.projectRoles[issue.projectRole]}`}
+            >
+              {labels.projectRoles[issue.projectRole]}
             </Badge>
           ) : null}
           {issue.blocked ? <Badge variant="outline">{labels.blocked}</Badge> : null}
         </div>
 
         <div className="flex min-w-0 items-center gap-1">
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-            {issue.labels.slice(0, 2).map((label) => (
-              <Badge key={label.id} variant="outline" className="max-w-24 truncate">
-                <span
-                  aria-hidden="true"
-                  className="size-1.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: label.color }}
-                />
-                {label.name}
-              </Badge>
-            ))}
-            {issue.labels.length > 2 ? (
-              <span className="text-muted-foreground shrink-0 text-xs">
-                +{issue.labels.length - 2}
-              </span>
-            ) : null}
+          <div className="min-w-0 flex-1">
+            <IssueLabelChips emptyLabel={labels.noLabels} labels={issue.labels} />
           </div>
-          <IssueFilterMenu
-            ariaLabel={`${issue.identifier} ${labels.labels}`}
-            disabled={mutation.isPending}
-            emptyLabel={labels.labelOptionsEmpty}
-            label={labels.labels}
-            onChange={changeLabels}
-            options={labelOptions.map((label) => ({
-              id: label.id,
-              label: label.name,
-              swatch: label.color,
-            }))}
-            selected={issue.labels.map((label) => label.id)}
-            triggerClassName="h-6 shrink-0 border-transparent px-1.5 text-xs"
-          />
+          {labelOptions.length > 0 ? (
+            <IssueFilterMenu
+              ariaLabel={`${issue.identifier} ${labels.labels}: ${issue.labels.map((label) => label.name).join(', ') || labels.noLabels}`}
+              busy={isPending && mutation.variables?.change.kind === 'labels'}
+              disabled={mutation.isPending}
+              emptyLabel={labels.labelOptionsEmpty}
+              label={labels.labels}
+              onChange={changeLabels}
+              options={labelOptions.map((label) => ({
+                id: label.id,
+                label: label.name,
+                swatch: label.color,
+              }))}
+              presentation="popover"
+              selected={issue.labels.map((label) => label.id)}
+              triggerClassName="pointer-events-none shrink-0 border-transparent bg-transparent px-1.5 text-xs opacity-0 data-popup-open:pointer-events-auto data-popup-open:opacity-100 group-focus-within/card:pointer-events-auto group-focus-within/card:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [&>span]:sr-only"
+            />
+          ) : null}
         </div>
 
         {isPending ? (
@@ -450,6 +443,10 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
   const router = useRouter();
   const [draggedIssueId, setDraggedIssueId] = useState<string | null>(null);
   const [dragOverStateId, setDragOverStateId] = useState<string | null>(null);
+  const stateFocusTargetRef = useRef<{
+    issueId: string;
+    stateId: string;
+  } | null>(null);
   const state = readIssueListState(searchParams, 'team');
   const teams = useTeamsControllerList({ includeArchived: false }, { query: { retry: false } });
   const activeTeams = (teams.data?.items ?? []).filter((team) => !team.archived);
@@ -490,6 +487,17 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
   createSearchParams.set('create', '1');
   createSearchParams.set('type', 'TEAM_TASK');
   const createHref = `${pathname}?${createSearchParams.toString()}`;
+
+  useEffect(() => {
+    const stateFocusTarget = stateFocusTargetRef.current;
+    if (!stateFocusTarget) return;
+    const trigger = document.querySelector<HTMLElement>(
+      `[data-board-state-trigger="${stateFocusTarget.issueId}"][data-board-state-id="${stateFocusTarget.stateId}"] [role="combobox"]`,
+    );
+    if (!trigger) return;
+    trigger.focus();
+    stateFocusTargetRef.current = null;
+  }, [issueItems]);
   const cardLabels: IssueBoardCardLabels = {
     assignee: t('columns.assignee'),
     blocked: t('board.blocked'),
@@ -512,6 +520,11 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
       URGENT: t('priority.URGENT'),
     },
     priority: t('columns.priority'),
+    projectRoles: {
+      APP_FRONTEND: t('projectRoles.APP_FRONTEND'),
+      BACKEND: t('projectRoles.BACKEND'),
+      WEB_FRONTEND: t('projectRoles.WEB_FRONTEND'),
+    },
     reapply: t('board.reapply'),
     retry: t('retry'),
     role: t('board.role'),
@@ -547,9 +560,34 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
     if (issues.isError) void issues.refetch();
   }
 
-  function moveIssue(issue: TeamTaskIssue, nextState: WorkflowStateResponseDto) {
+  function moveIssue(
+    issue: TeamTaskIssue,
+    nextState: WorkflowStateResponseDto,
+    restoreFocus = false,
+  ) {
     if (mutation.isPending || issue.status.workflowState.id === nextState.id) return;
-    mutation.mutate({ change: { kind: 'workflowState', value: nextState }, issue });
+    if (restoreFocus) {
+      stateFocusTargetRef.current = { issueId: issue.id, stateId: nextState.id };
+    }
+    mutation.mutate(
+      { change: { kind: 'workflowState', value: nextState }, issue },
+      restoreFocus
+        ? {
+            onSettled: () => {
+              requestAnimationFrame(() => {
+                if (document.activeElement === document.body) {
+                  document
+                    .querySelector<HTMLElement>(
+                      `[data-board-state-trigger="${issue.id}"] [role="combobox"]`,
+                    )
+                    ?.focus();
+                }
+                stateFocusTargetRef.current = null;
+              });
+            },
+          }
+        : undefined,
+    );
   }
 
   function dropIssue(event: DragEvent<HTMLElement>, nextState: WorkflowStateResponseDto) {
@@ -629,27 +667,32 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
             </TabsList>
           </Tabs>
           <div className="flex items-center gap-2">
-            <Link href={listHref} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+            <Link
+              href={listHref}
+              className={cn(buttonVariants({ size: 'sm', variant: 'ghost' }), 'h-11 sm:h-10')}
+            >
               <List aria-hidden="true" data-icon="inline-start" />
               {t('board.viewList')}
             </Link>
-            <Link href={createHref} className={buttonVariants({ size: 'sm' })}>
+            <Link href={createHref} className={cn(buttonVariants({ size: 'sm' }), 'h-11 sm:h-10')}>
               <Plus aria-hidden="true" data-icon="inline-start" />
               {t('create')}
             </Link>
           </div>
         </div>
 
-        <div className="mt-4 flex min-w-0 flex-wrap items-center gap-2 border-y py-3">
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 py-2.5">
           <IssueFilterMenu
             emptyLabel={t('filters.noOptions')}
             label={t('filters.state')}
             onChange={(selected) => replaceUrl('status', selected)}
             options={sortedStates.map((workflowState) => ({
+              ...WORKFLOW_STATE_PRESENTATION[workflowState.category],
               id: workflowState.id,
               label: workflowState.name,
             }))}
             selected={state.stateIds}
+            variant="compact"
           />
           <IssueFilterMenu
             emptyLabel={t('filters.noOptions')}
@@ -660,16 +703,19 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
               label: member.user.displayName,
             }))}
             selected={state.assigneeIds}
+            variant="compact"
           />
           <IssueFilterMenu
             emptyLabel={t('filters.noOptions')}
             label={t('filters.priority')}
             onChange={(selected) => replaceUrl('priority', selected)}
             options={ISSUE_PRIORITIES.map((priority) => ({
+              ...ISSUE_PRIORITY_PRESENTATION[priority],
               id: priority,
               label: t(`priority.${priority}`),
             }))}
             selected={state.priority}
+            variant="compact"
           />
           <IssueFilterMenu
             emptyLabel={t('filters.noOptions')}
@@ -681,9 +727,16 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
               swatch: label.color,
             }))}
             selected={state.labelIds}
+            variant="compact"
           />
           {filtersActive ? (
-            <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="hover:before:bg-muted/60 relative isolate h-11 bg-transparent px-2 text-xs before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-8 before:-translate-y-1/2 before:rounded-md before:bg-transparent hover:bg-transparent sm:h-10"
+              onClick={clearFilters}
+            >
               <RotateCcw aria-hidden="true" data-icon="inline-start" />
               {t('filters.reset')}
             </Button>
@@ -707,13 +760,17 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
                 }
               }}
             >
-              <SelectTrigger size="sm" aria-label={t('sort.fieldLabel')}>
+              <SelectTrigger size="sm" variant="inline" aria-label={t('sort.fieldLabel')}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false}>
                 <SelectGroup>
                   {ISSUE_SORT_FIELDS.map((sort) => (
-                    <SelectItem key={sort} value={sort}>
+                    <SelectItem
+                      className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
+                      key={sort}
+                      value={sort}
+                    >
                       {t(`sort.${sort}`)}
                     </SelectItem>
                   ))}
@@ -735,13 +792,17 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
                 }
               }}
             >
-              <SelectTrigger size="sm" aria-label={t('sort.directionLabel')}>
+              <SelectTrigger size="sm" variant="inline" aria-label={t('sort.directionLabel')}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false}>
                 <SelectGroup>
                   {ISSUE_SORT_DIRECTIONS.map((direction) => (
-                    <SelectItem key={direction} value={direction}>
+                    <SelectItem
+                      className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
+                      key={direction}
+                      value={direction}
+                    >
                       {t(`sort.${direction}`)}
                     </SelectItem>
                   ))}

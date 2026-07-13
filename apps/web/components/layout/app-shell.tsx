@@ -2,6 +2,7 @@
 
 import {
   Bell,
+  CircleDot,
   FolderKanban,
   ListTodo,
   type LucideIcon,
@@ -60,6 +61,7 @@ type ShellLabels = {
   skipToContent: string;
   inboxUnread: string;
   navigation: {
+    issues: string;
     myIssues: string;
     inbox: string;
     teams: string;
@@ -74,7 +76,7 @@ type ShellLabels = {
 };
 
 type NavigationItem = {
-  href: '/my-issues' | '/inbox' | '/projects';
+  href: '/issues' | '/my-issues' | '/inbox' | '/projects';
   label: string;
   icon: LucideIcon;
 };
@@ -139,6 +141,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
   const lastTeamSelectorTrigger = useRef<HTMLElement | null>(null);
   const consumedIssueCreateRequest = useRef<string | null>(null);
   const navigationItems: NavigationItem[] = [
+    { href: '/issues', label: labels.navigation.issues, icon: CircleDot },
     { href: '/my-issues', label: labels.navigation.myIssues, icon: ListTodo },
     { href: '/inbox', label: labels.navigation.inbox, icon: Bell },
     { href: '/projects', label: labels.navigation.projects, icon: FolderKanban },
@@ -466,22 +469,36 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
         >
           Rivet
         </Link>
-        {session.data?.authenticated ? (
+        <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={openProfileFromTrigger}
-            aria-label={labels.openProfile}
-            aria-pressed={profileOpen}
-            title={labels.profile.title}
-            className="focus-visible:ring-ring rounded-full outline-none focus-visible:ring-2"
+            onClick={openSearchFromTrigger}
+            aria-label={labels.openSearch}
+            aria-pressed={searchOpen}
+            className={cn(
+              'focus-visible:ring-ring flex size-10 items-center justify-center rounded-md outline-none focus-visible:ring-2',
+              searchOpen ? 'text-primary' : 'text-muted-foreground',
+            )}
           >
-            <UserAvatar
-              avatarFileId={session.data.user.avatarFileId}
-              displayName={session.data.user.displayName}
-              className="size-7"
-            />
+            <Search aria-hidden="true" className="size-5" strokeWidth={1.75} />
           </button>
-        ) : null}
+          {session.data?.authenticated ? (
+            <button
+              type="button"
+              onClick={openProfileFromTrigger}
+              aria-label={labels.openProfile}
+              aria-pressed={profileOpen}
+              title={labels.profile.title}
+              className="focus-visible:ring-ring flex size-10 items-center justify-center rounded-full outline-none focus-visible:ring-2"
+            >
+              <UserAvatar
+                avatarFileId={session.data.user.avatarFileId}
+                displayName={session.data.user.displayName}
+                className="size-7"
+              />
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <main
@@ -496,7 +513,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
         aria-label={labels.mobileNavigation}
         className="app-sticky-layer bg-surface-1 fixed inset-x-0 bottom-0 grid h-[calc(4rem+env(safe-area-inset-bottom))] grid-cols-5 border-t pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
-        {navigationItems.slice(0, 2).map(({ href, label, icon: Icon }) => {
+        {navigationItems.slice(0, 3).map(({ href, label, icon: Icon }) => {
           const active = isCurrentPath(pathname, href);
 
           return (
@@ -524,21 +541,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
           );
         })}
 
-        <button
-          type="button"
-          onClick={openTeamSelectorFromTrigger}
-          aria-label={labels.openTeamSelector}
-          aria-pressed={teamSelectorOpen}
-          className={cn(
-            'focus-visible:ring-ring flex min-h-11 flex-col items-center justify-center gap-0.5 text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-inset',
-            teamSelectorOpen ? 'text-primary' : 'text-muted-foreground',
-          )}
-        >
-          <Users aria-hidden="true" className="size-5" strokeWidth={1.75} />
-          <span>{labels.navigation.teams}</span>
-        </button>
-
-        {navigationItems.slice(2).map(({ href, label, icon: Icon }) => {
+        {navigationItems.slice(3).map(({ href, label, icon: Icon }) => {
           const active = isCurrentPath(pathname, href);
 
           return (
@@ -559,16 +562,16 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
 
         <button
           type="button"
-          onClick={openSearchFromTrigger}
-          aria-label={labels.openSearch}
-          aria-pressed={searchOpen}
+          onClick={openTeamSelectorFromTrigger}
+          aria-label={labels.openTeamSelector}
+          aria-pressed={teamSelectorOpen}
           className={cn(
             'focus-visible:ring-ring flex min-h-11 flex-col items-center justify-center gap-0.5 text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-inset',
-            searchOpen ? 'text-primary' : 'text-muted-foreground',
+            teamSelectorOpen ? 'text-primary' : 'text-muted-foreground',
           )}
         >
-          <Search aria-hidden="true" className="size-5" strokeWidth={1.75} />
-          <span>{labels.navigation.search}</span>
+          <Users aria-hidden="true" className="size-5" strokeWidth={1.75} />
+          <span>{labels.navigation.teams}</span>
         </button>
       </nav>
 

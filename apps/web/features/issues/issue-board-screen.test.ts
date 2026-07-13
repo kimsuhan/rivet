@@ -31,6 +31,12 @@ function issue(
     assignee: null,
     blocked: false,
     createdAt: '2026-07-01T00:00:00.000Z',
+    createdBy: {
+      id: 'membership-creator',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      user: { avatarFileId: null, displayName: '작성자', id: 'user-creator' },
+    },
     id,
     identifier,
     labels: [],
@@ -54,6 +60,7 @@ function issue(
     type: 'TEAM_TASK',
     updatedAt: '2026-07-01T00:00:00.000Z',
     version: 1,
+    workflowSummary: null,
   };
 }
 

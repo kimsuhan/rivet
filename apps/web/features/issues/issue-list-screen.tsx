@@ -1,7 +1,18 @@
 'use client';
 
 import { useQueries } from '@tanstack/react-query';
-import { CircleOff, LayoutGrid, ListTodo, Plus, RotateCcw, SearchX } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  CircleOff,
+  LayoutGrid,
+  ListTodo,
+  Plus,
+  RotateCcw,
+  SearchX,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
@@ -31,7 +42,12 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
+import { cn } from '@/lib/utils';
 
+import {
+  ISSUE_PRIORITY_PRESENTATION,
+  WORKFLOW_STATE_PRESENTATION,
+} from './issue-attribute-presentation';
 import { IssueFilterMenu, type IssueFilterOption } from './issue-filter-menu';
 import { getIssuePagesQueryKey, useIssuePages } from './issue-list-queries';
 import {
@@ -124,6 +140,11 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
       URGENT: t('priority.URGENT'),
     },
     priority: t('columns.priority'),
+    projectRoles: {
+      APP_FRONTEND: t('projectRoles.APP_FRONTEND'),
+      BACKEND: t('projectRoles.BACKEND'),
+      WEB_FRONTEND: t('projectRoles.WEB_FRONTEND'),
+    },
     reapply: t('inline.reapply'),
     retry: t('retry'),
     state: t('columns.state'),
@@ -134,6 +155,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
     optionTeamIds.flatMap((teamId, index) => {
       const team = activeTeams.find((candidate) => candidate.id === teamId);
       return (workflowStateQueries[index]?.data?.items ?? []).map((workflowState) => ({
+        ...WORKFLOW_STATE_PRESENTATION[workflowState.category],
         id: workflowState.id,
         label: mode === 'my' && team ? `${workflowState.name} · ${team.key}` : workflowState.name,
       }));
@@ -141,10 +163,60 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
   );
   const assigneeOptions = uniqueOptions(
     (memberQueries[0]?.data?.items ?? []).map((member) => ({
+      icon: UserRound,
+      iconClassName: 'text-muted-foreground',
       id: member.id,
       label: member.user.displayName,
     })),
   );
+  const filterChips = [
+    ...state.stateIds.map((id) => ({
+      key: `state-${id}`,
+      label: `${t('filters.state')}: ${workflowStateOptions.find((option) => option.id === id)?.label ?? id}`,
+      remove: () =>
+        replaceUrl(
+          'status',
+          state.stateIds.filter((value) => value !== id),
+        ),
+    })),
+    ...(mode === 'my'
+      ? state.teamIds.map((id) => ({
+          key: `team-${id}`,
+          label: `${t('filters.team')}: ${activeTeams.find((team) => team.id === id)?.name ?? id}`,
+          remove: () =>
+            replaceUrl(
+              'team',
+              state.teamIds.filter((value) => value !== id),
+            ),
+        }))
+      : state.assigneeIds.map((id) => ({
+          key: `assignee-${id}`,
+          label: `${t('filters.assignee')}: ${assigneeOptions.find((option) => option.id === id)?.label ?? id}`,
+          remove: () =>
+            replaceUrl(
+              'assignee',
+              state.assigneeIds.filter((value) => value !== id),
+            ),
+        }))),
+    ...state.priority.map((priority) => ({
+      key: `priority-${priority}`,
+      label: `${t('filters.priority')}: ${t(`priority.${priority}`)}`,
+      remove: () =>
+        replaceUrl(
+          'priority',
+          state.priority.filter((value) => value !== priority),
+        ),
+    })),
+    ...state.labelIds.map((id) => ({
+      key: `label-${id}`,
+      label: `${t('filters.label')}: ${activeLabels.find((label) => label.id === id)?.name ?? id}`,
+      remove: () =>
+        replaceUrl(
+          'label',
+          state.labelIds.filter((value) => value !== id),
+        ),
+    })),
+  ];
 
   function replaceUrl(
     key: Parameters<typeof replaceSearchParam>[1],
@@ -210,34 +282,35 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
     (issues.isError && !issues.data);
   const title =
     mode === 'my' ? t('my.title') : t('team.title', { team: selectedTeam?.name ?? teamKey ?? '' });
-  const description =
-    mode === 'my'
-      ? t('my.description')
-      : t('team.description', { team: selectedTeam?.name ?? teamKey ?? '' });
-
   return (
-    <section className="min-w-0">
-      <PageHeading title={title} description={description} />
-
-      <div className="mt-4 flex justify-end gap-2">
-        {mode === 'team' && selectedTeam ? (
-          <Link
-            href={`/teams/${encodeURIComponent(selectedTeam.key)}/board${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
-            className={buttonVariants({ size: 'sm', variant: 'outline' })}
-          >
-            <LayoutGrid aria-hidden="true" data-icon="inline-start" />
-            {t('team.viewBoard')}
+    <section className="mx-auto w-full max-w-[96rem] min-w-0">
+      <header className="flex min-h-11 flex-wrap items-center gap-3 pb-2">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h1 className="text-xl leading-8 font-semibold tracking-[-0.01em]">{title}</h1>
+          <span aria-live="polite" className="text-muted-foreground text-sm tabular-nums">
+            {t('resultCount', { count: issueItems.length, more: issues.hasNextPage ? '+' : '' })}
+          </span>
+        </div>
+        <div className="ml-auto flex items-center gap-1">
+          {mode === 'team' && selectedTeam ? (
+            <Link
+              href={`/teams/${encodeURIComponent(selectedTeam.key)}/board${searchParams.toString() ? `?${searchParams.toString()}` : ''}`}
+              className={cn(buttonVariants({ size: 'sm', variant: 'ghost' }), 'h-11 sm:h-10')}
+            >
+              <LayoutGrid aria-hidden="true" data-icon="inline-start" />
+              {t('team.viewBoard')}
+            </Link>
+          ) : null}
+          <Link href={createHref} className={cn(buttonVariants({ size: 'sm' }), 'h-11 sm:h-10')}>
+            <Plus aria-hidden="true" data-icon="inline-start" />
+            {mode === 'my' ? t('createIssue') : t('create')}
           </Link>
-        ) : null}
-        <Link href={createHref} className={buttonVariants({ size: 'sm' })}>
-          <Plus aria-hidden="true" data-icon="inline-start" />
-          {mode === 'my' ? t('createIssue') : t('create')}
-        </Link>
-      </div>
+        </div>
+      </header>
 
       {mode === 'team' ? (
         <Tabs
-          className="mt-4"
+          className="mt-1"
           value={state.tab}
           onValueChange={(value) => {
             if (TEAM_ISSUE_TABS.includes(value as (typeof TEAM_ISSUE_TABS)[number])) {
@@ -253,13 +326,14 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
         </Tabs>
       ) : null}
 
-      <div className="mt-4 flex min-w-0 flex-wrap items-center gap-2 border-y py-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 py-2.5">
         <IssueFilterMenu
           emptyLabel={t('filters.noOptions')}
           label={t('filters.state')}
           onChange={(selected) => replaceUrl('status', selected)}
           options={workflowStateOptions}
           selected={state.stateIds}
+          variant="compact"
         />
         {mode === 'my' ? (
           <IssueFilterMenu
@@ -271,6 +345,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
               label: `${team.name} (${team.key})`,
             }))}
             selected={state.teamIds}
+            variant="compact"
           />
         ) : (
           <IssueFilterMenu
@@ -279,6 +354,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
             onChange={(selected) => replaceUrl('assignee', selected)}
             options={assigneeOptions}
             selected={state.assigneeIds}
+            variant="compact"
           />
         )}
         <IssueFilterMenu
@@ -286,10 +362,12 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           label={t('filters.priority')}
           onChange={(selected) => replaceUrl('priority', selected)}
           options={ISSUE_PRIORITIES.map((priority) => ({
+            ...ISSUE_PRIORITY_PRESENTATION[priority],
             id: priority,
             label: t(`priority.${priority}`),
           }))}
           selected={state.priority}
+          variant="compact"
         />
         <IssueFilterMenu
           emptyLabel={t('filters.noOptions')}
@@ -301,17 +379,9 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
             swatch: label.color,
           }))}
           selected={state.labelIds}
+          variant="compact"
         />
-        {filtersActive ? (
-          <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
-            <RotateCcw aria-hidden="true" data-icon="inline-start" />
-            {t('filters.reset')}
-          </Button>
-        ) : null}
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-muted-foreground hidden text-xs sm:inline">
-            {t('resultCount', { count: issueItems.length, more: issues.hasNextPage ? '+' : '' })}
-          </span>
           <Select
             items={ISSUE_SORT_FIELDS.map((sort) => ({
               label: t(`sort.${sort}`),
@@ -327,13 +397,17 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
               }
             }}
           >
-            <SelectTrigger size="sm" aria-label={t('sort.fieldLabel')}>
+            <SelectTrigger size="sm" variant="inline" aria-label={t('sort.fieldLabel')}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
               <SelectGroup>
                 {ISSUE_SORT_FIELDS.map((sort) => (
-                  <SelectItem key={sort} value={sort}>
+                  <SelectItem
+                    className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
+                    key={sort}
+                    value={sort}
+                  >
                     {t(`sort.${sort}`)}
                   </SelectItem>
                 ))}
@@ -355,13 +429,28 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
               }
             }}
           >
-            <SelectTrigger size="sm" aria-label={t('sort.directionLabel')}>
+            <SelectTrigger
+              size="sm"
+              variant="inline"
+              aria-label={`${t('sort.directionLabel')}: ${t(`sort.${state.sortDirection}`)}`}
+              title={t(`sort.${state.sortDirection}`)}
+              className="min-w-11 justify-center p-0 [&_[data-slot=select-value]]:sr-only [&>svg:last-child]:hidden"
+            >
+              {state.sortDirection === 'desc' ? (
+                <ArrowDown aria-hidden="true" />
+              ) : (
+                <ArrowUp aria-hidden="true" />
+              )}
               <SelectValue />
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
               <SelectGroup>
                 {ISSUE_SORT_DIRECTIONS.map((direction) => (
-                  <SelectItem key={direction} value={direction}>
+                  <SelectItem
+                    className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
+                    key={direction}
+                    value={direction}
+                  >
                     {t(`sort.${direction}`)}
                   </SelectItem>
                 ))}
@@ -370,6 +459,40 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           </Select>
         </div>
       </div>
+
+      {filterChips.length > 0 ? (
+        <div
+          role="group"
+          aria-label={t('filters.active')}
+          className="flex min-w-0 flex-wrap items-center gap-1.5 pb-2"
+        >
+          <span className="text-muted-foreground text-xs font-medium">{t('filters.active')}</span>
+          {filterChips.map((chip) => (
+            <Button
+              key={chip.key}
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="before:bg-muted/50 hover:before:bg-muted relative isolate h-11 max-w-full gap-1 bg-transparent px-2 text-xs font-normal before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-8 before:-translate-y-1/2 before:rounded-md hover:bg-transparent sm:h-10"
+              aria-label={t('filters.remove', { label: chip.label })}
+              onClick={chip.remove}
+            >
+              <span className="truncate">{chip.label}</span>
+              <X aria-hidden="true" data-icon="inline-end" />
+            </Button>
+          ))}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="hover:before:bg-muted/60 relative isolate h-11 bg-transparent px-2 text-xs before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-8 before:-translate-y-1/2 before:rounded-md before:bg-transparent hover:bg-transparent sm:h-10"
+            onClick={clearFilters}
+          >
+            <RotateCcw aria-hidden="true" data-icon="inline-start" />
+            {t('filters.reset')}
+          </Button>
+        </div>
+      ) : null}
 
       {initialError ? (
         <div className="py-6">
@@ -407,7 +530,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
             aria-hidden="true"
             className={
               mode === 'my'
-                ? 'text-muted-foreground hidden min-h-9 grid-cols-[minmax(12rem,1fr)_5.5rem_7.5rem_8rem_6.5rem_5.5rem] items-center gap-2 border-b px-2 text-xs font-medium lg:grid xl:grid-cols-[minmax(16rem,1fr)_7rem_8.5rem_9rem_7rem_6rem]'
+                ? 'text-muted-foreground hidden min-h-9 grid-cols-[minmax(12rem,1fr)_7rem_7.5rem_8rem_6.5rem_5.5rem] items-center gap-2 border-b px-2 text-xs font-medium lg:grid xl:grid-cols-[minmax(16rem,1fr)_8rem_8.5rem_9rem_7rem_6rem]'
                 : 'text-muted-foreground hidden min-h-9 grid-cols-[minmax(16rem,1fr)_8.5rem_9rem_7rem_6rem] items-center gap-2 border-b px-2 text-xs font-medium lg:grid'
             }
           >

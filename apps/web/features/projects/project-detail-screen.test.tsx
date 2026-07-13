@@ -210,27 +210,59 @@ describe('ProjectDetailScreen trash action', () => {
       status: 'IN_PROGRESS' as const,
     };
     const parentIssue = { id: 'feature-id', identifier: 'F-1', title: '병렬 이슈' };
+    const taskAssignee = {
+      id: 'membership-assignee',
+      role: 'MEMBER' as const,
+      status: 'ACTIVE' as const,
+      user: { avatarFileId: null, displayName: '김담당', id: 'user-assignee' },
+    };
     const common = {
       assignee: null,
       blocked: false,
       createdAt: '2026-07-12T00:00:00.000Z',
-      labels: [],
-      priority: 'NONE' as const,
+      createdBy: {
+        id: 'membership-creator',
+        role: 'MEMBER' as const,
+        status: 'ACTIVE' as const,
+        user: { avatarFileId: null, displayName: '작성자', id: 'user-creator' },
+      },
+      labels: [
+        { archived: false, color: '#72A7F2', id: 'label-1', name: '퍼렁퍼렁' },
+        { archived: false, color: '#9A8CF2', id: 'label-2', name: '라벤더' },
+        { archived: false, color: '#45C46B', id: 'label-3', name: '완료 조건' },
+      ],
+      priority: 'HIGH' as const,
       project: projectSummary,
       updatedAt: '2026-07-12T00:00:00.000Z',
       version: 1,
+      workflowSummary: null,
     };
     const feature = {
       ...common,
       id: parentIssue.id,
       identifier: parentIssue.identifier,
       parentIssue: null,
-      progress: { completed: 0, percentage: 0, total: 2 },
+      progress: { completed: 1, percentage: 50, total: 2 },
       projectRole: null,
       status: { category: 'BACKLOG', featureStatus: 'IN_PROGRESS', workflowState: null },
       team: null,
       title: parentIssue.title,
       type: 'FEATURE',
+      workflowSummary: {
+        activeRoles: ['BACKEND', 'APP_FRONTEND'],
+        activeRoleTeams: [
+          { projectRole: 'BACKEND', team: apiTeam, unassignedCount: 1 },
+          { projectRole: 'APP_FRONTEND', team: appTeam, unassignedCount: 1 },
+        ],
+        allTargetTasksCompleted: false,
+        canceledCount: 0,
+        completedCount: 0,
+        currentUserAssignedTeamTasks: [],
+        currentUserTeamRoles: [],
+        teamTaskCount: 2,
+        unassignedCount: 2,
+        waitingOn: [],
+      },
     } satisfies IssueSummaryResponseDto;
     const task = (
       id: string,
@@ -240,6 +272,7 @@ describe('ProjectDetailScreen trash action', () => {
     ) =>
       ({
         ...common,
+        assignee: taskAssignee,
         id,
         identifier,
         parentIssue,
@@ -297,5 +330,21 @@ describe('ProjectDetailScreen trash action', () => {
 
     expect(screen.getByText('현재 작업 · 백엔드 · 앱 프론트')).toBeVisible();
     expect(screen.queryByText(messages.Projects.issues.expectedStage)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('progressbar', { name: messages.Projects.progress.label }),
+    ).toHaveAttribute('aria-valuenow', '50');
+    const featureCard = screen
+      .getByRole('link', { name: /F-1.*병렬 이슈/ })
+      .closest('[data-slot="card"]');
+    expect(featureCard?.querySelector('.lucide-circle-dot-dashed')).toBeInTheDocument();
+    const taskRow = screen.getByRole('link', { name: /API-1.*작업/ }).closest('article');
+    if (!taskRow) throw new Error('project task row missing');
+    expect(taskRow.querySelector('.lucide-circle')).toBeInTheDocument();
+    expect(taskRow.querySelector('.lucide-signal-high')).toBeInTheDocument();
+    expect(within(taskRow).getByText(messages.Projects.priority.HIGH)).toBeVisible();
+    expect(within(taskRow).getByText('김담당')).toBeVisible();
+    expect(within(taskRow).getByText('퍼렁퍼렁')).toBeVisible();
+    expect(within(taskRow).getByText('라벤더')).toBeVisible();
+    expect(within(taskRow).getByText('+1')).toBeVisible();
   });
 });

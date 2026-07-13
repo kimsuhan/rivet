@@ -65,6 +65,7 @@ export default async function WorkspaceLayout({
               inboxUnread: shell.raw('inboxUnread') as string,
               skipToContent: shell('skipToContent'),
               navigation: {
+                issues: navigation('issues'),
                 myIssues: navigation('myIssues'),
                 inbox: navigation('inbox'),
                 teams: navigation('teams'),

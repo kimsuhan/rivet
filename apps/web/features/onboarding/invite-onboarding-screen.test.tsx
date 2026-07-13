@@ -52,7 +52,7 @@ const labels = {
   submitting: '초대를 보내는 중입니다.',
   teamStep: '기본 팀',
   title: '동료 초대',
-  toMyIssues: '내 이슈로 이동',
+  toMyIssues: '내 작업으로 이동',
   workspaceStep: '워크스페이스',
 };
 

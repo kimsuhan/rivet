@@ -1,7 +1,7 @@
 'use client';
 
 import type { QueryKey } from '@tanstack/react-query';
-import { AlertCircle, RotateCcw } from 'lucide-react';
+import { AlertCircle, RotateCcw, UserRound } from 'lucide-react';
 
 import type {
   IssueLabelSummaryResponseDto,
@@ -18,8 +18,13 @@ import { Button } from '@/components/ui/button';
 import { Link } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
+import {
+  ISSUE_PRIORITY_PRESENTATION,
+  WORKFLOW_STATE_PRESENTATION,
+} from './issue-attribute-presentation';
 import { IssueFilterMenu } from './issue-filter-menu';
 import { IssueInlineSelect } from './issue-inline-select';
+import { IssueLabelChips } from './issue-label-chips';
 import { ISSUE_PRIORITIES, type IssueListMode } from './issue-list-state';
 import { useIssueInlineMutation } from './issue-mutations';
 import type { TeamTaskIssue } from './issue-types';
@@ -32,6 +37,7 @@ export type IssueRowLabels = {
   noLabels: string;
   priorities: Record<(typeof ISSUE_PRIORITIES)[number], string>;
   priority: string;
+  projectRoles: Record<'APP_FRONTEND' | 'BACKEND' | 'WEB_FRONTEND', string>;
   reapply: string;
   retry: string;
   state: string;
@@ -128,7 +134,7 @@ export function IssueRow({
   const stateOptions = uniqueById([
     issue.status.workflowState,
     ...workflowStates.map(toIssueState),
-  ]);
+  ]).sort((left, right) => left.position - right.position);
   const memberOptions = uniqueById([
     ...(issue.assignee ? [issue.assignee] : []),
     ...members.map(toIssueMember),
@@ -151,27 +157,37 @@ export function IssueRow({
   }
 
   function stateEditor(className?: string) {
+    const currentState = issue.status.workflowState;
     return (
-      <div className={className}>
+      <div className={cn('pointer-events-auto relative z-10', className)}>
         <IssueInlineSelect
-          ariaLabel={`${issue.identifier} ${labels.state}`}
+          appearance="compact"
+          ariaLabel={`${issue.identifier} ${labels.state}: ${currentState.name}`}
+          busy={isPending && mutation.variables?.change.kind === 'workflowState'}
           disabled={isPending}
           onValueChange={(stateId) => {
             const state = stateOptions.find((candidate) => candidate.id === stateId);
             if (state) mutation.mutate({ change: { kind: 'workflowState', value: state }, issue });
           }}
-          options={stateOptions.map((state) => ({ label: state.name, value: state.id }))}
-          value={issue.status.workflowState.id}
+          options={stateOptions.map((state) => ({
+            ...WORKFLOW_STATE_PRESENTATION[state.category],
+            label: state.name,
+            value: state.id,
+          }))}
+          value={currentState.id}
         />
       </div>
     );
   }
 
   function assigneeEditor(className?: string) {
+    const currentAssignee = issue.assignee?.user.displayName ?? labels.unassigned;
     return (
-      <div className={className}>
+      <div className={cn('pointer-events-auto relative z-10', className)}>
         <IssueInlineSelect
-          ariaLabel={`${issue.identifier} ${labels.assignee}`}
+          appearance="compact"
+          ariaLabel={`${issue.identifier} ${labels.assignee}: ${currentAssignee}`}
+          busy={isPending && mutation.variables?.change.kind === 'assignee'}
           disabled={isPending}
           onValueChange={(memberId) => {
             const assignee =
@@ -181,8 +197,15 @@ export function IssueRow({
             mutation.mutate({ change: { kind: 'assignee', value: assignee }, issue });
           }}
           options={[
-            { label: labels.unassigned, value: 'unassigned' },
+            {
+              icon: UserRound,
+              iconClassName: 'text-muted-foreground',
+              label: labels.unassigned,
+              value: 'unassigned',
+            },
             ...memberOptions.map((member) => ({
+              icon: UserRound,
+              iconClassName: 'text-muted-foreground',
               label: member.user.displayName,
               value: member.id,
             })),
@@ -194,10 +217,13 @@ export function IssueRow({
   }
 
   function priorityEditor(className?: string) {
+    const currentPriority = labels.priorities[issue.priority];
     return (
-      <div className={className}>
+      <div className={cn('pointer-events-auto relative z-10', className)}>
         <IssueInlineSelect
-          ariaLabel={`${issue.identifier} ${labels.priority}`}
+          appearance="compact"
+          ariaLabel={`${issue.identifier} ${labels.priority}: ${currentPriority}`}
+          busy={isPending && mutation.variables?.change.kind === 'priority'}
           disabled={isPending}
           onValueChange={(priority) => {
             if (ISSUE_PRIORITIES.includes(priority as (typeof ISSUE_PRIORITIES)[number])) {
@@ -211,6 +237,7 @@ export function IssueRow({
             }
           }}
           options={ISSUE_PRIORITIES.map((priority) => ({
+            ...ISSUE_PRIORITY_PRESENTATION[priority],
             label: labels.priorities[priority],
             value: priority,
           }))}
@@ -220,11 +247,12 @@ export function IssueRow({
     );
   }
 
-  function labelsEditor(className?: string, compact = false) {
+  function labelsEditor(className?: string, interactionOnly = false) {
     return (
-      <div className={cn('min-w-0', className)}>
+      <div className={cn('pointer-events-auto relative z-10 min-w-0', className)}>
         <IssueFilterMenu
-          ariaLabel={`${issue.identifier} ${labels.labels}`}
+          ariaLabel={`${issue.identifier} ${labels.labels}: ${issue.labels.map((label) => label.name).join(', ') || labels.noLabels}`}
+          busy={isPending && mutation.variables?.change.kind === 'labels'}
           disabled={isPending}
           emptyLabel={labels.noLabels}
           label={labels.labels}
@@ -234,8 +262,13 @@ export function IssueRow({
             label: label.name,
             swatch: label.color,
           }))}
+          presentation="popover"
           selected={issue.labels.map((label) => label.id)}
-          {...(compact ? { triggerClassName: 'h-6 border-transparent px-1.5 text-xs' } : {})}
+          triggerClassName={cn(
+            'border-transparent bg-transparent px-1.5 text-xs [&>span]:sr-only',
+            interactionOnly &&
+              'pointer-events-none opacity-0 data-popup-open:pointer-events-auto data-popup-open:opacity-100 group-focus-within/issue-row:pointer-events-auto group-focus-within/issue-row:opacity-100 group-hover/issue-row:pointer-events-auto group-hover/issue-row:opacity-100',
+          )}
         />
       </div>
     );
@@ -248,7 +281,13 @@ export function IssueRow({
     >
       <AlertCircle aria-hidden="true" className="text-warning size-4 shrink-0" />
       <span className="min-w-0 flex-1">{labels.conflictDescription}</span>
-      <Button type="button" variant="outline" size="xs" onClick={mutation.reapplyConflict}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        className="hover:before:bg-muted/60 relative isolate min-h-11 bg-transparent px-2 before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-8 before:-translate-y-1/2 before:rounded-md before:bg-transparent hover:bg-transparent lg:min-h-10"
+        onClick={mutation.reapplyConflict}
+      >
         <RotateCcw aria-hidden="true" data-icon="inline-start" />
         {labels.reapply}
       </Button>
@@ -260,7 +299,13 @@ export function IssueRow({
     >
       <AlertCircle aria-hidden="true" className="size-4 shrink-0" />
       <span className="min-w-0 flex-1">{labels.errorDescription}</span>
-      <Button type="button" variant="outline" size="xs" onClick={mutation.retry}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        className="hover:before:bg-muted/60 relative isolate min-h-11 bg-transparent px-2 before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-8 before:-translate-y-1/2 before:rounded-md before:bg-transparent hover:bg-transparent lg:min-h-10"
+        onClick={mutation.retry}
+      >
         <RotateCcw aria-hidden="true" data-icon="inline-start" />
         {labels.retry}
       </Button>
@@ -268,111 +313,93 @@ export function IssueRow({
   ) : null;
 
   return (
-    <li className="border-b" aria-busy={isPending || undefined}>
-      <div
-        className={cn(
-          'hidden min-h-14 items-center gap-2 px-2 py-1.5 lg:grid',
-          mode === 'my'
-            ? 'grid-cols-[minmax(12rem,1fr)_5.5rem_7.5rem_8rem_6.5rem_5.5rem] xl:grid-cols-[minmax(16rem,1fr)_7rem_8.5rem_9rem_7rem_6rem]'
-            : 'grid-cols-[minmax(16rem,1fr)_8.5rem_9rem_7rem_6rem]',
-        )}
-      >
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-baseline gap-2">
-            <span className="text-muted-foreground shrink-0 font-mono text-xs">
-              {issue.identifier}
-            </span>
-            <Link
-              href={`/issues/${encodeURIComponent(issue.identifier)}`}
-              className="hover:text-primary min-w-0 truncate text-sm font-medium underline-offset-4 hover:underline"
-            >
-              {issue.title}
-            </Link>
-          </div>
-          <div className="mt-1 flex min-w-0 items-center gap-1">
-            <div className="flex min-w-0 gap-1 overflow-hidden">
-              {issue.labels.slice(0, 2).map((label) => (
-                <Badge key={label.id} variant="outline" className="max-w-28 truncate px-1.5">
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: label.color }}
-                  />
-                  {label.name}
-                </Badge>
-              ))}
-              {issue.labels.length > 2 ? (
-                <span className="text-muted-foreground text-xs">+{issue.labels.length - 2}</span>
-              ) : null}
-            </div>
-            {labelsEditor('ml-auto shrink-0', true)}
-          </div>
-        </div>
-        {mode === 'my' ? (
-          <span className="text-muted-foreground truncate px-1.5 text-xs" title={issue.team.name}>
-            {issue.team.key}
-          </span>
-        ) : null}
-        {stateEditor()}
-        {assigneeEditor()}
-        {priorityEditor()}
-        <time
-          className="text-muted-foreground px-1.5 text-right text-xs"
-          dateTime={issue.updatedAt}
-          title={updatedAt.full}
+    <li
+      className="group/issue-row border-border/60 hover:bg-muted/40 focus-within:bg-muted/20 border-b transition-colors"
+      aria-busy={isPending || undefined}
+    >
+      <div className="relative">
+        <Link
+          href={`/issues/${encodeURIComponent(issue.identifier)}`}
+          aria-label={issue.title}
+          className="focus-visible:ring-ring/50 absolute inset-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-inset"
+        />
+        <div
+          className={cn(
+            'pointer-events-none hidden min-h-14 items-center gap-2 px-2 py-1.5 lg:grid',
+            mode === 'my'
+              ? 'grid-cols-[minmax(12rem,1fr)_7rem_7.5rem_8rem_6.5rem_5.5rem] xl:grid-cols-[minmax(16rem,1fr)_8rem_8.5rem_9rem_7rem_6rem]'
+              : 'grid-cols-[minmax(16rem,1fr)_8.5rem_9rem_7rem_6rem]',
+          )}
         >
-          {updatedAt.short}
-        </time>
-      </div>
-
-      <article className="min-h-18 px-3 py-3 lg:hidden">
-        <div className="flex min-w-0 items-start gap-2">
-          <span className="text-muted-foreground shrink-0 pt-0.5 font-mono text-xs">
-            {issue.identifier}
-          </span>
-          <Link
-            href={`/issues/${encodeURIComponent(issue.identifier)}`}
-            className="min-w-0 flex-1 text-sm leading-5 font-medium underline-offset-4 hover:underline"
-          >
-            {issue.title}
-          </Link>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="text-muted-foreground shrink-0 font-mono text-xs">
+                {issue.identifier}
+              </span>
+              <span className="min-w-0 truncate text-sm font-medium">{issue.title}</span>
+            </div>
+            <div className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1 text-xs">
+              {issue.project ? (
+                <span className="max-w-32 truncate">{issue.project.name}</span>
+              ) : null}
+              {issue.parentIssue ? (
+                <span className="max-w-24 truncate">{issue.parentIssue.identifier}</span>
+              ) : null}
+              <IssueLabelChips emptyLabel={labels.noLabels} labels={issue.labels} />
+              {labelOptions.length > 0 ? labelsEditor('ml-auto shrink-0', true) : null}
+            </div>
+          </div>
+          {mode === 'my' ? (
+            <span className="text-muted-foreground truncate px-1 text-xs" title={issue.team.name}>
+              {issue.team.key}
+              {issue.projectRole ? ` · ${labels.projectRoles[issue.projectRole]}` : ''}
+            </span>
+          ) : null}
+          {stateEditor()}
+          {assigneeEditor()}
+          {priorityEditor()}
           <time
-            className="text-muted-foreground shrink-0 text-xs"
+            className="text-muted-foreground px-1 text-right text-xs"
             dateTime={issue.updatedAt}
             title={updatedAt.full}
           >
             {updatedAt.short}
           </time>
         </div>
-        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
-          {mode === 'my' ? (
-            <Badge variant="outline" title={issue.team.name}>
-              {issue.team.key}
-            </Badge>
-          ) : null}
-          {stateEditor('max-w-36')}
-          {assigneeEditor('max-w-40')}
-          {priorityEditor('max-w-28')}
-          {labelsEditor('max-w-36')}
-        </div>
-        {issue.labels.length > 0 ? (
-          <div className="mt-2 flex min-w-0 flex-wrap gap-1">
-            {issue.labels.slice(0, 3).map((label) => (
-              <Badge key={label.id} variant="outline" className="max-w-32 truncate">
-                <span
-                  aria-hidden="true"
-                  className="size-1.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: label.color }}
-                />
-                {label.name}
-              </Badge>
-            ))}
-            {issue.labels.length > 3 ? (
-              <span className="text-muted-foreground text-xs">+{issue.labels.length - 3}</span>
-            ) : null}
+
+        <article className="pointer-events-none min-h-18 px-3 py-3 lg:hidden">
+          <div className="flex min-w-0 items-start gap-2">
+            <span className="text-muted-foreground shrink-0 pt-0.5 font-mono text-xs">
+              {issue.identifier}
+            </span>
+            <span className="min-w-0 flex-1 text-sm leading-5 font-medium">{issue.title}</span>
+            <time
+              className="text-muted-foreground shrink-0 text-xs"
+              dateTime={issue.updatedAt}
+              title={updatedAt.full}
+            >
+              {updatedAt.short}
+            </time>
           </div>
-        ) : null}
-      </article>
+          <div className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1 text-xs">
+            {issue.project ? <span className="max-w-40 truncate">{issue.project.name}</span> : null}
+            {issue.parentIssue ? <span>{issue.parentIssue.identifier}</span> : null}
+            <IssueLabelChips emptyLabel={labels.noLabels} labels={issue.labels} limit={1} />
+          </div>
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+            {mode === 'my' ? (
+              <Badge variant="outline" title={issue.team.name}>
+                {issue.team.key}
+                {issue.projectRole ? ` · ${labels.projectRoles[issue.projectRole]}` : ''}
+              </Badge>
+            ) : null}
+            {stateEditor('max-w-36')}
+            {assigneeEditor('max-w-40')}
+            {priorityEditor('max-w-28')}
+            {labelOptions.length > 0 ? labelsEditor(undefined, true) : null}
+          </div>
+        </article>
+      </div>
       {notice}
     </li>
   );

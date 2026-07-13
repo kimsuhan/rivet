@@ -250,7 +250,7 @@
       "alreadyInvited": "이미 초대됨",
       "failed": "보내지 못함",
       "firstIssue": "첫 이슈 만들기",
-      "toMyIssues": "내 이슈로 이동",
+      "toMyIssues": "내 작업으로 이동",
       "errorTitle": "초대를 보내지 못했습니다",
       "errorDescription": "입력한 이메일을 유지했습니다. 잠시 후 다시 시도해 주세요."
     }
@@ -336,7 +336,8 @@
     "unknownType": "알 수 없는 형식"
   },
   "Navigation": {
-    "myIssues": "내 이슈",
+    "issues": "이슈",
+    "myIssues": "내 작업",
     "inbox": "알림함",
     "teams": "팀",
     "projects": "프로젝트",
@@ -349,7 +350,7 @@
     "label": "검색어",
     "placeholder": "이슈 ID 또는 제목 검색",
     "emptyTitle": "검색어를 입력하세요",
-    "emptyDescription": "찾으려는 기능 이슈나 팀 작업의 표시 ID 또는 제목을 입력하세요.",
+    "emptyDescription": "찾으려는 이슈나 팀 작업의 표시 ID 또는 제목을 입력하세요.",
     "minimumTitle": "두 글자 이상 입력하세요",
     "minimumDescription": "제목 부분 검색은 두 글자부터 시작합니다.",
     "loading": "이슈를 검색하는 중입니다.",
@@ -364,7 +365,7 @@
     "loadingMore": "결과를 더 불러오는 중",
     "loadMoreError": "결과를 더 불러오지 못했습니다.",
     "exactMatch": "ID 일치",
-    "feature": "기능 이슈",
+    "feature": "이슈",
     "teamTask": "팀 작업",
     "noProject": "프로젝트 없음",
     "roles": {
@@ -378,7 +379,7 @@
       "IN_PROGRESS": "진행 중",
       "REVIEW": "검토",
       "DONE": "완료",
-      "PAUSED": "보류",
+      "PAUSED": "일시 중지",
       "CANCELED": "취소"
     },
     "stateCategories": {
@@ -474,7 +475,7 @@
     "teamTaskSubmit": "팀 작업 만들기",
     "teamTaskSubmitting": "팀 작업을 만드는 중입니다.",
     "teamTaskType": "팀 작업",
-    "featureType": "기능 이슈",
+    "featureType": "이슈",
     "projectLabel": "프로젝트",
     "projectPlaceholder": "프로젝트 선택",
     "projectRequired": "프로젝트를 선택해 주세요.",
@@ -487,10 +488,10 @@
       "WEB_FRONTEND": "웹 프론트",
       "APP_FRONTEND": "앱 프론트"
     },
-    "parentLabel": "상위 기능 이슈",
-    "parentPlaceholder": "상위 기능 이슈 선택",
-    "parentProjectMismatch": "선택한 프로젝트와 같은 프로젝트의 상위 기능 이슈를 다시 선택하거나 연결을 해제해 주세요.",
-    "noParent": "상위 기능 이슈 없음",
+    "parentLabel": "상위 이슈",
+    "parentPlaceholder": "상위 이슈 선택",
+    "parentProjectMismatch": "선택한 프로젝트와 같은 프로젝트의 상위 이슈를 다시 선택하거나 연결을 해제해 주세요.",
+    "noParent": "상위 이슈 없음",
     "teamLabel": "팀",
     "teamPlaceholder": "팀 선택",
     "teamRequired": "팀을 선택해 주세요.",
@@ -562,7 +563,7 @@
       "permissionDescription": "워크스페이스 관리자에게 필요한 변경을 요청해 주세요.",
       "desktopTitle": "설정은 데스크톱에서 사용할 수 있습니다",
       "desktopDescription": "넓은 화면에서 워크스페이스 설정과 데이터 복구를 안전하게 관리해 주세요.",
-      "backToWork": "내 이슈로 돌아가기"
+      "backToWork": "내 작업으로 돌아가기"
     },
     "members": {
       "title": "멤버",
@@ -964,11 +965,11 @@
     "errorDescription": "잠시 후 다시 시도해 주세요.",
     "notFoundTitle": "이슈를 찾을 수 없습니다",
     "notFoundDescription": "삭제되었거나 이 워크스페이스에서 접근할 수 없는 이슈입니다.",
-    "backToMyIssues": "내 이슈로 이동",
+    "backToMyIssues": "내 작업으로 이동",
     "retry": "다시 시도",
     "cancel": "취소",
     "teamTask": "팀 작업",
-    "feature": "기능 이슈",
+    "feature": "이슈",
     "blocked": "선행 작업 완료 대기",
     "invalidContractTitle": "이슈 정보를 표시할 수 없습니다",
     "invalidContractDescription": "이슈 유형과 속성이 일치하지 않습니다. 새로고침한 뒤 다시 시도해 주세요.",
@@ -980,7 +981,7 @@
     "saveErrorTitle": "변경을 저장하지 못했습니다",
     "saveErrorDescription": "변경 전 상태로 되돌렸습니다. 입력을 확인한 뒤 다시 시도해 주세요.",
     "projectImmutableErrorTitle": "프로젝트 연결을 변경할 수 없습니다",
-    "projectImmutableErrorDescription": "프로젝트 연결 변경을 취소했습니다. 기능 이슈와 하위 작업의 프로젝트 연결은 개별적으로 변경할 수 없습니다. 최신 상태를 확인해 주세요.",
+    "projectImmutableErrorDescription": "프로젝트 연결 변경을 취소했습니다. 이슈와 하위 작업의 프로젝트 연결은 개별적으로 변경할 수 없습니다. 최신 상태를 확인해 주세요.",
     "refreshLatest": "최신 상태 다시 불러오기",
     "collaborationMembersErrorTitle": "멘션할 멤버를 불러오지 못했습니다",
     "collaborationMembersErrorDescription": "설명과 댓글은 계속 작성할 수 있지만 멘션 후보는 다시 불러와야 합니다.",
@@ -993,7 +994,7 @@
       "conflictTitle": "이슈가 이미 변경되었습니다",
       "conflictDescription": "최신 이슈를 다시 불러왔습니다. 변경 내용을 확인한 뒤 다시 시도해 주세요.",
       "childrenTitle": "하위 팀 작업이 있어 이동할 수 없습니다",
-      "childrenDescription": "하위 팀 작업을 다른 기능 이슈로 옮기거나 먼저 휴지통으로 이동한 뒤 다시 시도해 주세요.",
+      "childrenDescription": "하위 팀 작업을 다른 이슈로 옮기거나 먼저 휴지통으로 이동한 뒤 다시 시도해 주세요.",
       "blocksTitle": "이 작업 다음에 시작할 작업이 있어 이동할 수 없습니다",
       "blocksDescription": "현재 작업과 연결된 작업 순서를 삭제한 뒤 다시 시도해 주세요.",
       "openChildren": "하위 팀 작업 확인",
@@ -1284,11 +1285,228 @@
       "reapply": "내 변경 다시 적용"
     }
   },
+  "FeatureIssues": {
+    "title": "이슈",
+    "description": "워크스페이스 전체 이슈를 접수하고 검토·분류한 뒤 팀 작업을 시작합니다.",
+    "resultCount": "{count}개",
+    "create": "이슈 만들기",
+    "retry": "다시 시도",
+    "loading": "이슈 목록을 불러오는 중입니다.",
+    "search": {
+      "label": "이슈 검색",
+      "placeholder": "표시 ID 또는 제목 검색",
+      "clear": "검색 초기화"
+    },
+    "queues": {
+      "label": "빠른 필터",
+      "optionLabel": "{queue} {count}개",
+      "currentLabel": "빠른 필터: {queue} {count}개",
+      "ALL": "전체",
+      "REVIEW_REQUIRED": "검토 필요",
+      "ASSIGNMENT_REQUIRED": "담당 필요",
+      "IN_PROGRESS": "진행 중",
+      "COMPLETION_REQUIRED": "완료 확인",
+      "COMPLETED": "완료"
+    },
+    "filters": {
+      "detail": "세부 필터",
+      "detailCount": "세부 필터 {count}",
+      "active": "활성 필터",
+      "chip": "{name}: {value}",
+      "dateFromChip": "{name} 시작: {value}",
+      "dateToChip": "{name} 종료: {value}",
+      "removeChip": "{label} 필터 제거",
+      "clearDetails": "세부 필터 전체 초기화",
+      "title": "세부 필터",
+      "description": "같은 필터 안에서는 하나 이상, 서로 다른 필터 사이는 모두 만족하는 이슈를 찾습니다.",
+      "close": "세부 필터 닫기",
+      "reset": "필터 초기화",
+      "project": "프로젝트",
+      "status": "이슈 상태",
+      "priority": "우선순위",
+      "activeRole": "현재 작업 역할",
+      "unassigned": "담당자 없음",
+      "label": "라벨",
+      "createdBy": "만든 사람",
+      "createdRange": "생성일 범위",
+      "updatedRange": "최근 수정일 범위",
+      "from": "시작일",
+      "to": "종료일",
+      "noOptions": "선택할 항목이 없습니다.",
+      "optionsErrorTitle": "필터 항목을 불러오지 못했습니다",
+      "optionsErrorDescription": "목록은 계속 사용할 수 있습니다. 필요한 필터 항목만 다시 불러와 주세요."
+    },
+    "sort": {
+      "field": "정렬 기준",
+      "direction": "정렬 방향",
+      "currentDirection": "정렬 방향: {direction}",
+      "updatedAt": "최근 수정일",
+      "createdAt": "생성일",
+      "status": "상태",
+      "priority": "우선순위",
+      "progress": "진행률",
+      "asc": "오름차순",
+      "desc": "내림차순"
+    },
+    "error": {
+      "title": "이슈 목록을 불러오지 못했습니다",
+      "description": "현재 필터와 정렬은 유지했습니다. 잠시 후 다시 시도해 주세요."
+    },
+    "empty": {
+      "initial": "아직 등록된 이슈가 없습니다",
+      "review": "검토를 기다리는 이슈가 없습니다",
+      "assignment": "담당자가 필요한 작업이 없습니다",
+      "filtered": "조건에 맞는 이슈가 없습니다",
+      "description": "다른 조건을 선택하거나 전체 이슈를 확인해 주세요.",
+      "showAll": "전체 이슈 보기",
+      "create": "첫 이슈 만들기"
+    },
+    "columns": {
+      "issue": "이슈",
+      "project": "프로젝트",
+      "statusPriority": "상태 · 우선순위",
+      "status": "상태",
+      "priority": "우선순위",
+      "labels": "라벨",
+      "currentWork": "현재 작업",
+      "progress": "진행",
+      "createdBy": "만든 사람",
+      "updatedAt": "업데이트",
+      "nextAction": "다음 행동"
+    },
+    "roles": {
+      "BACKEND": "백엔드",
+      "WEB_FRONTEND": "웹 프론트",
+      "APP_FRONTEND": "앱 프론트"
+    },
+    "statuses": {
+      "UNSORTED": "미분류",
+      "TODO": "할 일",
+      "IN_PROGRESS": "진행 중",
+      "REVIEW": "검토",
+      "DONE": "완료",
+      "PAUSED": "일시 중지",
+      "CANCELED": "취소"
+    },
+    "priorities": {
+      "NONE": "없음",
+      "LOW": "낮음",
+      "MEDIUM": "보통",
+      "HIGH": "높음",
+      "URGENT": "긴급"
+    },
+    "row": {
+      "analysis": "분석 중 · 시작 팀 없음",
+      "waitingOn": "{identifier} 완료 대기",
+      "waitingOnMore": "{identifier} 외 {count}개 완료 대기",
+      "allComplete": "모든 팀 작업 완료",
+      "noActiveWork": "진행할 팀 작업 없음",
+      "parallel": "{roles} 병렬 진행",
+      "parallelMore": "{role} 외 {count}개 병렬 진행",
+      "assignmentRequired": "{role} 담당 필요",
+      "inProgress": "{role} 진행 중",
+      "activeTeam": "{role} · {team}",
+      "activeTeamMore": "{role} · {team} 외 {count}개",
+      "work": "팀 작업",
+      "noProject": "프로젝트 없음",
+      "unassigned": "담당 필요 {count}개",
+      "progress": "완료 {completed} / {total} · {percentage}%"
+    },
+    "actions": {
+      "START_WORK": "작업 시작",
+      "ASSIGN_TEAM_TASKS": "담당자 지정",
+      "START_FROM_MY_TEAM": "우리 팀에서 시작",
+      "START_ROLE_WORK": "{role} 작업 시작",
+      "OPEN_MY_WORK": "내 작업 열기",
+      "COMPLETE_ISSUE": "이슈 완료",
+      "VIEW_DETAIL": "상세 보기",
+      "CLAIM": "내가 맡기",
+      "more": "더보기",
+      "moreForIssue": "{identifier} 이슈 작업 더보기"
+    },
+    "inline": {
+      "currentValue": "{identifier} {property}: {value}",
+      "conflict": "다른 변경이 먼저 저장되었습니다. 최신 값을 확인한 뒤 다시 적용해 주세요.",
+      "error": "변경하지 못했습니다. 이전 값으로 되돌렸습니다.",
+      "reapply": "다시 적용"
+    },
+    "pagination": {
+      "first": "첫 페이지",
+      "next": "다음 이슈"
+    },
+    "actionsDialog": {
+      "close": "작업 창 닫기",
+      "cancel": "취소",
+      "loading": "최신 작업과 담당자 후보를 불러오는 중입니다.",
+      "roles": "프로젝트 역할",
+      "existingTask": "기존 작업 재사용",
+      "unassigned": "담당자 없음",
+      "assigneeForRole": "{role} 담당자",
+      "selectRole": "역할 선택",
+      "selectAssignee": "담당자 선택",
+      "optionsErrorTitle": "작업 정보와 담당자 후보를 불러오지 못했습니다",
+      "optionsErrorDescription": "현재 선택은 유지했습니다. 최신 정보를 다시 불러와 주세요.",
+      "errorTitle": "변경을 저장하지 못했습니다",
+      "conflictTitle": "다른 배정이 먼저 저장되었습니다",
+      "errors": {
+        "default": "최신 작업과 담당자 후보를 확인한 뒤 다시 시도해 주세요.",
+        "roleRequired": "하나 이상의 역할을 선택해 주세요.",
+        "claimTargetRequired": "맡을 팀 작업을 선택해 주세요.",
+        "assignmentRequired": "한 개 이상의 팀 작업에 담당자를 선택해 주세요.",
+        "assignmentCandidateChanged": "사용할 수 없게 된 담당자 선택이 있습니다. 최신 후보에서 다시 선택해 주세요.",
+        "completionNotReady": "최신 작업 기준으로 완료되지 않은 팀 작업이 있거나 이슈 상태가 변경되었습니다. 목록을 확인한 뒤 다시 시도해 주세요."
+      },
+      "start": {
+        "title": "작업 시작",
+        "description": "역할별 팀 작업을 만들거나 기존 미완료 작업을 재사용하고 담당자를 함께 지정합니다.",
+        "roleDescription": "하나 이상의 역할을 선택하세요. 담당자를 비워 둘 수 있습니다."
+      },
+      "teamStart": {
+        "title": "우리 팀에서 시작",
+        "description": "현재 소속된 팀의 프로젝트 역할에서 담당자 없이 작업을 시작합니다.",
+        "roleDescription": "현재 소속 팀이 맡은 역할 중 아직 미완료 작업이 없는 역할만 선택할 수 있습니다."
+      },
+      "claim": {
+        "title": "내가 맡기",
+        "description": "현재 소속 팀 역할의 미할당 작업을 맡거나 새 작업을 만들어 자신에게 할당합니다.",
+        "target": "팀 작업",
+        "targetPlaceholder": "맡을 팀 작업 선택",
+        "reuse": "{identifier} 미할당 작업을 자신에게 할당합니다.",
+        "create": "이 역할의 작업이 없어 새 팀 작업을 만들고 자신에게 할당합니다."
+      },
+      "assign": {
+        "title": "담당자 지정",
+        "description": "한 이슈의 여러 미할당 팀 작업에 담당자를 한 번에 지정합니다.",
+        "tasks": "미할당 팀 작업",
+        "taskDescription": "저장할 작업만 담당자를 선택하세요. 한 건이라도 충돌하면 모두 저장하지 않습니다.",
+        "assignee": "{identifier} 담당자",
+        "currentAssignee": "현재 담당자: {name}",
+        "previousSelection": "저장 전 선택: {name}",
+        "candidateUnavailable": "{name}님은 더 이상 이 팀의 활성 후보가 아닙니다. 새 담당자를 선택해 주세요.",
+        "candidateCount": "현재 활성 후보 {count}명"
+      },
+      "complete": {
+        "title": "이슈 완료",
+        "description": "완료된 역할과 팀 작업, 제외된 취소 작업을 확인한 뒤 이슈를 완료합니다.",
+        "notReadyTitle": "이슈를 바로 완료할 수 없습니다",
+        "roles": "완료된 역할",
+        "tasks": "완료된 팀 작업",
+        "canceled": "완료 대상에서 제외된 취소 작업"
+      },
+      "submit": {
+        "START_WORK": "작업 시작",
+        "START_FROM_MY_TEAM": "우리 팀에서 시작",
+        "CLAIM": "내가 맡기",
+        "ASSIGN_TEAM_TASKS": "담당자 지정",
+        "COMPLETE_ISSUE": "이슈 완료"
+      }
+    }
+  },
   "Issues": {
     "my": {
-      "title": "내 이슈",
+      "title": "내 작업",
       "description": "나에게 할당된 미완료 팀 작업을 확인합니다.",
-      "emptyTitle": "할당된 이슈가 없습니다",
+      "emptyTitle": "할당된 작업이 없습니다",
       "emptyDescription": "새로 할당된 팀 작업이 이곳에 표시됩니다."
     },
     "team": {
@@ -1355,6 +1573,8 @@
       "assignee": "담당자",
       "priority": "우선순위",
       "label": "라벨",
+      "active": "활성 필터",
+      "remove": "{label} 제거",
       "reset": "필터 초기화",
       "noOptions": "선택할 항목이 없습니다."
     },
@@ -1374,6 +1594,11 @@
       "MEDIUM": "보통",
       "HIGH": "높음",
       "URGENT": "긴급"
+    },
+    "projectRoles": {
+      "BACKEND": "백엔드",
+      "WEB_FRONTEND": "웹 프론트",
+      "APP_FRONTEND": "앱 프론트"
     },
     "columns": {
       "issue": "이슈 · 라벨",
@@ -1509,7 +1734,7 @@
       "CANCELED": "취소"
     },
     "featureStatus": {
-      "UNSORTED": "분류 안 됨",
+      "UNSORTED": "미분류",
       "TODO": "할 일",
       "IN_PROGRESS": "진행 중",
       "REVIEW": "검토",
@@ -1518,6 +1743,7 @@
       "CANCELED": "취소"
     },
     "progress": {
+      "label": "진행률",
       "none": "작업 없음 · 0%",
       "summary": "완료 {completed} / {total} · {percentage}%",
       "compact": "{completed}/{total} · {percentage}%"
@@ -1591,18 +1817,19 @@
       "expectedStage": "전달 후 생성",
       "blocked": "선행 작업 완료 대기",
       "unassigned": "담당자 없음",
+      "noLabels": "라벨 없음",
       "expand": "{title} 하위 작업 펼치기",
       "collapse": "{title} 하위 작업 접기",
       "noChildren": "현재 조건에 맞는 하위 팀 작업이 없습니다.",
       "emptyTitle": "연결된 작업이 없습니다",
-      "emptyDescription": "기능 이슈를 만들거나 단독 팀 작업을 프로젝트에 연결하세요.",
+      "emptyDescription": "이슈를 만들거나 단독 팀 작업을 프로젝트에 연결하세요.",
       "filteredEmptyTitle": "조건에 맞는 작업이 없습니다",
       "filteredEmptyDescription": "역할 또는 상태 조건을 바꿔 주세요.",
       "errorTitle": "프로젝트 작업을 불러오지 못했습니다",
       "errorDescription": "프로젝트 정보는 유지했습니다. 잠시 후 다시 시도해 주세요."
     },
     "priority": {
-      "NONE": "우선순위 없음",
+      "NONE": "없음",
       "LOW": "낮음",
       "MEDIUM": "보통",
       "HIGH": "높음",
@@ -1611,9 +1838,9 @@
   },
   "Pages": {
     "myIssues": {
-      "title": "내 이슈",
+      "title": "내 작업",
       "description": "나에게 할당된 미완료 팀 작업을 확인합니다.",
-      "emptyTitle": "할당된 이슈가 없습니다",
+      "emptyTitle": "할당된 작업이 없습니다",
       "emptyDescription": "새로 할당된 팀 작업이 이곳에 표시됩니다."
     },
     "inbox": {
@@ -1624,7 +1851,7 @@
     },
     "projects": {
       "title": "프로젝트",
-      "description": "역할별 팀과 연결된 기능 이슈의 진행을 확인합니다.",
+      "description": "역할별 팀과 연결된 이슈의 진행을 확인합니다.",
       "emptyTitle": "프로젝트가 없습니다",
       "emptyDescription": "참여 중인 프로젝트가 생기면 이곳에 표시됩니다."
     }
@@ -1635,7 +1862,7 @@
     "unexpectedDescription": "잠시 후 다시 시도해 주세요. 문제가 계속되면 요청 ID와 함께 관리자에게 알려 주세요.",
     "retry": "다시 시도",
     "notFoundTitle": "페이지를 찾을 수 없습니다",
-    "notFoundDescription": "주소를 확인하거나 내 이슈로 돌아가세요.",
-    "backToMyIssues": "내 이슈로 이동"
+    "notFoundDescription": "주소를 확인하거나 내 작업으로 돌아가세요.",
+    "backToMyIssues": "내 작업으로 이동"
   }
 }

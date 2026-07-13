@@ -138,7 +138,7 @@ test('E06 알림 앵커와 E08 다중 브라우저 SSE 수렴을 검증한다', 
     const invitationToken = await getLatestWorkspaceInvitationToken(recipientEmail);
 
     recipientContext = await browser.newContext({
-      baseURL: 'http://127.0.0.1:3000',
+      baseURL: new URL(page.url()).origin,
       viewport: { height: 800, width: 1280 },
     });
     const recipientPage = await recipientContext.newPage();
@@ -152,7 +152,7 @@ test('E06 알림 앵커와 E08 다중 브라우저 SSE 수렴을 검증한다', 
       method: 'POST',
     });
     await recipientPage.goto('/my-issues');
-    await expect(recipientPage.getByRole('heading', { name: '내 이슈' })).toBeVisible();
+    await expect(recipientPage.getByRole('heading', { name: '내 작업' })).toBeVisible();
 
     const [adminSession, recipientSession, teams] = await Promise.all([
       apiRequest<AuthenticatedSessionDto>(page, '/auth/session'),

@@ -90,7 +90,7 @@ test('가입부터 이메일 인증과 기본 팀 생성까지 완료한다', as
     await page.getByRole('button', { name: '건너뛰기' }).click();
 
     await expect(page).toHaveURL(/\/my-issues$/);
-    await expect(page.getByRole('heading', { name: '내 이슈' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '내 작업' })).toBeVisible();
     await checkLayout(page, testInfo.project.name, 'my-issues');
   } finally {
     await cleanupM1User(email);
@@ -266,7 +266,7 @@ test('미가입 사용자가 가입과 인증 후 초대를 다시 열어 수락
     await expect(page.getByText(inviteeEmail, { exact: true })).toBeVisible();
     await page.getByRole('button', { name: '초대 수락' }).click();
     await expect(page).toHaveURL(/\/my-issues$/);
-    await expect(page.getByRole('heading', { name: '내 이슈' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '내 작업' })).toBeVisible();
 
     await page.goto(`/invite#token=${encodeURIComponent(invitationToken)}`);
     await expect(page).toHaveURL(/\/my-issues$/);

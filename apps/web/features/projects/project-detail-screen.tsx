@@ -10,6 +10,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  UserRound,
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -52,6 +53,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -62,7 +64,14 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
+import { cn } from '@/lib/utils';
 
+import {
+  FEATURE_STATUS_PRESENTATION,
+  ISSUE_PRIORITY_PRESENTATION,
+  WORKFLOW_STATE_PRESENTATION,
+} from '../issues/issue-attribute-presentation';
+import { IssueLabelChips } from '../issues/issue-label-chips';
 import { useIssuePages } from '../issues/issue-list-queries';
 import { PROJECT_ROLES } from './project-form';
 import {
@@ -437,13 +446,24 @@ function ProjectDetailContent({
                 }
               }}
             >
-              <SelectTrigger size="sm" aria-label={t('issues.moreActions')}>
+              <SelectTrigger
+                size="sm"
+                variant="inline"
+                aria-label={t('issues.moreActions')}
+                title={t('issues.moreActions')}
+                className="min-w-11 justify-center p-0 [&_[data-slot=select-value]]:sr-only [&>svg:last-child]:hidden"
+              >
                 <MoreHorizontal aria-hidden="true" />
                 <SelectValue placeholder={t('issues.moreActions')} />
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false}>
                 <SelectGroup>
-                  <SelectItem value="STANDALONE">{t('issues.createStandalone')}</SelectItem>
+                  <SelectItem
+                    className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
+                    value="STANDALONE"
+                  >
+                    {t('issues.createStandalone')}
+                  </SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -463,14 +483,20 @@ function ProjectDetailContent({
           value={role ?? 'ALL'}
           onValueChange={(value) => setFilter('role', value === 'ALL' ? null : value)}
         >
-          <SelectTrigger size="sm" aria-label={t('filter.role')}>
+          <SelectTrigger size="sm" variant="inline" aria-label={t('filter.role')}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              <SelectItem value="ALL">{t('filter.allRoles')}</SelectItem>
+              <SelectItem className="data-selected:bg-accent/60 min-h-11 lg:min-h-9" value="ALL">
+                {t('filter.allRoles')}
+              </SelectItem>
               {PROJECT_ROLES.map((value) => (
-                <SelectItem key={value} value={value}>
+                <SelectItem
+                  className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
+                  key={value}
+                  value={value}
+                >
                   {labels.roles[value]}
                 </SelectItem>
               ))}
@@ -485,17 +511,31 @@ function ProjectDetailContent({
           value={category ?? 'ALL'}
           onValueChange={(value) => setFilter('category', value === 'ALL' ? null : value)}
         >
-          <SelectTrigger size="sm" aria-label={t('filter.category')}>
+          <SelectTrigger size="sm" variant="inline" aria-label={t('filter.category')}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              <SelectItem value="ALL">{t('filter.allCategories')}</SelectItem>
-              {STATE_CATEGORIES.map((value) => (
-                <SelectItem key={value} value={value}>
-                  {t(`stateCategory.${value}`)}
-                </SelectItem>
-              ))}
+              <SelectItem className="data-selected:bg-accent/60 min-h-11 lg:min-h-9" value="ALL">
+                {t('filter.allCategories')}
+              </SelectItem>
+              {STATE_CATEGORIES.map((value) => {
+                const presentation = WORKFLOW_STATE_PRESENTATION[value];
+                const StateIcon = presentation.icon;
+                return (
+                  <SelectItem
+                    className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
+                    key={value}
+                    value={value}
+                  >
+                    <StateIcon
+                      aria-hidden="true"
+                      className={cn('size-4 shrink-0', presentation.iconClassName)}
+                    />
+                    {t(`stateCategory.${value}`)}
+                  </SelectItem>
+                );
+              })}
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -541,6 +581,11 @@ function ProjectDetailContent({
                     (projectRole) => !role || projectRole === role,
                   );
                   const isCollapsed = collapsed.has(feature.id);
+                  const featurePresentation = feature.status.featureStatus
+                    ? FEATURE_STATUS_PRESENTATION[feature.status.featureStatus]
+                    : WORKFLOW_STATE_PRESENTATION[feature.status.category];
+                  const FeatureStatusIcon = featurePresentation.icon;
+                  const featureProgress = feature.progress;
                   return (
                     <Card key={feature.id} size="sm">
                       <CardHeader>
@@ -574,7 +619,11 @@ function ProjectDetailContent({
                           </Link>
                         </CardTitle>
                         <CardDescription className="flex flex-col gap-1">
-                          <span>
+                          <span className="flex items-center gap-1.5">
+                            <FeatureStatusIcon
+                              aria-hidden="true"
+                              className={cn('size-4 shrink-0', featurePresentation.iconClassName)}
+                            />
                             {feature.status.featureStatus
                               ? t(`featureStatus.${feature.status.featureStatus}`)
                               : t(`stateCategory.${feature.status.category}`)}
@@ -596,14 +645,29 @@ function ProjectDetailContent({
                           ) : null}
                         </CardDescription>
                         <CardAction>
-                          {feature.progress && feature.progress.total > 0 ? (
-                            <span className="text-muted-foreground text-xs tabular-nums">
-                              {t('progress.compact', {
-                                completed: feature.progress.completed,
-                                percentage: feature.progress.percentage,
-                                total: feature.progress.total,
+                          {featureProgress && featureProgress.total > 0 ? (
+                            <Progress
+                              value={featureProgress.percentage}
+                              className="w-24 gap-1.5"
+                              aria-label={t('progress.compact', {
+                                completed: featureProgress.completed,
+                                percentage: featureProgress.percentage,
+                                total: featureProgress.total,
                               })}
-                            </span>
+                            >
+                              <ProgressLabel className="sr-only">
+                                {t('progress.label')}
+                              </ProgressLabel>
+                              <ProgressValue className="text-foreground ml-0 text-xs font-medium">
+                                {() =>
+                                  t('progress.compact', {
+                                    completed: featureProgress.completed,
+                                    percentage: featureProgress.percentage,
+                                    total: featureProgress.total,
+                                  })
+                                }
+                              </ProgressValue>
+                            </Progress>
                           ) : null}
                         </CardAction>
                       </CardHeader>
@@ -762,6 +826,10 @@ function ProjectTaskRow({
   labels: ProjectLabels;
 }) {
   const t = useTranslations('Projects');
+  const statePresentation = WORKFLOW_STATE_PRESENTATION[task.status.category];
+  const StateIcon = statePresentation.icon;
+  const priorityPresentation = ISSUE_PRIORITY_PRESENTATION[task.priority];
+  const PriorityIcon = priorityPresentation.icon;
   return (
     <article className="bg-surface-1 flex min-w-0 flex-col gap-2 rounded-lg p-3 sm:flex-row sm:items-center">
       <div className="min-w-0 flex-1">
@@ -780,13 +848,31 @@ function ProjectTaskRow({
           </Link>
         </div>
         <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-2 text-xs">
-          <span>
+          <span className="flex items-center gap-1">
+            <StateIcon
+              aria-hidden="true"
+              className={cn('size-4 shrink-0', statePresentation.iconClassName)}
+            />
             {task.status.workflowState?.name ?? t(`stateCategory.${task.status.category}`)}
           </span>
           {task.blocked ? <Badge variant="secondary">{t('issues.blocked')}</Badge> : null}
-          <span>{task.assignee?.user.displayName ?? t('issues.unassigned')}</span>
-          <span>{t(`priority.${task.priority}`)}</span>
+          <span className="flex items-center gap-1">
+            <UserRound aria-hidden="true" className="size-3.5 shrink-0" />
+            {task.assignee?.user.displayName ?? t('issues.unassigned')}
+          </span>
+          <span className="flex items-center gap-1" title={t(`priority.${task.priority}`)}>
+            <PriorityIcon
+              aria-hidden="true"
+              className={cn('size-4 shrink-0', priorityPresentation.iconClassName)}
+            />
+            {t(`priority.${task.priority}`)}
+          </span>
         </div>
+        {task.labels.length > 0 ? (
+          <div className="mt-2">
+            <IssueLabelChips emptyLabel={t('issues.noLabels')} labels={task.labels} />
+          </div>
+        ) : null}
       </div>
     </article>
   );

@@ -67,7 +67,21 @@ const issue = {
   type: 'TEAM_TASK',
   updatedAt: '2026-07-01T00:00:00.000Z',
   version: 1,
+  workflowSummary: null,
 } satisfies IssueDetailResponseDto;
+
+const emptyFeatureWorkflowSummary = {
+  activeRoles: [],
+  activeRoleTeams: [],
+  allTargetTasksCompleted: false,
+  canceledCount: 0,
+  completedCount: 0,
+  currentUserAssignedTeamTasks: [],
+  currentUserTeamRoles: [],
+  teamTaskCount: 0,
+  unassignedCount: 0,
+  waitingOn: [],
+} satisfies NonNullable<IssueDetailResponseDto['workflowSummary']>;
 
 const params = {
   assigneeMembershipId: 'me',
@@ -88,10 +102,14 @@ function QueryWrapper({ children }: PropsWithChildren) {
 function seedIssue() {
   const list: InfiniteData<IssueListResponseDto> = {
     pageParams: [undefined],
-    pages: [{ items: [issue], nextCursor: null }],
+    pages: [{ items: [issue], nextCursor: null, totalCount: 1 }],
   };
   queryClient.setQueryData(listQueryKey, list);
-  queryClient.setQueryData(regularListQueryKey, { items: [issue], nextCursor: null });
+  queryClient.setQueryData(regularListQueryKey, {
+    items: [issue],
+    nextCursor: null,
+    totalCount: 1,
+  });
   queryClient.setQueryData(getIssuesControllerGetQueryKey(issue.identifier), issue);
 }
 
@@ -140,6 +158,7 @@ describe('issue inline optimistic mutation', () => {
       },
       team: null,
       type: 'FEATURE' as const,
+      workflowSummary: emptyFeatureWorkflowSummary,
     };
 
     expect(

@@ -45,13 +45,18 @@ import { IssueCollaborationService } from '../collaboration/issue-collaboration.
 import { isInlineDisplayable } from '../files/file-content';
 import { FilesService } from '../files/files.service';
 import type {
+  AssignTeamTasksDto,
+  ClaimIssueDto,
   CreateIssueDto,
   IssueListQueryDto,
   StartIssueDto,
   UpdateIssueDto,
 } from './dto/issue-request.dto';
 import type {
+  AssignTeamTasksResponseDto,
+  ClaimIssueResponseDto,
   CreateIssueResponseDto,
+  FeatureWorkQueueCountsResponseDto,
   IssueCompletionBlockRelationResponseDto,
   IssueCompletionHandoffResponseDto,
   IssueDetailResponseDto,
@@ -124,7 +129,29 @@ const ISSUE_SELECT = {
     where: { blockedIssue: { deletedAt: null } },
   },
   childIssues: {
-    select: { workflowState: { select: { category: true } } },
+    select: {
+      assigneeMembershipId: true,
+      blockedRelations: {
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: {
+          blockingIssue: {
+            select: {
+              featureStatus: true,
+              id: true,
+              identifier: true,
+              title: true,
+              workflowState: { select: { category: true } },
+            },
+          },
+        },
+        where: { blockingIssue: { deletedAt: null } },
+      },
+      id: true,
+      identifier: true,
+      projectRole: true,
+      team: { select: { archivedAt: true, id: true, key: true, name: true } },
+      workflowState: { select: { category: true } },
+    },
     where: { deletedAt: null, type: IssueType.TEAM_TASK },
   },
   featureStatus: true,
@@ -184,7 +211,7 @@ const ISSUE_SELECT = {
 
 type IssueRow = Prisma.IssueGetPayload<{ select: typeof ISSUE_SELECT }>;
 type Transaction = Prisma.TransactionClient;
-type SortField = 'createdAt' | 'priority' | 'status' | 'updatedAt';
+type SortField = 'createdAt' | 'priority' | 'progress' | 'status' | 'updatedAt';
 type SortDirection = 'asc' | 'desc';
 
 interface AutomatedHandoffCompletionResult {
@@ -234,6 +261,10 @@ interface ProjectRoleTeamLockRow {
   teamId: string;
 }
 
+interface AutomaticTeamTaskAssignment extends ProjectRoleTeamLockRow {
+  assigneeMembershipId?: string | null;
+}
+
 interface FeatureStartLockRow {
   id: string;
   priority: IssuePriority;
@@ -281,7 +312,12 @@ interface MembershipLockRow {
 
 interface IssueCursor {
   id: string;
-  value: string | [StateCategory, number, IssueType];
+  value: number | string | [StateCategory, number, IssueType];
+}
+
+interface ProgressSortRow {
+  id: string;
+  progress: number;
 }
 
 const FEATURE_STATUS_CATEGORY: Record<FeatureIssueStatus, StateCategory> = {
@@ -359,6 +395,23 @@ function unprocessable(code: string, message: string): never {
   throw new ApiError({ code, message, status: HttpStatus.UNPROCESSABLE_ENTITY });
 }
 
+function assignmentConflict(message: string, details?: Record<string, unknown>): never {
+  throw new ApiError({
+    code: 'ISSUE_ASSIGNMENT_CONFLICT',
+    ...(details ? { details } : {}),
+    message,
+    status: HttpStatus.CONFLICT,
+  });
+}
+
+function teamMembershipRequired(): never {
+  throw new ApiError({
+    code: 'TEAM_MEMBERSHIP_REQUIRED',
+    message: '해당 역할 팀의 활성 멤버만 작업을 맡을 수 있습니다.',
+    status: HttpStatus.FORBIDDEN,
+  });
+}
+
 function issueTypeFieldInvalid(message: string): never {
   throw new ApiError({
     code: 'ISSUE_TYPE_FIELD_INVALID',
@@ -422,6 +475,24 @@ function parseCsv(
   return [...new Set(items)].sort();
 }
 
+function parseDate(
+  value: string | undefined,
+  message: string,
+  includeWholeDate = false,
+): Date | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = new Date(
+    includeWholeDate && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T23:59:59.999Z` : value,
+  );
+  if (Number.isNaN(parsed.getTime())) {
+    return invalidQuery(message);
+  }
+  return parsed;
+}
+
 function parseCursor(
   value: string | undefined,
   sort: SortField,
@@ -471,6 +542,15 @@ function parseCursor(
       ) {
         return invalidQuery('커서를 확인해 주세요.');
       }
+    } else if (sort === 'progress') {
+      if (
+        typeof cursorValue !== 'number' ||
+        !Number.isInteger(cursorValue) ||
+        cursorValue < 0 ||
+        cursorValue > 100
+      ) {
+        return invalidQuery('커서를 확인해 주세요.');
+      }
     } else if (
       !Array.isArray(cursorValue) ||
       cursorValue.length !== 3 ||
@@ -486,7 +566,7 @@ function parseCursor(
 
     return {
       id: parsed[4],
-      value: cursorValue as string | [StateCategory, number, IssueType],
+      value: cursorValue as number | string | [StateCategory, number, IssueType],
     };
   } catch {
     return invalidQuery('커서를 확인해 주세요.');
@@ -544,6 +624,63 @@ function isTerminalCategory(category: StateCategory): boolean {
   return category === StateCategory.COMPLETED || category === StateCategory.CANCELED;
 }
 
+export function buildFeatureWorkQueueWhere(workQueue: string): Prisma.IssueWhereInput {
+  const activeTask = {
+    deletedAt: null,
+    type: IssueType.TEAM_TASK,
+    workflowState: {
+      category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] },
+    },
+  } satisfies Prisma.IssueWhereInput;
+
+  switch (workQueue) {
+    case 'REVIEW_REQUIRED':
+      return {
+        childIssues: { none: { deletedAt: null, type: IssueType.TEAM_TASK } },
+        featureStatus: { notIn: [FeatureIssueStatus.DONE, FeatureIssueStatus.CANCELED] },
+        type: IssueType.FEATURE,
+      };
+    case 'ASSIGNMENT_REQUIRED':
+      return {
+        childIssues: { some: { ...activeTask, assigneeMembershipId: null } },
+        type: IssueType.FEATURE,
+      };
+    case 'IN_PROGRESS':
+      return { childIssues: { some: activeTask }, type: IssueType.FEATURE };
+    case 'COMPLETION_REQUIRED':
+      return {
+        AND: [
+          {
+            childIssues: {
+              some: {
+                deletedAt: null,
+                type: IssueType.TEAM_TASK,
+                workflowState: { category: { not: StateCategory.CANCELED } },
+              },
+            },
+          },
+          {
+            childIssues: {
+              none: {
+                deletedAt: null,
+                type: IssueType.TEAM_TASK,
+                workflowState: {
+                  category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] },
+                },
+              },
+            },
+          },
+        ],
+        featureStatus: { notIn: [FeatureIssueStatus.DONE, FeatureIssueStatus.CANCELED] },
+        type: IssueType.FEATURE,
+      };
+    case 'COMPLETED':
+      return { featureStatus: FeatureIssueStatus.DONE, type: IssueType.FEATURE };
+    default:
+      return invalidQuery('작업 대기열 필터를 확인해 주세요.');
+  }
+}
+
 function blockingDurationBucket(seconds: number): IssueUnblockedDurationBucket {
   if (seconds < 60 * 60) return 'LT_1_HOUR';
   if (seconds < 24 * 60 * 60) return 'LT_1_DAY';
@@ -551,7 +688,20 @@ function blockingDurationBucket(seconds: number): IssueUnblockedDurationBucket {
   return 'GTE_7_DAYS';
 }
 
-function cursorValue(row: IssueRow, sort: SortField): string | [StateCategory, number, IssueType] {
+function issueProgress(issue: IssueRow): number {
+  const targets = issue.childIssues.filter(
+    ({ workflowState }) => workflowState?.category !== StateCategory.CANCELED,
+  );
+  const completed = targets.filter(
+    ({ workflowState }) => workflowState?.category === StateCategory.COMPLETED,
+  ).length;
+  return targets.length === 0 ? 0 : Math.round((completed / targets.length) * 100);
+}
+
+function cursorValue(
+  row: IssueRow,
+  sort: SortField,
+): number | string | [StateCategory, number, IssueType] {
   switch (sort) {
     case 'createdAt':
       return row.createdAt.toISOString();
@@ -559,6 +709,8 @@ function cursorValue(row: IssueRow, sort: SortField): string | [StateCategory, n
       return row.updatedAt.toISOString();
     case 'priority':
       return row.priority;
+    case 'progress':
+      return issueProgress(row);
     case 'status':
       return [issueCategory(row), issueStatusPosition(row), row.type];
   }
@@ -593,12 +745,65 @@ function toMemberResponse(member: {
   };
 }
 
-function toSummaryResponse(issue: IssueRow): IssueSummaryResponseDto {
+function toSummaryResponse(
+  issue: IssueRow,
+  currentMembershipId?: string,
+  currentUserTeamRoles: ProjectRole[] = [],
+): IssueSummaryResponseDto {
   const children = issue.childIssues.filter(
     ({ workflowState }) => workflowState?.category !== StateCategory.CANCELED,
   );
   const completed = children.filter(
     ({ workflowState }) => workflowState?.category === StateCategory.COMPLETED,
+  ).length;
+
+  const activeChildren = issue.childIssues.filter(
+    ({ workflowState }) => workflowState && !isTerminalCategory(workflowState.category),
+  );
+  const activeRoles = [
+    ...new Set(activeChildren.flatMap(({ projectRole }) => projectRole ?? [])),
+  ].sort();
+  const activeRoleTeams = [
+    ...new Set(activeChildren.flatMap(({ projectRole }) => projectRole ?? [])),
+  ]
+    .sort()
+    .flatMap((projectRole) => {
+      const roleChildren = activeChildren.filter((child) => child.projectRole === projectRole);
+      const team = roleChildren[0]?.team;
+      return team
+        ? [
+            {
+              projectRole,
+              team: {
+                archived: team.archivedAt !== null,
+                id: team.id,
+                key: team.key,
+                name: team.name,
+              },
+              unassignedCount: roleChildren.filter(
+                ({ assigneeMembershipId }) => assigneeMembershipId === null,
+              ).length,
+            },
+          ]
+        : [];
+    });
+  const waitingOn = new Map<string, { identifier: string; issueId: string; title: string }>();
+  for (const child of activeChildren) {
+    for (const { blockingIssue } of child.blockedRelations) {
+      if (!isTerminalCategory(issueCategory(blockingIssue))) {
+        waitingOn.set(blockingIssue.id, {
+          identifier: blockingIssue.identifier,
+          issueId: blockingIssue.id,
+          title: blockingIssue.title,
+        });
+      }
+    }
+  }
+  const canceledCount = issue.childIssues.filter(
+    ({ workflowState }) => workflowState?.category === StateCategory.CANCELED,
+  ).length;
+  const unassignedCount = activeChildren.filter(
+    ({ assigneeMembershipId }) => assigneeMembershipId === null,
   ).length;
 
   return {
@@ -609,6 +814,7 @@ function toSummaryResponse(issue: IssueRow): IssueSummaryResponseDto {
       ({ blockingIssue }) => !isTerminalCategory(issueCategory(blockingIssue)),
     ),
     createdAt: issue.createdAt.toISOString(),
+    createdBy: toMemberResponse(issue.createdByMembership),
     id: issue.id,
     identifier: issue.identifier,
     labels: issue.labels.map(({ label }) => ({
@@ -653,6 +859,35 @@ function toSummaryResponse(issue: IssueRow): IssueSummaryResponseDto {
     type: issue.type,
     updatedAt: issue.updatedAt.toISOString(),
     version: issue.version,
+    workflowSummary:
+      issue.type === IssueType.FEATURE
+        ? {
+            activeRoles,
+            activeRoleTeams,
+            allTargetTasksCompleted: children.length > 0 && completed === children.length,
+            canceledCount,
+            completedCount: completed,
+            currentUserAssignedTeamTasks: currentMembershipId
+              ? activeChildren
+                  .filter(
+                    ({ assigneeMembershipId, projectRole }) =>
+                      assigneeMembershipId === currentMembershipId && projectRole !== null,
+                  )
+                  .map(({ id, identifier, projectRole }) => ({
+                    id,
+                    identifier,
+                    projectRole: projectRole!,
+                  }))
+                  .sort((left, right) => left.id.localeCompare(right.id))
+              : [],
+            currentUserTeamRoles,
+            teamTaskCount: issue.childIssues.length,
+            unassignedCount,
+            waitingOn: [...waitingOn.values()].sort((left, right) =>
+              left.issueId.localeCompare(right.issueId),
+            ),
+          }
+        : null,
   };
 }
 
@@ -735,7 +970,7 @@ export class IssuesService {
     }
 
     const sort = dto.sort ?? 'updatedAt';
-    if (!['createdAt', 'priority', 'status', 'updatedAt'].includes(sort)) {
+    if (!['createdAt', 'priority', 'progress', 'status', 'updatedAt'].includes(sort)) {
       invalidQuery('정렬 기준을 확인해 주세요.');
     }
     const direction = dto.sortDirection ?? 'desc';
@@ -744,6 +979,12 @@ export class IssuesService {
     }
 
     const typedSort = sort as SortField;
+    if (typedSort === 'progress' && dto.type !== IssueType.FEATURE) {
+      invalidQuery('진행률 정렬은 기능 이슈 목록에서만 사용할 수 있습니다.');
+    }
+    if (dto.workQueue !== undefined && dto.type !== undefined && dto.type !== IssueType.FEATURE) {
+      invalidQuery('작업 대기열은 기능 이슈 목록에서만 사용할 수 있습니다.');
+    }
     const teamIds = parseCsv(dto.teamId, (item) => isUUID(item, '4'), '팀 필터를 확인해 주세요.');
     const projectIds = parseCsv(
       dto.projectId,
@@ -754,6 +995,11 @@ export class IssuesService {
       dto.projectRole,
       (item) => Object.values(ProjectRole).includes(item as ProjectRole),
       '프로젝트 역할 필터를 확인해 주세요.',
+    ) as ProjectRole[] | undefined;
+    const activeProjectRoles = parseCsv(
+      dto.activeProjectRole,
+      (item) => Object.values(ProjectRole).includes(item as ProjectRole),
+      '현재 작업 역할 필터를 확인해 주세요.',
     ) as ProjectRole[] | undefined;
     const featureStatuses = parseCsv(
       dto.featureStatus,
@@ -788,30 +1034,115 @@ export class IssuesService {
       ?.map((item) => (item === 'me' ? context.membershipId : item))
       .filter((item, index, items) => items.indexOf(item) === index)
       .sort();
+    const createdByMembershipIds = parseCsv(
+      dto.createdByMembershipId,
+      (item) => isUUID(item, '4'),
+      '만든 사람 필터를 확인해 주세요.',
+    );
     const blocked = dto.blocked === undefined ? undefined : dto.blocked === 'true';
+    const unassigned = dto.unassigned === undefined ? undefined : dto.unassigned === 'true';
+    const createdFrom = parseDate(dto.createdFrom, '생성일 범위를 확인해 주세요.');
+    const createdTo = parseDate(dto.createdTo, '생성일 범위를 확인해 주세요.', true);
+    const updatedFrom = parseDate(dto.updatedFrom, '최근 수정일 범위를 확인해 주세요.');
+    const updatedTo = parseDate(dto.updatedTo, '최근 수정일 범위를 확인해 주세요.', true);
+    if (createdFrom && createdTo && createdFrom > createdTo) {
+      invalidQuery('생성일 범위를 확인해 주세요.');
+    }
+    if (updatedFrom && updatedTo && updatedFrom > updatedTo) {
+      invalidQuery('최근 수정일 범위를 확인해 주세요.');
+    }
+    const query = dto.query?.normalize('NFC').trim() || undefined;
     const cursorScope = createHash('sha256')
       .update(
         JSON.stringify([
           context.workspaceId,
           dto.type ?? null,
+          query ?? null,
+          dto.workQueue ?? null,
           teamIds ?? null,
           projectIds ?? null,
           projectRoles ?? null,
+          activeProjectRoles ?? null,
           dto.parentIssueId ?? null,
           featureStatuses ?? null,
           workflowStateIds ?? null,
           stateCategories ?? null,
           assigneeIds ?? null,
+          createdByMembershipIds ?? null,
           priorities ?? null,
           labelIds ?? null,
           blocked ?? null,
+          unassigned ?? null,
+          createdFrom?.toISOString() ?? null,
+          createdTo?.toISOString() ?? null,
+          updatedFrom?.toISOString() ?? null,
+          updatedTo?.toISOString() ?? null,
         ]),
       )
       .digest('base64url');
     const cursor = parseCursor(dto.cursor, typedSort, direction, cursorScope);
 
-    const where: Prisma.IssueWhereInput = {
+    const and: Prisma.IssueWhereInput[] = [];
+    if (query) {
+      and.push({
+        OR: [
+          { identifier: { contains: query, mode: 'insensitive' } },
+          { title: { contains: query, mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (stateCategories) {
+      and.push({
+        OR: [
+          { workflowState: { category: { in: stateCategories } } },
+          {
+            featureStatus: {
+              in: Object.values(FeatureIssueStatus).filter((status) =>
+                stateCategories.includes(FEATURE_STATUS_CATEGORY[status]),
+              ),
+            },
+          },
+        ],
+      });
+    }
+    if (activeProjectRoles) {
+      and.push({
+        childIssues: {
+          some: {
+            deletedAt: null,
+            projectRole: { in: activeProjectRoles },
+            type: IssueType.TEAM_TASK,
+            workflowState: {
+              category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] },
+            },
+          },
+        },
+      });
+    }
+    if (unassigned !== undefined) {
+      const unassignedTask: Prisma.IssueWhereInput = {
+        assigneeMembershipId: null,
+        deletedAt: null,
+        type: IssueType.TEAM_TASK,
+        workflowState: {
+          category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] },
+        },
+      };
+      and.push({ childIssues: unassigned ? { some: unassignedTask } : { none: unassignedTask } });
+    }
+
+    const workQueueBaseWhere: Prisma.IssueWhereInput = {
+      ...(and.length > 0 ? { AND: and } : {}),
       ...(assigneeIds ? { assigneeMembershipId: { in: assigneeIds } } : {}),
+      ...(createdByMembershipIds ? { createdByMembershipId: { in: createdByMembershipIds } } : {}),
+      ...(createdFrom || createdTo
+        ? {
+            createdAt: {
+              ...(createdFrom ? { gte: createdFrom } : {}),
+              ...(createdTo ? { lte: createdTo } : {}),
+            },
+          }
+        : {}),
       ...(labelIds ? { labels: { some: { labelId: { in: labelIds } } } } : {}),
       ...(blocked === undefined
         ? {}
@@ -843,26 +1174,23 @@ export class IssuesService {
       ...(priorities ? { priority: { in: priorities } } : {}),
       ...(projectIds ? { projectId: { in: projectIds } } : {}),
       ...(projectRoles ? { projectRole: { in: projectRoles } } : {}),
-      ...(stateCategories
-        ? {
-            OR: [
-              { workflowState: { category: { in: stateCategories } } },
-              {
-                featureStatus: {
-                  in: Object.values(FeatureIssueStatus).filter((status) =>
-                    stateCategories.includes(FEATURE_STATUS_CATEGORY[status]),
-                  ),
-                },
-              },
-            ],
-          }
-        : {}),
       ...(teamIds ? { teamId: { in: teamIds } } : {}),
       ...(dto.type ? { type: dto.type as IssueType } : {}),
+      ...(updatedFrom || updatedTo
+        ? {
+            updatedAt: {
+              ...(updatedFrom ? { gte: updatedFrom } : {}),
+              ...(updatedTo ? { lte: updatedTo } : {}),
+            },
+          }
+        : {}),
       ...(workflowStateIds ? { workflowStateId: { in: workflowStateIds } } : {}),
       deletedAt: null,
       workspaceId: context.workspaceId,
     };
+    const where: Prisma.IssueWhereInput = dto.workQueue
+      ? { AND: [workQueueBaseWhere, buildFeatureWorkQueueWhere(dto.workQueue)] }
+      : workQueueBaseWhere;
     if (cursor) {
       const cursorIssue = await this.database.client.issue.findFirst({
         select: ISSUE_SELECT,
@@ -876,33 +1204,91 @@ export class IssuesService {
       }
     }
     const limit = dto.limit ?? 50;
+    const includesWorkQueueCounts = dto.type === IssueType.FEATURE || dto.workQueue !== undefined;
+    const workQueueCountsPromise = includesWorkQueueCounts
+      ? this.countFeatureWorkQueues(workQueueBaseWhere)
+      : Promise.resolve(undefined);
     if (typedSort === 'status') {
-      return this.listByStatus(where, cursor, direction, limit, cursorScope);
+      const [response, workQueueCounts] = await Promise.all([
+        this.listByStatus(context, where, cursor, direction, limit, cursorScope),
+        workQueueCountsPromise,
+      ]);
+      return workQueueCounts ? { ...response, workQueueCounts } : response;
+    }
+    if (typedSort === 'progress') {
+      const [response, workQueueCounts] = await Promise.all([
+        this.listByProgress(context, where, cursor, direction, limit, cursorScope),
+        workQueueCountsPromise,
+      ]);
+      return workQueueCounts ? { ...response, workQueueCounts } : response;
     }
 
     const orderBy: Prisma.IssueOrderByWithRelationInput[] = [
       { [typedSort]: direction },
       { id: direction },
     ];
-    const issues = await this.database.client.issue.findMany({
-      ...(cursor ? { cursor: { id: cursor.id }, skip: 1 } : {}),
-      orderBy,
-      select: ISSUE_SELECT,
-      take: limit + 1,
-      where,
-    });
+    const [issues, listTotalCount, workQueueCounts] = await Promise.all([
+      this.database.client.issue.findMany({
+        ...(cursor ? { cursor: { id: cursor.id }, skip: 1 } : {}),
+        orderBy,
+        select: ISSUE_SELECT,
+        take: limit + 1,
+        where,
+      }),
+      includesWorkQueueCounts ? Promise.resolve(0) : this.database.client.issue.count({ where }),
+      workQueueCountsPromise,
+    ]);
     const page = issues.slice(0, limit);
+    const totalCount = workQueueCounts ? workQueueCounts[dto.workQueue ?? 'ALL'] : listTotalCount;
 
     return {
-      items: page.map(toSummaryResponse),
+      items: await this.listItems(context, page),
       nextCursor:
         issues.length > limit && page.length > 0
           ? encodeCursor(page[page.length - 1]!, typedSort, direction, cursorScope)
           : null,
+      totalCount,
+      ...(workQueueCounts ? { workQueueCounts } : {}),
+    };
+  }
+
+  private async countFeatureWorkQueues(
+    where: Prisma.IssueWhereInput,
+  ): Promise<FeatureWorkQueueCountsResponseDto> {
+    const [all, reviewRequired, assignmentRequired, inProgress, completionRequired, completed] =
+      await Promise.all([
+        this.database.client.issue.count({
+          where: { AND: [where, { type: IssueType.FEATURE }] },
+        }),
+        this.database.client.issue.count({
+          where: { AND: [where, buildFeatureWorkQueueWhere('REVIEW_REQUIRED')] },
+        }),
+        this.database.client.issue.count({
+          where: { AND: [where, buildFeatureWorkQueueWhere('ASSIGNMENT_REQUIRED')] },
+        }),
+        this.database.client.issue.count({
+          where: { AND: [where, buildFeatureWorkQueueWhere('IN_PROGRESS')] },
+        }),
+        this.database.client.issue.count({
+          where: { AND: [where, buildFeatureWorkQueueWhere('COMPLETION_REQUIRED')] },
+        }),
+        this.database.client.issue.count({
+          where: { AND: [where, buildFeatureWorkQueueWhere('COMPLETED')] },
+        }),
+      ]);
+
+    return {
+      ALL: all,
+      REVIEW_REQUIRED: reviewRequired,
+      ASSIGNMENT_REQUIRED: assignmentRequired,
+      IN_PROGRESS: inProgress,
+      COMPLETION_REQUIRED: completionRequired,
+      COMPLETED: completed,
     };
   }
 
   private async listByStatus(
+    context: { membershipId: string; workspaceId: string },
     where: Prisma.IssueWhereInput,
     cursor: IssueCursor | undefined,
     direction: SortDirection,
@@ -937,12 +1323,140 @@ export class IssuesService {
     const page = issues.slice(0, limit);
 
     return {
-      items: page.map(toSummaryResponse),
+      items: await this.listItems(context, page),
       nextCursor:
         issues.length > limit && page.length > 0
           ? encodeCursor(page[page.length - 1]!, 'status', direction, cursorScope)
           : null,
+      totalCount: sortRows.length,
     };
+  }
+
+  private async listByProgress(
+    context: { membershipId: string; workspaceId: string },
+    where: Prisma.IssueWhereInput,
+    cursor: IssueCursor | undefined,
+    direction: SortDirection,
+    limit: number,
+    cursorScope: string,
+  ): Promise<IssueListResponseDto> {
+    const candidates = await this.database.client.issue.findMany({
+      select: { id: true },
+      where,
+    });
+    if (candidates.length === 0) {
+      return { items: [], nextCursor: null, totalCount: 0 };
+    }
+    const candidateIds = candidates.map(({ id }) => id).join(',');
+
+    const cursorProgress = cursor?.value;
+    if (cursorProgress !== undefined && typeof cursorProgress !== 'number') {
+      invalidQuery('현재 정렬 조건에 맞는 커서를 사용해 주세요.');
+    }
+    const comparison = cursor
+      ? direction === 'asc'
+        ? Prisma.sql`("progress" > ${cursorProgress as number} OR ("progress" = ${cursorProgress as number} AND "id" > ${cursor.id}::uuid))`
+        : Prisma.sql`("progress" < ${cursorProgress as number} OR ("progress" = ${cursorProgress as number} AND "id" < ${cursor.id}::uuid))`
+      : Prisma.sql`TRUE`;
+    const order = Prisma.raw(direction.toUpperCase());
+    const rows = await this.database.client.$queryRaw<ProgressSortRow[]>(Prisma.sql`
+      WITH "progress_rows" AS (
+        SELECT
+          "feature"."id",
+          CASE
+            WHEN COUNT("task"."id") FILTER (
+              WHERE "state"."category" <> 'CANCELED'::"StateCategory"
+            ) = 0 THEN 0
+            ELSE ROUND(
+              COUNT("task"."id") FILTER (
+                WHERE "state"."category" = 'COMPLETED'::"StateCategory"
+              ) * 100.0 /
+              COUNT("task"."id") FILTER (
+                WHERE "state"."category" <> 'CANCELED'::"StateCategory"
+              )
+            )::integer
+          END AS "progress"
+        FROM "issues" AS "feature"
+        LEFT JOIN "issues" AS "task"
+          ON "task"."workspace_id" = "feature"."workspace_id"
+         AND "task"."parent_issue_id" = "feature"."id"
+         AND "task"."type" = 'TEAM_TASK'::"IssueType"
+         AND "task"."deleted_at" IS NULL
+        LEFT JOIN "workflow_states" AS "state"
+          ON "state"."workspace_id" = "task"."workspace_id"
+         AND "state"."team_id" = "task"."team_id"
+         AND "state"."id" = "task"."workflow_state_id"
+        WHERE "feature"."id" = ANY(string_to_array(${candidateIds}, ',')::uuid[])
+        GROUP BY "feature"."id"
+      )
+      SELECT "id", "progress"
+      FROM "progress_rows"
+      WHERE ${comparison}
+      ORDER BY "progress" ${order}, "id" ${order}
+      LIMIT ${limit + 1}
+    `);
+    const pageRows = rows.slice(0, limit);
+    const selected = await this.database.client.issue.findMany({
+      select: ISSUE_SELECT,
+      where: { AND: [where, { id: { in: pageRows.map(({ id }) => id) } }] },
+    });
+    const byId = new Map(selected.map((issue) => [issue.id, issue]));
+    const page = pageRows.map(({ id }) => byId.get(id)).filter((issue) => issue !== undefined);
+
+    return {
+      items: await this.listItems(context, page),
+      nextCursor:
+        rows.length > limit && page.length > 0
+          ? encodeCursor(page[page.length - 1]!, 'progress', direction, cursorScope)
+          : null,
+      totalCount: candidates.length,
+    };
+  }
+
+  private async listItems(
+    context: { membershipId: string; workspaceId: string },
+    issues: IssueRow[],
+  ): Promise<IssueSummaryResponseDto[]> {
+    const projectIds = [
+      ...new Set(
+        issues.flatMap((issue) =>
+          issue.type === IssueType.FEATURE && issue.project ? [issue.project.id] : [],
+        ),
+      ),
+    ];
+    const roleTeams =
+      projectIds.length === 0
+        ? []
+        : await this.database.client.projectRoleTeam.findMany({
+            orderBy: [{ projectId: 'asc' }, { role: 'asc' }],
+            select: { projectId: true, role: true },
+            where: {
+              project: { archivedAt: null, deletedAt: null },
+              projectId: { in: projectIds },
+              team: {
+                archivedAt: null,
+                teamMembers: {
+                  some: {
+                    membership: { status: MembershipStatus.ACTIVE },
+                    membershipId: context.membershipId,
+                    removedAt: null,
+                  },
+                },
+              },
+              workspaceId: context.workspaceId,
+            },
+          });
+    const rolesByProject = new Map<string, ProjectRole[]>();
+    for (const { projectId, role } of roleTeams) {
+      rolesByProject.set(projectId, [...(rolesByProject.get(projectId) ?? []), role]);
+    }
+    return issues.map((issue) =>
+      toSummaryResponse(
+        issue,
+        context.membershipId,
+        issue.project ? (rolesByProject.get(issue.project.id) ?? []) : [],
+      ),
+    );
   }
 
   async create(
@@ -1049,7 +1563,7 @@ export class IssuesService {
           workspaceId: context.workspaceId,
         });
         return {
-          createdTeamTasks: createdTeamTasks.map(toSummaryResponse),
+          createdTeamTasks: createdTeamTasks.map((task) => toSummaryResponse(task)),
           issue: toDetailResponse(created),
         };
       });
@@ -1168,10 +1682,22 @@ export class IssuesService {
     issueId: string,
     dto: StartIssueDto,
   ): Promise<CreateIssueResponseDto> {
-    const initialRoles = dto?.initialRoles;
-    if (!initialRoles || initialRoles.length === 0) {
+    if (dto.initialRoles !== undefined && dto.roleAssignments !== undefined) {
+      unprocessable(
+        'INITIAL_ROLE_INPUT_CONFLICT',
+        '처음 작업할 역할과 역할별 담당자를 동시에 보낼 수 없습니다.',
+      );
+    }
+    const roles = dto.roleAssignments?.map(({ projectRole }) => projectRole) ?? dto.initialRoles;
+    if (!roles || roles.length === 0) {
       unprocessable('INITIAL_ROLE_REQUIRED', '처음 작업할 역할을 하나 이상 선택해 주세요.');
     }
+    const assigneeByRole = new Map(
+      (dto.roleAssignments ?? []).map(({ assigneeMembershipId, projectRole }) => [
+        projectRole,
+        assigneeMembershipId,
+      ]),
+    );
 
     return this.database.client.$transaction(async (transaction) => {
       await this.lockWorkspace(transaction, context.workspaceId);
@@ -1194,14 +1720,25 @@ export class IssuesService {
         context.workspaceId,
         feature.projectId,
       );
-      const selectedAssignments = this.selectedRoleAssignments(roleAssignments, initialRoles);
-      const existingRoles = await transaction.issue.findMany({
-        distinct: ['projectRole'],
-        select: { projectRole: true },
+      const selectedAssignments = this.selectedRoleAssignments(roleAssignments, roles);
+      for (const teamId of new Set(selectedAssignments.map(({ teamId }) => teamId))) {
+        await this.lockActiveTeam(transaction, context.workspaceId, teamId);
+        if (dto.requireCurrentUserTeamMembership) {
+          await this.lockActiveTeamMembership(
+            transaction,
+            context.workspaceId,
+            teamId,
+            context.membershipId,
+          );
+        }
+      }
+      const existingTasks = await transaction.issue.findMany({
+        orderBy: [{ projectRole: 'asc' }, { id: 'asc' }],
+        select: ISSUE_SELECT,
         where: {
           deletedAt: null,
           parentIssueId: issueId,
-          projectRole: { in: initialRoles },
+          projectRole: { in: roles },
           type: IssueType.TEAM_TASK,
           workflowState: {
             category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] },
@@ -1209,16 +1746,63 @@ export class IssuesService {
           workspaceId: context.workspaceId,
         },
       });
-      const existingRoleSet = new Set(existingRoles.map(({ projectRole }) => projectRole));
-      const missingAssignments = selectedAssignments.filter(
-        ({ role }) => !existingRoleSet.has(role),
-      );
+      const validatedAssignees = new Map<ProjectRole, MembershipLockRow>();
+      const missingAssignments: AutomaticTeamTaskAssignment[] = [];
+      let changedExistingTask = false;
+      for (const assignment of selectedAssignments) {
+        const roleTasks = existingTasks.filter(
+          ({ projectRole }) => projectRole === assignment.role,
+        );
+        const assigneeMembershipId = assigneeByRole.get(assignment.role);
+        if (assigneeMembershipId) {
+          const assignee = await this.lockMemberships(
+            transaction,
+            context.workspaceId,
+            assignment.teamId,
+            context.membershipId,
+            assigneeMembershipId,
+          );
+          if (!assignee) {
+            throw new Error('ASSIGNEE_MEMBERSHIP_INVARIANT_VIOLATION');
+          }
+          if (
+            roleTasks.some(
+              (task) =>
+                task.assigneeTeamMember !== null &&
+                task.assigneeTeamMember.membership.id !== assigneeMembershipId,
+            )
+          ) {
+            assignmentConflict('이미 다른 담당자가 지정된 팀 작업이 있습니다.', {
+              projectRole: assignment.role,
+              teamTasks: roleTasks.map((task) => toSummaryResponse(task)),
+            });
+          }
+          validatedAssignees.set(assignment.role, assignee);
+        }
+        if (roleTasks.length === 0) {
+          missingAssignments.push({
+            ...assignment,
+            assigneeMembershipId: assigneeMembershipId ?? null,
+          });
+        }
+      }
+      for (const task of existingTasks) {
+        if (!task.projectRole || task.assigneeTeamMember) continue;
+        const assignee = validatedAssignees.get(task.projectRole);
+        if (assignee) {
+          await this.assignExistingTeamTask(transaction, context, task, assignee);
+          changedExistingTask = true;
+        }
+      }
       const createdTeamTasks = await this.createAutomaticTeamTasks(
         transaction,
         context,
         feature,
         missingAssignments,
       );
+      if (changedExistingTask || createdTeamTasks.length > 0) {
+        await this.touchParentFeature(transaction, context.workspaceId, issueId);
+      }
       const updatedFeature = await this.findIssue(transaction, context.workspaceId, issueId);
       await notifyResourceChanged(transaction, {
         changeType: 'UPDATED',
@@ -1229,8 +1813,310 @@ export class IssuesService {
       });
 
       return {
-        createdTeamTasks: createdTeamTasks.map(toSummaryResponse),
-        issue: toDetailResponse(updatedFeature),
+        createdTeamTasks: createdTeamTasks.map((task) => toSummaryResponse(task)),
+        issue: {
+          ...toDetailResponse(updatedFeature),
+          ...toSummaryResponse(
+            updatedFeature,
+            context.membershipId,
+            await this.currentUserProjectRoles(
+              transaction,
+              context.workspaceId,
+              feature.projectId,
+              context.membershipId,
+            ),
+          ),
+        },
+      };
+    });
+  }
+
+  async claim(
+    context: { membershipId: string; userId: string; workspaceId: string },
+    issueId: string,
+    dto: ClaimIssueDto,
+  ): Promise<ClaimIssueResponseDto> {
+    return this.database.client.$transaction(async (transaction) => {
+      await this.lockWorkspace(transaction, context.workspaceId);
+      await this.lockActorMembership(transaction, context.workspaceId, context.membershipId);
+      const [feature] = await transaction.$queryRaw<FeatureStartLockRow[]>`
+        SELECT "id", "type", "title", "priority", "project_id" AS "projectId"
+        FROM "issues"
+        WHERE "workspace_id" = ${context.workspaceId}::uuid
+          AND "id" = ${issueId}::uuid
+          AND "deleted_at" IS NULL
+        FOR UPDATE
+      `;
+      if (!feature || feature.type !== IssueType.FEATURE) {
+        return resourceNotFound();
+      }
+      await this.lockActiveProject(transaction, context.workspaceId, feature.projectId);
+      const [roleAssignment] = this.selectedRoleAssignments(
+        await this.lockProjectRoleAssignments(transaction, context.workspaceId, feature.projectId),
+        [dto.projectRole],
+      );
+      if (!roleAssignment) {
+        return resourceNotFound('프로젝트 역할을 찾을 수 없습니다.');
+      }
+      await this.lockActiveTeam(transaction, context.workspaceId, roleAssignment.teamId);
+      await this.lockActiveTeamMembership(
+        transaction,
+        context.workspaceId,
+        roleAssignment.teamId,
+        context.membershipId,
+      );
+
+      const activeTasks = await transaction.issue.findMany({
+        orderBy: [{ identifier: 'asc' }, { id: 'asc' }],
+        select: ISSUE_SELECT,
+        where: {
+          deletedAt: null,
+          parentIssueId: issueId,
+          projectId: feature.projectId,
+          projectRole: dto.projectRole,
+          teamId: roleAssignment.teamId,
+          type: IssueType.TEAM_TASK,
+          workflowState: {
+            category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] },
+          },
+          workspaceId: context.workspaceId,
+        },
+      });
+      let teamTask: IssueRow;
+      if (dto.teamTaskIssueId) {
+        const selected = activeTasks.find(({ id }) => id === dto.teamTaskIssueId);
+        if (!selected || selected.assigneeTeamMember) {
+          assignmentConflict('팀 작업을 더 이상 맡을 수 없습니다.', {
+            candidates: activeTasks
+              .filter(({ assigneeTeamMember }) => assigneeTeamMember === null)
+              .map((task) => toSummaryResponse(task)),
+          });
+        }
+        teamTask = selected;
+      } else {
+        const candidates = activeTasks.filter(
+          ({ assigneeTeamMember }) => assigneeTeamMember === null,
+        );
+        if (candidates.length > 1) {
+          throw new ApiError({
+            code: 'CLAIM_TARGET_REQUIRED',
+            details: { candidates: candidates.map((task) => toSummaryResponse(task)) },
+            message: '맡을 팀 작업을 선택해 주세요.',
+            status: HttpStatus.CONFLICT,
+          });
+        }
+        if (candidates[0]) {
+          teamTask = candidates[0];
+        } else if (activeTasks.length > 0) {
+          assignmentConflict('해당 역할의 팀 작업에 이미 담당자가 있습니다.');
+        } else {
+          const [created] = await this.createAutomaticTeamTasks(transaction, context, feature, [
+            { ...roleAssignment, assigneeMembershipId: context.membershipId },
+          ]);
+          if (!created) {
+            throw new Error('CLAIMED_TEAM_TASK_INVARIANT_VIOLATION');
+          }
+          teamTask = created;
+        }
+      }
+
+      if (teamTask.assigneeTeamMember === null) {
+        const assignee = await this.lockMemberships(
+          transaction,
+          context.workspaceId,
+          roleAssignment.teamId,
+          context.membershipId,
+          context.membershipId,
+        );
+        if (!assignee) {
+          throw new Error('CLAIM_MEMBERSHIP_INVARIANT_VIOLATION');
+        }
+        teamTask = await this.assignExistingTeamTask(transaction, context, teamTask, assignee);
+      }
+
+      await this.touchParentFeature(transaction, context.workspaceId, issueId);
+      const parent = await this.findIssue(transaction, context.workspaceId, issueId);
+      const currentUserTeamRoles = await this.currentUserProjectRoles(
+        transaction,
+        context.workspaceId,
+        feature.projectId,
+        context.membershipId,
+      );
+      const parentSummary = toSummaryResponse(parent, context.membershipId, currentUserTeamRoles);
+      if (!parentSummary.workflowSummary) {
+        throw new Error('FEATURE_WORKFLOW_SUMMARY_INVARIANT_VIOLATION');
+      }
+      await notifyResourceChanged(transaction, {
+        changeType: 'UPDATED',
+        resourceId: issueId,
+        resourceType: 'ISSUE',
+        version: parent.version,
+        workspaceId: context.workspaceId,
+      });
+      return {
+        issue: parentSummary,
+        teamTask: toSummaryResponse(teamTask),
+        workflowSummary: parentSummary.workflowSummary,
+      };
+    });
+  }
+
+  async assignTeamTasks(
+    context: { membershipId: string; userId: string; workspaceId: string },
+    issueId: string,
+    dto: AssignTeamTasksDto,
+  ): Promise<AssignTeamTasksResponseDto> {
+    return this.database.client.$transaction(async (transaction) => {
+      await this.lockWorkspace(transaction, context.workspaceId);
+      await this.lockActorMembership(transaction, context.workspaceId, context.membershipId);
+      const [feature] = await transaction.$queryRaw<FeatureStartLockRow[]>`
+        SELECT "id", "type", "title", "priority", "project_id" AS "projectId"
+        FROM "issues"
+        WHERE "workspace_id" = ${context.workspaceId}::uuid
+          AND "id" = ${issueId}::uuid
+          AND "deleted_at" IS NULL
+        FOR UPDATE
+      `;
+      if (!feature || feature.type !== IssueType.FEATURE) {
+        return resourceNotFound();
+      }
+      await this.lockActiveProject(transaction, context.workspaceId, feature.projectId);
+      const projectRoleTeams = await this.lockProjectRoleAssignments(
+        transaction,
+        context.workspaceId,
+        feature.projectId,
+      );
+      const assignments = [...dto.assignments].sort((left, right) =>
+        left.teamTaskIssueId.localeCompare(right.teamTaskIssueId),
+      );
+      await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id"
+        FROM "issues"
+        WHERE "workspace_id" = ${context.workspaceId}::uuid
+          AND "id" IN (${Prisma.join(
+            assignments.map(({ teamTaskIssueId }) => Prisma.sql`${teamTaskIssueId}::uuid`),
+          )})
+        ORDER BY "id"
+        FOR UPDATE
+      `);
+      const tasks = await transaction.issue.findMany({
+        orderBy: { id: 'asc' },
+        select: ISSUE_SELECT,
+        where: {
+          deletedAt: null,
+          id: { in: assignments.map(({ teamTaskIssueId }) => teamTaskIssueId) },
+          workspaceId: context.workspaceId,
+        },
+      });
+      const taskById = new Map(tasks.map((task) => [task.id, task]));
+      const roleTeamByRole = new Map(projectRoleTeams.map(({ role, teamId }) => [role, teamId]));
+      for (const assignment of assignments) {
+        const task = taskById.get(assignment.teamTaskIssueId);
+        if (
+          !task ||
+          task.type !== IssueType.TEAM_TASK ||
+          task.parentIssue?.id !== issueId ||
+          task.project?.id !== feature.projectId ||
+          !task.projectRole ||
+          !task.team ||
+          roleTeamByRole.get(task.projectRole) !== task.team.id ||
+          !task.workflowState ||
+          isTerminalCategory(task.workflowState.category)
+        ) {
+          assignmentConflict('담당자를 지정할 수 없는 팀 작업이 포함됐습니다.', {
+            ...(await this.teamTaskAssignmentConflictDetails(
+              transaction,
+              context.workspaceId,
+              assignments,
+              tasks,
+            )),
+          });
+        }
+        if (task.version !== assignment.version) {
+          throw new ApiError({
+            code: 'ISSUE_VERSION_CONFLICT',
+            currentVersion: task.version,
+            details: {
+              staleTeamTaskIssueId: task.id,
+              ...(await this.teamTaskAssignmentConflictDetails(
+                transaction,
+                context.workspaceId,
+                assignments,
+                tasks,
+              )),
+            },
+            message: '이슈가 다른 요청에서 변경되었습니다.',
+            status: HttpStatus.CONFLICT,
+          });
+        }
+        if (task.assigneeTeamMember) {
+          assignmentConflict('팀 작업의 담당자가 이미 변경됐습니다.', {
+            ...(await this.teamTaskAssignmentConflictDetails(
+              transaction,
+              context.workspaceId,
+              assignments,
+              tasks,
+            )),
+          });
+        }
+      }
+
+      const assignees = new Map<string, MembershipLockRow>();
+      for (const teamId of new Set(tasks.flatMap(({ team }) => (team ? [team.id] : [])))) {
+        await this.lockActiveTeam(transaction, context.workspaceId, teamId);
+      }
+      for (const assignment of assignments) {
+        const task = taskById.get(assignment.teamTaskIssueId)!;
+        const assignee = await this.lockMemberships(
+          transaction,
+          context.workspaceId,
+          task.team!.id,
+          context.membershipId,
+          assignment.assigneeMembershipId,
+        );
+        if (!assignee) {
+          throw new Error('ASSIGNEE_MEMBERSHIP_INVARIANT_VIOLATION');
+        }
+        assignees.set(task.id, assignee);
+      }
+      const updatedTasks: IssueRow[] = [];
+      for (const assignment of assignments) {
+        updatedTasks.push(
+          await this.assignExistingTeamTask(
+            transaction,
+            context,
+            taskById.get(assignment.teamTaskIssueId)!,
+            assignees.get(assignment.teamTaskIssueId)!,
+          ),
+        );
+      }
+
+      await this.touchParentFeature(transaction, context.workspaceId, issueId);
+      const parent = await this.findIssue(transaction, context.workspaceId, issueId);
+      const parentSummary = toSummaryResponse(
+        parent,
+        context.membershipId,
+        await this.currentUserProjectRoles(
+          transaction,
+          context.workspaceId,
+          feature.projectId,
+          context.membershipId,
+        ),
+      );
+      if (!parentSummary.workflowSummary) {
+        throw new Error('FEATURE_WORKFLOW_SUMMARY_INVARIANT_VIOLATION');
+      }
+      await notifyResourceChanged(transaction, {
+        changeType: 'UPDATED',
+        resourceId: issueId,
+        resourceType: 'ISSUE',
+        version: parent.version,
+        workspaceId: context.workspaceId,
+      });
+      return {
+        issue: parentSummary,
+        teamTasks: updatedTasks.map((task) => toSummaryResponse(task)),
+        workflowSummary: parentSummary.workflowSummary,
       };
     });
   }
@@ -1508,10 +2394,13 @@ export class IssuesService {
           status: HttpStatus.CONFLICT,
         });
       }
+      if (dto.requireCompletedTeamTasks === true && dto.featureStatus !== FeatureIssueStatus.DONE) {
+        issueTypeFieldInvalid('팀 작업 완료 확인은 이슈 완료 상태 변경에만 사용할 수 있습니다.');
+      }
       return this.updateFeatureIssue(context, issueId, dto);
     }
 
-    if (dto.featureStatus !== undefined) {
+    if (dto.featureStatus !== undefined || dto.requireCompletedTeamTasks !== undefined) {
       issueTypeFieldInvalid('팀 작업에는 기능 이슈 상태를 사용할 수 없습니다.');
     }
     if (!preliminary.teamId) {
@@ -2113,6 +3002,34 @@ export class IssuesService {
         return versionConflict(current.version);
       }
 
+      if (dto.requireCompletedTeamTasks === true) {
+        const teamTasks = await transaction.issue.findMany({
+          select: { workflowState: { select: { category: true } } },
+          where: {
+            deletedAt: null,
+            parentIssueId: issueId,
+            type: IssueType.TEAM_TASK,
+            workspaceId: context.workspaceId,
+          },
+        });
+        const targetTasks = teamTasks.filter(
+          ({ workflowState }) => workflowState?.category !== StateCategory.CANCELED,
+        );
+        const completedCount = targetTasks.filter(
+          ({ workflowState }) => workflowState?.category === StateCategory.COMPLETED,
+        ).length;
+        if (targetTasks.length === 0 || completedCount !== targetTasks.length) {
+          conflict(
+            'ISSUE_COMPLETION_NOT_READY',
+            '완료되지 않은 팀 작업이 있어 이슈를 완료할 수 없습니다.',
+            {
+              completedCount,
+              targetTaskCount: targetTasks.length,
+            },
+          );
+        }
+      }
+
       const currentSnapshot = await this.findIssue(transaction, context.workspaceId, issueId);
       const currentLabelIds = currentSnapshot.labels.map(({ label }) => label.id);
       const currentDescriptionMentionIds = requestedDescription
@@ -2361,7 +3278,7 @@ export class IssuesService {
     transaction: Transaction,
     context: { membershipId: string; workspaceId: string },
     parent: { id: string; priority: IssuePriority; projectId: string; title: string },
-    assignments: ProjectRoleTeamLockRow[],
+    assignments: AutomaticTeamTaskAssignment[],
   ): Promise<IssueRow[]> {
     const created: IssueRow[] = [];
     for (const assignment of assignments) {
@@ -2372,6 +3289,15 @@ export class IssuesService {
         team.id,
         undefined,
       );
+      if (assignment.assigneeMembershipId) {
+        await this.lockMemberships(
+          transaction,
+          context.workspaceId,
+          team.id,
+          context.membershipId,
+          assignment.assigneeMembershipId,
+        );
+      }
       await transaction.team.update({
         data: { nextIssueNumber: { increment: 1 } },
         where: { id: team.id },
@@ -2379,7 +3305,7 @@ export class IssuesService {
       const identifier = `${team.key}-${team.nextIssueNumber}`;
       const issue = await transaction.issue.create({
         data: {
-          assigneeMembershipId: null,
+          assigneeMembershipId: assignment.assigneeMembershipId ?? null,
           createdByMembershipId: context.membershipId,
           descriptionMarkdown: null,
           identifier,
@@ -2403,7 +3329,7 @@ export class IssuesService {
         identifier,
         parent.title,
         [],
-        null,
+        assignment.assigneeMembershipId ?? null,
         [],
       );
       const row = await this.findIssue(transaction, context.workspaceId, issue.id);
@@ -2418,6 +3344,144 @@ export class IssuesService {
       created.push(row);
     }
     return created;
+  }
+
+  private async assignExistingTeamTask(
+    transaction: Transaction,
+    context: { membershipId: string; workspaceId: string },
+    current: IssueRow,
+    assignee: MembershipLockRow,
+  ): Promise<IssueRow> {
+    const changed = await transaction.issue.updateMany({
+      data: { assigneeMembershipId: assignee.id, version: { increment: 1 } },
+      where: {
+        assigneeMembershipId: null,
+        deletedAt: null,
+        id: current.id,
+        version: current.version,
+        workspaceId: context.workspaceId,
+      },
+    });
+    if (changed.count !== 1) {
+      assignmentConflict('팀 작업의 담당자가 이미 변경됐습니다.');
+    }
+    await transaction.activityEvent.create({
+      data: this.activity(context, current.id, 'assigneeMembershipId', null, {
+        displayName: assignee.displayName,
+        id: assignee.id,
+      }),
+    });
+    await transaction.issueSubscription.createMany({
+      data: [{ issueId: current.id, membershipId: assignee.id, workspaceId: context.workspaceId }],
+      skipDuplicates: true,
+    });
+    const eventId = await this.createIssueChangedOutbox(transaction, context, current.id, {
+      assigneeMembershipId: assignee.id,
+      changedFields: ['ASSIGNEE'],
+      mentionedMembershipIds: [],
+      terminalCategory: null,
+    });
+    const updated = await this.findIssue(transaction, context.workspaceId, current.id);
+    await notifyResourceChanged(transaction, {
+      changeType: 'UPDATED',
+      eventId,
+      resourceId: current.id,
+      resourceType: 'ISSUE',
+      version: updated.version,
+      workspaceId: context.workspaceId,
+    });
+    return updated;
+  }
+
+  private async touchParentFeature(
+    transaction: Transaction,
+    workspaceId: string,
+    issueId: string,
+  ): Promise<void> {
+    const updated = await transaction.issue.updateMany({
+      data: { version: { increment: 1 } },
+      where: {
+        deletedAt: null,
+        id: issueId,
+        type: IssueType.FEATURE,
+        workspaceId,
+      },
+    });
+    if (updated.count !== 1) {
+      return resourceNotFound();
+    }
+  }
+
+  private async currentUserProjectRoles(
+    transaction: Transaction,
+    workspaceId: string,
+    projectId: string,
+    membershipId: string,
+  ): Promise<ProjectRole[]> {
+    const assignments = await transaction.projectRoleTeam.findMany({
+      orderBy: { role: 'asc' },
+      select: { role: true },
+      where: {
+        project: { archivedAt: null, deletedAt: null },
+        projectId,
+        team: {
+          archivedAt: null,
+          teamMembers: {
+            some: {
+              membership: { status: MembershipStatus.ACTIVE },
+              membershipId,
+              removedAt: null,
+            },
+          },
+        },
+        workspaceId,
+      },
+    });
+    return assignments.map(({ role }) => role);
+  }
+
+  private async teamTaskAssignmentConflictDetails(
+    transaction: Transaction,
+    workspaceId: string,
+    assignments: AssignTeamTasksDto['assignments'],
+    tasks: IssueRow[],
+  ): Promise<Record<string, unknown>> {
+    const teamIds = [...new Set(tasks.flatMap(({ team }) => (team ? [team.id] : [])))].sort();
+    const teamMembers =
+      teamIds.length === 0
+        ? []
+        : await transaction.teamMember.findMany({
+            orderBy: [{ teamId: 'asc' }, { membershipId: 'asc' }],
+            select: {
+              membership: {
+                select: {
+                  id: true,
+                  role: true,
+                  status: true,
+                  user: { select: { avatarFileId: true, displayName: true, id: true } },
+                },
+              },
+              teamId: true,
+            },
+            where: {
+              membership: { status: MembershipStatus.ACTIVE },
+              removedAt: null,
+              team: { archivedAt: null },
+              teamId: { in: teamIds },
+              workspaceId,
+            },
+          });
+
+    return {
+      candidates: teamIds.map((teamId) => ({
+        members: teamMembers
+          .filter((teamMember) => teamMember.teamId === teamId)
+          .map(({ membership }) => toMemberResponse(membership)),
+        teamId,
+      })),
+      requestedAssignments: assignments,
+      teamTasks: tasks.map((task) => toSummaryResponse(task)),
+    };
   }
 
   private async prepareInitialHandoffForCompletion(
@@ -3233,6 +4297,30 @@ export class IssuesService {
       });
     }
     return assignee;
+  }
+
+  private async lockActiveTeamMembership(
+    transaction: Transaction,
+    workspaceId: string,
+    teamId: string,
+    membershipId: string,
+  ): Promise<void> {
+    const [membership] = await transaction.$queryRaw<Array<{ id: string }>>`
+      SELECT "membership"."id"
+      FROM "workspace_memberships" AS "membership"
+      INNER JOIN "team_members" AS "team_member"
+        ON "team_member"."workspace_id" = "membership"."workspace_id"
+       AND "team_member"."membership_id" = "membership"."id"
+      WHERE "membership"."workspace_id" = ${workspaceId}::uuid
+        AND "membership"."id" = ${membershipId}::uuid
+        AND "membership"."status" = 'ACTIVE'::"MembershipStatus"
+        AND "team_member"."team_id" = ${teamId}::uuid
+        AND "team_member"."removed_at" IS NULL
+      FOR UPDATE OF "membership", "team_member"
+    `;
+    if (!membership) {
+      teamMembershipRequired();
+    }
   }
 
   private async lockLabels(

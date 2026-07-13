@@ -42,11 +42,13 @@ function DialogContent({
   showCloseButton = true,
   scaleAnimation = true,
   closeLabel = '닫기',
+  closeButtonClassName,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
   scaleAnimation?: boolean;
   closeLabel?: string;
+  closeButtonClassName?: string;
 }) {
   return (
     <DialogPortal>
@@ -64,7 +66,13 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            render={<Button variant="ghost" className="absolute top-2 right-2" size="icon-sm" />}
+            render={
+              <Button
+                variant="ghost"
+                className={cn('absolute top-2 right-2', closeButtonClassName)}
+                size="icon-sm"
+              />
+            }
           >
             <XIcon data-icon="inline-start" />
             <span className="sr-only">{closeLabel}</span>

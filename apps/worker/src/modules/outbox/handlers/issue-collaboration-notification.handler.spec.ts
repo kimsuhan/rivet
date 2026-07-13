@@ -105,6 +105,21 @@ describe('IssueCollaborationNotificationHandler', () => {
     });
   });
 
+  it('does not notify the actor when they assign the issue to themselves', async () => {
+    await handler.handleIssueChanged(event, {
+      assigneeMembershipId: actorMembershipId,
+      changedFields: ['ASSIGNEE'],
+      issueId,
+      mentionedMembershipIds: [],
+      schemaVersion: 1,
+      subscriberMembershipIds: [],
+      terminalCategory: null,
+    });
+
+    expect(transaction.workspaceMembership.findMany).not.toHaveBeenCalled();
+    expect(transaction.notification.createManyAndReturn).not.toHaveBeenCalled();
+  });
+
   it('uses mention, assignment, then completed priority for issue changes', async () => {
     await handler.handleIssueChanged(event, {
       assigneeMembershipId: secondRecipientMembershipId,

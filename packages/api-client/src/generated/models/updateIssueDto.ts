@@ -27,6 +27,8 @@ export interface UpdateIssueDto {
   teamId?: string;
   workflowStateId?: string;
   featureStatus?: UpdateIssueDtoFeatureStatus;
+  /** 빠른 이슈 완료 시 취소 제외 하위 팀 작업이 모두 완료됐는지 재검증합니다. */
+  requireCompletedTeamTasks?: boolean;
   /** @nullable */
   projectId?: string | null;
   /** @nullable */

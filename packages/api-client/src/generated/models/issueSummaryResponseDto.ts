@@ -5,6 +5,7 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
+import type { FeatureWorkflowSummaryResponseDto } from './featureWorkflowSummaryResponseDto';
 import type { IssueLabelSummaryResponseDto } from './issueLabelSummaryResponseDto';
 import type { IssueMemberSummaryResponseDto } from './issueMemberSummaryResponseDto';
 import type { IssueParentSummaryResponseDto } from './issueParentSummaryResponseDto';
@@ -37,6 +38,9 @@ export interface IssueSummaryResponseDto {
   blocked: boolean;
   /** @nullable */
   progress: IssueProgressResponseDto | null;
+  createdBy: IssueMemberSummaryResponseDto;
+  /** @nullable */
+  workflowSummary: FeatureWorkflowSummaryResponseDto | null;
   /** @minimum 1 */
   version: number;
   createdAt: string;

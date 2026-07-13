@@ -33,7 +33,7 @@ const labels: GlobalSearchLabels = {
   errorDescription: '입력한 검색어는 유지됩니다.',
   errorTitle: '이슈를 검색하지 못했습니다',
   exactMatch: 'ID 일치',
-  feature: '기능 이슈',
+  feature: '이슈',
   featureStatuses: {
     CANCELED: '취소',
     DONE: '완료',

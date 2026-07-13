@@ -18,7 +18,7 @@ import { IssueDetailScreen } from './issue-detail-screen';
 const translations = vi.hoisted(() => ({
   archived: '보관됨',
   assignee: '담당자',
-  backToMyIssues: '내 이슈로 이동',
+  backToMyIssues: '내 작업으로 이동',
   cancel: '취소',
   'children.progress': '1/2 완료 · 50%',
   'conflict.description':
@@ -32,7 +32,7 @@ const translations = vi.hoisted(() => ({
   createdBy: '만든 사람',
   errorDescription: '잠시 후 다시 시도해 주세요.',
   errorTitle: '이슈를 불러오지 못했습니다',
-  feature: '기능 이슈',
+  feature: '이슈',
   'featureStatuses.DONE': '완료',
   'featureStatuses.UNSORTED': '미분류',
   labels: '라벨',
@@ -54,7 +54,7 @@ const translations = vi.hoisted(() => ({
   'priorities.URGENT': '긴급',
   priority: '우선순위',
   projectImmutableErrorDescription:
-    '프로젝트 연결 변경을 취소했습니다. 기능 이슈와 하위 작업의 프로젝트 연결은 개별적으로 변경할 수 없습니다. 최신 상태를 확인해 주세요.',
+    '프로젝트 연결 변경을 취소했습니다. 이슈와 하위 작업의 프로젝트 연결은 개별적으로 변경할 수 없습니다. 최신 상태를 확인해 주세요.',
   projectImmutableErrorTitle: '프로젝트 연결을 변경할 수 없습니다',
   refreshLatest: '최신 상태 다시 불러오기',
   properties: '속성',
@@ -79,7 +79,7 @@ const translations = vi.hoisted(() => ({
   'trash.blocksDescription': '현재 작업이 차단 중인 관계를 해제한 뒤 다시 시도해 주세요.',
   'trash.blocksTitle': '다른 작업을 차단하고 있어 이동할 수 없습니다',
   'trash.childrenDescription':
-    '하위 팀 작업을 다른 기능 이슈로 옮기거나 먼저 휴지통으로 이동한 뒤 다시 시도해 주세요.',
+    '하위 팀 작업을 다른 이슈로 옮기거나 먼저 휴지통으로 이동한 뒤 다시 시도해 주세요.',
   'trash.childrenTitle': '하위 팀 작업이 있어 이동할 수 없습니다',
   'trash.confirm': '이슈를 휴지통으로 이동',
   'trash.conflictDescription':
@@ -375,7 +375,21 @@ const issue = {
   type: 'TEAM_TASK',
   updatedAt: '2026-07-01T00:00:00.000Z',
   version: 1,
+  workflowSummary: null,
 } satisfies IssueDetailResponseDto;
+
+const emptyFeatureWorkflowSummary = {
+  activeRoles: [],
+  activeRoleTeams: [],
+  allTargetTasksCompleted: false,
+  canceledCount: 0,
+  completedCount: 0,
+  currentUserAssignedTeamTasks: [],
+  currentUserTeamRoles: [],
+  teamTaskCount: 0,
+  unassignedCount: 0,
+  waitingOn: [],
+} satisfies NonNullable<IssueDetailResponseDto['workflowSummary']>;
 
 function issueQuery(data: IssueDetailResponseDto = issue) {
   return {
@@ -599,19 +613,57 @@ describe('IssueDetailScreen', () => {
     expect(screen.getAllByText(translations.createdAt)).toHaveLength(1);
     expect(screen.getAllByText(translations.updatedAt)).toHaveLength(1);
     expect(within(properties).getByText('API 팀 (API)')).toBeVisible();
-    expect(
-      within(properties).getByRole('combobox', { name: translations.state }),
-    ).toHaveTextContent('할 일');
-    expect(
-      within(properties).getByRole('combobox', { name: translations.assignee }),
-    ).toHaveTextContent(translations.unassigned);
-    expect(
-      within(properties).getByRole('combobox', { name: translations.priority }),
-    ).toHaveTextContent(translations['priorities.NONE']);
-    expect(within(properties).getByLabelText(translations.labels)).toHaveTextContent(
-      '레거시, 버그',
+    const state = within(properties).getByRole('combobox', {
+      name: new RegExp(`^${translations.state}:`),
+    });
+    const assignee = within(properties).getByRole('combobox', {
+      name: new RegExp(`^${translations.assignee}:`),
+    });
+    const priority = within(properties).getByRole('combobox', {
+      name: new RegExp(`^${translations.priority}:`),
+    });
+    expect(state).toHaveTextContent('할 일');
+    expect(assignee).toHaveTextContent(translations.unassigned);
+    expect(priority).toHaveTextContent(translations['priorities.NONE']);
+    for (const trigger of [state, assignee, priority]) {
+      expect(trigger).toHaveAttribute('data-variant', 'property');
+      expect(trigger).toHaveClass('min-w-36', 'max-w-full');
+      expect(trigger).not.toHaveClass('w-full');
+    }
+    expect(state.querySelector('[data-slot="inline-select-icon"]')).toHaveClass('lucide-circle');
+    expect(assignee.querySelector('[data-slot="inline-select-icon"]')).toHaveClass(
+      'lucide-user-round',
     );
+    expect(priority.querySelector('[data-slot="inline-select-icon"]')).toHaveClass('lucide-minus');
+    expect(within(properties).getByRole('button', { name: /^라벨: 레거시, 버그$/ })).toBeVisible();
+    expect(within(properties).getByText('레거시')).toBeVisible();
+    expect(within(properties).getByText('버그')).toBeVisible();
     expect(mocks.issueHook).toHaveBeenCalledWith('API-1', { query: { retry: false } });
+  });
+
+  it('읽기 전용 프로젝트는 입력 컨트롤 없이 같은 속성 grid에 표시한다', () => {
+    mocks.issueHook.mockReturnValue(
+      issueQuery({
+        ...issue,
+        project: {
+          archived: false,
+          id: 'project-id',
+          name: '결제 프로젝트',
+          status: 'IN_PROGRESS',
+        },
+        projectRole: 'WEB_FRONTEND',
+      }),
+    );
+
+    render(<IssueDetailScreen issueRef="API-1" />, { wrapper: QueryWrapper });
+
+    const properties = screen.getByRole('complementary', { name: translations.properties });
+    const projectLabel = within(properties).getByText('project', { selector: 'dt' });
+    const projectRow = projectLabel.parentElement;
+    if (!projectRow) throw new Error('project property row missing');
+    expect(within(projectRow).getByText('결제 프로젝트')).toBeVisible();
+    expect(projectRow.querySelector('.lucide-folder-kanban')).toBeInTheDocument();
+    expect(within(projectRow).queryByRole('combobox')).toBeNull();
   });
 
   it.each([
@@ -665,6 +717,7 @@ describe('IssueDetailScreen', () => {
         status: { category: 'BACKLOG', featureStatus: 'UNSORTED', workflowState: null },
         team: null,
         type: 'FEATURE',
+        workflowSummary: emptyFeatureWorkflowSummary,
       } satisfies IssueDetailResponseDto,
       expectedTab: '연결',
       expectedUrl: '/issues/FEAT-ANCHOR?tab=relations#handoff-handoff-id',
@@ -714,7 +767,11 @@ describe('IssueDetailScreen', () => {
     const view = render(<IssueDetailScreen issueRef="API-1" />, { wrapper: QueryWrapper });
 
     const properties = screen.getByRole('complementary', { name: translations.properties });
-    await user.click(within(properties).getByRole('combobox', { name: translations.priority }));
+    await user.click(
+      within(properties).getByRole('combobox', {
+        name: new RegExp(`^${translations.priority}:`),
+      }),
+    );
     await user.click(await screen.findByRole('option', { name: translations['priorities.HIGH'] }));
     expect(mocks.mutate).toHaveBeenCalledWith({
       change: { kind: 'priority', value: 'HIGH' },
@@ -723,10 +780,9 @@ describe('IssueDetailScreen', () => {
     mocks.issueHook.mockReturnValue(issueQuery({ ...issue, priority: 'HIGH' }));
     view.rerender(<IssueDetailScreen issueRef="API-1" />);
 
-    const labels = within(properties).getByLabelText(translations.labels);
+    const labels = within(properties).getByRole('button', { name: /^라벨:/ });
     await user.click(labels);
-    const labelsDetails = labels.closest('details');
-    expect(labelsDetails).toHaveAttribute('open');
+    expect(labels).toHaveAttribute('data-popup-open');
 
     const workTab = screen.getByRole('tab', { name: translations['tabs.work'] });
     const relationsTab = screen.getByRole('tab', { name: translations['tabs.relations'] });
@@ -743,9 +799,10 @@ describe('IssueDetailScreen', () => {
     expect(mocks.replace).toHaveBeenCalledWith('/issues/API-1?tab=relations', {
       scroll: false,
     });
-    expect(labelsDetails).toHaveAttribute('open');
     expect(
-      within(properties).getByRole('combobox', { name: translations.priority }),
+      within(properties).getByRole('combobox', {
+        name: new RegExp(`^${translations.priority}:`),
+      }),
     ).toHaveTextContent(translations['priorities.HIGH']);
   });
 
@@ -1009,7 +1066,9 @@ describe('IssueDetailScreen', () => {
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
 
-    await user.click(screen.getByRole('combobox', { name: translations.priority }));
+    await user.click(
+      screen.getByRole('combobox', { name: new RegExp(`^${translations.priority}:`) }),
+    );
     await user.click(await screen.findByRole('option', { name: translations['priorities.HIGH'] }));
     expect(mocks.mutate).toHaveBeenLastCalledWith({
       change: { kind: 'priority', value: 'HIGH' },
@@ -1082,10 +1141,15 @@ describe('IssueDetailScreen', () => {
 
     render(<IssueDetailScreen issueRef="API-1" />, { wrapper: QueryWrapper });
 
-    expect(screen.getByText(translations.projectImmutableErrorTitle)).toBeVisible();
-    expect(screen.getByText(translations.projectImmutableErrorDescription)).toBeVisible();
+    const properties = screen.getByRole('complementary', { name: translations.properties });
+    expect(within(properties).getByText(translations.projectImmutableErrorTitle)).toBeVisible();
+    expect(
+      within(properties).getByText(translations.projectImmutableErrorDescription),
+    ).toBeVisible();
     expect(screen.queryByRole('button', { name: translations.retry })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: translations.refreshLatest }));
+    const refresh = screen.getByRole('button', { name: translations.refreshLatest });
+    expect(refresh).toHaveClass('min-h-11', 'lg:min-h-9');
+    await user.click(refresh);
     expect(mocks.refreshLatest).toHaveBeenCalledOnce();
   });
 
@@ -1112,7 +1176,8 @@ describe('IssueDetailScreen', () => {
     const user = userEvent.setup();
     render(<IssueDetailScreen issueRef="API-1" />, { wrapper: QueryWrapper });
 
-    await user.click(screen.getByLabelText(translations.labels));
+    const labelTrigger = screen.getByRole('button', { name: /^라벨:/ });
+    await user.click(labelTrigger);
     const selectedArchived = screen.getByRole('checkbox', { name: /레거시/ });
     const unselectedArchived = screen.getByRole('checkbox', { name: /옛 라벨/ });
     const attachable = screen.getByRole('checkbox', { name: '개선' });
@@ -1136,6 +1201,10 @@ describe('IssueDetailScreen', () => {
       },
       issue,
     });
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(labelTrigger).not.toHaveAttribute('data-popup-open'));
+    expect(labelTrigger).toHaveFocus();
   });
 
   it('기능 이슈는 업무에 현재 요약을, 연결에 전체 작업 흐름을 표시한다', async () => {
@@ -1153,6 +1222,7 @@ describe('IssueDetailScreen', () => {
       status: { category: 'BACKLOG', featureStatus: 'UNSORTED', workflowState: null },
       team: null,
       type: 'FEATURE',
+      workflowSummary: emptyFeatureWorkflowSummary,
     } satisfies IssueDetailResponseDto;
     mocks.issueHook.mockReturnValue(issueQuery(featureIssue));
     mocks.issuesListHook.mockReturnValue({
@@ -1197,7 +1267,9 @@ describe('IssueDetailScreen', () => {
 
     expect(screen.queryByText(translations.feature)).not.toBeInTheDocument();
     expect(screen.getByText('모바일 리뉴얼')).toBeVisible();
-    expect(screen.queryByRole('combobox', { name: translations.assignee })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('combobox', { name: new RegExp(`^${translations.assignee}:`) }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: translations['workSummary.title'] })).toBeVisible();
     expect(screen.getByRole('link', { name: /API-2/ })).toBeVisible();
     expect(
@@ -1224,7 +1296,7 @@ describe('IssueDetailScreen', () => {
       '/issues/FEAT-1?tab=relations&create=1&type=TEAM_TASK&projectId=project-id&parentIssueId=7c8fc5da-cccb-4478-b9b0-78ec539e9271#feature-progress-title',
     );
 
-    await user.click(screen.getByRole('combobox', { name: translations.state }));
+    await user.click(screen.getByRole('combobox', { name: new RegExp(`^${translations.state}:`) }));
     await user.click(
       await screen.findByRole('option', { name: translations['featureStatuses.DONE'] }),
     );
@@ -1249,6 +1321,7 @@ describe('IssueDetailScreen', () => {
       status: { category: 'BACKLOG', featureStatus: 'UNSORTED', workflowState: null },
       team: null,
       type: 'FEATURE',
+      workflowSummary: emptyFeatureWorkflowSummary,
     } satisfies IssueDetailResponseDto;
     mocks.issueHook.mockReturnValue(issueQuery(featureIssue));
     mocks.projectHook.mockReturnValue({
@@ -1348,6 +1421,7 @@ describe('IssueDetailScreen', () => {
       status: { category: 'BACKLOG', featureStatus: 'UNSORTED', workflowState: null },
       team: null,
       type: 'FEATURE',
+      workflowSummary: emptyFeatureWorkflowSummary,
       workflowRelations: [],
     } satisfies IssueDetailResponseDto;
     mocks.issueHook.mockReturnValue(issueQuery(featureIssue));
@@ -1492,6 +1566,7 @@ describe('IssueDetailScreen', () => {
       status: { category: 'BACKLOG', featureStatus: 'UNSORTED', workflowState: null },
       team: null,
       type: 'FEATURE',
+      workflowSummary: emptyFeatureWorkflowSummary,
       workflowRelations: [],
     } satisfies IssueDetailResponseDto;
     mocks.issueHook.mockReturnValue(issueQuery(featureIssue));
@@ -1714,7 +1789,7 @@ describe('IssueDetailScreen', () => {
     const view = render(<IssueDetailScreen issueRef="API-1" />, { wrapper: QueryWrapper });
 
     expect(screen.getByRole('button', { name: 'handoff.submitAndComplete' })).toBeEnabled();
-    await user.click(screen.getByRole('combobox', { name: translations.state }));
+    await user.click(screen.getByRole('combobox', { name: new RegExp(`^${translations.state}:`) }));
     await user.click(await screen.findByRole('option', { name: completedState.name }));
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeVisible();
@@ -1791,6 +1866,7 @@ describe('IssueDetailScreen', () => {
         team: null,
         title: '상위 이슈',
         type: 'FEATURE',
+        workflowSummary: emptyFeatureWorkflowSummary,
       },
       downstreamTeamTasks: [
         {
@@ -1858,7 +1934,7 @@ describe('IssueDetailScreen', () => {
 
     render(<IssueDetailScreen issueRef="API-1" />, { wrapper: QueryWrapper });
 
-    await user.click(screen.getByRole('combobox', { name: translations.state }));
+    await user.click(screen.getByRole('combobox', { name: new RegExp(`^${translations.state}:`) }));
     await user.click(await screen.findByRole('option', { name: completedState.name }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(mocks.mutate).toHaveBeenLastCalledWith(
@@ -1928,7 +2004,7 @@ describe('IssueDetailScreen', () => {
     });
     const view = render(<IssueDetailScreen issueRef="API-1" />, { wrapper: QueryWrapper });
 
-    await user.click(screen.getByRole('combobox', { name: translations.state }));
+    await user.click(screen.getByRole('combobox', { name: new RegExp(`^${translations.state}:`) }));
     await user.click(await screen.findByRole('option', { name: completedState.name }));
     const editor = within(screen.getByRole('dialog')).getByRole('textbox', {
       name: 'editorLabel',

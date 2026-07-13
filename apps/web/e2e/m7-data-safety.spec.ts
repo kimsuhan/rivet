@@ -113,7 +113,7 @@ test('M7 관리자 삭제·복구와 CSV 내보내기 안전 경계를 검증한
       await expect(
         page.getByRole('heading', { name: '설정은 데스크톱에서 사용할 수 있습니다' }),
       ).toBeVisible();
-      await expect(page.getByRole('link', { name: '내 이슈로 돌아가기' })).toBeVisible();
+      await expect(page.getByRole('link', { name: '내 작업으로 돌아가기' })).toBeVisible();
       return;
     }
 

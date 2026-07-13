@@ -2894,6 +2894,1116 @@ describe('M3 issues', () => {
     ).resolves.toBe(0);
   });
 
+  it('lists feature work queues with workflow summaries and stable progress cursors', async () => {
+    const workspaceId = workspaceIds[0]!;
+    const project = await database.client.project.create({
+      data: {
+        name: `전역 이슈 목록 ${runId}`,
+        status: ProjectStatus.IN_PROGRESS,
+        workspaceId,
+      },
+    });
+    await database.client.projectRoleTeam.createMany({
+      data: [
+        { projectId: project.id, role: ProjectRole.BACKEND, teamId, workspaceId },
+        {
+          projectId: project.id,
+          role: ProjectRole.WEB_FRONTEND,
+          teamId: otherTeamId,
+          workspaceId,
+        },
+      ],
+    });
+    const canceledState = await database.client.workflowState.create({
+      data: {
+        category: StateCategory.CANCELED,
+        name: `전역 이슈 취소 ${runId}`,
+        normalizedName: `전역 이슈 취소 ${runId}`,
+        position: 500_000,
+        teamId,
+        workspaceId,
+      },
+    });
+    const featureIds = {
+      assigned: randomUUID(),
+      canceledOnly: randomUUID(),
+      completed: randomUUID(),
+      completedOnly: randomUUID(),
+      deletedOnly: randomUUID(),
+      done: randomUUID(),
+      review: randomUUID(),
+      unassigned: randomUUID(),
+    };
+    const features = [
+      [featureIds.review, FeatureIssueStatus.TODO, '검토 필요'],
+      [featureIds.canceledOnly, FeatureIssueStatus.TODO, '취소 이력만 있음'],
+      [featureIds.completedOnly, FeatureIssueStatus.REVIEW, '완료 확인 단일'],
+      [featureIds.unassigned, FeatureIssueStatus.IN_PROGRESS, '담당 필요 검색 대상'],
+      [featureIds.assigned, FeatureIssueStatus.IN_PROGRESS, '담당 완료 진행'],
+      [featureIds.completed, FeatureIssueStatus.REVIEW, '완료와 취소 혼합'],
+      [featureIds.done, FeatureIssueStatus.DONE, '상위 이슈 완료'],
+      [featureIds.deletedOnly, FeatureIssueStatus.TODO, '삭제 작업만 있음'],
+    ] as const;
+    await database.client.issue.createMany({
+      data: features.map(([id, featureStatus, title], index) => ({
+        createdByMembershipId: adminMembershipId,
+        featureStatus,
+        id,
+        identifier: `GQF-${runId}-${index}`,
+        priority: IssuePriority.MEDIUM,
+        projectId: project.id,
+        sequenceNumber: 500_000 + index,
+        title,
+        type: IssueType.FEATURE,
+        workspaceId,
+      })),
+    });
+    const childIds = {
+      assigned: randomUUID(),
+      canceled: randomUUID(),
+      completed: randomUUID(),
+      completedOnly: randomUUID(),
+      deleted: randomUUID(),
+      unassigned: randomUUID(),
+    };
+    const deletedAt = new Date();
+    const childSpecs = [
+      {
+        assigneeMembershipId: null,
+        id: childIds.canceled,
+        parentIssueId: featureIds.canceledOnly,
+        workflowStateId: canceledState.id,
+      },
+      {
+        assigneeMembershipId: null,
+        id: childIds.completedOnly,
+        parentIssueId: featureIds.completedOnly,
+        workflowStateId: completedStateId,
+      },
+      {
+        assigneeMembershipId: null,
+        id: childIds.unassigned,
+        parentIssueId: featureIds.unassigned,
+        workflowStateId: backlogStateId,
+      },
+      {
+        assigneeMembershipId: adminMembershipId,
+        id: childIds.assigned,
+        parentIssueId: featureIds.assigned,
+        workflowStateId: startedStateId,
+      },
+      {
+        assigneeMembershipId: null,
+        id: childIds.completed,
+        parentIssueId: featureIds.completed,
+        workflowStateId: completedStateId,
+      },
+      {
+        assigneeMembershipId: null,
+        id: randomUUID(),
+        parentIssueId: featureIds.completed,
+        workflowStateId: canceledState.id,
+      },
+      {
+        assigneeMembershipId: null,
+        id: childIds.deleted,
+        parentIssueId: featureIds.deletedOnly,
+        workflowStateId: backlogStateId,
+      },
+    ];
+    await database.client.issue.createMany({
+      data: childSpecs.map(
+        ({ assigneeMembershipId, id, parentIssueId, workflowStateId }, index) => ({
+          ...(id === childIds.deleted
+            ? {
+                deletedAt,
+                deletedByMembershipId: adminMembershipId,
+                purgeAt: new Date(deletedAt.getTime() + 30 * 24 * 60 * 60 * 1_000),
+              }
+            : {}),
+          assigneeMembershipId,
+          createdByMembershipId: adminMembershipId,
+          id,
+          identifier: `GQT-${runId}-${index}`,
+          parentIssueId,
+          projectId: project.id,
+          projectRole: ProjectRole.BACKEND,
+          sequenceNumber: 500_000 + index,
+          teamId,
+          title: `전역 이슈 하위 ${index}`,
+          type: IssueType.TEAM_TASK,
+          workflowStateId,
+          workspaceId,
+        }),
+      ),
+    });
+
+    const queueIds = async (workQueue: string): Promise<string[]> => {
+      const response = await request(app.getHttpServer())
+        .get('/api/v1/issues')
+        .query({ limit: 100, projectId: project.id, type: IssueType.FEATURE, workQueue })
+        .set('Cookie', adminCookie)
+        .expect(200);
+      expect(response.body.totalCount).toBe(response.body.items.length);
+      expect(response.body.workQueueCounts).toEqual({
+        ALL: 8,
+        ASSIGNMENT_REQUIRED: 1,
+        COMPLETED: 1,
+        COMPLETION_REQUIRED: 2,
+        IN_PROGRESS: 2,
+        REVIEW_REQUIRED: 2,
+      });
+      return response.body.items.map(({ id }: { id: string }) => id).sort();
+    };
+    expect(await queueIds('REVIEW_REQUIRED')).toEqual(
+      [featureIds.review, featureIds.deletedOnly].sort(),
+    );
+    expect(await queueIds('ASSIGNMENT_REQUIRED')).toEqual([featureIds.unassigned]);
+    expect(await queueIds('IN_PROGRESS')).toEqual(
+      [featureIds.assigned, featureIds.unassigned].sort(),
+    );
+    expect(await queueIds('COMPLETION_REQUIRED')).toEqual(
+      [featureIds.completed, featureIds.completedOnly].sort(),
+    );
+    expect(await queueIds('COMPLETED')).toEqual([featureIds.done]);
+    const implicitFeatureQueue = await request(app.getHttpServer())
+      .get('/api/v1/issues')
+      .query({ limit: 100, projectId: project.id, workQueue: 'IN_PROGRESS' })
+      .set('Cookie', adminCookie)
+      .expect(200);
+    expect(implicitFeatureQueue.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: featureIds.assigned, type: IssueType.FEATURE }),
+        expect.objectContaining({ id: featureIds.unassigned, type: IssueType.FEATURE }),
+      ]),
+    );
+    expect(implicitFeatureQueue.body.totalCount).toBe(2);
+    expect(implicitFeatureQueue.body.workQueueCounts.ALL).toBe(8);
+
+    const filtered = await request(app.getHttpServer())
+      .get('/api/v1/issues')
+      .query({
+        activeProjectRole: ProjectRole.BACKEND,
+        createdByMembershipId: adminMembershipId,
+        projectId: project.id,
+        query: '담당 필요',
+        type: IssueType.FEATURE,
+        unassigned: 'true',
+        workQueue: 'ASSIGNMENT_REQUIRED',
+      })
+      .set('Cookie', adminCookie)
+      .expect(200);
+    expect(filtered.body.totalCount).toBe(1);
+    expect(filtered.body.workQueueCounts).toEqual({
+      ALL: 1,
+      ASSIGNMENT_REQUIRED: 1,
+      COMPLETED: 0,
+      COMPLETION_REQUIRED: 0,
+      IN_PROGRESS: 1,
+      REVIEW_REQUIRED: 0,
+    });
+    expect(filtered.body.items).toEqual([
+      expect.objectContaining({
+        createdBy: expect.objectContaining({ id: adminMembershipId }),
+        id: featureIds.unassigned,
+        workflowSummary: expect.objectContaining({
+          activeRoleTeams: [
+            expect.objectContaining({
+              projectRole: ProjectRole.BACKEND,
+              team: expect.objectContaining({ id: teamId }),
+              unassignedCount: 1,
+            }),
+          ],
+          activeRoles: [ProjectRole.BACKEND],
+          allTargetTasksCompleted: false,
+          canceledCount: 0,
+          completedCount: 0,
+          currentUserTeamRoles: [ProjectRole.BACKEND, ProjectRole.WEB_FRONTEND],
+          teamTaskCount: 1,
+          unassignedCount: 1,
+        }),
+      }),
+    ]);
+
+    const assigned = await request(app.getHttpServer())
+      .get('/api/v1/issues')
+      .query({ projectId: project.id, query: '담당 완료', type: IssueType.FEATURE })
+      .set('Cookie', adminCookie)
+      .expect(200);
+    expect(assigned.body.items[0].workflowSummary.currentUserAssignedTeamTasks).toEqual([
+      {
+        id: childIds.assigned,
+        identifier: expect.any(String),
+        projectRole: ProjectRole.BACKEND,
+      },
+    ]);
+
+    const isolationTitle = `전역 FEATURE 격리 ${runId}`;
+    const isolationProject = await database.client.project.create({
+      data: {
+        name: isolationTitle,
+        status: ProjectStatus.IN_PROGRESS,
+        workspaceId,
+      },
+    });
+    const [visibleFeature, deletedFeature] = await Promise.all([
+      database.client.issue.create({
+        data: {
+          createdByMembershipId: adminMembershipId,
+          featureStatus: FeatureIssueStatus.TODO,
+          identifier: `ISO-${runId}-VISIBLE`,
+          projectId: isolationProject.id,
+          sequenceNumber: 700_001,
+          title: isolationTitle,
+          type: IssueType.FEATURE,
+          workspaceId,
+        },
+      }),
+      database.client.issue.create({
+        data: {
+          createdByMembershipId: adminMembershipId,
+          deletedAt,
+          deletedByMembershipId: adminMembershipId,
+          featureStatus: FeatureIssueStatus.TODO,
+          identifier: `ISO-${runId}-DELETED`,
+          projectId: isolationProject.id,
+          purgeAt: new Date(deletedAt.getTime() + 30 * 24 * 60 * 60 * 1_000),
+          sequenceNumber: 700_002,
+          title: isolationTitle,
+          type: IssueType.FEATURE,
+          workspaceId,
+        },
+      }),
+    ]);
+    await database.client.issue.create({
+      data: {
+        createdByMembershipId: adminMembershipId,
+        identifier: `ISO-${runId}-TASK`,
+        sequenceNumber: 700_003,
+        teamId,
+        title: isolationTitle,
+        type: IssueType.TEAM_TASK,
+        workflowStateId: backlogStateId,
+        workspaceId,
+      },
+    });
+    const foreignMembership = await database.client.workspaceMembership.findFirstOrThrow({
+      where: { workspaceId: workspaceIds[1]! },
+    });
+    const foreignProject = await database.client.project.create({
+      data: {
+        name: isolationTitle,
+        status: ProjectStatus.IN_PROGRESS,
+        workspaceId: workspaceIds[1]!,
+      },
+    });
+    await database.client.issue.create({
+      data: {
+        createdByMembershipId: foreignMembership.id,
+        featureStatus: FeatureIssueStatus.TODO,
+        identifier: `ISO-${runId}-FOREIGN`,
+        projectId: foreignProject.id,
+        sequenceNumber: 700_001,
+        title: isolationTitle,
+        type: IssueType.FEATURE,
+        workspaceId: workspaceIds[1]!,
+      },
+    });
+    const isolated = await request(app.getHttpServer())
+      .get('/api/v1/issues')
+      .query({ limit: 100, query: isolationTitle, type: IssueType.FEATURE })
+      .set('Cookie', adminCookie)
+      .expect(200);
+    expect(isolated.body).toMatchObject({
+      items: [expect.objectContaining({ id: visibleFeature.id, type: IssueType.FEATURE })],
+      totalCount: 1,
+      workQueueCounts: {
+        ALL: 1,
+        ASSIGNMENT_REQUIRED: 0,
+        COMPLETED: 0,
+        COMPLETION_REQUIRED: 0,
+        IN_PROGRESS: 0,
+        REVIEW_REQUIRED: 1,
+      },
+    });
+    expect(isolated.body.items).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: deletedFeature.id })]),
+    );
+
+    const progressOrder = await collectIssueIds({
+      limit: 2,
+      projectId: project.id,
+      sort: 'progress',
+      sortDirection: 'asc',
+      type: IssueType.FEATURE,
+    });
+    expect(progressOrder).toEqual([
+      ...[
+        featureIds.assigned,
+        featureIds.canceledOnly,
+        featureIds.deletedOnly,
+        featureIds.done,
+        featureIds.review,
+        featureIds.unassigned,
+      ].sort(),
+      ...[featureIds.completed, featureIds.completedOnly].sort(),
+    ]);
+  });
+
+  it('starts roles with assignees while preserving legacy and current-team boundaries', async () => {
+    const workspaceId = workspaceIds[0]!;
+    const project = await database.client.project.create({
+      data: {
+        name: `역할별 배정 ${runId}`,
+        status: ProjectStatus.IN_PROGRESS,
+        workspaceId,
+      },
+    });
+    await database.client.projectRoleTeam.createMany({
+      data: [
+        { projectId: project.id, role: ProjectRole.BACKEND, teamId, workspaceId },
+        {
+          projectId: project.id,
+          role: ProjectRole.WEB_FRONTEND,
+          teamId: otherTeamId,
+          workspaceId,
+        },
+      ],
+    });
+    const feature = await request(app.getHttpServer())
+      .post('/api/v1/issues')
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        featureStatus: FeatureIssueStatus.TODO,
+        projectId: project.id,
+        title: '역할별 담당자 지정',
+        type: IssueType.FEATURE,
+      })
+      .expect(201);
+    const featureId = feature.body.issue.id as string;
+
+    const mixedContract = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${featureId}/start`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        initialRoles: [ProjectRole.BACKEND],
+        roleAssignments: [
+          { assigneeMembershipId: adminMembershipId, projectRole: ProjectRole.BACKEND },
+        ],
+      })
+      .expect(422);
+    expect(mixedContract.body.code).toBe('INITIAL_ROLE_INPUT_CONFLICT');
+
+    const started = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${featureId}/start`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        roleAssignments: [
+          { assigneeMembershipId: adminMembershipId, projectRole: ProjectRole.BACKEND },
+          { assigneeMembershipId: null, projectRole: ProjectRole.WEB_FRONTEND },
+        ],
+      })
+      .expect(200);
+    expect(started.body.issue).toMatchObject({
+      version: 2,
+      workflowSummary: {
+        activeRoles: [ProjectRole.BACKEND, ProjectRole.WEB_FRONTEND],
+        completedCount: 0,
+        currentUserAssignedTeamTasks: [
+          expect.objectContaining({ projectRole: ProjectRole.BACKEND }),
+        ],
+        teamTaskCount: 2,
+        unassignedCount: 1,
+      },
+    });
+    expect(started.body.createdTeamTasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          assignee: expect.objectContaining({ id: adminMembershipId }),
+          projectRole: ProjectRole.BACKEND,
+        }),
+        expect.objectContaining({ assignee: null, projectRole: ProjectRole.WEB_FRONTEND }),
+      ]),
+    );
+
+    const idempotent = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${featureId}/start`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        roleAssignments: [
+          { assigneeMembershipId: adminMembershipId, projectRole: ProjectRole.BACKEND },
+        ],
+      })
+      .expect(200);
+    expect(idempotent.body.createdTeamTasks).toEqual([]);
+    expect(idempotent.body.issue.version).toBe(2);
+
+    const staleAssignment = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${featureId}/start`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        roleAssignments: [
+          { assigneeMembershipId: memberMembershipId, projectRole: ProjectRole.BACKEND },
+        ],
+      })
+      .expect(409);
+    expect(staleAssignment.body.code).toBe('ISSUE_ASSIGNMENT_CONFLICT');
+    await expect(
+      database.client.issue.findUniqueOrThrow({
+        select: { version: true },
+        where: { id: featureId },
+      }),
+    ).resolves.toEqual({ version: 2 });
+
+    const wrongTeamFeature = await request(app.getHttpServer())
+      .post('/api/v1/issues')
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        featureStatus: FeatureIssueStatus.TODO,
+        projectId: project.id,
+        title: '다른 역할 팀 담당자 전체 롤백',
+        type: IssueType.FEATURE,
+      })
+      .expect(201);
+    const wrongTeamFeatureId = wrongTeamFeature.body.issue.id as string;
+    const wrongTeamAssignment = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${wrongTeamFeatureId}/start`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        roleAssignments: [
+          { assigneeMembershipId: adminMembershipId, projectRole: ProjectRole.BACKEND },
+          {
+            assigneeMembershipId: deactivateTargetMembershipId,
+            projectRole: ProjectRole.WEB_FRONTEND,
+          },
+        ],
+      })
+      .expect(422);
+    expect(wrongTeamAssignment.body.code).toBe('ASSIGNEE_NOT_TEAM_MEMBER');
+    await expect(
+      database.client.issue.findMany({
+        select: { id: true },
+        where: { parentIssueId: wrongTeamFeatureId },
+      }),
+    ).resolves.toEqual([]);
+    await expect(
+      database.client.issue.findUniqueOrThrow({
+        select: { version: true },
+        where: { id: wrongTeamFeatureId },
+      }),
+    ).resolves.toEqual({ version: 1 });
+
+    const inactiveFeature = await request(app.getHttpServer())
+      .post('/api/v1/issues')
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        featureStatus: FeatureIssueStatus.TODO,
+        projectId: project.id,
+        title: '비활성 담당자 거부',
+        type: IssueType.FEATURE,
+      })
+      .expect(201);
+    await database.client.workspaceMembership.update({
+      data: { deactivatedAt: new Date(), status: MembershipStatus.INACTIVE },
+      where: { id: deactivateTargetMembershipId },
+    });
+    try {
+      const inactiveAssignment = await request(app.getHttpServer())
+        .post(`/api/v1/issues/${String(inactiveFeature.body.issue.id)}/start`)
+        .set('Cookie', adminCookie)
+        .set('Origin', WEB_ORIGIN)
+        .set('X-CSRF-Token', adminCsrfToken)
+        .send({
+          roleAssignments: [
+            {
+              assigneeMembershipId: deactivateTargetMembershipId,
+              projectRole: ProjectRole.BACKEND,
+            },
+          ],
+        })
+        .expect(422);
+      expect(inactiveAssignment.body.code).toBe('ASSIGNEE_NOT_TEAM_MEMBER');
+    } finally {
+      await database.client.workspaceMembership.update({
+        data: { deactivatedAt: null, status: MembershipStatus.ACTIVE },
+        where: { id: deactivateTargetMembershipId },
+      });
+    }
+    await expect(
+      database.client.issue.count({
+        where: { parentIssueId: inactiveFeature.body.issue.id as string },
+      }),
+    ).resolves.toBe(0);
+
+    const privateTeam = await database.client.team.create({
+      data: {
+        key: 'OWN',
+        name: `현재 팀 검증 ${runId}`,
+        normalizedName: `현재 팀 검증 ${runId}`,
+        workspaceId,
+      },
+    });
+    await database.client.teamMember.create({
+      data: { membershipId: adminMembershipId, teamId: privateTeam.id, workspaceId },
+    });
+    await database.client.workflowState.create({
+      data: {
+        category: StateCategory.BACKLOG,
+        isDefault: true,
+        name: '현재 팀 백로그',
+        normalizedName: '현재 팀 백로그',
+        position: 0,
+        teamId: privateTeam.id,
+        workspaceId,
+      },
+    });
+    const privateProject = await database.client.project.create({
+      data: {
+        name: `현재 팀 프로젝트 ${runId}`,
+        status: ProjectStatus.IN_PROGRESS,
+        workspaceId,
+      },
+    });
+    await database.client.projectRoleTeam.create({
+      data: {
+        projectId: privateProject.id,
+        role: ProjectRole.BACKEND,
+        teamId: privateTeam.id,
+        workspaceId,
+      },
+    });
+    const privateFeature = await request(app.getHttpServer())
+      .post('/api/v1/issues')
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        featureStatus: FeatureIssueStatus.TODO,
+        projectId: privateProject.id,
+        title: '우리 팀에서 시작',
+        type: IssueType.FEATURE,
+      })
+      .expect(201);
+    const denied = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${String(privateFeature.body.issue.id)}/start`)
+      .set('Cookie', memberCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', memberCsrfToken)
+      .send({
+        initialRoles: [ProjectRole.BACKEND],
+        requireCurrentUserTeamMembership: true,
+      })
+      .expect(403);
+    expect(denied.body.code).toBe('TEAM_MEMBERSHIP_REQUIRED');
+    await expect(
+      database.client.issue.count({
+        where: { parentIssueId: privateFeature.body.issue.id as string },
+      }),
+    ).resolves.toBe(0);
+  });
+
+  it('revalidates every child task when quick-completing a feature without changing legacy status edits', async () => {
+    const workspaceId = workspaceIds[0]!;
+    const project = await database.client.project.create({
+      data: {
+        name: `빠른 완료 재검증 ${runId}`,
+        status: ProjectStatus.IN_PROGRESS,
+        workspaceId,
+      },
+    });
+    await database.client.projectRoleTeam.create({
+      data: {
+        projectId: project.id,
+        role: ProjectRole.BACKEND,
+        teamId,
+        workspaceId,
+      },
+    });
+    const feature = await request(app.getHttpServer())
+      .post('/api/v1/issues')
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        featureStatus: FeatureIssueStatus.REVIEW,
+        initialRoles: [ProjectRole.BACKEND],
+        projectId: project.id,
+        title: '완료 창 이후 작업 재개 경합',
+        type: IssueType.FEATURE,
+      })
+      .expect(201);
+    const featureId = feature.body.issue.id as string;
+    const task = feature.body.createdTeamTasks[0] as { id: string; version: number };
+
+    const initiallyCompleted = await request(app.getHttpServer())
+      .patch(`/api/v1/issues/${task.id}`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({ version: task.version, workflowStateId: completedStateId })
+      .expect(200);
+    const reopened = await request(app.getHttpServer())
+      .patch(`/api/v1/issues/${task.id}`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({ version: initiallyCompleted.body.version, workflowStateId: startedStateId })
+      .expect(200);
+    const latestParent = await request(app.getHttpServer())
+      .get(`/api/v1/issues/${featureId}`)
+      .set('Cookie', adminCookie)
+      .expect(200);
+
+    const rejected = await request(app.getHttpServer())
+      .patch(`/api/v1/issues/${featureId}`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        featureStatus: FeatureIssueStatus.DONE,
+        requireCompletedTeamTasks: true,
+        version: latestParent.body.version,
+      })
+      .expect(409);
+    expect(rejected.body).toMatchObject({
+      code: 'ISSUE_COMPLETION_NOT_READY',
+      details: { completedCount: 0, targetTaskCount: 1 },
+    });
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/issues/${task.id}`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({ version: reopened.body.version, workflowStateId: completedStateId })
+      .expect(200);
+    const completableParent = await request(app.getHttpServer())
+      .get(`/api/v1/issues/${featureId}`)
+      .set('Cookie', adminCookie)
+      .expect(200);
+    const completed = await request(app.getHttpServer())
+      .patch(`/api/v1/issues/${featureId}`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        featureStatus: FeatureIssueStatus.DONE,
+        requireCompletedTeamTasks: true,
+        version: completableParent.body.version,
+      })
+      .expect(200);
+    expect(completed.body.status.featureStatus).toBe(FeatureIssueStatus.DONE);
+
+    const legacyFeature = await request(app.getHttpServer())
+      .post('/api/v1/issues')
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        featureStatus: FeatureIssueStatus.TODO,
+        projectId: project.id,
+        title: '기존 직접 상태 변경 호환',
+        type: IssueType.FEATURE,
+      })
+      .expect(201);
+    const legacyCompleted = await request(app.getHttpServer())
+      .patch(`/api/v1/issues/${String(legacyFeature.body.issue.id)}`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({ featureStatus: FeatureIssueStatus.DONE, version: legacyFeature.body.issue.version })
+      .expect(200);
+    expect(legacyCompleted.body.status.featureStatus).toBe(FeatureIssueStatus.DONE);
+  });
+
+  it('claims and batch-assigns team tasks atomically', async () => {
+    const workspaceId = workspaceIds[0]!;
+    const project = await database.client.project.create({
+      data: {
+        name: `내가 맡기와 일괄 배정 ${runId}`,
+        status: ProjectStatus.IN_PROGRESS,
+        workspaceId,
+      },
+    });
+    await database.client.projectRoleTeam.createMany({
+      data: [
+        { projectId: project.id, role: ProjectRole.BACKEND, teamId, workspaceId },
+        {
+          projectId: project.id,
+          role: ProjectRole.WEB_FRONTEND,
+          teamId: otherTeamId,
+          workspaceId,
+        },
+      ],
+    });
+    const createFeature = async (title: string, initialRoles?: ProjectRole[]) =>
+      request(app.getHttpServer())
+        .post('/api/v1/issues')
+        .set('Cookie', adminCookie)
+        .set('Origin', WEB_ORIGIN)
+        .set('X-CSRF-Token', adminCsrfToken)
+        .send({
+          featureStatus: FeatureIssueStatus.TODO,
+          ...(initialRoles ? { initialRoles } : {}),
+          projectId: project.id,
+          title,
+          type: IssueType.FEATURE,
+        })
+        .expect(201);
+
+    const outsiderUser = await database.client.workspaceMembership.findUniqueOrThrow({
+      select: { userId: true },
+      where: { id: outsiderMembershipId },
+    });
+    const outsiderSession = await app.get(AuthSessionService).create(outsiderUser.userId);
+    const outsiderCookie = `rivet_session=${outsiderSession.token}`;
+    const outsiderCsrfToken = createCsrfToken(outsiderSession.token, CSRF_HMAC_KEY);
+    const deniedClaimFeature = await createFeature('역할 팀 외부 멤버 맡기', [ProjectRole.BACKEND]);
+    const deniedClaim = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${String(deniedClaimFeature.body.issue.id)}/claim`)
+      .set('Cookie', outsiderCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', outsiderCsrfToken)
+      .send({ projectRole: ProjectRole.BACKEND })
+      .expect(403);
+    expect(deniedClaim.body.code).toBe('TEAM_MEMBERSHIP_REQUIRED');
+
+    const claimable = await createFeature('기존 미할당 작업 맡기', [ProjectRole.BACKEND]);
+    const claimableTaskId = claimable.body.createdTeamTasks[0].id as string;
+    const claimed = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${String(claimable.body.issue.id)}/claim`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({ projectRole: ProjectRole.BACKEND })
+      .expect(200);
+    expect(claimed.body).toMatchObject({
+      issue: { version: 2 },
+      teamTask: { assignee: { id: adminMembershipId }, id: claimableTaskId, version: 2 },
+      workflowSummary: {
+        currentUserAssignedTeamTasks: [expect.objectContaining({ id: claimableTaskId })],
+        unassignedCount: 0,
+      },
+    });
+    await expect(
+      database.client.issueSubscription.findUnique({
+        where: {
+          issueId_membershipId: {
+            issueId: claimableTaskId,
+            membershipId: adminMembershipId,
+          },
+        },
+      }),
+    ).resolves.not.toBeNull();
+    await expect(
+      database.client.outboxEvent.findFirst({
+        where: { aggregateId: claimableTaskId, eventType: ISSUE_CHANGED, workspaceId },
+      }),
+    ).resolves.toMatchObject({
+      actorMembershipId: adminMembershipId,
+      payload: expect.objectContaining({ assigneeMembershipId: adminMembershipId }),
+    });
+
+    const createdByClaim = await createFeature('작업 생성 후 맡기');
+    const createdClaim = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${String(createdByClaim.body.issue.id)}/claim`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({ projectRole: ProjectRole.BACKEND })
+      .expect(200);
+    expect(createdClaim.body).toMatchObject({
+      issue: { version: 2 },
+      teamTask: {
+        assignee: { id: adminMembershipId },
+        projectRole: ProjectRole.BACKEND,
+        version: 1,
+      },
+    });
+
+    const concurrent = await createFeature('동시 내가 맡기', [ProjectRole.BACKEND]);
+    const concurrentResponses = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/issues/${String(concurrent.body.issue.id)}/claim`)
+        .set('Cookie', adminCookie)
+        .set('Origin', WEB_ORIGIN)
+        .set('X-CSRF-Token', adminCsrfToken)
+        .send({ projectRole: ProjectRole.BACKEND }),
+      request(app.getHttpServer())
+        .post(`/api/v1/issues/${String(concurrent.body.issue.id)}/claim`)
+        .set('Cookie', memberCookie)
+        .set('Origin', WEB_ORIGIN)
+        .set('X-CSRF-Token', memberCsrfToken)
+        .send({ projectRole: ProjectRole.BACKEND }),
+    ]);
+    expect(concurrentResponses.map(({ status }) => status).sort()).toEqual([200, 409]);
+    await expect(
+      database.client.issue.findUniqueOrThrow({
+        select: { version: true },
+        where: { id: concurrent.body.issue.id as string },
+      }),
+    ).resolves.toEqual({ version: 2 });
+
+    const multiple = await createFeature('복수 후보 내가 맡기');
+    const multipleTaskResponses = await Promise.all(
+      ['복수 후보 1', '복수 후보 2'].map((title) =>
+        request(app.getHttpServer())
+          .post('/api/v1/issues')
+          .set('Cookie', adminCookie)
+          .set('Origin', WEB_ORIGIN)
+          .set('X-CSRF-Token', adminCsrfToken)
+          .send({
+            parentIssueId: multiple.body.issue.id,
+            projectId: project.id,
+            projectRole: ProjectRole.BACKEND,
+            teamId,
+            title,
+            type: IssueType.TEAM_TASK,
+          })
+          .expect(201),
+      ),
+    );
+    const targetRequired = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${String(multiple.body.issue.id)}/claim`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({ projectRole: ProjectRole.BACKEND })
+      .expect(409);
+    expect(targetRequired.body).toMatchObject({
+      code: 'CLAIM_TARGET_REQUIRED',
+      details: { candidates: expect.arrayContaining([expect.any(Object), expect.any(Object)]) },
+    });
+    await request(app.getHttpServer())
+      .post(`/api/v1/issues/${String(multiple.body.issue.id)}/claim`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        projectRole: ProjectRole.BACKEND,
+        teamTaskIssueId: multipleTaskResponses[0]!.body.issue.id,
+      })
+      .expect(200);
+
+    const batchFeature = await createFeature('복수 역할 일괄 배정', [
+      ProjectRole.BACKEND,
+      ProjectRole.WEB_FRONTEND,
+    ]);
+    const backendTask = batchFeature.body.createdTeamTasks.find(
+      ({ projectRole }: { projectRole: ProjectRole }) => projectRole === ProjectRole.BACKEND,
+    );
+    const webTask = batchFeature.body.createdTeamTasks.find(
+      ({ projectRole }: { projectRole: ProjectRole }) => projectRole === ProjectRole.WEB_FRONTEND,
+    );
+    expect(backendTask).toBeDefined();
+    expect(webTask).toBeDefined();
+    const batch = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${String(batchFeature.body.issue.id)}/assign-team-tasks`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        assignments: [
+          {
+            assigneeMembershipId: adminMembershipId,
+            teamTaskIssueId: backendTask.id,
+            version: 1,
+          },
+          {
+            assigneeMembershipId: memberMembershipId,
+            teamTaskIssueId: webTask.id,
+            version: 1,
+          },
+        ],
+      })
+      .expect(200);
+    expect(batch.body.issue.version).toBe(2);
+    expect(batch.body.teamTasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ assignee: expect.objectContaining({ id: adminMembershipId }) }),
+        expect.objectContaining({ assignee: expect.objectContaining({ id: memberMembershipId }) }),
+      ]),
+    );
+    await expect(
+      database.client.outboxEvent.count({
+        where: {
+          aggregateId: { in: [backendTask.id as string, webTask.id as string] },
+          eventType: ISSUE_CHANGED,
+          workspaceId,
+        },
+      }),
+    ).resolves.toBe(2);
+    await expect(
+      database.client.activityEvent.count({
+        where: {
+          eventType: 'ISSUE_UPDATED',
+          fieldName: 'assigneeMembershipId',
+          issueId: { in: [backendTask.id as string, webTask.id as string] },
+          workspaceId,
+        },
+      }),
+    ).resolves.toBe(2);
+    await expect(
+      database.client.issueSubscription.findUnique({
+        where: {
+          issueId_membershipId: {
+            issueId: backendTask.id as string,
+            membershipId: adminMembershipId,
+          },
+        },
+      }),
+    ).resolves.not.toBeNull();
+    await expect(
+      database.client.issueSubscription.findUnique({
+        where: {
+          issueId_membershipId: {
+            issueId: webTask.id as string,
+            membershipId: memberMembershipId,
+          },
+        },
+      }),
+    ).resolves.not.toBeNull();
+
+    const invalidCandidateFeature = await createFeature('일괄 배정 후보 검증', [
+      ProjectRole.BACKEND,
+    ]);
+    const invalidCandidateTaskId = invalidCandidateFeature.body.createdTeamTasks[0].id as string;
+    const invalidCandidate = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${String(invalidCandidateFeature.body.issue.id)}/assign-team-tasks`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        assignments: [
+          {
+            assigneeMembershipId: outsiderMembershipId,
+            teamTaskIssueId: invalidCandidateTaskId,
+            version: 1,
+          },
+        ],
+      })
+      .expect(422);
+    expect(invalidCandidate.body.code).toBe('ASSIGNEE_NOT_TEAM_MEMBER');
+    await expect(
+      database.client.issue.findUniqueOrThrow({
+        select: { assigneeMembershipId: true, version: true },
+        where: { id: invalidCandidateTaskId },
+      }),
+    ).resolves.toEqual({ assigneeMembershipId: null, version: 1 });
+    await expect(
+      database.client.issue.findUniqueOrThrow({
+        select: { version: true },
+        where: { id: invalidCandidateFeature.body.issue.id as string },
+      }),
+    ).resolves.toEqual({ version: 1 });
+
+    const rollbackFeature = await createFeature('일괄 배정 전체 롤백', [
+      ProjectRole.BACKEND,
+      ProjectRole.WEB_FRONTEND,
+    ]);
+    const rollbackTasks = rollbackFeature.body.createdTeamTasks as Array<{
+      id: string;
+      projectRole: ProjectRole;
+    }>;
+    const rollback = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${String(rollbackFeature.body.issue.id)}/assign-team-tasks`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        assignments: rollbackTasks.map(({ id }, index) => ({
+          assigneeMembershipId: index === 0 ? adminMembershipId : memberMembershipId,
+          teamTaskIssueId: id,
+          version: index === 0 ? 1 : 999,
+        })),
+      })
+      .expect(409);
+    expect(rollback.body.code).toBe('ISSUE_VERSION_CONFLICT');
+    expect(rollback.body.details).toMatchObject({
+      candidates: expect.arrayContaining([
+        expect.objectContaining({ members: expect.any(Array), teamId }),
+        expect.objectContaining({ members: expect.any(Array), teamId: otherTeamId }),
+      ]),
+      staleTeamTaskIssueId: rollbackTasks[1]!.id,
+      teamTasks: expect.arrayContaining(
+        rollbackTasks.map(({ id }) => expect.objectContaining({ id })),
+      ),
+    });
+    await expect(
+      database.client.issue.findMany({
+        orderBy: { id: 'asc' },
+        select: { assigneeMembershipId: true, version: true },
+        where: { id: { in: rollbackTasks.map(({ id }) => id) } },
+      }),
+    ).resolves.toEqual([
+      { assigneeMembershipId: null, version: 1 },
+      { assigneeMembershipId: null, version: 1 },
+    ]);
+    await expect(
+      database.client.issue.findUniqueOrThrow({
+        select: { version: true },
+        where: { id: rollbackFeature.body.issue.id as string },
+      }),
+    ).resolves.toEqual({ version: 1 });
+
+    const otherParent = await createFeature('다른 상위 이슈', [ProjectRole.BACKEND]);
+    const otherParentTaskId = otherParent.body.createdTeamTasks[0].id as string;
+    const mixedParentBatch = await request(app.getHttpServer())
+      .post(`/api/v1/issues/${String(rollbackFeature.body.issue.id)}/assign-team-tasks`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        assignments: [
+          {
+            assigneeMembershipId: adminMembershipId,
+            teamTaskIssueId: rollbackTasks[0]!.id,
+            version: 1,
+          },
+          {
+            assigneeMembershipId: adminMembershipId,
+            teamTaskIssueId: otherParentTaskId,
+            version: 1,
+          },
+        ],
+      })
+      .expect(409);
+    expect(mixedParentBatch.body.code).toBe('ISSUE_ASSIGNMENT_CONFLICT');
+    expect(mixedParentBatch.body.details).toMatchObject({
+      candidates: expect.any(Array),
+      requestedAssignments: expect.any(Array),
+      teamTasks: expect.any(Array),
+    });
+    await expect(
+      database.client.issue.findUniqueOrThrow({
+        select: { assigneeMembershipId: true, version: true },
+        where: { id: rollbackTasks[0]!.id },
+      }),
+    ).resolves.toEqual({ assigneeMembershipId: null, version: 1 });
+    await expect(
+      database.client.issue.findUniqueOrThrow({
+        select: { version: true },
+        where: { id: rollbackFeature.body.issue.id as string },
+      }),
+    ).resolves.toEqual({ version: 1 });
+  });
+
   it('serializes assignment against team removal and membership deactivation', async () => {
     const createRaceIssue = (title: string) =>
       request(app.getHttpServer())

@@ -20,6 +20,12 @@ const issue = {
   assignee: null,
   blocked: false,
   createdAt: '2026-07-01T00:00:00.000Z',
+  createdBy: {
+    id: 'membership-creator',
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    user: { avatarFileId: null, displayName: '작성자', id: 'user-creator' },
+  },
   id: '7c8fc5da-cccb-4478-b9b0-78ec539e9271',
   identifier: 'API-1',
   labels: [],
@@ -50,6 +56,7 @@ const issue = {
   type: 'TEAM_TASK',
   updatedAt: '2026-07-01T00:00:00.000Z',
   version: 1,
+  workflowSummary: null,
 } satisfies IssueSummaryResponseDto;
 
 let queryClient: QueryClient;
@@ -71,8 +78,12 @@ describe('issue infinite query', () => {
 
   it('다음 커서를 같은 필터와 함께 전달하고 페이지를 누적한다', async () => {
     vi.mocked(issuesControllerList)
-      .mockResolvedValueOnce({ items: [issue], nextCursor: 'next-issue' })
-      .mockResolvedValueOnce({ items: [{ ...issue, id: 'issue-2' }], nextCursor: null });
+      .mockResolvedValueOnce({ items: [issue], nextCursor: 'next-issue', totalCount: 2 })
+      .mockResolvedValueOnce({
+        items: [{ ...issue, id: 'issue-2' }],
+        nextCursor: null,
+        totalCount: 2,
+      });
     const params = {
       assigneeMembershipId: 'me',
       limit: 50,

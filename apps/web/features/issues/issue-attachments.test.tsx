@@ -94,6 +94,7 @@ const issue = {
   type: 'TEAM_TASK',
   updatedAt: '2026-07-01T00:00:00.000Z',
   version: 1,
+  workflowSummary: null,
 } satisfies IssueDetailResponseDto;
 
 let queryClient: QueryClient;

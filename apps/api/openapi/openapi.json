@@ -2802,6 +2802,31 @@
         "operationId": "IssuesController_list",
         "parameters": [
           {
+            "name": "query",
+            "required": false,
+            "in": "query",
+            "description": "표시 ID 또는 제목 검색",
+            "schema": {
+              "maxLength": 500,
+              "type": "string"
+            }
+          },
+          {
+            "name": "workQueue",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "REVIEW_REQUIRED",
+                "ASSIGNMENT_REQUIRED",
+                "IN_PROGRESS",
+                "COMPLETION_REQUIRED",
+                "COMPLETED"
+              ]
+            }
+          },
+          {
             "name": "type",
             "required": false,
             "in": "query",
@@ -2839,6 +2864,16 @@
             "required": false,
             "in": "query",
             "description": "쉼표로 구분한 프로젝트 역할",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "activeProjectRole",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 현재 작업 프로젝트 역할",
             "schema": {
               "maxLength": 100,
               "type": "string"
@@ -2894,6 +2929,64 @@
             }
           },
           {
+            "name": "unassigned",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "name": "createdByMembershipId",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 만든 사람 멤버십 ID",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "createdFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "createdTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "updatedFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "updatedTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
             "name": "priority",
             "required": false,
             "in": "query",
@@ -2938,7 +3031,8 @@
                 "createdAt",
                 "updatedAt",
                 "status",
-                "priority"
+                "priority",
+                "progress"
               ]
             }
           },
@@ -3207,7 +3301,7 @@
             }
           },
           "403": {
-            "description": "EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN",
+            "description": "EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID, TEAM_MEMBERSHIP_REQUIRED 또는 FORBIDDEN",
             "content": {
               "application/json": {
                 "schema": {
@@ -3227,7 +3321,7 @@
             }
           },
           "422": {
-            "description": "VALIDATION_ERROR, INITIAL_ROLE_REQUIRED 또는 INITIAL_ROLE_NOT_AVAILABLE",
+            "description": "VALIDATION_ERROR, INITIAL_ROLE_REQUIRED, INITIAL_ROLE_INPUT_CONFLICT, INITIAL_ROLE_NOT_AVAILABLE 또는 ASSIGNEE_NOT_TEAM_MEMBER",
             "content": {
               "application/json": {
                 "schema": {
@@ -3243,6 +3337,200 @@
           }
         ],
         "summary": "기존 기능 이슈의 최초 팀 작업 시작",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
+    "/api/v1/issues/{issueId}/claim": {
+      "post": {
+        "operationId": "IssuesController_claim",
+        "parameters": [
+          {
+            "name": "issueId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimIssueDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimIssueResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID, TEAM_MEMBERSHIP_REQUIRED 또는 FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CLAIM_TARGET_REQUIRED 또는 ISSUE_ASSIGNMENT_CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "VALIDATION_ERROR 또는 INITIAL_ROLE_NOT_AVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "현재 사용자가 프로젝트 역할의 팀 작업 맡기",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
+    "/api/v1/issues/{issueId}/assign-team-tasks": {
+      "post": {
+        "operationId": "IssuesController_assignTeamTasks",
+        "parameters": [
+          {
+            "name": "issueId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignTeamTasksDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignTeamTasksResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ISSUE_VERSION_CONFLICT 또는 ISSUE_ASSIGNMENT_CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "VALIDATION_ERROR 또는 ASSIGNEE_NOT_TEAM_MEMBER",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "기능 이슈의 미할당 팀 작업 담당자 일괄 지정",
         "tags": [
           "issues"
         ]
@@ -3380,7 +3668,7 @@
             }
           },
           "409": {
-            "description": "VERSION_CONFLICT, ISSUE_VERSION_CONFLICT, ISSUE_TEAM_IMMUTABLE, ISSUE_PROJECT_IMMUTABLE, HANDOFF_REQUIRED, INITIAL_HANDOFF_EXISTS, DOWNSTREAM_TASK_SCOPE_CONFLICT, DOWNSTREAM_TASK_ALREADY_CLOSED 또는 FILE_ALREADY_LINKED",
+            "description": "VERSION_CONFLICT, ISSUE_VERSION_CONFLICT, ISSUE_COMPLETION_NOT_READY, ISSUE_TEAM_IMMUTABLE, ISSUE_PROJECT_IMMUTABLE, HANDOFF_REQUIRED, INITIAL_HANDOFF_EXISTS, DOWNSTREAM_TASK_SCOPE_CONFLICT, DOWNSTREAM_TASK_ALREADY_CLOSED 또는 FILE_ALREADY_LINKED",
             "content": {
               "application/json": {
                 "schema": {
@@ -8175,6 +8463,152 @@
           "percentage"
         ]
       },
+      "IssueActiveRoleTeamResponseDto": {
+        "type": "object",
+        "properties": {
+          "projectRole": {
+            "enum": [
+              "BACKEND",
+              "WEB_FRONTEND",
+              "APP_FRONTEND"
+            ],
+            "type": "string"
+          },
+          "team": {
+            "$ref": "#/components/schemas/IssueTeamSummaryResponseDto"
+          },
+          "unassignedCount": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "projectRole",
+          "team",
+          "unassignedCount"
+        ]
+      },
+      "IssueWorkflowWaitingOnResponseDto": {
+        "type": "object",
+        "properties": {
+          "issueId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "identifier": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "issueId",
+          "identifier",
+          "title"
+        ]
+      },
+      "CurrentUserAssignedTeamTaskResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "identifier": {
+            "type": "string"
+          },
+          "projectRole": {
+            "enum": [
+              "BACKEND",
+              "WEB_FRONTEND",
+              "APP_FRONTEND"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "identifier",
+          "projectRole"
+        ]
+      },
+      "FeatureWorkflowSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "teamTaskCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "completedCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "canceledCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "unassignedCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "activeRoles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "BACKEND",
+                "WEB_FRONTEND",
+                "APP_FRONTEND"
+              ]
+            }
+          },
+          "activeRoleTeams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueActiveRoleTeamResponseDto"
+            }
+          },
+          "waitingOn": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueWorkflowWaitingOnResponseDto"
+            }
+          },
+          "allTargetTasksCompleted": {
+            "type": "boolean"
+          },
+          "currentUserTeamRoles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "BACKEND",
+                "WEB_FRONTEND",
+                "APP_FRONTEND"
+              ]
+            }
+          },
+          "currentUserAssignedTeamTasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CurrentUserAssignedTeamTaskResponseDto"
+            }
+          }
+        },
+        "required": [
+          "teamTaskCount",
+          "completedCount",
+          "canceledCount",
+          "unassignedCount",
+          "activeRoles",
+          "activeRoleTeams",
+          "waitingOn",
+          "allTargetTasksCompleted",
+          "currentUserTeamRoles",
+          "currentUserAssignedTeamTasks"
+        ]
+      },
       "IssueSummaryResponseDto": {
         "type": "object",
         "properties": {
@@ -8272,6 +8706,18 @@
               }
             ]
           },
+          "createdBy": {
+            "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
+          },
+          "workflowSummary": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FeatureWorkflowSummaryResponseDto"
+              }
+            ]
+          },
           "version": {
             "type": "number",
             "minimum": 1
@@ -8300,9 +8746,48 @@
           "labels",
           "blocked",
           "progress",
+          "createdBy",
+          "workflowSummary",
           "version",
           "createdAt",
           "updatedAt"
+        ]
+      },
+      "FeatureWorkQueueCountsResponseDto": {
+        "type": "object",
+        "properties": {
+          "ALL": {
+            "type": "number",
+            "minimum": 0
+          },
+          "REVIEW_REQUIRED": {
+            "type": "number",
+            "minimum": 0
+          },
+          "ASSIGNMENT_REQUIRED": {
+            "type": "number",
+            "minimum": 0
+          },
+          "IN_PROGRESS": {
+            "type": "number",
+            "minimum": 0
+          },
+          "COMPLETION_REQUIRED": {
+            "type": "number",
+            "minimum": 0
+          },
+          "COMPLETED": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "ALL",
+          "REVIEW_REQUIRED",
+          "ASSIGNMENT_REQUIRED",
+          "IN_PROGRESS",
+          "COMPLETION_REQUIRED",
+          "COMPLETED"
         ]
       },
       "IssueListResponseDto": {
@@ -8317,11 +8802,19 @@
           "nextCursor": {
             "type": "string",
             "nullable": true
+          },
+          "totalCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "workQueueCounts": {
+            "$ref": "#/components/schemas/FeatureWorkQueueCountsResponseDto"
           }
         },
         "required": [
           "items",
-          "nextCursor"
+          "nextCursor",
+          "totalCount"
         ]
       },
       "IssueRelationIssueResponseDto": {
@@ -8699,6 +9192,18 @@
               }
             ]
           },
+          "createdBy": {
+            "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
+          },
+          "workflowSummary": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FeatureWorkflowSummaryResponseDto"
+              }
+            ]
+          },
           "version": {
             "type": "number",
             "minimum": 1
@@ -8714,9 +9219,6 @@
           "descriptionMarkdown": {
             "type": "string",
             "nullable": true
-          },
-          "createdBy": {
-            "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
           },
           "blockers": {
             "type": "array",
@@ -8773,11 +9275,12 @@
           "labels",
           "blocked",
           "progress",
+          "createdBy",
+          "workflowSummary",
           "version",
           "createdAt",
           "updatedAt",
           "descriptionMarkdown",
-          "createdBy",
           "blockers",
           "blocking",
           "attachments",
@@ -8802,6 +9305,28 @@
           "createdTeamTasks"
         ]
       },
+      "InitialRoleAssignmentDto": {
+        "type": "object",
+        "properties": {
+          "projectRole": {
+            "enum": [
+              "BACKEND",
+              "WEB_FRONTEND",
+              "APP_FRONTEND"
+            ],
+            "type": "string"
+          },
+          "assigneeMembershipId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "projectRole",
+          "assigneeMembershipId"
+        ]
+      },
       "StartIssueDto": {
         "type": "object",
         "properties": {
@@ -8817,11 +9342,124 @@
                 "APP_FRONTEND"
               ]
             },
+            "description": "`roleAssignments`와 동시에 사용할 수 없습니다.",
             "minItems": 1
+          },
+          "roleAssignments": {
+            "uniqueItems": true,
+            "minItems": 1,
+            "maxItems": 3,
+            "description": "`initialRoles`와 동시에 사용할 수 없습니다.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InitialRoleAssignmentDto"
+            }
+          },
+          "requireCurrentUserTeamMembership": {
+            "type": "boolean",
+            "description": "선택 역할 팀에 현재 사용자가 활성 멤버인지 서버에서 확인합니다."
+          }
+        }
+      },
+      "ClaimIssueDto": {
+        "type": "object",
+        "properties": {
+          "projectRole": {
+            "enum": [
+              "BACKEND",
+              "WEB_FRONTEND",
+              "APP_FRONTEND"
+            ],
+            "type": "string"
+          },
+          "teamTaskIssueId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
           }
         },
         "required": [
-          "initialRoles"
+          "projectRole"
+        ]
+      },
+      "ClaimIssueResponseDto": {
+        "type": "object",
+        "properties": {
+          "issue": {
+            "$ref": "#/components/schemas/IssueSummaryResponseDto"
+          },
+          "teamTask": {
+            "$ref": "#/components/schemas/IssueSummaryResponseDto"
+          },
+          "workflowSummary": {
+            "$ref": "#/components/schemas/FeatureWorkflowSummaryResponseDto"
+          }
+        },
+        "required": [
+          "issue",
+          "teamTask",
+          "workflowSummary"
+        ]
+      },
+      "TeamTaskAssignmentDto": {
+        "type": "object",
+        "properties": {
+          "teamTaskIssueId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "assigneeMembershipId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "teamTaskIssueId",
+          "assigneeMembershipId",
+          "version"
+        ]
+      },
+      "AssignTeamTasksDto": {
+        "type": "object",
+        "properties": {
+          "assignments": {
+            "uniqueItems": true,
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamTaskAssignmentDto"
+            }
+          }
+        },
+        "required": [
+          "assignments"
+        ]
+      },
+      "AssignTeamTasksResponseDto": {
+        "type": "object",
+        "properties": {
+          "issue": {
+            "$ref": "#/components/schemas/IssueSummaryResponseDto"
+          },
+          "teamTasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueSummaryResponseDto"
+            }
+          },
+          "workflowSummary": {
+            "$ref": "#/components/schemas/FeatureWorkflowSummaryResponseDto"
+          }
+        },
+        "required": [
+          "issue",
+          "teamTasks",
+          "workflowSummary"
         ]
       },
       "InlineHandoffDto": {
@@ -8888,6 +9526,10 @@
               "CANCELED"
             ],
             "type": "string"
+          },
+          "requireCompletedTeamTasks": {
+            "type": "boolean",
+            "description": "빠른 이슈 완료 시 취소 제외 하위 팀 작업이 모두 완료됐는지 재검증합니다."
           },
           "projectId": {
             "type": "string",
@@ -9106,6 +9748,18 @@
               }
             ]
           },
+          "createdBy": {
+            "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
+          },
+          "workflowSummary": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FeatureWorkflowSummaryResponseDto"
+              }
+            ]
+          },
           "version": {
             "type": "number",
             "minimum": 1
@@ -9121,9 +9775,6 @@
           "descriptionMarkdown": {
             "type": "string",
             "nullable": true
-          },
-          "createdBy": {
-            "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
           },
           "blockers": {
             "type": "array",
@@ -9198,11 +9849,12 @@
           "labels",
           "blocked",
           "progress",
+          "createdBy",
+          "workflowSummary",
           "version",
           "createdAt",
           "updatedAt",
           "descriptionMarkdown",
-          "createdBy",
           "blockers",
           "blocking",
           "attachments",

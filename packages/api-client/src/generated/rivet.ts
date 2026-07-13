@@ -30,7 +30,11 @@ import type {
   ApiErrorResponseDto,
   ArchiveLabelDto,
   ArchiveProjectDto,
+  AssignTeamTasksDto,
+  AssignTeamTasksResponseDto,
   AuthenticatedSessionDto,
+  ClaimIssueDto,
+  ClaimIssueResponseDto,
   CommentResourceResponseDto,
   CommentsControllerRemoveParams,
   ConfirmPasswordResetDto,
@@ -3446,6 +3450,150 @@ export const useIssuesControllerStart = <TError = ErrorType<ApiErrorResponseDto>
         TContext
       > => {
       return useMutation(getIssuesControllerStartMutationOptions(options), queryClient);
+    }
+
+export const getIssuesControllerClaimUrl = (issueId: string,) => {
+
+
+
+
+  return `/api/v1/issues/${issueId}/claim`
+}
+
+/**
+ * @summary 현재 사용자가 프로젝트 역할의 팀 작업 맡기
+ */
+export const issuesControllerClaim = async (issueId: string,
+    claimIssueDto: ClaimIssueDto, options?: RequestInit): Promise<ClaimIssueResponseDto> => {
+
+  return rivetFetch<ClaimIssueResponseDto>(getIssuesControllerClaimUrl(issueId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(claimIssueDto)
+  }
+);}
+
+
+
+
+
+export const getIssuesControllerClaimMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issuesControllerClaim>>, TError,{issueId: string;data: BodyType<ClaimIssueDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof issuesControllerClaim>>, TError,{issueId: string;data: BodyType<ClaimIssueDto>}, TContext> => {
+
+const mutationKey = ['issuesControllerClaim'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof issuesControllerClaim>>, {issueId: string;data: BodyType<ClaimIssueDto>}> = (props) => {
+          const {issueId,data} = props ?? {};
+
+          return  issuesControllerClaim(issueId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type IssuesControllerClaimMutationResult = NonNullable<Awaited<ReturnType<typeof issuesControllerClaim>>>
+    export type IssuesControllerClaimMutationBody = BodyType<ClaimIssueDto>
+    export type IssuesControllerClaimMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 현재 사용자가 프로젝트 역할의 팀 작업 맡기
+ */
+export const useIssuesControllerClaim = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issuesControllerClaim>>, TError,{issueId: string;data: BodyType<ClaimIssueDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof issuesControllerClaim>>,
+        TError,
+        {issueId: string;data: BodyType<ClaimIssueDto>},
+        TContext
+      > => {
+      return useMutation(getIssuesControllerClaimMutationOptions(options), queryClient);
+    }
+
+export const getIssuesControllerAssignTeamTasksUrl = (issueId: string,) => {
+
+
+
+
+  return `/api/v1/issues/${issueId}/assign-team-tasks`
+}
+
+/**
+ * @summary 기능 이슈의 미할당 팀 작업 담당자 일괄 지정
+ */
+export const issuesControllerAssignTeamTasks = async (issueId: string,
+    assignTeamTasksDto: AssignTeamTasksDto, options?: RequestInit): Promise<AssignTeamTasksResponseDto> => {
+
+  return rivetFetch<AssignTeamTasksResponseDto>(getIssuesControllerAssignTeamTasksUrl(issueId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assignTeamTasksDto)
+  }
+);}
+
+
+
+
+
+export const getIssuesControllerAssignTeamTasksMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issuesControllerAssignTeamTasks>>, TError,{issueId: string;data: BodyType<AssignTeamTasksDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof issuesControllerAssignTeamTasks>>, TError,{issueId: string;data: BodyType<AssignTeamTasksDto>}, TContext> => {
+
+const mutationKey = ['issuesControllerAssignTeamTasks'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof issuesControllerAssignTeamTasks>>, {issueId: string;data: BodyType<AssignTeamTasksDto>}> = (props) => {
+          const {issueId,data} = props ?? {};
+
+          return  issuesControllerAssignTeamTasks(issueId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type IssuesControllerAssignTeamTasksMutationResult = NonNullable<Awaited<ReturnType<typeof issuesControllerAssignTeamTasks>>>
+    export type IssuesControllerAssignTeamTasksMutationBody = BodyType<AssignTeamTasksDto>
+    export type IssuesControllerAssignTeamTasksMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 기능 이슈의 미할당 팀 작업 담당자 일괄 지정
+ */
+export const useIssuesControllerAssignTeamTasks = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issuesControllerAssignTeamTasks>>, TError,{issueId: string;data: BodyType<AssignTeamTasksDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof issuesControllerAssignTeamTasks>>,
+        TError,
+        {issueId: string;data: BodyType<AssignTeamTasksDto>},
+        TContext
+      > => {
+      return useMutation(getIssuesControllerAssignTeamTasksMutationOptions(options), queryClient);
     }
 
 export const getIssuesControllerGetUrl = (issueRef: string,) => {

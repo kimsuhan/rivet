@@ -96,7 +96,7 @@ async function completeOnboarding(
   await expect(page).toHaveURL(/\/onboarding\/invite$/);
   await page.getByRole('button', { name: '건너뛰기' }).click();
   await expect(page).toHaveURL(/\/my-issues$/);
-  await expect(page.getByRole('heading', { name: '내 이슈' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '내 작업' })).toBeVisible();
 }
 
 async function selectOption(
@@ -105,7 +105,11 @@ async function selectOption(
   optionName: string,
   triggerRoot: Locator | Page = page,
 ): Promise<void> {
-  await triggerRoot.getByRole('combobox', { name: triggerName, exact: true }).click();
+  const accessibleName = new RegExp(
+    `^${triggerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?::|$)`,
+    'u',
+  );
+  await triggerRoot.getByRole('combobox', { name: accessibleName }).click();
   await page.getByRole('listbox').getByRole('option', { name: optionName, exact: true }).click();
 }
 
@@ -168,10 +172,12 @@ test('UF-03과 UF-07 팀 이슈 기본 루프를 완료한다', async ({ page, i
       await expect(page.getByRole('link', { name: title })).toBeVisible();
       await checkLayout(page, testInfo.project.name, 'my-issues-mobile');
 
-      await page.getByRole('link', { name: title }).click();
+      await page.getByRole('link', { name: title }).click({ position: { x: 16, y: 16 } });
       await expect(page).toHaveURL(new RegExp(`/issues/${issue.identifier}$`));
       await expect(page.getByLabel('이슈 제목')).toHaveValue(title);
-      await expect(page.getByLabel('라벨')).toContainText('M3 핵심');
+      const properties = page.getByRole('complementary', { name: '속성' });
+      await expect(properties.getByText('M3 핵심', { exact: true })).toBeVisible();
+      await expect(properties.getByRole('button', { name: '라벨: M3 핵심' })).toBeVisible();
       await checkLayout(page, testInfo.project.name, 'detail-mobile');
 
       await page.goto('/my-issues?create=1');
@@ -215,8 +221,9 @@ test('UF-03과 UF-07 팀 이슈 기본 루프를 완료한다', async ({ page, i
       const properties = page.getByRole('complementary', { name: '속성' });
       await expect(page.getByLabel('이슈 제목')).toHaveValue(title);
       await expect(properties.getByText('웹 (WEB)', { exact: true })).toBeVisible();
-      await expect(properties.getByLabel('우선순위')).toContainText('높음');
-      await expect(properties.getByLabel('라벨')).toContainText('M3 핵심');
+      await expect(properties.getByLabel(/^우선순위:/u)).toContainText('높음');
+      await expect(properties.getByText('M3 핵심', { exact: true })).toBeVisible();
+      await expect(properties.getByRole('button', { name: '라벨: M3 핵심' })).toBeVisible();
       await checkLayout(page, testInfo.project.name, 'detail-created');
 
       await page.getByLabel('이슈 제목').fill(updatedTitle);
@@ -267,19 +274,15 @@ test('UF-03과 UF-07 팀 이슈 기본 루프를 완료한다', async ({ page, i
       await expect(conflictAlert.getByText('긴급', { exact: true })).toBeVisible();
       await page.unroute(issueUpdatePattern);
       await conflictAlert.getByRole('button', { name: '내 변경 다시 적용' }).click();
-      await expect(properties.getByLabel('우선순위')).toContainText('긴급');
+      await expect(properties.getByLabel(/^우선순위:/u)).toContainText('긴급');
       await expect(conflictAlert).toBeHidden();
 
       await page.goto('/my-issues');
       await expect(page.getByRole('link', { name: updatedTitle })).toBeVisible();
       await checkLayout(page, testInfo.project.name, 'my-issues');
 
-      const priorityFilter = page
-        .locator('details')
-        .filter({ hasText: /^우선순위/ })
-        .first();
-      await priorityFilter.locator('summary').click();
-      await priorityFilter.getByText('긴급', { exact: true }).click();
+      await page.getByRole('button', { name: '우선순위', exact: true }).click();
+      await page.getByRole('checkbox', { name: '긴급', exact: true }).click();
       await expect(page).toHaveURL(/priority=URGENT/);
       await expect(page.getByRole('link', { name: updatedTitle })).toBeVisible();
 
@@ -290,9 +293,9 @@ test('UF-03과 UF-07 팀 이슈 기본 루프를 완료한다', async ({ page, i
       await page.getByRole('button', { name: '필터 초기화' }).click();
 
       await selectOption(page, 'WEB-1 상태', '진행 중');
-      await expect(page.getByRole('combobox', { name: 'WEB-1 상태' })).toContainText('진행 중');
+      await expect(page.getByRole('combobox', { name: /^WEB-1 상태:/u })).toContainText('진행 중');
       await selectOption(page, 'WEB-1 우선순위', '높음');
-      await expect(page.getByRole('combobox', { name: 'WEB-1 우선순위' })).toContainText('높음');
+      await expect(page.getByRole('combobox', { name: /^WEB-1 우선순위:/u })).toContainText('높음');
 
       await page.goto('/teams/WEB/issues');
       await expect(page.getByRole('link', { name: updatedTitle })).toBeVisible();
@@ -310,7 +313,7 @@ test('UF-03과 UF-07 팀 이슈 기본 루프를 완료한다', async ({ page, i
       await expect(page).toHaveURL(/\/teams\/WEB\/board$/);
 
       await selectOption(page, 'WEB-1 상태', '검토');
-      const boardState = page.getByRole('combobox', { name: 'WEB-1 상태' });
+      const boardState = page.getByRole('combobox', { name: /^WEB-1 상태:/u });
       await expect(boardState).toContainText('검토');
       await expect(boardState).toBeEnabled();
 
@@ -318,13 +321,13 @@ test('UF-03과 UF-07 팀 이슈 기본 루프를 완료한다', async ({ page, i
         .getByRole('listitem')
         .filter({ has: page.getByRole('link', { name: updatedTitle }) });
       await selectOption(page, 'WEB-1 담당자', '담당자 없음', boardCard);
-      const boardAssignee = boardCard.getByRole('combobox', { name: 'WEB-1 담당자' });
+      const boardAssignee = boardCard.getByRole('combobox', { name: /^WEB-1 담당자:/u });
       await expect(boardAssignee).toContainText('담당자 없음');
       await expect(boardAssignee).toBeEnabled();
 
-      const boardLabels = boardCard.getByLabel('WEB-1 라벨', { exact: true });
+      const boardLabels = boardCard.getByLabel(/^WEB-1 라벨:/u);
       await boardLabels.click();
-      const boardLabelCheckbox = boardCard.getByRole('checkbox', { name: 'M3 핵심' });
+      const boardLabelCheckbox = page.getByRole('checkbox', { name: 'M3 핵심' });
       await boardLabelCheckbox.click();
       await expect(boardLabelCheckbox).not.toBeChecked();
       await expect(boardLabelCheckbox).toBeEnabled();
@@ -357,7 +360,7 @@ test('UF-03과 UF-07 팀 이슈 기본 루프를 완료한다', async ({ page, i
       });
 
       await selectOption(page, 'WEB-1 우선순위', '긴급', boardCard);
-      const boardPriority = boardCard.getByRole('combobox', { name: 'WEB-1 우선순위' });
+      const boardPriority = boardCard.getByRole('combobox', { name: /^WEB-1 우선순위:/u });
       const boardConflict = boardCard
         .getByRole('alert')
         .filter({ hasText: '다른 변경이 먼저 저장되었습니다' });

@@ -6,6 +6,7 @@ import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  type IssueSummaryResponseDto,
   useAuthControllerGetSession,
   useLabelsControllerList,
   useTeamsControllerList,
@@ -80,6 +81,27 @@ const member = {
     id: 'a43a66d7-76f4-4854-b698-27271a36ea6f',
   },
 };
+const issue = {
+  assignee: member,
+  blocked: false,
+  createdAt: '2026-07-01T00:00:00.000Z',
+  createdBy: member,
+  id: 'issue-web-1',
+  identifier: 'WEB-1',
+  labels: [],
+  parentIssue: null,
+  priority: 'HIGH',
+  progress: null,
+  project: null,
+  projectRole: 'WEB_FRONTEND',
+  status: { category: 'UNSTARTED', featureStatus: null, workflowState },
+  team,
+  title: '목록 속성 일관성',
+  type: 'TEAM_TASK',
+  updatedAt: '2026-07-02T00:00:00.000Z',
+  version: 1,
+  workflowSummary: null,
+} satisfies IssueSummaryResponseDto;
 
 let queryClient: QueryClient;
 
@@ -93,9 +115,12 @@ function queryResult(data: unknown) {
   };
 }
 
-function issuePages({ error = false }: { error?: boolean } = {}) {
+function issuePages({
+  error = false,
+  items = [],
+}: { error?: boolean; items?: IssueSummaryResponseDto[] } = {}) {
   return {
-    data: error ? undefined : { pageParams: [undefined], pages: [{ items: [], nextCursor: null }] },
+    data: error ? undefined : { pageParams: [undefined], pages: [{ items, nextCursor: null }] },
     error: error ? new Error('failed') : null,
     fetchNextPage: vi.fn(),
     hasNextPage: false,
@@ -171,8 +196,8 @@ describe('IssueListScreen', () => {
       },
       true,
     );
-    expect(screen.getByRole('heading', { level: 1, name: '내 이슈' })).toBeVisible();
-    expect(screen.getByText('할당된 이슈가 없습니다')).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: '내 작업' })).toBeVisible();
+    expect(screen.getByText('할당된 작업이 없습니다')).toBeVisible();
     expect(screen.getAllByRole('link', { name: '이슈 만들기' })[0]).toHaveAttribute(
       'href',
       '/my-issues?create=1',
@@ -199,6 +224,28 @@ describe('IssueListScreen', () => {
     expect(mocks.replace).toHaveBeenCalledWith('/my-issues?sort=status&direction=asc', {
       scroll: false,
     });
+  });
+
+  it('제목·결과 수와 Compact 도구를 한 목록 헤더에 두고 개별 필터만 제거한다', async () => {
+    const user = userEvent.setup();
+    mocks.search = `status=${workflowState.id}&team=${team.id}&priority=HIGH&sort=status&direction=asc`;
+    vi.mocked(useIssuePages).mockReturnValue(issuePages({ items: [issue] }) as never);
+    renderScreen();
+
+    const heading = screen.getByRole('heading', { level: 1, name: '내 작업' });
+    expect(heading.closest('header')).toHaveTextContent('내 작업1개');
+    expect(screen.getByRole('combobox', { name: '정렬 기준' })).toHaveAttribute(
+      'data-variant',
+      'inline',
+    );
+    const statusFilter = screen.getByRole('button', { name: '상태' });
+    expect(statusFilter).toHaveClass('min-h-11');
+
+    await user.click(screen.getByRole('button', { name: '상태: 할 일 · WEB 제거' }));
+    expect(mocks.replace).toHaveBeenCalledWith(
+      `/my-issues?team=${team.id}&priority=HIGH&sort=status&direction=asc`,
+      { scroll: false },
+    );
   });
 
   it('초기 목록 오류를 인라인 재시도 상태로 표시한다', async () => {

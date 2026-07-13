@@ -16,7 +16,7 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 const labels = {
-  backToWork: '내 이슈로 돌아가기',
+  backToWork: '내 작업으로 돌아가기',
   errorDescription: '네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
   errorTitle: '설정 권한을 확인하지 못했습니다',
   loading: '관리자 권한을 확인하는 중입니다.',

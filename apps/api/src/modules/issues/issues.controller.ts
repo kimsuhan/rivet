@@ -36,6 +36,8 @@ import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto'
 import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import {
+  AssignTeamTasksDto,
+  ClaimIssueDto,
   CreateFeatureIssueDto,
   CreateIssueDto,
   CreateTeamTaskIssueDto,
@@ -45,6 +47,8 @@ import {
   UpdateIssueDto,
 } from './dto/issue-request.dto';
 import {
+  AssignTeamTasksResponseDto,
+  ClaimIssueResponseDto,
   CreateIssueResponseDto,
   IssueDetailResponseDto,
   IssueListResponseDto,
@@ -158,12 +162,14 @@ export class IssuesController {
   @ApiOkResponse({ type: CreateIssueResponseDto })
   @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
   @ApiForbiddenResponse({
-    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
+    description:
+      'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID, TEAM_MEMBERSHIP_REQUIRED 또는 FORBIDDEN',
     type: ApiErrorResponseDto,
   })
   @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
   @ApiUnprocessableEntityResponse({
-    description: 'VALIDATION_ERROR, INITIAL_ROLE_REQUIRED 또는 INITIAL_ROLE_NOT_AVAILABLE',
+    description:
+      'VALIDATION_ERROR, INITIAL_ROLE_REQUIRED, INITIAL_ROLE_INPUT_CONFLICT, INITIAL_ROLE_NOT_AVAILABLE 또는 ASSIGNEE_NOT_TEAM_MEMBER',
     type: ApiErrorResponseDto,
   })
   start(
@@ -172,6 +178,63 @@ export class IssuesController {
     @Body() dto: StartIssueDto,
   ): Promise<CreateIssueResponseDto> {
     return this.issues.start(workspaceContext(authentication), issueId, dto);
+  }
+
+  @Post(':issueId/claim')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '현재 사용자가 프로젝트 역할의 팀 작업 맡기' })
+  @ApiParam({ format: 'uuid', name: 'issueId' })
+  @ApiBody({ type: ClaimIssueDto })
+  @ApiOkResponse({ type: ClaimIssueResponseDto })
+  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({
+    description:
+      'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID, TEAM_MEMBERSHIP_REQUIRED 또는 FORBIDDEN',
+    type: ApiErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description: 'CLAIM_TARGET_REQUIRED 또는 ISSUE_ASSIGNMENT_CONFLICT',
+    type: ApiErrorResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  @ApiUnprocessableEntityResponse({
+    description: 'VALIDATION_ERROR 또는 INITIAL_ROLE_NOT_AVAILABLE',
+    type: ApiErrorResponseDto,
+  })
+  claim(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
+    @Body() dto: ClaimIssueDto,
+  ): Promise<ClaimIssueResponseDto> {
+    return this.issues.claim(workspaceContext(authentication), issueId, dto);
+  }
+
+  @Post(':issueId/assign-team-tasks')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '기능 이슈의 미할당 팀 작업 담당자 일괄 지정' })
+  @ApiParam({ format: 'uuid', name: 'issueId' })
+  @ApiBody({ type: AssignTeamTasksDto })
+  @ApiOkResponse({ type: AssignTeamTasksResponseDto })
+  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({
+    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
+    type: ApiErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description: 'ISSUE_VERSION_CONFLICT 또는 ISSUE_ASSIGNMENT_CONFLICT',
+    type: ApiErrorResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  @ApiUnprocessableEntityResponse({
+    description: 'VALIDATION_ERROR 또는 ASSIGNEE_NOT_TEAM_MEMBER',
+    type: ApiErrorResponseDto,
+  })
+  assignTeamTasks(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
+    @Body() dto: AssignTeamTasksDto,
+  ): Promise<AssignTeamTasksResponseDto> {
+    return this.issues.assignTeamTasks(workspaceContext(authentication), issueId, dto);
   }
 
   @Get(':issueRef')
@@ -202,7 +265,7 @@ export class IssuesController {
   })
   @ApiConflictResponse({
     description:
-      'VERSION_CONFLICT, ISSUE_VERSION_CONFLICT, ISSUE_TEAM_IMMUTABLE, ISSUE_PROJECT_IMMUTABLE, HANDOFF_REQUIRED, INITIAL_HANDOFF_EXISTS, DOWNSTREAM_TASK_SCOPE_CONFLICT, DOWNSTREAM_TASK_ALREADY_CLOSED 또는 FILE_ALREADY_LINKED',
+      'VERSION_CONFLICT, ISSUE_VERSION_CONFLICT, ISSUE_COMPLETION_NOT_READY, ISSUE_TEAM_IMMUTABLE, ISSUE_PROJECT_IMMUTABLE, HANDOFF_REQUIRED, INITIAL_HANDOFF_EXISTS, DOWNSTREAM_TASK_SCOPE_CONFLICT, DOWNSTREAM_TASK_ALREADY_CLOSED 또는 FILE_ALREADY_LINKED',
     type: ApiErrorResponseDto,
   })
   @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })

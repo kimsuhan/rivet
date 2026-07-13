@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AnchorHTMLAttributes } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -112,7 +112,8 @@ const labels = {
   openProfile: '프로필 설정 열기',
   navigation: {
     inbox: '알림함',
-    myIssues: '내 이슈',
+    issues: '이슈',
+    myIssues: '내 작업',
     projects: '프로젝트',
     search: '검색',
     settings: '설정',
@@ -159,7 +160,7 @@ const labels = {
       TODO: '할 일',
       UNSORTED: '분류 안 됨',
     },
-    featureType: '기능 이슈',
+    featureType: '이슈',
     initialRoleSelected: '선택됨',
     initialRolesDescription: '선택하지 않아도 됩니다.',
     initialRolesLabel: '처음 작업할 팀 (선택)',
@@ -174,8 +175,8 @@ const labels = {
     optionsErrorDescription: '항목 오류 설명',
     optionsErrorTitle: '항목 오류',
     optionsLoading: '불러오는 중',
-    parentLabel: '상위 기능 이슈',
-    parentPlaceholder: '상위 기능 이슈 선택',
+    parentLabel: '상위 이슈',
+    parentPlaceholder: '상위 이슈 선택',
     priorities: {
       HIGH: '높음',
       LOW: '낮음',
@@ -228,7 +229,7 @@ const labels = {
     errorDescription: '검색 오류 설명',
     errorTitle: '검색 오류',
     exactMatch: 'ID 일치',
-    feature: '기능 이슈',
+    feature: '이슈',
     featureStatuses: {
       CANCELED: '취소',
       DONE: '완료',
@@ -310,6 +311,40 @@ describe('AppShell', () => {
     );
     expect(screen.getByRole('main')).toHaveAttribute('id', 'workspace-main-content');
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('데스크톱과 모바일에서 이슈, 내 작업, 알림함, 프로젝트 순서를 유지한다', () => {
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    const desktopLinks = within(
+      screen.getByRole('navigation', { name: labels.desktopNavigation }),
+    ).getAllByRole('link');
+    expect(desktopLinks.map((link) => link.getAttribute('href'))).toEqual([
+      '/issues',
+      '/my-issues',
+      '/inbox',
+      '/projects',
+    ]);
+
+    const mobileNavigation = screen.getByRole('navigation', { name: labels.mobileNavigation });
+    expect(
+      within(mobileNavigation)
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('href')),
+    ).toEqual(['/issues', '/my-issues', '/inbox', '/projects']);
+    expect(
+      Array.from(mobileNavigation.children).map(
+        (item) => item.getAttribute('href') ?? item.getAttribute('aria-label'),
+      ),
+    ).toEqual(['/issues', '/my-issues', '/inbox', '/projects', labels.openTeamSelector]);
+    expect(
+      within(mobileNavigation).getByRole('button', { name: labels.openTeamSelector }),
+    ).toBeVisible();
+    expect(screen.getAllByRole('button', { name: labels.openSearch })).toHaveLength(2);
   });
 
   it('데스크톱과 모바일 알림함에 같은 읽지 않은 개수와 접근 가능한 이름을 표시한다', () => {
