@@ -57,6 +57,14 @@ import {
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   type DeleteUploadedFile,
@@ -589,15 +597,15 @@ function Toolbar({
         </Button>
 
         {mentionsEnabled && mentionOptions.length ? (
-          <select
-            aria-label={labels.mention}
-            className="border-input bg-background focus-visible:ring-ring h-8 max-w-44 rounded-md border px-2 text-sm outline-none focus-visible:ring-2"
-            defaultValue=""
+          <Select
+            items={mentionOptions.map((option) => ({
+              label: option.displayName,
+              value: option.membershipId,
+            }))}
+            value=""
             disabled={disabled}
-            onChange={(event) => {
-              const option = mentionOptions.find(
-                ({ membershipId }) => membershipId === event.currentTarget.value,
-              );
+            onValueChange={(membershipId) => {
+              const option = mentionOptions.find((item) => item.membershipId === membershipId);
               if (!option) return;
               editor.update(() => {
                 const selection = $getSelection();
@@ -607,16 +615,21 @@ function Toolbar({
                   $createTextNode(' '),
                 ]);
               });
-              event.currentTarget.value = '';
             }}
           >
-            <option value="">{labels.mentionPlaceholder}</option>
-            {mentionOptions.map((option) => (
-              <option key={option.membershipId} value={option.membershipId}>
-                {option.displayName}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger aria-label={labels.mention} size="sm" className="max-w-44">
+              <SelectValue placeholder={labels.mentionPlaceholder} />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {mentionOptions.map((option) => (
+                  <SelectItem key={option.membershipId} value={option.membershipId}>
+                    {option.displayName}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         ) : null}
 
         {imagesEnabled ? (

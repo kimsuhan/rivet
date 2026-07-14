@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, CircleAlert, Play, Save, UserRound } from 'lucide-react';
+import { ArrowLeft, Check, CircleAlert, FileText, Play, Save, UserRound } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
@@ -40,6 +40,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import {
   HandoffEditor,
@@ -927,23 +935,33 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
           </div>
           {issue.teamWorks.length ? (
             <>
-              <select
-                aria-label="팀 작업 전환"
-                className="bg-background h-10 w-full rounded-md border px-3 text-sm lg:hidden"
+              <Select
+                items={issue.teamWorks.map((work) => ({
+                  label: `${work.identifier} · ${ROLE_LABELS[work.projectRole]} · ${work.team.name}`,
+                  value: work.identifier,
+                }))}
                 value={selectedWork?.identifier ?? ''}
-                onChange={(event) => {
+                onValueChange={(value) => {
+                  if (!value) return;
                   const next = new URLSearchParams(searchParams.toString());
                   next.set('tab', 'work');
-                  next.set('work', event.target.value);
+                  next.set('work', value);
                   router.push(`${pathname}?${next.toString()}`, { scroll: false });
                 }}
               >
-                {issue.teamWorks.map((work) => (
-                  <option key={work.id} value={work.identifier}>
-                    {work.identifier} · {ROLE_LABELS[work.projectRole]} · {work.team.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-label="팀 작업 전환" className="w-full lg:hidden">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {issue.teamWorks.map((work) => (
+                      <SelectItem key={work.id} value={work.identifier}>
+                        {work.identifier} · {ROLE_LABELS[work.projectRole]} · {work.team.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
               <nav className="hidden space-y-1 lg:block" aria-label="팀 작업 선택">
                 {issue.teamWorks.map((work) => {
                   const active = work.id === selectedWork?.id;
@@ -1077,9 +1095,12 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
                 aria-labelledby="issue-content-title"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <h2 id="issue-content-title" className="text-lg font-semibold">
-                    이슈 설명
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <FileText aria-hidden="true" className="text-muted-foreground size-4" />
+                    <h2 id="issue-content-title" className="text-lg font-semibold">
+                      이슈 설명
+                    </h2>
+                  </div>
                   {!editingDescription ? (
                     <Button size="sm" variant="outline" onClick={() => setEditingDescription(true)}>
                       편집
@@ -1115,14 +1136,16 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
                     </div>
                   </div>
                 ) : issue.descriptionMarkdown ? (
-                  <div className="prose prose-sm mt-4 max-w-none">
+                  <div className="prose prose-sm mt-4 max-w-none border-l pl-4">
                     <MarkdownRenderer
                       imageUnavailableLabel="이미지를 표시할 수 없습니다"
                       markdown={issue.descriptionMarkdown}
                     />
                   </div>
                 ) : (
-                  <p className="text-muted-foreground mt-4 text-sm">등록된 설명이 없습니다.</p>
+                  <p className="text-muted-foreground mt-4 border-y py-4 text-sm">
+                    등록된 설명이 없습니다.
+                  </p>
                 )}
                 <IssueAttachments issue={issue} />
                 <div id="comments">

@@ -450,8 +450,11 @@
   "IssueCreate": {
     "title": "이슈 만들기",
     "description": "제목, 프로젝트와 필요한 공통 속성을 입력합니다.",
+    "descriptionLabel": "설명",
     "initialRolesLabel": "처음 작업할 팀 (선택)",
     "initialRolesDescription": "아직 작업 범위가 정해지지 않았다면 선택하지 않아도 됩니다.",
+    "initialRolesNoProject": "프로젝트를 먼저 선택해 주세요.",
+    "initialRolesEmpty": "이 프로젝트에서 선택할 수 있는 팀이 아직 없습니다.",
     "close": "이슈 만들기 닫기",
     "titleLabel": "제목",
     "titlePlaceholder": "할 일을 간단히 적어 주세요",

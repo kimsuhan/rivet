@@ -9,7 +9,7 @@ export default async function MyIssuesPage({ params }: { params: Promise<{ local
   const messages = await getMessages();
 
   return (
-    <NextIntlClientProvider messages={{ Issues: messages.Issues }}>
+    <NextIntlClientProvider messages={{ Issues: messages.Issues, Markdown: messages.Markdown }}>
       <IssueListScreen mode="my" />
     </NextIntlClientProvider>
   );

@@ -40,7 +40,11 @@ async function captureIssueStep(page: Page, testInfo: TestInfo, name: string): P
 
 async function selectTeamWork(page: Page, identifier: string, isMobile: boolean): Promise<void> {
   if (isMobile) {
-    await page.getByLabel('팀 작업 전환').selectOption(identifier);
+    await page.getByLabel('팀 작업 전환').click();
+    await page
+      .locator('[data-slot="select-content"]')
+      .getByRole('option', { name: new RegExp(`^${identifier}\\s·`, 'u') })
+      .click();
     return;
   }
 
@@ -114,14 +118,18 @@ async function createIssueFromDialog(
   await page.goto('/issues?create=1');
   const dialog = page.getByRole('dialog', { name: '이슈 만들기' });
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel('제목').fill(input.title);
-  await dialog.getByLabel('프로젝트').selectOption({ label: input.projectName });
+  await dialog.getByRole('textbox', { name: '제목', exact: true }).fill(input.title);
+  await dialog.getByLabel('프로젝트').click();
+  await page
+    .locator('[data-slot="select-content"]')
+    .getByRole('option', { name: input.projectName, exact: true })
+    .click();
   await dialog
-    .getByLabel('설명 (Markdown)')
+    .getByRole('textbox', { name: 'Markdown 본문 편집기' })
     .fill('# 공유 설명\n\n모든 팀 작업이 같은 본문을 사용합니다.');
   if (input.initialBackend) await dialog.getByRole('checkbox', { name: '백엔드' }).click();
   if (input.withAttachment) {
-    await dialog.locator('input[type="file"]').setInputFiles({
+    await dialog.getByRole('button', { name: '파일 선택' }).setInputFiles({
       buffer: Buffer.from('M9 shared attachment', 'utf8'),
       mimeType: 'text/plain',
       name: 'm9-shared.txt',
@@ -214,7 +222,7 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
       await page.locator('article header p.font-mono').first().textContent()
     )?.trim();
     const backendIdentifier = isMobile
-      ? await page.getByLabel('팀 작업 전환').inputValue()
+      ? (await page.getByLabel('팀 작업 전환').textContent())?.split(' · ')[0]?.trim()
       : (
           await page
             .getByRole('navigation', { name: '팀 작업 선택' })

@@ -13,7 +13,7 @@ export default async function TeamIssuesPage({
   const messages = await getMessages();
 
   return (
-    <NextIntlClientProvider messages={{ Issues: messages.Issues }}>
+    <NextIntlClientProvider messages={{ Issues: messages.Issues, Markdown: messages.Markdown }}>
       <IssueListScreen mode="team" teamKey={teamKey} />
     </NextIntlClientProvider>
   );

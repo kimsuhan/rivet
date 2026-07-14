@@ -11,6 +11,14 @@ import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
@@ -96,19 +104,28 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
             />
           </form>
           <Filter className="text-muted-foreground size-4" aria-hidden="true" />
-          <select
-            aria-label="작업 상태 필터"
-            className="hover:bg-muted/50 focus-visible:ring-ring bg-transparent px-2 py-1 text-sm outline-none focus-visible:ring-2"
+          <Select
+            items={[
+              { label: '모든 상태', value: '' },
+              ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ label, value })),
+            ]}
             value={category}
-            onChange={(event) => replace('stateCategory', event.target.value)}
+            onValueChange={(value) => replace('stateCategory', value ?? '')}
           >
-            <option value="">모든 상태</option>
-            {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger size="sm" aria-label="작업 상태 필터">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="">모든 상태</SelectItem>
+                {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
       </div>
       {teams.isPending || works.isPending ? (

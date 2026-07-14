@@ -13,6 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import { Link } from '@/i18n/navigation';
 
 import { IssueStatusDisplay, PriorityTrigger } from './issue-attribute-presentation';
+import { IssueLabelChips } from './issue-label-chips';
 
 function relativeUpdatedAt(value: string) {
   const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60_000);
@@ -49,7 +50,7 @@ export function IssueListRow({ issue, queryKey }: { issue: IssueSummaryResponseD
       <div className="grid min-h-16 grid-cols-[minmax(18rem,1fr)_8.5rem_7.5rem_10rem_6.5rem_5rem_7rem] items-center gap-3 px-3 py-2.5 text-sm max-xl:grid-cols-[minmax(18rem,1fr)_8.5rem_7.5rem_9rem_6.5rem_6rem] max-lg:grid-cols-[minmax(18rem,1fr)_8.5rem_7.5rem_6rem] max-md:grid-cols-1 max-md:gap-1 max-md:px-3">
         <Link href={`/issues/${encodeURIComponent(issue.identifier)}?tab=work`} className="min-w-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <span className="text-muted-foreground mr-2 font-mono text-xs">{issue.identifier}</span><span className="font-medium">{issue.title}</span>
-          <span className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1.5 truncate text-xs"><span className="truncate">{issue.project.name}</span>{issue.labels.slice(0, 2).map((label) => <span key={label.id} className="bg-muted rounded px-1.5 py-0.5">{label.name}</span>)}</span>
+          <span className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1.5 truncate text-xs"><span className="truncate">{issue.project.name}</span><IssueLabelChips emptyLabel="" labels={issue.labels} /></span>
         </Link>
         <IssueStatusDisplay status={issue.status} className="w-32" />
         <PriorityTrigger identifier={issue.identifier} priority={issue.priority} busy={mutation.isPending} disabled={mutation.isPending} onValueChange={(priority) => mutation.mutate(priority)} />

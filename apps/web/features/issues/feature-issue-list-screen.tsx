@@ -11,6 +11,14 @@ import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
@@ -38,7 +46,74 @@ export function FeatureIssueListScreen() {
   return (
     <section className="mx-auto max-w-7xl space-y-5" aria-labelledby="issues-title">
       <header className="flex flex-wrap items-end justify-between gap-4"><div><h1 id="issues-title" className="text-2xl font-semibold tracking-tight">이슈</h1><p className="text-muted-foreground mt-1 text-sm">프로젝트의 콘텐츠와 실행 현황을 함께 봅니다.</p></div><Link href={`${pathname}?create=1`} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-2')}><Plus className="size-4" />이슈 만들기</Link></header>
-      <div className="border-b pb-3"><div className="flex flex-wrap items-center gap-2"><form className="relative min-w-56 flex-1 sm:max-w-sm" onSubmit={(event) => { event.preventDefault(); replace('query', draft.trim()); }}><Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" /><Input aria-label="이슈 검색" className="h-8 border-transparent bg-transparent pl-8 shadow-none hover:bg-muted/50 focus-visible:bg-background" placeholder="표시 ID 또는 제목 검색" value={draft} onChange={(event) => setDraft(event.target.value)} /></form><Filter className="text-muted-foreground size-4" aria-hidden="true" /><select aria-label="프로젝트 필터" className="bg-transparent px-2 py-1 text-sm outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring" value={projectId} onChange={(event) => replace('projectId', event.target.value)}><option value="">모든 프로젝트</option>{(projects.data?.items ?? []).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select><select aria-label="상태 필터" className="bg-transparent px-2 py-1 text-sm outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring" value={status} onChange={(event) => replace('status', event.target.value)}><option value="">모든 상태</option>{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div></div>
+      <div className="border-b pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <form
+            className="relative min-w-56 flex-1 sm:max-w-sm"
+            onSubmit={(event) => {
+              event.preventDefault();
+              replace('query', draft.trim());
+            }}
+          >
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+            <Input
+              aria-label="이슈 검색"
+              className="h-8 border-transparent bg-transparent pl-8 shadow-none hover:bg-muted/50 focus-visible:bg-background"
+              placeholder="표시 ID 또는 제목 검색"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+            />
+          </form>
+          <Filter className="text-muted-foreground size-4" aria-hidden="true" />
+          <Select
+            items={[
+              { label: '모든 프로젝트', value: '' },
+              ...(projects.data?.items ?? []).map((project) => ({
+                label: project.name,
+                value: project.id,
+              })),
+            ]}
+            value={projectId}
+            onValueChange={(value) => replace('projectId', value ?? '')}
+          >
+            <SelectTrigger size="sm" aria-label="프로젝트 필터">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="">모든 프로젝트</SelectItem>
+                {(projects.data?.items ?? []).map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Select
+            items={[
+              { label: '모든 상태', value: '' },
+              ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ label, value })),
+            ]}
+            value={status}
+            onValueChange={(value) => replace('status', value ?? '')}
+          >
+            <SelectTrigger size="sm" aria-label="상태 필터">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="">모든 상태</SelectItem>
+                {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
       {issues.isPending ? <ContentLoading label="이슈를 불러오는 중입니다" /> : null}
       {issues.isError ? <ContentError title="이슈를 불러오지 못했습니다" description="입력한 필터는 유지했습니다." retryLabel="다시 시도" onRetry={() => void issues.refetch()} /> : null}
       {issues.data?.items.length === 0 ? <ContentEmpty icon={CircleDot} title="조건에 맞는 이슈가 없습니다" description="필터를 바꾸거나 새 이슈를 만들어 보세요." /> : null}
