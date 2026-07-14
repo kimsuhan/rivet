@@ -39,7 +39,16 @@ export const ISSUE_STATUS_PRESENTATION: Record<IssueSummaryResponseDto['status']
   CANCELED: { icon: CircleX, iconClassName: 'text-muted-foreground', label: '취소' },
 };
 
-export const TEAM_WORK_STATUS_PRESENTATION: Record<TeamWorkSummaryResponseDto['stateCategory'], Presentation> = {
+export const PROJECT_ROLE_LABELS = {
+  APP_FRONTEND: '앱 프론트',
+  BACKEND: '백엔드',
+  WEB_FRONTEND: '웹 프론트',
+} as const;
+
+export const TEAM_WORK_STATUS_PRESENTATION: Record<
+  TeamWorkSummaryResponseDto['stateCategory'],
+  Presentation
+> = {
   BACKLOG: { icon: CircleDashed, iconClassName: 'text-muted-foreground', label: '백로그' },
   UNSTARTED: { icon: Circle, iconClassName: 'text-foreground', label: '시작 전' },
   STARTED: { icon: CircleDotDashed, iconClassName: 'text-info', label: '진행 중' },
@@ -55,26 +64,70 @@ export const PRIORITY_PRESENTATION: Record<IssueSummaryResponseDto['priority'], 
   URGENT: { icon: CircleAlert, iconClassName: 'text-destructive', label: '긴급' },
 };
 
-function AttributeDisplay({ presentation, className }: { presentation: Presentation; className?: string }) {
+function AttributeDisplay({
+  presentation,
+  className,
+}: {
+  presentation: Presentation;
+  className?: string;
+}) {
   const Icon = presentation.icon;
   return (
-    <span className={cn('inline-flex min-w-0 items-center gap-1.5 text-sm whitespace-nowrap', className)}>
+    <span
+      className={cn(
+        'inline-flex min-w-0 items-center gap-1.5 text-sm whitespace-nowrap',
+        className,
+      )}
+    >
       <Icon aria-hidden="true" className={cn('size-4 shrink-0', presentation.iconClassName)} />
       <span className="truncate">{presentation.label}</span>
     </span>
   );
 }
 
-export function IssueStatusDisplay({ status, className }: { status: IssueSummaryResponseDto['status']; className?: string }) {
-  return <AttributeDisplay presentation={ISSUE_STATUS_PRESENTATION[status]} {...(className ? { className } : {})} />;
+export function IssueStatusDisplay({
+  status,
+  className,
+}: {
+  status: IssueSummaryResponseDto['status'];
+  className?: string;
+}) {
+  return (
+    <AttributeDisplay
+      presentation={ISSUE_STATUS_PRESENTATION[status]}
+      {...(className ? { className } : {})}
+    />
+  );
 }
 
-export function TeamWorkStatusDisplay({ category, className }: { category: TeamWorkSummaryResponseDto['stateCategory']; className?: string }) {
-  return <AttributeDisplay presentation={TEAM_WORK_STATUS_PRESENTATION[category]} {...(className ? { className } : {})} />;
+export function TeamWorkStatusDisplay({
+  category,
+  className,
+}: {
+  category: TeamWorkSummaryResponseDto['stateCategory'];
+  className?: string;
+}) {
+  return (
+    <AttributeDisplay
+      presentation={TEAM_WORK_STATUS_PRESENTATION[category]}
+      {...(className ? { className } : {})}
+    />
+  );
 }
 
-export function PriorityDisplay({ priority, className }: { priority: IssueSummaryResponseDto['priority']; className?: string }) {
-  return <AttributeDisplay presentation={PRIORITY_PRESENTATION[priority]} {...(className ? { className } : {})} />;
+export function PriorityDisplay({
+  priority,
+  className,
+}: {
+  priority: IssueSummaryResponseDto['priority'];
+  className?: string;
+}) {
+  return (
+    <AttributeDisplay
+      presentation={PRIORITY_PRESENTATION[priority]}
+      {...(className ? { className } : {})}
+    />
+  );
 }
 
 export function PriorityTrigger({
@@ -103,7 +156,10 @@ export function PriorityTrigger({
       error={error}
       labelClassName="text-sm"
       onValueChange={(value) => onValueChange(value as IssueSummaryResponseDto['priority'])}
-      options={Object.entries(PRIORITY_PRESENTATION).map(([value, option]) => ({ ...option, value }))}
+      options={Object.entries(PRIORITY_PRESENTATION).map(([value, option]) => ({
+        ...option,
+        value,
+      }))}
       triggerClassName={cn('w-24', className)}
       value={priority}
     />
@@ -124,16 +180,33 @@ export function StatusTrigger({
   disabled?: boolean;
   identifier: string;
   onValueChange: (value: string) => void;
-  states: Array<{ category: TeamWorkSummaryResponseDto['stateCategory']; id: string }>;
+  states: Array<{
+    category: TeamWorkSummaryResponseDto['stateCategory'];
+    id: string;
+    name: string;
+  }>;
   value: string;
 }) {
   const current = states.find((state) => state.id === value);
-  const currentLabel = current ? TEAM_WORK_STATUS_PRESENTATION[current.category].label : '상태 없음';
+  const currentLabel = current ? current.name : '상태 없음';
   const options: IssueInlineSelectOption[] = states.map((state) => ({
-    ...TEAM_WORK_STATUS_PRESENTATION[state.category],
+    icon: TEAM_WORK_STATUS_PRESENTATION[state.category].icon,
+    iconClassName: TEAM_WORK_STATUS_PRESENTATION[state.category].iconClassName,
+    label: state.name,
     value: state.id,
   }));
-  return <IssueInlineSelect appearance="comfortable" ariaLabel={`팀 작업 상태 (${identifier}): ${currentLabel}`} busy={busy} disabled={disabled} onValueChange={onValueChange} options={options} triggerClassName={cn('w-28', className)} value={value} />;
+  return (
+    <IssueInlineSelect
+      appearance="comfortable"
+      ariaLabel={`팀 작업 상태 변경 (${identifier}): 현재 ${currentLabel}`}
+      busy={busy}
+      disabled={disabled}
+      onValueChange={onValueChange}
+      options={options}
+      triggerClassName={cn('w-28', className)}
+      value={value}
+    />
+  );
 }
 
 export function CompactAssigneeTrigger({
@@ -155,7 +228,23 @@ export function CompactAssigneeTrigger({
 }) {
   const options: IssueInlineSelectOption[] = [
     { icon: UserRound, iconClassName: 'text-muted-foreground', label: '담당자 없음', value: '' },
-    ...members.map((member) => ({ icon: UserRound, iconClassName: 'text-muted-foreground', label: member.user.displayName, value: member.id })),
+    ...members.map((member) => ({
+      icon: UserRound,
+      iconClassName: 'text-muted-foreground',
+      label: member.user.displayName,
+      value: member.id,
+    })),
   ];
-  return <IssueInlineSelect appearance="comfortable" ariaLabel={`팀 작업 담당자 (${identifier}): ${assignee?.user.displayName ?? '담당자 없음'}`} busy={busy} disabled={disabled} onValueChange={onValueChange} options={options} triggerClassName={cn('w-32', className)} value={assignee?.id ?? ''} />;
+  return (
+    <IssueInlineSelect
+      appearance="comfortable"
+      ariaLabel={`팀 작업 담당자 (${identifier}): ${assignee?.user.displayName ?? '담당자 없음'}`}
+      busy={busy}
+      disabled={disabled}
+      onValueChange={onValueChange}
+      options={options}
+      triggerClassName={cn('w-32', className)}
+      value={assignee?.id ?? ''}
+    />
+  );
 }

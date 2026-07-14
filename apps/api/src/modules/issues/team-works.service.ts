@@ -15,6 +15,7 @@ import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
 import { notifyResourceChanged } from '../../common/realtime/notify-resource-changed';
 import { IssueCollaborationService } from '../collaboration/issue-collaboration.service';
+import { shouldAutoStartOnAssignment } from './domain/team-work-transition';
 import type {
   RemoveTeamWorkDto,
   TeamWorkListQueryDto,
@@ -253,42 +254,65 @@ export class TeamWorksService {
             status: HttpStatus.UNPROCESSABLE_ENTITY,
           });
       }
-      if (dto.handoff && nextCategory !== StateCategory.COMPLETED) {
-        throw new ApiError({
-          code: 'HANDOFF_REQUIRES_COMPLETION',
-          message: '작업 전달은 완료 상태 변경과 함께 저장해야 합니다.',
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-        });
+      let autoStartStateId: string | undefined;
+      if (
+        dto.workflowStateId === undefined &&
+        dto.assigneeMembershipId &&
+        shouldAutoStartOnAssignment(current.workflowState)
+      ) {
+        autoStartStateId = await this.issues.firstUnstartedStateId(
+          transaction,
+          context.workspaceId,
+          current.team.id,
+        );
+        nextCategory = StateCategory.UNSTARTED;
       }
-      const isFrontend =
-        current.projectRole === ProjectRole.WEB_FRONTEND ||
-        current.projectRole === ProjectRole.APP_FRONTEND;
-      if (isFrontend && nextCategory === StateCategory.STARTED) {
-        const [hasBackendTeamWork, initialHandoffTarget] = await Promise.all([
-          transaction.teamWork.count({
-            where: {
-              deletedAt: null,
-              issueId: current.issue.id,
-              projectRole: ProjectRole.BACKEND,
-              workspaceId: context.workspaceId,
-            },
-          }),
-          transaction.apiHandoffTarget.findFirst({
-            select: { handoffId: true },
-            where: {
-              handoff: { kind: HandoffKind.INITIAL },
-              teamWorkId,
-              workspaceId: context.workspaceId,
-            },
-          }),
-        ]);
-        if (hasBackendTeamWork > 0 && !initialHandoffTarget) {
+      const isCompletionTransition =
+        dto.workflowStateId !== undefined && nextCategory === StateCategory.COMPLETED;
+      if (isCompletionTransition) {
+        if (!dto.completionMode) {
           throw new ApiError({
-            code: 'TEAM_WORK_API_HANDOFF_REQUIRED',
-            message: 'API 전달 후 시작할 수 있습니다.',
+            code: 'TEAM_WORK_COMPLETION_MODE_REQUIRED',
+            message: '완료로 전환하려면 완료 방식을 선택해야 합니다.',
             status: HttpStatus.UNPROCESSABLE_ENTITY,
           });
         }
+        if (dto.completionMode === 'COMPLETE_ONLY' && dto.handoff) {
+          throw new ApiError({
+            code: 'TEAM_WORK_HANDOFF_NOT_ALLOWED',
+            message: '이 작업만 완료할 때는 작업 전달을 포함할 수 없습니다.',
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+          });
+        }
+        if (dto.completionMode === 'HANDOFF_AND_COMPLETE') {
+          if (!dto.handoff) {
+            throw new ApiError({
+              code: 'TEAM_WORK_HANDOFF_REQUIRED',
+              message: '프론트에 전달 후 완료하려면 전달 내용이 필요합니다.',
+              status: HttpStatus.UNPROCESSABLE_ENTITY,
+            });
+          }
+          const frontendRoleCount = await transaction.projectRoleTeam.count({
+            where: {
+              projectId: current.issue.projectId,
+              role: { in: [ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND] },
+              workspaceId: context.workspaceId,
+            },
+          });
+          if (frontendRoleCount === 0) {
+            throw new ApiError({
+              code: 'TEAM_WORK_HANDOFF_NO_FRONTEND_ROLE',
+              message: '프로젝트에 프론트 역할이 없어 전달할 수 없습니다.',
+              status: HttpStatus.UNPROCESSABLE_ENTITY,
+            });
+          }
+        }
+      } else if (dto.completionMode !== undefined || dto.handoff !== undefined) {
+        throw new ApiError({
+          code: 'TEAM_WORK_COMPLETION_MODE_NOT_ALLOWED',
+          message: '완료 상태로 전환하는 요청에서만 완료 방식과 작업 전달을 사용할 수 있습니다.',
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+        });
       }
       const changed = await transaction.teamWork.updateMany({
         data: {
@@ -298,7 +322,11 @@ export class TeamWorksService {
           ...(dto.workNoteMarkdown !== undefined
             ? { workNoteMarkdown: dto.workNoteMarkdown || null }
             : {}),
-          ...(dto.workflowStateId ? { workflowStateId: dto.workflowStateId } : {}),
+          ...(dto.workflowStateId
+            ? { workflowStateId: dto.workflowStateId }
+            : autoStartStateId
+              ? { workflowStateId: autoStartStateId }
+              : {}),
           version: { increment: 1 },
         },
         where: { id: teamWorkId, version: dto.version, workspaceId: context.workspaceId },
@@ -327,7 +355,7 @@ export class TeamWorksService {
           afterData: {
             assigneeMembershipId: dto.assigneeMembershipId,
             workNoteMarkdown: dto.workNoteMarkdown,
-            workflowStateId: dto.workflowStateId,
+            workflowStateId: dto.workflowStateId ?? autoStartStateId,
           },
           eventType: 'TEAM_WORK_CHANGED',
           issueId: current.issue.id,
@@ -346,7 +374,7 @@ export class TeamWorksService {
         : undefined;
       await this.issues.recalculateIssueStatus(transaction, context.workspaceId, current.issue.id);
       const changedFields: TeamWorkChangedField[] = [
-        ...(dto.workflowStateId ? ['WORKFLOW_STATE' as const] : []),
+        ...(dto.workflowStateId || autoStartStateId ? ['WORKFLOW_STATE' as const] : []),
         ...(dto.assigneeMembershipId !== undefined ? ['ASSIGNEE' as const] : []),
         ...(dto.workNoteMarkdown !== undefined ? ['WORK_NOTE' as const] : []),
       ];

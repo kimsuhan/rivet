@@ -195,7 +195,7 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     await expect(page.getByText('m9-shared.txt')).toBeVisible();
     await page.getByRole('checkbox', { name: '웹 프론트' }).click();
     await page.getByRole('button', { name: '선택한 작업 시작' }).click();
-    await expect(page.getByText('작업 가능')).toBeVisible();
+    await expect(page.getByRole('button', { name: /: 담당자를 선택해 주세요$/u })).toBeVisible();
     await captureIssueStep(page, testInfo, 'frontend-only-ready');
 
     const editor = page.getByRole('textbox', { name: 'Markdown 본문 편집기' }).first();
@@ -243,17 +243,29 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     const webIdentifier = new URL(page.url()).searchParams.get('work');
     if (!webIdentifier) throw new Error('M9 웹 팀 작업 표시 ID를 찾지 못했습니다.');
     await expect(page.getByText('모든 팀 작업이 같은 본문을 사용합니다.')).toBeVisible();
-    await expect(page.getByText('API 전달 대기')).toBeVisible();
-    await page.getByRole('button', { name: '작업 노트 편집' }).click();
+    await expect(page.getByRole('button', { name: /: 담당자를 선택해 주세요$/u })).toBeVisible();
+
+    // 백엔드의 API 전달을 기다리지 않고 프론트 작업을 담당자 지정과 함께 즉시 시작할 수 있다.
+    await page.getByLabel(/팀 작업 담당자/u).click();
     await page
+      .locator('[data-slot="select-content"]')
+      .getByRole('option', { name: 'M9 브라우저 사용자', exact: true })
+      .click();
+    await expect(page.getByText('담당자 저장 중…')).toBeHidden();
+    await expect(page.getByRole('button', { name: /: 작업 시작$/u })).toBeVisible();
+    await page.getByRole('button', { name: /: 작업 시작$/u }).click();
+    await expect(page.getByRole('button', { name: /: 완료$/u })).toBeVisible();
+
+    const workNoteRegion = page.getByRole('region', { name: '작업 노트' });
+    await workNoteRegion.getByRole('button', { name: '작업 노트 편집' }).click();
+    await workNoteRegion
       .getByRole('textbox', { name: 'Markdown 본문 편집기' })
-      .last()
       .fill('웹 구현 시 응답 계약을 확인합니다.');
     const noteResponse = page.waitForResponse(
       (response) =>
         response.url().includes('/api/v1/team-works/') && response.request().method() === 'PATCH',
     );
-    await page.getByRole('button', { name: '노트 저장' }).click();
+    await workNoteRegion.getByRole('button', { name: '노트 저장' }).click();
     const savedNote = await noteResponse;
     expect(savedNote.status(), await savedNote.text()).toBe(200);
     await page.reload();
@@ -282,16 +294,18 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
       .locator('[data-slot="select-content"]')
       .getByRole('option', { name: '완료', exact: true })
       .click();
-    await expect(page.getByRole('heading', { name: '프론트에 전달하고 완료' })).toBeVisible();
-    await page
+    const backendCompletionDialog = page.getByRole('dialog', { name: /완료$/u });
+    await expect(backendCompletionDialog).toBeVisible();
+    await backendCompletionDialog.getByText('프론트에 전달 후 완료').click();
+    await backendCompletionDialog
       .getByRole('textbox', { name: 'Markdown 본문 편집기' })
-      .last()
       .fill('## 변경 요약\n\n웹 구현에 필요한 API 응답을 배포했습니다.');
-    await page.getByRole('button', { name: '전달하고 완료' }).click();
+    await backendCompletionDialog.getByRole('button', { name: '전달하고 완료' }).click();
+    await expect(backendCompletionDialog).toBeHidden();
     await expect(page.getByText('최초 전달 #1')).toBeVisible();
 
     await selectTeamWork(page, webIdentifier, isMobile);
-    await expect(page.getByText('작업 가능')).toBeVisible();
+    await expect(page.getByRole('button', { name: /: 완료$/u })).toBeVisible();
     await page.getByRole('button', { name: '내용 펼치기' }).click();
     await expect(page.getByText('웹 구현에 필요한 API 응답을 배포했습니다.')).toBeVisible();
     await captureIssueStep(page, testInfo, 'received-initial-handoff');
@@ -301,24 +315,25 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     );
     const webDone = webStates.items.find((state) => state.category === 'COMPLETED');
     if (!webDone) throw new Error('M9 웹 완료 상태를 찾지 못했습니다.');
-    await page.getByLabel(/팀 작업 상태/u).click();
-    await page
-      .locator('[data-slot="select-content"]')
-      .getByRole('option', { name: '완료', exact: true })
-      .click();
+    await page.getByRole('button', { name: /: 완료$/u }).click();
+    const webCompletionDialog = page.getByRole('dialog', { name: /완료$/u });
+    await expect(webCompletionDialog).toBeVisible();
+    await expect(webCompletionDialog.getByText('작업 전달은 필요하지 않습니다.')).toBeVisible();
+    await webCompletionDialog.getByRole('button', { name: '완료', exact: true }).click();
+    await expect(webCompletionDialog).toBeHidden();
     await expect(page.getByText('완료 확인')).toBeVisible();
     await page.getByRole('button', { name: '이슈 완료' }).click();
     await expect(page.getByText('완료', { exact: true }).first()).toBeVisible();
 
     await selectTeamWork(page, backendIdentifier, isMobile);
     await page.getByRole('button', { name: '추가 전달 작성' }).click();
-    await expect(page.getByRole('heading', { name: '추가 전달 작성' })).toBeVisible();
-    await expect(page.getByText('알림 대상')).toBeVisible();
-    await page
+    const followUpDialog = page.getByRole('dialog', { name: '추가 전달 작성' });
+    await expect(followUpDialog).toBeVisible();
+    await expect(followUpDialog.getByText('알림 대상')).toBeVisible();
+    await followUpDialog
       .getByRole('textbox', { name: 'Markdown 본문 편집기' })
-      .last()
       .fill('## 변경 요약\n\n응답 필드 설명을 보완했습니다.');
-    await page.getByRole('button', { name: '추가 전달 저장' }).click();
+    await followUpDialog.getByRole('button', { name: '추가 전달 저장' }).click();
     await expect(page.getByText('추가 전달 #2이 이력에 저장되었습니다')).toBeVisible();
     await expect(page.getByText('추가 전달 #2')).toBeVisible();
 

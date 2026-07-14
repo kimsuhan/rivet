@@ -14,4 +14,5 @@ export interface TeamWorkIssueSummaryResponseDto {
   title: string;
   status: TeamWorkIssueSummaryResponseDtoStatus;
   priority: TeamWorkIssueSummaryResponseDtoPriority;
+  projectId: string;
 }

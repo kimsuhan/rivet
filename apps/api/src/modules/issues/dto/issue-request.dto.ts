@@ -391,6 +391,9 @@ export class InlineHandoffDto {
   destinationRoles?: (typeof ProjectRole.WEB_FRONTEND | typeof ProjectRole.APP_FRONTEND)[];
 }
 
+export const TEAM_WORK_COMPLETION_MODES = ['COMPLETE_ONLY', 'HANDOFF_AND_COMPLETE'] as const;
+export type TeamWorkCompletionMode = (typeof TEAM_WORK_COMPLETION_MODES)[number];
+
 export class UpdateTeamWorkDto {
   @ApiProperty({ minimum: 1 })
   @IsInt()
@@ -402,6 +405,14 @@ export class UpdateTeamWorkDto {
   @IsOptional()
   @IsUUID('4')
   workflowStateId?: string;
+
+  @ApiPropertyOptional({
+    description: '완료 범주로 전이할 때만 사용하는 명시적 완료 방식',
+    enum: TEAM_WORK_COMPLETION_MODES,
+  })
+  @IsOptional()
+  @IsIn(TEAM_WORK_COMPLETION_MODES)
+  completionMode?: TeamWorkCompletionMode;
 
   @ApiPropertyOptional({ format: 'uuid', nullable: true, type: String })
   @Transform(({ value }) => normalizeUuid(value))

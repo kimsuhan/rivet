@@ -85,6 +85,7 @@ export class TeamWorkIssueSummaryResponseDto {
   @ApiProperty() title!: string;
   @ApiProperty({ enum: IssueStatus }) status!: IssueStatus;
   @ApiProperty({ enum: IssuePriority }) priority!: IssuePriority;
+  @ApiProperty({ format: 'uuid' }) projectId!: string;
 }
 
 export class TeamWorkReferenceResponseDto {
@@ -105,8 +106,6 @@ export class TeamWorkSummaryResponseDto {
   @ApiProperty({ type: IssueWorkflowStateSummaryResponseDto })
   workflowState!: IssueWorkflowStateSummaryResponseDto;
   @ApiProperty({ enum: StateCategory }) stateCategory!: StateCategory;
-  @ApiProperty({ enum: ['API_HANDOFF_PENDING', 'READY'], nullable: true, type: String })
-  readinessStatus!: 'API_HANDOFF_PENDING' | 'READY' | null;
   @ApiProperty({ nullable: true, type: IssueMemberSummaryResponseDto })
   assignee!: IssueMemberSummaryResponseDto | null;
   @ApiProperty({ maxLength: 10000, nullable: true, type: String }) workNoteMarkdown!: string | null;

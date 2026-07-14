@@ -54,23 +54,17 @@ import {
   CompactAssigneeTrigger,
   IssueStatusDisplay,
   PriorityDisplay,
+  PROJECT_ROLE_LABELS as ROLE_LABELS,
   StatusTrigger,
   TeamWorkStatusDisplay,
 } from './issue-attribute-presentation';
 import { markdownEditorLabels } from './issue-collaboration-labels';
-import {
-  FOLLOW_UP_HANDOFF_TEMPLATE,
-  HANDOFF_TEMPLATE,
-  handoffBodyError,
-} from './issue-handoff-validation';
+import { FOLLOW_UP_HANDOFF_TEMPLATE, handoffBodyError } from './issue-handoff-validation';
 import { IssueTimeline } from './issue-timeline';
 import { issueWorkHref, matchesRequestedTeamWork } from './issue-work-routing';
+import { TeamWorkCompletionModal } from './team-work-completion-modal';
+import { TeamWorkPrimaryAction } from './team-work-primary-action';
 
-const ROLE_LABELS = {
-  BACKEND: '백엔드',
-  WEB_FRONTEND: '웹 프론트',
-  APP_FRONTEND: '앱 프론트',
-} as const;
 type ProjectRole = 'BACKEND' | 'WEB_FRONTEND' | 'APP_FRONTEND';
 
 function mutationErrorMessage(error: unknown): string {
@@ -91,6 +85,7 @@ function useTeamWorkCellMutation(
     mutationFn: async (change: {
       assignee?: IssueMemberSummaryResponseDto | null;
       assigneeMembershipId?: string | null;
+      completionMode?: 'COMPLETE_ONLY' | 'HANDOFF_AND_COMPLETE';
       handoff?: { bodyMarkdown: string; destinationRoles?: Array<'APP_FRONTEND' | 'WEB_FRONTEND'> };
       workNoteMarkdown?: string | null;
       workflowState?: {
@@ -107,6 +102,7 @@ function useTeamWorkCellMutation(
         ...(change.assigneeMembershipId !== undefined
           ? { assigneeMembershipId: change.assigneeMembershipId }
           : {}),
+        ...(change.completionMode ? { completionMode: change.completionMode } : {}),
         ...(change.workNoteMarkdown !== undefined
           ? { workNoteMarkdown: change.workNoteMarkdown }
           : {}),
@@ -227,36 +223,18 @@ function TeamWorkPanel({
   const followUpMutation = useIssueCollaborationControllerCreateHandoff();
   const [workNoteMarkdown, setWorkNoteMarkdown] = useState(work.workNoteMarkdown ?? '');
   const [editingWorkNote, setEditingWorkNote] = useState(false);
-  const [completionStateId, setCompletionStateId] = useState<string | null>(null);
-  const [handoffBody, setHandoffBody] = useState('');
-  const [destinationRoles, setDestinationRoles] = useState<Array<'APP_FRONTEND' | 'WEB_FRONTEND'>>(
-    [],
-  );
-  const [handoffGuideOpen, setHandoffGuideOpen] = useState(false);
+  const [completionModalOpen, setCompletionModalOpen] = useState(false);
   const [followUpBody, setFollowUpBody] = useState('');
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpGuideOpen, setFollowUpGuideOpen] = useState(false);
   const [followUpSuccess, setFollowUpSuccess] = useState(false);
   const [savedFollowUpSequence, setSavedFollowUpSequence] = useState<number | null>(null);
-  const project = useProjectsControllerGet(issue.project.id, { query: { retry: false } });
-
-  const frontRoles = (project.data?.roleTeams ?? []).flatMap(({ role }) =>
-    role === 'WEB_FRONTEND' || role === 'APP_FRONTEND' ? [role] : [],
-  );
-  const requiresHandoff =
-    work.projectRole === 'BACKEND' &&
-    frontRoles.length > 0 &&
-    !issue.handoffFlows.some(
-      (handoff) => handoff.kind === 'INITIAL' && handoff.sourceTeamWork.id === work.id,
-    );
-  const handoffBodyInvalid = handoffBodyError(handoffBody) === 'content';
 
   function saveState(stateId: string) {
     const state = states.data?.items.find((item) => item.id === stateId);
     if (!state) return;
-    if (state.category === 'COMPLETED' && requiresHandoff) {
-      setCompletionStateId(state.id);
-      setDestinationRoles(frontRoles);
+    if (state.category === 'COMPLETED') {
+      setCompletionModalOpen(true);
       return;
     }
     stateMutation.mutate({ workflowState: state });
@@ -318,65 +296,87 @@ function TeamWorkPanel({
 
   return (
     <section className="border-b pb-6" aria-labelledby="selected-work-title">
-      <header className="flex flex-wrap items-start justify-between gap-3 pb-3">
-        <h2 id="selected-work-title" className="text-lg font-semibold">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pb-3 sm:justify-between">
+        <h2 id="selected-work-title" className="order-1 text-lg font-semibold">
           {ROLE_LABELS[work.projectRole]} · {work.team.name}
         </h2>
-      </header>
+        <TeamWorkPrimaryAction
+          className="order-3 sm:order-2"
+          busy={stateMutation.isPending}
+          disabled={states.isPending}
+          onOpenCompletion={() => setCompletionModalOpen(true)}
+          onStart={(stateId) => {
+            const state = states.data?.items.find((item) => item.id === stateId);
+            if (state) stateMutation.mutate({ workflowState: state });
+          }}
+          states={states.data?.items ?? []}
+          work={work}
+        />
+        <dl className="order-2 flex w-full flex-wrap items-center gap-x-6 gap-y-2 text-sm sm:order-3">
+          <div className="flex items-center gap-2">
+            <dt className="text-muted-foreground">상태</dt>
+            <dd>
+              <StatusTrigger
+                className="w-32"
+                identifier={work.identifier}
+                value={work.workflowState.id}
+                states={states.data?.items ?? []}
+                busy={stateMutation.isPending}
+                disabled={stateMutation.isPending || states.isPending}
+                onValueChange={saveState}
+              />
+            </dd>
+          </div>
+          <div className="flex items-center gap-2">
+            <dt className="text-muted-foreground">담당자</dt>
+            <dd className="flex items-center gap-2">
+              <CompactAssigneeTrigger
+                identifier={work.identifier}
+                assignee={work.assignee}
+                members={(members.data?.items ?? []) as IssueMemberSummaryResponseDto[]}
+                busy={assigneeMutation.isPending}
+                disabled={assigneeMutation.isPending || members.isPending}
+                onValueChange={(id) => {
+                  const member = members.data?.items.find((item) => item.id === id);
+                  assigneeMutation.mutate({
+                    assignee: member ? (member as IssueMemberSummaryResponseDto) : null,
+                    assigneeMembershipId: id || null,
+                  });
+                }}
+              />
+              {assigneeMutation.isPending ? (
+                <span className="text-muted-foreground text-xs">담당자 저장 중…</span>
+              ) : null}
+            </dd>
+          </div>
+        </dl>
+      </div>
       {error ? (
-        <Alert variant="destructive" className="mt-4">
+        <Alert variant="destructive" className="mt-2">
           <CircleAlert />
           <AlertTitle>변경을 저장하지 못했습니다</AlertTitle>
           <AlertDescription>{mutationErrorMessage(error)}</AlertDescription>
         </Alert>
       ) : null}
-      <dl className="mt-2 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-        <div className="flex min-h-10 items-center justify-between gap-3">
-          <dt className="text-muted-foreground">상태</dt>
-          <dd>
-            <StatusTrigger
-              identifier={work.identifier}
-              value={work.workflowState.id}
-              states={states.data?.items ?? []}
-              busy={stateMutation.isPending}
-              disabled={
-                stateMutation.isPending ||
-                states.isPending ||
-                (work.projectRole === 'BACKEND' &&
-                  !hasInitialHandoff &&
-                  (project.isPending || project.isError))
-              }
-              onValueChange={saveState}
-            />
-          </dd>
-        </div>
-        <div className="flex min-h-10 items-center justify-between gap-3">
-          <dt className="text-muted-foreground">담당자</dt>
-          <dd className="flex items-center gap-2">
-            <CompactAssigneeTrigger
-              identifier={work.identifier}
-              assignee={work.assignee}
-              members={(members.data?.items ?? []) as IssueMemberSummaryResponseDto[]}
-              busy={assigneeMutation.isPending}
-              disabled={assigneeMutation.isPending || members.isPending}
-              onValueChange={(id) => {
-                const member = members.data?.items.find((item) => item.id === id);
-                assigneeMutation.mutate({
-                  assignee: member ? (member as IssueMemberSummaryResponseDto) : null,
-                  assigneeMembershipId: id || null,
-                });
-              }}
-            />
-            {assigneeMutation.isPending ? (
-              <span className="text-muted-foreground text-xs">담당자 저장 중…</span>
-            ) : null}
-          </dd>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-muted-foreground">작업 준비</dt>
-          <dd>{work.readinessStatus === 'API_HANDOFF_PENDING' ? 'API 전달 대기' : '작업 가능'}</dd>
-        </div>
-      </dl>
+      <TeamWorkCompletionModal
+        error={stateMutation.error}
+        onOpenChange={setCompletionModalOpen}
+        onSubmit={(payload) => {
+          const state = states.data?.items.find((item) => item.id === payload.workflowStateId);
+          if (!state) return;
+          stateMutation.mutate(
+            {
+              ...(payload.handoff ? { handoff: payload.handoff } : {}),
+              completionMode: payload.completionMode,
+              workflowState: state,
+            },
+            { onSuccess: () => setCompletionModalOpen(false) },
+          );
+        }}
+        open={completionModalOpen}
+        submitting={stateMutation.isPending}
+        work={work}
+      />
       <section className="mt-5 border-t pt-4" aria-labelledby="work-note-title">
         <div className="flex items-center justify-between gap-3">
           <h3 id="work-note-title" className="text-sm font-medium">
@@ -439,121 +439,6 @@ function TeamWorkPanel({
           />
         ) : null}
       </section>
-      {completionStateId ? (
-        <section className="mt-5 border-t pt-4">
-          <h3 className="font-medium">프론트에 전달하고 완료</h3>
-          <p className="text-muted-foreground mt-1 text-sm">
-            변경 내용을 적고 전달할 프론트 역할을 선택해 주세요. 기존에 작성한 전달은 수정되지
-            않습니다.
-          </p>
-          <div className="border-border bg-muted/40 mt-3 rounded-lg border px-3 py-2.5 text-sm">
-            <p className="text-muted-foreground text-xs font-medium">전달 관계</p>
-            <p className="mt-1 font-medium">
-              {work.identifier} · {ROLE_LABELS[work.projectRole]} →{' '}
-              {destinationRoles.length > 0
-                ? destinationRoles.map((role) => ROLE_LABELS[role]).join(', ')
-                : '전달할 프론트 역할을 선택해 주세요'}
-            </p>
-          </div>
-          <fieldset className="mt-3 space-y-2">
-            <legend className="text-sm font-medium">전달 대상</legend>
-            <div className="flex flex-wrap gap-3">
-              {frontRoles.map((role) => (
-                <label key={role} className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={destinationRoles.includes(role)}
-                    onCheckedChange={(checked) =>
-                      setDestinationRoles((current) =>
-                        checked ? [...current, role] : current.filter((item) => item !== role),
-                      )
-                    }
-                  />
-                  {ROLE_LABELS[role]}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <div className="mt-3 grid gap-2">
-            <HandoffEditor
-              charLimit={50_000}
-              labels={editorLabels}
-              onChange={setHandoffBody}
-              value={handoffBody}
-            />
-            {handoffBodyInvalid ? (
-              <p className="text-destructive text-sm" role="alert">
-                전달할 변경 내용을 입력해 주세요.
-              </p>
-            ) : null}
-          </div>
-          <details
-            className="mt-3"
-            open={handoffGuideOpen}
-            onToggle={(event) => setHandoffGuideOpen(event.currentTarget.open)}
-          >
-            <summary className="cursor-pointer text-sm font-medium">작성 가이드 보기</summary>
-            <div className="text-muted-foreground mt-2 space-y-2 text-sm">
-              <p>
-                변경 요약, API 명세 링크, 사용 가능 환경, 요청·응답 변경, 프론트 주의사항을 필요한
-                만큼만 적어 주세요.
-              </p>
-              <Button
-                size="sm"
-                type="button"
-                variant="ghost"
-                onClick={() => setHandoffBody(HANDOFF_TEMPLATE)}
-              >
-                가이드 삽입
-              </Button>
-            </div>
-          </details>
-          <Alert className="mt-3">
-            <AlertTitle>알림 대상</AlertTitle>
-            <AlertDescription>
-              선택한 프론트 작업의 담당자와 구독자에게 알립니다. 새 미할당 작업은 대상 팀의 활성
-              멤버에게 알립니다.
-            </AlertDescription>
-          </Alert>
-          <div className="mt-3 flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setHandoffBody('');
-                setDestinationRoles([]);
-                setHandoffGuideOpen(false);
-                setCompletionStateId(null);
-              }}
-            >
-              취소
-            </Button>
-            <Button
-              disabled={
-                stateMutation.isPending || destinationRoles.length === 0 || handoffBodyInvalid
-              }
-              onClick={() => {
-                const state = states.data?.items.find((item) => item.id === completionStateId);
-                if (state)
-                  stateMutation.mutate(
-                    {
-                      handoff: { bodyMarkdown: handoffBody, destinationRoles },
-                      workflowState: state,
-                    },
-                    {
-                      onSuccess: () => {
-                        setHandoffBody('');
-                        setDestinationRoles([]);
-                        setHandoffGuideOpen(false);
-                        setCompletionStateId(null);
-                      },
-                    },
-                  );
-              }}
-            >
-              전달하고 완료
-            </Button>
-          </div>
-        </section>
-      ) : null}
       <section className="mt-6 border-t pt-4" aria-labelledby="handoff-context-title">
         <div className="flex items-center justify-between gap-3">
           <h3 id="handoff-context-title" className="text-sm font-semibold">
@@ -1090,10 +975,23 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
             <p className="text-muted-foreground text-sm">아직 시작한 팀 작업이 없습니다.</p>
           )}
           {availableRoles.length ? (
-            <div className="bg-surface-2 rounded-lg border p-3">
-              <h3 className="flex items-center gap-2 text-sm font-medium">
-                <Play className="size-4" />팀 작업 시작
-              </h3>
+            <details
+              className={
+                selectedWork?.stateCategory === 'STARTED'
+                  ? 'rounded-lg border border-dashed p-3'
+                  : 'bg-surface-2 rounded-lg border p-3'
+              }
+              open={selectedWork?.stateCategory !== 'STARTED'}
+            >
+              <summary
+                className={
+                  selectedWork?.stateCategory === 'STARTED'
+                    ? 'text-muted-foreground flex cursor-pointer items-center gap-2 text-sm font-medium'
+                    : 'flex cursor-pointer items-center gap-2 text-sm font-medium'
+                }
+              >
+                <Play className="size-4" />팀 작업 추가
+              </summary>
               <div className="mt-3 space-y-2">
                 {availableRoles.map((role) => (
                   <label key={role} className="flex items-center gap-2 text-sm">
@@ -1117,7 +1015,7 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
               >
                 {start.isPending ? <Spinner /> : <Play className="size-3.5" />}선택한 작업 시작
               </Button>
-            </div>
+            </details>
           ) : null}
         </aside>
         <main className="min-w-0 space-y-6">

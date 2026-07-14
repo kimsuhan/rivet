@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import {
   type IssueMemberSummaryResponseDto,
   type TeamWorkSummaryResponseDto,
@@ -12,16 +14,13 @@ import { Link } from '@/i18n/navigation';
 import {
   CompactAssigneeTrigger,
   PriorityDisplay,
+  PROJECT_ROLE_LABELS as ROLE_LABELS,
   StatusTrigger,
 } from './issue-attribute-presentation';
 import { issueWorkHref } from './issue-work-routing';
+import { TeamWorkCompletionModal } from './team-work-completion-modal';
+import { TeamWorkPrimaryAction } from './team-work-primary-action';
 import { useTeamWorkInlineMutation } from './use-team-work-inline-mutation';
-
-const ROLE_LABELS = {
-  BACKEND: '백엔드',
-  WEB_FRONTEND: '웹 프론트',
-  APP_FRONTEND: '앱 프론트',
-} as const;
 
 function relativeUpdatedAt(value: string) {
   const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60_000);
@@ -40,6 +39,7 @@ export function TeamWorkListRow({ work }: { work: TeamWorkSummaryResponseDto }) 
   );
   const stateMutation = useTeamWorkInlineMutation(work, 'workflowState');
   const assigneeMutation = useTeamWorkInlineMutation(work, 'assignee');
+  const [completionModalOpen, setCompletionModalOpen] = useState(false);
   return (
     <li className="group border-b last:border-b-0">
       <div className="grid min-h-16 grid-cols-[7.5rem_minmax(16rem,1fr)_11rem_8.5rem_9.5rem_7.5rem_9rem_5rem] items-center gap-3 px-3 py-2.5 text-sm max-xl:grid-cols-[7.5rem_minmax(16rem,1fr)_11rem_8.5rem_9.5rem_7.5rem_6rem] max-lg:grid-cols-[7.5rem_minmax(16rem,1fr)_8.5rem_9.5rem_7.5rem] max-md:grid-cols-1 max-md:gap-1">
@@ -84,13 +84,41 @@ export function TeamWorkListRow({ work }: { work: TeamWorkSummaryResponseDto }) 
           }}
         />
         <PriorityDisplay priority={work.issue.priority} className="w-24 max-lg:hidden" />
-        <span className="text-muted-foreground text-xs">
-          {work.readinessStatus === 'API_HANDOFF_PENDING' ? 'API 전달 대기' : '작업 가능'}
-        </span>
+        <TeamWorkPrimaryAction
+          busy={stateMutation.isPending}
+          compact
+          disabled={states.isPending}
+          onOpenCompletion={() => setCompletionModalOpen(true)}
+          onStart={(stateId) => {
+            const state = states.data?.items.find((item) => item.id === stateId);
+            if (state) stateMutation.mutate({ workflowState: state });
+          }}
+          states={states.data?.items ?? []}
+          work={work}
+        />
         <time className="text-muted-foreground text-xs max-xl:hidden" dateTime={work.updatedAt}>
           {relativeUpdatedAt(work.updatedAt)}
         </time>
       </div>
+      <TeamWorkCompletionModal
+        error={stateMutation.error}
+        onOpenChange={setCompletionModalOpen}
+        onSubmit={(payload) => {
+          const state = states.data?.items.find((item) => item.id === payload.workflowStateId);
+          if (!state) return;
+          stateMutation.mutate(
+            {
+              ...(payload.handoff ? { handoff: payload.handoff } : {}),
+              completionMode: payload.completionMode,
+              workflowState: state,
+            },
+            { onSuccess: () => setCompletionModalOpen(false) },
+          );
+        }}
+        open={completionModalOpen}
+        submitting={stateMutation.isPending}
+        work={work}
+      />
     </li>
   );
 }

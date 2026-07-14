@@ -8037,6 +8037,10 @@
               "URGENT"
             ],
             "type": "string"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
           }
         },
         "required": [
@@ -8044,7 +8048,8 @@
           "identifier",
           "title",
           "status",
-          "priority"
+          "priority",
+          "projectId"
         ]
       },
       "IssueTeamSummaryResponseDto": {
@@ -8150,14 +8155,6 @@
             ],
             "type": "string"
           },
-          "readinessStatus": {
-            "nullable": true,
-            "enum": [
-              "API_HANDOFF_PENDING",
-              "READY"
-            ],
-            "type": "string"
-          },
           "assignee": {
             "nullable": true,
             "type": "object",
@@ -8193,7 +8190,6 @@
           "team",
           "workflowState",
           "stateCategory",
-          "readinessStatus",
           "assignee",
           "workNoteMarkdown",
           "version",
@@ -8955,14 +8951,6 @@
             ],
             "type": "string"
           },
-          "readinessStatus": {
-            "nullable": true,
-            "enum": [
-              "API_HANDOFF_PENDING",
-              "READY"
-            ],
-            "type": "string"
-          },
           "assignee": {
             "nullable": true,
             "type": "object",
@@ -8998,7 +8986,6 @@
           "team",
           "workflowState",
           "stateCategory",
-          "readinessStatus",
           "assignee",
           "workNoteMarkdown",
           "version",
@@ -9040,6 +9027,14 @@
           "workflowStateId": {
             "type": "string",
             "format": "uuid"
+          },
+          "completionMode": {
+            "enum": [
+              "COMPLETE_ONLY",
+              "HANDOFF_AND_COMPLETE"
+            ],
+            "type": "string",
+            "description": "완료 범주로 전이할 때만 사용하는 명시적 완료 방식"
           },
           "assigneeMembershipId": {
             "type": "string",

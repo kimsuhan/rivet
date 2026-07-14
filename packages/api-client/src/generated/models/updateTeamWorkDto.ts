@@ -6,11 +6,14 @@
  * OpenAPI spec version: 1.0
  */
 import type { InlineHandoffDto } from './inlineHandoffDto';
+import type { UpdateTeamWorkDtoCompletionMode } from './updateTeamWorkDtoCompletionMode';
 
 export interface UpdateTeamWorkDto {
   /** @minimum 1 */
   version: number;
   workflowStateId?: string;
+  /** 완료 범주로 전이할 때만 사용하는 명시적 완료 방식 */
+  completionMode?: UpdateTeamWorkDtoCompletionMode;
   /** @nullable */
   assigneeMembershipId?: string | null;
   /**

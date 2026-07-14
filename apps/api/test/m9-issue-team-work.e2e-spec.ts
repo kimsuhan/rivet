@@ -42,13 +42,19 @@ describe('M9 issue content and team execution API', () => {
   let app: INestApplication;
   let database: DatabaseService;
   let userId: string;
+  let secondMembershipId: string;
   let workspaceId: string;
   let membershipId: string;
   let projectId: string;
+  let soloProjectId: string;
   let webTeamId: string;
+  let appTeamId: string;
   let backendDoneId: string;
   let webDoneId: string;
   let webStartedId: string;
+  let appBacklogDefaultId: string;
+  let appUnstartedId: string;
+  let appPausedId: string;
   let cookie: string;
   let csrf: string;
 
@@ -80,16 +86,34 @@ describe('M9 issue content and team execution API', () => {
       const membership = await transaction.workspaceMembership.create({
         data: { role: MembershipRole.ADMIN, userId: user.id, workspaceId: workspace.id },
       });
+      const secondEmail = `m9-second.${runId}@example.com`;
+      const secondUser = await transaction.user.create({
+        data: {
+          displayName: 'M9 두 번째 사용자',
+          email: secondEmail,
+          emailVerifiedAt: new Date(),
+          normalizedEmail: secondEmail,
+          passwordHash: PASSWORD_HASH,
+        },
+      });
+      const secondMembership = await transaction.workspaceMembership.create({
+        data: { role: MembershipRole.MEMBER, userId: secondUser.id, workspaceId: workspace.id },
+      });
       const backend = await transaction.team.create({
         data: { key: 'API', name: '백엔드', normalizedName: '백엔드', workspaceId: workspace.id },
       });
       const web = await transaction.team.create({
         data: { key: 'WEB', name: '웹', normalizedName: '웹', workspaceId: workspace.id },
       });
+      const app = await transaction.team.create({
+        data: { key: 'APP', name: '앱', normalizedName: '앱', workspaceId: workspace.id },
+      });
       await transaction.teamMember.createMany({
         data: [
           { membershipId: membership.id, teamId: backend.id, workspaceId: workspace.id },
           { membershipId: membership.id, teamId: web.id, workspaceId: workspace.id },
+          { membershipId: membership.id, teamId: app.id, workspaceId: workspace.id },
+          { membershipId: secondMembership.id, teamId: app.id, workspaceId: workspace.id },
         ],
       });
       await transaction.workflowState.create({
@@ -144,6 +168,58 @@ describe('M9 issue content and team execution API', () => {
           workspaceId: workspace.id,
         },
       });
+      const appBacklogDefault = await transaction.workflowState.create({
+        data: {
+          category: StateCategory.BACKLOG,
+          isDefault: true,
+          name: '미분류',
+          normalizedName: '미분류',
+          position: 0,
+          teamId: app.id,
+          workspaceId: workspace.id,
+        },
+      });
+      const appUnstarted = await transaction.workflowState.create({
+        data: {
+          category: StateCategory.UNSTARTED,
+          name: '할 일',
+          normalizedName: '할 일',
+          position: 1,
+          teamId: app.id,
+          workspaceId: workspace.id,
+        },
+      });
+      await transaction.workflowState.create({
+        data: {
+          category: StateCategory.STARTED,
+          name: '진행 중',
+          normalizedName: '진행 중',
+          position: 2,
+          teamId: app.id,
+          workspaceId: workspace.id,
+        },
+      });
+      await transaction.workflowState.create({
+        data: {
+          category: StateCategory.COMPLETED,
+          name: '완료',
+          normalizedName: '완료',
+          position: 3,
+          teamId: app.id,
+          workspaceId: workspace.id,
+        },
+      });
+      const appPaused = await transaction.workflowState.create({
+        data: {
+          category: StateCategory.BACKLOG,
+          isDefault: false,
+          name: '보류',
+          normalizedName: '보류',
+          position: 4,
+          teamId: app.id,
+          workspaceId: workspace.id,
+        },
+      });
       const project = await transaction.project.create({
         data: { leadMembershipId: membership.id, name: '통합 프로젝트', workspaceId: workspace.id },
       });
@@ -161,12 +237,39 @@ describe('M9 issue content and team execution API', () => {
             teamId: web.id,
             workspaceId: workspace.id,
           },
+          {
+            projectId: project.id,
+            role: ProjectRole.APP_FRONTEND,
+            teamId: app.id,
+            workspaceId: workspace.id,
+          },
         ],
       });
+      const soloProject = await transaction.project.create({
+        data: {
+          leadMembershipId: membership.id,
+          name: '프론트 역할 없는 프로젝트',
+          workspaceId: workspace.id,
+        },
+      });
+      await transaction.projectRoleTeam.create({
+        data: {
+          projectId: soloProject.id,
+          role: ProjectRole.BACKEND,
+          teamId: backend.id,
+          workspaceId: workspace.id,
+        },
+      });
       return {
+        appBacklogDefaultId: appBacklogDefault.id,
+        appPausedId: appPaused.id,
+        appTeamId: app.id,
+        appUnstartedId: appUnstarted.id,
         backendDoneId: backendDone.id,
         membershipId: membership.id,
         projectId: project.id,
+        secondMembershipId: secondMembership.id,
+        soloProjectId: soloProject.id,
         userId: user.id,
         webDoneId: webDone.id,
         webStartedId: webStarted.id,
@@ -178,11 +281,17 @@ describe('M9 issue content and team execution API', () => {
       userId,
       workspaceId,
       membershipId,
+      secondMembershipId,
       projectId,
+      soloProjectId,
       webTeamId,
+      appTeamId,
       backendDoneId,
       webDoneId,
       webStartedId,
+      appBacklogDefaultId,
+      appUnstartedId,
+      appPausedId,
     } = fixture);
     const session = await app.get(AuthSessionService).create(userId);
     cookie = `rivet_session=${session.token}`;
@@ -206,9 +315,16 @@ describe('M9 issue content and team execution API', () => {
       await database.client.teamMember.deleteMany({ where: { workspaceId } });
       await database.client.team.deleteMany({ where: { workspaceId } });
       await database.client.session.deleteMany({ where: { userId } });
+      const secondUserId = (
+        await database.client.workspaceMembership.findFirst({
+          select: { userId: true },
+          where: { id: secondMembershipId },
+        })
+      )?.userId;
       await database.client.workspaceMembership.deleteMany({ where: { workspaceId } });
       await database.client.workspace.deleteMany({ where: { id: workspaceId } });
       await database.client.user.deleteMany({ where: { id: userId } });
+      if (secondUserId) await database.client.user.deleteMany({ where: { id: secondUserId } });
     }
     await app?.close();
     if (process.env.FILE_STORAGE_ROOT)
@@ -317,17 +433,17 @@ describe('M9 issue content and team execution API', () => {
       .expect(200);
     expect(note.body.teamWork).toMatchObject({
       assignee: { id: membershipId },
-      readinessStatus: 'API_HANDOFF_PENDING',
       workNoteMarkdown: '## 응답 계약\n\n`workspaceId`를 사용합니다.',
     });
-    await mutate('patch', `/api/v1/team-works/${web.id}`)
+    expect(note.body.teamWork.readinessStatus).toBeUndefined();
+    const startedWeb = await mutate('patch', `/api/v1/team-works/${web.id}`)
       .send({ version: note.body.teamWork.version, workflowStateId: webStartedId })
-      .expect(422)
-      .expect(({ body }) => expect(body.code).toBe('TEAM_WORK_API_HANDOFF_REQUIRED'));
+      .expect(200);
+    expect(startedWeb.body.teamWork.stateCategory).toBe('STARTED');
     await mutate('patch', `/api/v1/team-works/${web.id}`)
       .send({
         workNoteMarkdown: '![이미지](/files/98ab3a6d-0d24-484e-a36a-b8028dc00465)',
-        version: note.body.teamWork.version,
+        version: startedWeb.body.teamWork.version,
       })
       .expect(422);
 
@@ -336,8 +452,43 @@ describe('M9 issue content and team execution API', () => {
       .set('Cookie', cookie)
       .expect(200);
 
+    // 완료 전이에 completionMode가 없으면 명확한 422를 반환한다.
+    await mutate('patch', `/api/v1/team-works/${backend.id}`)
+      .send({ version: currentBackend.body.version, workflowStateId: backendDoneId })
+      .expect(422)
+      .expect(({ body }) => expect(body.code).toBe('TEAM_WORK_COMPLETION_MODE_REQUIRED'));
+    // COMPLETE_ONLY에는 handoff를 허용하지 않는다.
+    await mutate('patch', `/api/v1/team-works/${backend.id}`)
+      .send({
+        completionMode: 'COMPLETE_ONLY',
+        handoff: { bodyMarkdown: handoffBody() },
+        version: currentBackend.body.version,
+        workflowStateId: backendDoneId,
+      })
+      .expect(422)
+      .expect(({ body }) => expect(body.code).toBe('TEAM_WORK_HANDOFF_NOT_ALLOWED'));
+    // HANDOFF_AND_COMPLETE에는 전달 본문이 필요하다.
+    await mutate('patch', `/api/v1/team-works/${backend.id}`)
+      .send({
+        completionMode: 'HANDOFF_AND_COMPLETE',
+        version: currentBackend.body.version,
+        workflowStateId: backendDoneId,
+      })
+      .expect(422)
+      .expect(({ body }) => expect(body.code).toBe('TEAM_WORK_HANDOFF_REQUIRED'));
+    // 완료가 아닌 전이에 completionMode가 오면 422를 반환한다.
+    await mutate('patch', `/api/v1/team-works/${backend.id}`)
+      .send({
+        completionMode: 'COMPLETE_ONLY',
+        version: currentBackend.body.version,
+        workNoteMarkdown: '완료가 아닌 변경',
+      })
+      .expect(422)
+      .expect(({ body }) => expect(body.code).toBe('TEAM_WORK_COMPLETION_MODE_NOT_ALLOWED'));
+
     const delivered = await mutate('patch', `/api/v1/team-works/${backend.id}`)
       .send({
+        completionMode: 'HANDOFF_AND_COMPLETE',
         handoff: { bodyMarkdown: handoffBody(), destinationRoles: ['WEB_FRONTEND'] },
         version: currentBackend.body.version,
         workflowStateId: backendDoneId,
@@ -355,9 +506,14 @@ describe('M9 issue content and team execution API', () => {
       .get(`/api/v1/team-works/${web.id}`)
       .set('Cookie', cookie)
       .expect(200);
-    expect(readyWeb.body.readinessStatus).toBe('READY');
+    expect(readyWeb.body.stateCategory).toBe('STARTED');
+    // 프론트 전용 작업은 프로젝트에 프론트 역할이 있어도 전달 없이 완료할 수 있다.
     const completedWeb = await mutate('patch', `/api/v1/team-works/${web.id}`)
-      .send({ version: readyWeb.body.version, workflowStateId: webDoneId })
+      .send({
+        completionMode: 'COMPLETE_ONLY',
+        version: readyWeb.body.version,
+        workflowStateId: webDoneId,
+      })
       .expect(200);
     expect(completedWeb.body.issue.status).toBe('REVIEW');
     const completedIssue = await mutate('patch', `/api/v1/issues/${issue.id}`)
@@ -403,5 +559,142 @@ describe('M9 issue content and team execution API', () => {
       resourceType: 'TEAM_WORK',
       teamWork: { id: web.id },
     });
+  });
+
+  it('creates default-backlog or unstarted team works based on assignee, and assignment only auto-starts the default backlog state', async () => {
+    const unassignedIssue = await mutate('post', '/api/v1/issues')
+      .send({
+        initialRoles: [{ projectRole: 'APP_FRONTEND' }],
+        projectId,
+        title: '담당자 없는 앱 작업',
+      })
+      .expect(201);
+    const backlogWork = unassignedIssue.body.createdTeamWorks[0] as {
+      id: string;
+      stateCategory: string;
+      version: number;
+      workflowState: { id: string };
+    };
+    expect(backlogWork.stateCategory).toBe('BACKLOG');
+    expect(backlogWork.workflowState.id).toBe(appBacklogDefaultId);
+
+    const assignedIssue = await mutate('post', '/api/v1/issues')
+      .send({
+        initialRoles: [{ assigneeMembershipId: membershipId, projectRole: 'APP_FRONTEND' }],
+        projectId,
+        title: '담당자 있는 앱 작업',
+      })
+      .expect(201);
+    const unstartedWork = assignedIssue.body.createdTeamWorks[0] as {
+      stateCategory: string;
+      workflowState: { id: string };
+    };
+    expect(unstartedWork.stateCategory).toBe('UNSTARTED');
+    expect(unstartedWork.workflowState.id).toBe(appUnstartedId);
+
+    const assigned = await mutate('patch', `/api/v1/team-works/${backlogWork.id}`)
+      .send({ assigneeMembershipId: membershipId, version: backlogWork.version })
+      .expect(200);
+    expect(assigned.body.teamWork.stateCategory).toBe('UNSTARTED');
+    expect(assigned.body.teamWork.workflowState.id).toBe(appUnstartedId);
+
+    const reassigned = await mutate('patch', `/api/v1/team-works/${backlogWork.id}`)
+      .send({ assigneeMembershipId: secondMembershipId, version: assigned.body.teamWork.version })
+      .expect(200);
+    expect(reassigned.body.teamWork.stateCategory).toBe('UNSTARTED');
+    expect(reassigned.body.teamWork.assignee).toMatchObject({ id: secondMembershipId });
+
+    const unassigned = await mutate('patch', `/api/v1/team-works/${backlogWork.id}`)
+      .send({ assigneeMembershipId: null, version: reassigned.body.teamWork.version })
+      .expect(200);
+    expect(unassigned.body.teamWork.stateCategory).toBe('UNSTARTED');
+    expect(unassigned.body.teamWork.assignee).toBeNull();
+
+    const pausedIssue = await mutate('post', '/api/v1/issues')
+      .send({ projectId, title: '보류 상태 수동 앱 작업' })
+      .expect(201);
+    const appTeamRow = await database.client.team.findUniqueOrThrow({ where: { id: appTeamId } });
+    const pausedWork = await database.client.teamWork.create({
+      data: {
+        createdByMembershipId: membershipId,
+        identifier: `${appTeamRow.key}-${appTeamRow.nextIssueNumber}`,
+        issueId: pausedIssue.body.issue.id,
+        projectRole: ProjectRole.APP_FRONTEND,
+        sequenceNumber: appTeamRow.nextIssueNumber,
+        teamId: appTeamId,
+        workflowStateId: appPausedId,
+        workspaceId,
+      },
+    });
+    await database.client.team.update({
+      data: { nextIssueNumber: { increment: 1 } },
+      where: { id: appTeamId },
+    });
+    const pausedAssigned = await mutate('patch', `/api/v1/team-works/${pausedWork.id}`)
+      .send({ assigneeMembershipId: membershipId, version: pausedWork.version })
+      .expect(200);
+    expect(pausedAssigned.body.teamWork.stateCategory).toBe('BACKLOG');
+    expect(pausedAssigned.body.teamWork.workflowState.id).toBe(appPausedId);
+  });
+
+  it('applies the same auto-start rule to claim and bulk assignment entry points', async () => {
+    const claimIssue = await mutate('post', '/api/v1/issues')
+      .send({
+        initialRoles: [{ projectRole: 'APP_FRONTEND' }],
+        projectId,
+        title: '내가 맡기 대상 작업',
+      })
+      .expect(201);
+    const claimTarget = claimIssue.body.createdTeamWorks[0] as { id: string };
+    const claimed = await mutate('post', `/api/v1/issues/${claimIssue.body.issue.id}/claim`)
+      .send({ projectRole: 'APP_FRONTEND', teamWorkId: claimTarget.id })
+      .expect(200);
+    expect(claimed.body.teamWork.stateCategory).toBe('UNSTARTED');
+    expect(claimed.body.teamWork.assignee).toMatchObject({ id: membershipId });
+
+    const bulkIssue = await mutate('post', '/api/v1/issues')
+      .send({
+        initialRoles: [{ projectRole: 'APP_FRONTEND' }],
+        projectId,
+        title: '일괄 배정 대상 작업',
+      })
+      .expect(201);
+    const bulkTarget = bulkIssue.body.createdTeamWorks[0] as { id: string; version: number };
+    const assignedInBulk = await mutate(
+      'post',
+      `/api/v1/issues/${bulkIssue.body.issue.id}/assign-team-works`,
+    )
+      .send({
+        assignments: [
+          {
+            assigneeMembershipId: secondMembershipId,
+            teamWorkId: bulkTarget.id,
+            version: bulkTarget.version,
+          },
+        ],
+      })
+      .expect(200);
+    expect(assignedInBulk.body.teamWorks[0].stateCategory).toBe('UNSTARTED');
+    expect(assignedInBulk.body.teamWorks[0].assignee).toMatchObject({ id: secondMembershipId });
+  });
+
+  it('rejects HANDOFF_AND_COMPLETE when the project has no frontend role', async () => {
+    const soloIssue = await mutate('post', '/api/v1/issues')
+      .send({
+        initialRoles: [{ assigneeMembershipId: membershipId, projectRole: 'BACKEND' }],
+        projectId: soloProjectId,
+        title: '프론트 역할 없는 프로젝트의 백엔드 작업',
+      })
+      .expect(201);
+    const soloBackend = soloIssue.body.createdTeamWorks[0] as { id: string; version: number };
+    await mutate('patch', `/api/v1/team-works/${soloBackend.id}`)
+      .send({
+        completionMode: 'HANDOFF_AND_COMPLETE',
+        handoff: { bodyMarkdown: handoffBody() },
+        version: soloBackend.version,
+        workflowStateId: backendDoneId,
+      })
+      .expect(422)
+      .expect(({ body }) => expect(body.code).toBe('TEAM_WORK_HANDOFF_NO_FRONTEND_ROLE'));
   });
 });

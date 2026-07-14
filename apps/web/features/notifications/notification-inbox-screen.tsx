@@ -88,9 +88,7 @@ function notificationHref(notification: NotificationResponseDto): string {
   const issueHref = issueWorkHref(notification.issue.identifier, notification.teamWork?.identifier);
   if (notification.commentId) return `${issueHref}#comment-${notification.commentId}`;
   if (notification.handoffId) {
-    const params = new URLSearchParams({ handoff: notification.handoffId, tab: 'work' });
-    if (notification.teamWork?.identifier) params.set('work', notification.teamWork.identifier);
-    return `${issueHref}?${params.toString()}#handoff-${notification.handoffId}`;
+    return `${issueHref}&handoff=${encodeURIComponent(notification.handoffId)}#handoff-${notification.handoffId}`;
   }
   return issueHref;
 }

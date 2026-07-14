@@ -10,7 +10,6 @@ import type { IssueTeamSummaryResponseDto } from './issueTeamSummaryResponseDto'
 import type { IssueWorkflowStateSummaryResponseDto } from './issueWorkflowStateSummaryResponseDto';
 import type { TeamWorkIssueSummaryResponseDto } from './teamWorkIssueSummaryResponseDto';
 import type { TeamWorkSummaryResponseDtoProjectRole } from './teamWorkSummaryResponseDtoProjectRole';
-import type { TeamWorkSummaryResponseDtoReadinessStatus } from './teamWorkSummaryResponseDtoReadinessStatus';
 import type { TeamWorkSummaryResponseDtoStateCategory } from './teamWorkSummaryResponseDtoStateCategory';
 
 export interface TeamWorkSummaryResponseDto {
@@ -21,8 +20,6 @@ export interface TeamWorkSummaryResponseDto {
   team: IssueTeamSummaryResponseDto;
   workflowState: IssueWorkflowStateSummaryResponseDto;
   stateCategory: TeamWorkSummaryResponseDtoStateCategory;
-  /** @nullable */
-  readinessStatus: TeamWorkSummaryResponseDtoReadinessStatus;
   /** @nullable */
   assignee: IssueMemberSummaryResponseDto | null;
   /**

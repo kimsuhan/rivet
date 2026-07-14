@@ -4,7 +4,6 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 
 import {
-  HandoffKind,
   IssueFileKind,
   IssuePriority,
   IssueStatus,
@@ -39,6 +38,7 @@ import {
 } from '../../common/validation/markdown';
 import { isInlineDisplayable } from '../files/file-content';
 import { FilesService } from '../files/files.service';
+import { shouldAutoStartOnAssignment } from './domain/team-work-transition';
 import type {
   AssignTeamWorksDto,
   ClaimTeamWorkDto,
@@ -79,12 +79,12 @@ const TEAM_WORK_SELECT = {
   createdAt: true,
   id: true,
   identifier: true,
-  handoffTargets: { select: { handoff: { select: { kind: true } } } },
   issue: {
     select: {
       id: true,
       identifier: true,
       priority: true,
+      projectId: true,
       status: true,
       teamWorks: {
         select: { projectRole: true },
@@ -255,14 +255,6 @@ function teamWorkReference(teamWork: {
 }
 
 export function toTeamWorkSummary(row: TeamWorkRow): TeamWorkSummaryResponseDto {
-  const isFrontend =
-    row.projectRole === ProjectRole.WEB_FRONTEND || row.projectRole === ProjectRole.APP_FRONTEND;
-  const hasBackendTeamWork = row.issue.teamWorks.some(
-    ({ projectRole }) => projectRole === ProjectRole.BACKEND,
-  );
-  const hasInitialHandoff = row.handoffTargets.some(
-    ({ handoff }) => handoff.kind === HandoffKind.INITIAL,
-  );
   return {
     assignee: row.assigneeTeamMember ? memberResponse(row.assigneeTeamMember.membership) : null,
     createdAt: row.createdAt.toISOString(),
@@ -272,15 +264,11 @@ export function toTeamWorkSummary(row: TeamWorkRow): TeamWorkSummaryResponseDto 
       id: row.issue.id,
       identifier: row.issue.identifier,
       priority: row.issue.priority,
+      projectId: row.issue.projectId,
       status: row.issue.status,
       title: row.issue.title,
     },
     projectRole: row.projectRole,
-    readinessStatus: isFrontend
-      ? hasInitialHandoff || !hasBackendTeamWork
-        ? 'READY'
-        : 'API_HANDOFF_PENDING'
-      : null,
     workNoteMarkdown: row.workNoteMarkdown,
     stateCategory: row.workflowState.category,
     team: teamResponse(row.team),
@@ -686,8 +674,16 @@ export class IssuesService {
         candidate.team.id,
         context.membershipId,
       );
+      const autoStart = shouldAutoStartOnAssignment(candidate.workflowState);
+      const autoStartStateId = autoStart
+        ? await this.firstUnstartedStateId(transaction, context.workspaceId, candidate.team.id)
+        : null;
       const changed = await transaction.teamWork.updateMany({
-        data: { assigneeMembershipId: context.membershipId, version: { increment: 1 } },
+        data: {
+          assigneeMembershipId: context.membershipId,
+          ...(autoStartStateId ? { workflowStateId: autoStartStateId } : {}),
+          version: { increment: 1 },
+        },
         where: { assigneeMembershipId: null, id: candidate.id, version: candidate.version },
       });
       if (changed.count !== 1)
@@ -717,7 +713,7 @@ export class IssuesService {
           id: eventId,
           payload: {
             assigneeMembershipId: context.membershipId,
-            changedFields: ['ASSIGNEE'],
+            changedFields: autoStartStateId ? ['ASSIGNEE', 'WORKFLOW_STATE'] : ['ASSIGNEE'],
             issueId,
             schemaVersion: TEAM_WORK_CHANGED_SCHEMA_VERSION,
             subscriberMembershipIds: [],
@@ -767,9 +763,14 @@ export class IssuesService {
           current.team.id,
           assignment.assigneeMembershipId,
         );
+        const autoStart = shouldAutoStartOnAssignment(current.workflowState);
+        const autoStartStateId = autoStart
+          ? await this.firstUnstartedStateId(transaction, context.workspaceId, current.team.id)
+          : null;
         const changed = await transaction.teamWork.updateMany({
           data: {
             assigneeMembershipId: assignment.assigneeMembershipId,
+            ...(autoStartStateId ? { workflowStateId: autoStartStateId } : {}),
             version: { increment: 1 },
           },
           where: { id: current.id, version: assignment.version, workspaceId: context.workspaceId },
@@ -811,7 +812,7 @@ export class IssuesService {
             id: eventId,
             payload: {
               assigneeMembershipId: assignment.assigneeMembershipId,
-              changedFields: ['ASSIGNEE'],
+              changedFields: autoStartStateId ? ['ASSIGNEE', 'WORKFLOW_STATE'] : ['ASSIGNEE'],
               issueId,
               schemaVersion: TEAM_WORK_CHANGED_SCHEMA_VERSION,
               subscriberMembershipIds: [],
@@ -1101,6 +1102,20 @@ export class IssuesService {
     return row;
   }
 
+  async firstUnstartedStateId(
+    transaction: Transaction,
+    workspaceId: string,
+    teamId: string,
+  ): Promise<string> {
+    const state = await transaction.workflowState.findFirst({
+      orderBy: [{ position: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+      where: { category: StateCategory.UNSTARTED, teamId, workspaceId },
+    });
+    if (!state) resourceNotFound('팀의 시작 전 상태를 찾을 수 없습니다.');
+    return state.id;
+  }
+
   private async createTeamWorks(
     transaction: Transaction,
     context: IssueMutationContext,
@@ -1133,7 +1148,12 @@ export class IssuesService {
         );
       const reusable = await transaction.teamWork.findFirst({
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        select: { assigneeMembershipId: true, id: true, version: true },
+        select: {
+          assigneeMembershipId: true,
+          id: true,
+          version: true,
+          workflowState: { select: { category: true, isDefault: true } },
+        },
         where: {
           deletedAt: null,
           issueId,
@@ -1152,9 +1172,14 @@ export class IssuesService {
           conflict('TEAM_WORK_ASSIGNMENT_CONFLICT', '기존 팀 작업의 담당자가 다릅니다.');
         }
         if (assignment.assigneeMembershipId && reusable.assigneeMembershipId === null) {
+          const autoStart = shouldAutoStartOnAssignment(reusable.workflowState);
+          const autoStartStateId = autoStart
+            ? await this.firstUnstartedStateId(transaction, context.workspaceId, roleTeam.teamId)
+            : null;
           await transaction.teamWork.update({
             data: {
               assigneeMembershipId: assignment.assigneeMembershipId,
+              ...(autoStartStateId ? { workflowStateId: autoStartStateId } : {}),
               version: { increment: 1 },
             },
             where: { id: reusable.id },
@@ -1179,7 +1204,7 @@ export class IssuesService {
               id: eventId,
               payload: {
                 assigneeMembershipId: assignment.assigneeMembershipId,
-                changedFields: ['ASSIGNEE'],
+                changedFields: autoStartStateId ? ['ASSIGNEE', 'WORKFLOW_STATE'] : ['ASSIGNEE'],
                 issueId,
                 schemaVersion: TEAM_WORK_CHANGED_SCHEMA_VERSION,
                 subscriberMembershipIds: [],
@@ -1211,10 +1236,14 @@ export class IssuesService {
         where: { archivedAt: null, id: roleTeam.teamId, workspaceId: context.workspaceId },
       });
       const workflowState = await transaction.workflowState.findFirst({
-        orderBy: [{ isDefault: 'desc' }, { position: 'asc' }, { id: 'asc' }],
+        orderBy: assignment.assigneeMembershipId
+          ? [{ position: 'asc' }, { id: 'asc' }]
+          : [{ isDefault: 'desc' }, { position: 'asc' }, { id: 'asc' }],
         select: { id: true },
         where: {
-          category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] },
+          ...(assignment.assigneeMembershipId
+            ? { category: StateCategory.UNSTARTED }
+            : { category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] } }),
           teamId: roleTeam.teamId,
           workspaceId: context.workspaceId,
         },
