@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 
-import { IssueType, MembershipStatus, Prisma, ProjectRole, ProjectStatus } from '@rivet/database';
+import { MembershipStatus, Prisma, ProjectRole, ProjectStatus } from '@rivet/database';
 import {
   PROJECT_CREATED,
   PROJECT_CREATED_SCHEMA_VERSION,
@@ -576,13 +576,12 @@ export class ProjectsService {
         );
 
         if (changedRoles.length > 0) {
-          const blockingIssues = await transaction.issue.findMany({
+          const blockingIssues = await transaction.teamWork.findMany({
             orderBy: [{ projectRole: 'asc' }, { identifier: 'asc' }, { id: 'asc' }],
-            select: { id: true, identifier: true, projectRole: true, teamId: true, title: true },
+            select: { id: true, identifier: true, issue: { select: { title: true } }, projectRole: true, teamId: true },
             where: {
-              projectId,
+              issue: { projectId },
               projectRole: { in: changedRoles },
-              type: IssueType.TEAM_TASK,
               workspaceId: context.workspaceId,
             },
           });
@@ -986,13 +985,16 @@ export class ProjectsService {
         i."project_id" AS "projectId",
         COUNT(*) FILTER (WHERE s."category" <> 'CANCELED'::"StateCategory") AS "total",
         COUNT(*) FILTER (WHERE s."category" = 'COMPLETED'::"StateCategory") AS "completed"
-      FROM "issues" i
+      FROM "team_works" tw
+      JOIN "issues" i
+        ON i."workspace_id" = tw."workspace_id"
+        AND i."id" = tw."issue_id"
       JOIN "workflow_states" s
-        ON s."workspace_id" = i."workspace_id"
-        AND s."team_id" = i."team_id"
-        AND s."id" = i."workflow_state_id"
-      WHERE i."workspace_id" = ${workspaceId}::uuid
-        AND i."type" = ${IssueType.TEAM_TASK}::"IssueType"
+        ON s."workspace_id" = tw."workspace_id"
+        AND s."team_id" = tw."team_id"
+        AND s."id" = tw."workflow_state_id"
+      WHERE tw."workspace_id" = ${workspaceId}::uuid
+        AND tw."deleted_at" IS NULL
         AND i."deleted_at" IS NULL
         AND i."project_id" IN (${Prisma.join(projectIds.map((id) => Prisma.sql`${id}::uuid`))})
       GROUP BY i."project_id"

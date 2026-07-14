@@ -172,13 +172,15 @@ export async function cleanupM2Users(emails: string[]): Promise<void> {
             OR requested_by_membership_id = ANY($2::uuid[])`,
         [workspaceIds, membershipIds],
       );
+      await database.query('DELETE FROM api_handoff_targets WHERE workspace_id = ANY($1::uuid[])', [
+        workspaceIds,
+      ]);
       await database.query('DELETE FROM api_handoffs WHERE workspace_id = ANY($1::uuid[])', [
         workspaceIds,
       ]);
-      await database.query(
-        'DELETE FROM issue_block_relations WHERE workspace_id = ANY($1::uuid[])',
-        [workspaceIds],
-      );
+      await database.query('DELETE FROM team_work_relations WHERE workspace_id = ANY($1::uuid[])', [
+        workspaceIds,
+      ]);
       await database.query('DELETE FROM issue_subscriptions WHERE workspace_id = ANY($1::uuid[])', [
         workspaceIds,
       ]);
@@ -193,6 +195,9 @@ export async function cleanupM2Users(emails: string[]): Promise<void> {
         workspaceIds,
       ]);
       await database.query('DELETE FROM comments WHERE workspace_id = ANY($1::uuid[])', [
+        workspaceIds,
+      ]);
+      await database.query('DELETE FROM team_works WHERE workspace_id = ANY($1::uuid[])', [
         workspaceIds,
       ]);
       await database.query('DELETE FROM issues WHERE workspace_id = ANY($1::uuid[])', [

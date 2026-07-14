@@ -23,9 +23,5 @@ export interface TrashItemResponseDto {
   version: number;
   /** @nullable */
   project?: TrashConnectionResponseDto | null;
-  /** @nullable */
-  team?: TrashConnectionResponseDto | null;
-  /** @nullable */
-  parentIssue?: TrashConnectionResponseDto | null;
   roleTeams: TrashProjectRoleTeamResponseDto[];
 }

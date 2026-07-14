@@ -5,12 +5,9 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { IssuesControllerListBlocked } from './issuesControllerListBlocked';
 import type { IssuesControllerListSort } from './issuesControllerListSort';
 import type { IssuesControllerListSortDirection } from './issuesControllerListSortDirection';
-import type { IssuesControllerListType } from './issuesControllerListType';
-import type { IssuesControllerListUnassigned } from './issuesControllerListUnassigned';
-import type { IssuesControllerListWorkQueue } from './issuesControllerListWorkQueue';
+import type { IssuesControllerListStatus } from './issuesControllerListStatus';
 
 export type IssuesControllerListParams = {
 /**
@@ -18,62 +15,16 @@ export type IssuesControllerListParams = {
  * @maxLength 500
  */
 query?: string;
-workQueue?: IssuesControllerListWorkQueue;
-/**
- * @maxLength 20
- */
-type?: IssuesControllerListType;
-/**
- * 쉼표로 구분한 팀 ID
- * @maxLength 2048
- */
-teamId?: string;
 /**
  * 쉼표로 구분한 프로젝트 ID
  * @maxLength 2048
  */
 projectId?: string;
 /**
- * 쉼표로 구분한 프로젝트 역할
- * @maxLength 100
- */
-projectRole?: string;
-/**
- * 쉼표로 구분한 현재 작업 프로젝트 역할
- * @maxLength 100
- */
-activeProjectRole?: string;
-parentIssueId?: string;
-/**
- * 쉼표로 구분한 기능 이슈 상태
+ * 쉼표로 구분한 이슈 상태
  * @maxLength 200
  */
-featureStatus?: string;
-/**
- * 쉼표로 구분한 워크플로 상태 ID
- * @maxLength 2048
- */
-workflowStateId?: string;
-/**
- * 쉼표로 구분한 상태 범주
- * @maxLength 100
- */
-stateCategory?: string;
-/**
- * 쉼표로 구분한 멤버십 ID 또는 me
- * @maxLength 2048
- */
-assigneeMembershipId?: string;
-unassigned?: IssuesControllerListUnassigned;
-/**
- * 쉼표로 구분한 만든 사람 멤버십 ID
- * @maxLength 2048
- */
-createdByMembershipId?: string;
-createdFrom?: string;
-createdTo?: string;
-updatedFrom?: string;
-updatedTo?: string;
+status?: IssuesControllerListStatus;
 /**
  * 쉼표로 구분한 우선순위
  * @maxLength 100
@@ -84,16 +35,16 @@ priority?: string;
  * @maxLength 2048
  */
 labelId?: string;
-blocked?: IssuesControllerListBlocked;
 /**
- * 이슈 정렬 기준입니다. 생략하면 `updatedAt desc`를 사용합니다. `priority` 오름차순은 `NONE < LOW < MEDIUM < HIGH < URGENT`입니다. `status` 오름차순은 `StateCategory(BACKLOG < UNSTARTED < STARTED < COMPLETED < CANCELED) → 유형별 상태 위치(팀 작업은 workflow position, 기능 이슈는 UNSORTED < PAUSED와 IN_PROGRESS < REVIEW의 범주 내 고정 위치) → IssueType(FEATURE < TEAM_TASK) → id` 순서입니다. 모든 정렬은 불변 `id`를 마지막 동률 해소 값으로 사용합니다.
- * @maxLength 20
+ * 쉼표로 구분한 만든 사람 멤버십 ID
+ * @maxLength 2048
  */
+createdByMembershipId?: string;
+createdFrom?: string;
+createdTo?: string;
+updatedFrom?: string;
+updatedTo?: string;
 sort?: IssuesControllerListSort;
-/**
- * 정렬 방향입니다. 주 정렬 값과 상태 정렬 튜플의 모든 값, 마지막 `id` 동률 해소에 같은 방향을 적용합니다.
- * @maxLength 4
- */
 sortDirection?: IssuesControllerListSortDirection;
 /**
  * @minimum 1
@@ -101,7 +52,7 @@ sortDirection?: IssuesControllerListSortDirection;
  */
 limit?: number;
 /**
- * 이전 응답에서 받은 불투명 커서입니다. 서버가 정규화한 실제 정렬 값(상태 정렬은 전체 튜플)과 마지막 항목의 `id`를 포함하며 클라이언트는 해석하거나 생성하지 않습니다. 같은 워크스페이스와 sort·sortDirection·필터 조건의 다음 페이지에만 사용하고 조건이 바뀌면 첫 페이지부터 조회합니다.
+ * 같은 정렬·필터 조건에서만 사용하는 불투명 커서
  * @maxLength 1024
  */
 cursor?: string;

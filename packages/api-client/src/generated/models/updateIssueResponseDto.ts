@@ -5,65 +5,35 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { FeatureWorkflowSummaryResponseDto } from './featureWorkflowSummaryResponseDto';
-import type { IssueBlockRelationResponseDto } from './issueBlockRelationResponseDto';
-import type { IssueCompletionBlockRelationResponseDto } from './issueCompletionBlockRelationResponseDto';
-import type { IssueCompletionHandoffResponseDto } from './issueCompletionHandoffResponseDto';
 import type { IssueDetailAttachmentResponseDto } from './issueDetailAttachmentResponseDto';
-import type { IssueHandoffFlowResponseDto } from './issueHandoffFlowResponseDto';
-import type { IssueHandoffSummaryResponseDto } from './issueHandoffSummaryResponseDto';
+import type { IssueHandoffFlowHandoffResponseDto } from './issueHandoffFlowHandoffResponseDto';
 import type { IssueLabelSummaryResponseDto } from './issueLabelSummaryResponseDto';
 import type { IssueMemberSummaryResponseDto } from './issueMemberSummaryResponseDto';
-import type { IssueParentSummaryResponseDto } from './issueParentSummaryResponseDto';
 import type { IssueProgressResponseDto } from './issueProgressResponseDto';
 import type { IssueProjectSummaryResponseDto } from './issueProjectSummaryResponseDto';
-import type { IssueStatusResponseDto } from './issueStatusResponseDto';
-import type { IssueSummaryResponseDto } from './issueSummaryResponseDto';
-import type { IssueTeamSummaryResponseDto } from './issueTeamSummaryResponseDto';
-import type { IssueWorkflowRelationResponseDto } from './issueWorkflowRelationResponseDto';
+import type { IssueWorkflowSummaryResponseDto } from './issueWorkflowSummaryResponseDto';
+import type { TeamWorkSummaryResponseDto } from './teamWorkSummaryResponseDto';
 import type { UpdateIssueResponseDtoPriority } from './updateIssueResponseDtoPriority';
-import type { UpdateIssueResponseDtoProjectRole } from './updateIssueResponseDtoProjectRole';
-import type { UpdateIssueResponseDtoType } from './updateIssueResponseDtoType';
+import type { UpdateIssueResponseDtoStatus } from './updateIssueResponseDtoStatus';
 
 export interface UpdateIssueResponseDto {
   id: string;
   identifier: string;
-  type: UpdateIssueResponseDtoType;
   title: string;
-  status: IssueStatusResponseDto;
+  status: UpdateIssueResponseDtoStatus;
   priority: UpdateIssueResponseDtoPriority;
-  /** @nullable */
-  team: IssueTeamSummaryResponseDto | null;
-  /** @nullable */
-  assignee: IssueMemberSummaryResponseDto | null;
-  /** @nullable */
-  project: IssueProjectSummaryResponseDto | null;
-  /** @nullable */
-  projectRole: UpdateIssueResponseDtoProjectRole;
-  /** @nullable */
-  parentIssue: IssueParentSummaryResponseDto | null;
+  project: IssueProjectSummaryResponseDto;
   labels: IssueLabelSummaryResponseDto[];
-  blocked: boolean;
-  /** @nullable */
-  progress: IssueProgressResponseDto | null;
+  progress: IssueProgressResponseDto;
   createdBy: IssueMemberSummaryResponseDto;
-  /** @nullable */
-  workflowSummary: FeatureWorkflowSummaryResponseDto | null;
+  workflowSummary: IssueWorkflowSummaryResponseDto;
   /** @minimum 1 */
   version: number;
   createdAt: string;
   updatedAt: string;
   /** @nullable */
   descriptionMarkdown: string | null;
-  blockers: IssueBlockRelationResponseDto[];
-  blocking: IssueBlockRelationResponseDto[];
   attachments: IssueDetailAttachmentResponseDto[];
-  /** @nullable */
-  handoffSummary: IssueHandoffSummaryResponseDto | null;
-  handoffFlows?: IssueHandoffFlowResponseDto[];
-  workflowRelations?: IssueWorkflowRelationResponseDto[];
-  handoff?: IssueCompletionHandoffResponseDto;
-  downstreamTeamTasks?: IssueSummaryResponseDto[];
-  blockRelations?: IssueCompletionBlockRelationResponseDto[];
-  updatedParentIssue?: IssueSummaryResponseDto;
+  teamWorks: TeamWorkSummaryResponseDto[];
+  handoffFlows: IssueHandoffFlowHandoffResponseDto[];
 }

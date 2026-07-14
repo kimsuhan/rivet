@@ -2,57 +2,31 @@ import { describe, expect, it } from 'vitest';
 
 import {
   extractHandoffApiSpecificationUrl,
+  FOLLOW_UP_HANDOFF_TEMPLATE,
   HANDOFF_TEMPLATE,
   handoffBodyError,
 } from './issue-handoff-validation';
 
 describe('handoffBodyError', () => {
-  it('정확한 일곱 H2 섹션과 본문 안의 안전한 HTTP(S) 링크를 허용한다', () => {
+  it('필요한 섹션만 채운 최초 전달과 안전한 API 링크를 허용한다', () => {
     const body = HANDOFF_TEMPLATE.replace(
-      '## API 명세 링크\n\n해당 없음',
-      '## API 명세 링크\n\nOpenAPI: https://api.example.com/openapi.json',
-    );
+      '## 변경 요약',
+      '## 변경 요약\n\n변경된 응답에 workspaceId를 추가했습니다.',
+    ).replace('## API 명세 링크', '## API 명세 링크\n\nhttps://api.example.com/openapi.json');
 
     expect(handoffBodyError(body)).toBeNull();
     expect(extractHandoffApiSpecificationUrl(body)).toBe('https://api.example.com/openapi.json');
   });
 
-  it('추가 H2, 빈 의미 내용과 잘못된 순서를 거부한다', () => {
-    expect(handoffBodyError(`${HANDOFF_TEMPLATE}\n\n## 추가 항목\n\n내용`)).toBe('content');
-    expect(handoffBodyError(HANDOFF_TEMPLATE.replace('해당 없음', '** **'))).toBe('content');
-    expect(
-      handoffBodyError(
-        HANDOFF_TEMPLATE.replace('## 변경 요약', '## 임의 항목').replace(
-          '## API 명세 링크',
-          '## 변경 요약',
-        ),
-      ),
-    ).toBe('content');
+  it('제목만 있는 빈 전달을 거부하고 추가 전달 템플릿을 허용한다', () => {
+    expect(handoffBodyError(HANDOFF_TEMPLATE)).toBe('content');
+    expect(handoffBodyError(`${FOLLOW_UP_HANDOFF_TEMPLATE}\n\n클라이언트 캐시를 갱신해 주세요.`)).toBeNull();
   });
 
-  it('URL 후보가 없거나 userinfo가 포함된 API 명세 링크를 거부한다', () => {
-    expect(
-      handoffBodyError(
-        HANDOFF_TEMPLATE.replace(
-          '## API 명세 링크\n\n해당 없음',
-          '## API 명세 링크\n\nftp://api.example.com',
-        ),
-      ),
-    ).toBe('link');
-    expect(
-      handoffBodyError(
-        HANDOFF_TEMPLATE.replace(
-          '## API 명세 링크\n\n해당 없음',
-          '## API 명세 링크\n\nhttps://user:secret@api.example.com/openapi.json',
-        ),
-      ),
-    ).toBe('link');
+  it('userinfo가 포함된 링크는 API 명세 링크로 해석하지 않는다', () => {
     expect(
       extractHandoffApiSpecificationUrl(
-        HANDOFF_TEMPLATE.replace(
-          '## API 명세 링크\n\n해당 없음',
-          '## API 명세 링크\n\nhttps://user:secret@api.example.com/openapi.json',
-        ),
+        `${HANDOFF_TEMPLATE}\n\nhttps://user:secret@api.example.com/openapi.json`,
       ),
     ).toBeNull();
   });

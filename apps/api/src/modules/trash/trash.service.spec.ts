@@ -20,8 +20,8 @@ describe('TrashService', () => {
     issue: { findFirst: jest.fn(), update: jest.fn() },
     outboxEvent: { updateMany: jest.fn() },
     project: { findFirst: jest.fn(), update: jest.fn() },
-    projectRoleTeam: { findFirst: jest.fn() },
     team: { findFirst: jest.fn() },
+    teamWork: { findFirst: jest.fn(), updateMany: jest.fn() },
   };
   const database = {
     client: {
@@ -54,10 +54,8 @@ describe('TrashService', () => {
         },
         id: issueId,
         identifier: 'API-1',
-        parentIssue: null,
         project: { id: projectId, name: '프로젝트' },
         purgeAt,
-        team: { id: '98ab3a6d-0d24-484e-a36a-b8028dc00465', name: 'API' },
         title: '삭제된 작업',
         version: 2,
       },
@@ -94,10 +92,8 @@ describe('TrashService', () => {
         {
           databaseNow: new Date('2026-07-12T00:00:00.000Z'),
           deletedAt,
-          parentIssueId: null,
           projectId,
           purgeAt,
-          teamId: null,
           version: 2,
         },
       ]);
@@ -145,10 +141,8 @@ describe('TrashService', () => {
         {
           databaseNow: new Date('2026-07-12T00:00:00.000Z'),
           deletedAt,
-          parentIssueId: null,
           projectId: null,
           purgeAt,
-          teamId: null,
           version: 3,
         },
       ]);
@@ -170,10 +164,8 @@ describe('TrashService', () => {
         {
           databaseNow: purgeAt,
           deletedAt,
-          parentIssueId: null,
           projectId: null,
           purgeAt,
-          teamId: null,
           version: 2,
         },
       ]);
@@ -186,29 +178,4 @@ describe('TrashService', () => {
     expect(transaction.issue.update).not.toHaveBeenCalled();
   });
 
-  it('warns when an issue is restored under a parent that remains in trash', async () => {
-    const parentIssueId = '98ab3a6d-0d24-484e-a36a-b8028dc00465';
-    transaction.$queryRaw
-      .mockResolvedValueOnce([{ id: workspaceId }])
-      .mockResolvedValueOnce([{ role: MembershipRole.ADMIN, status: MembershipStatus.ACTIVE }])
-      .mockResolvedValueOnce([
-        {
-          databaseNow: new Date('2026-07-12T00:00:00.000Z'),
-          deletedAt,
-          parentIssueId,
-          projectId: null,
-          purgeAt,
-          teamId: null,
-          version: 2,
-        },
-      ]);
-    transaction.issue.findFirst.mockResolvedValue({ deletedAt: new Date() });
-
-    await expect(service.restoreIssue({ membershipId, workspaceId }, issueId, 2)).resolves.toEqual({
-      id: issueId,
-      resourceType: 'ISSUE',
-      version: 3,
-      warnings: ['PARENT_ISSUE_IN_TRASH'],
-    });
-  });
 });

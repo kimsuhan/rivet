@@ -25,10 +25,8 @@ const TRASH_ISSUE_SELECT = {
   deletedByMembership: { select: DELETER_SELECT },
   id: true,
   identifier: true,
-  parentIssue: { select: { id: true, title: true } },
   project: { select: { id: true, name: true } },
   purgeAt: true,
-  team: { select: { id: true, name: true } },
   title: true,
   version: true,
 } satisfies Prisma.IssueSelect;
@@ -57,10 +55,8 @@ type Transaction = Prisma.TransactionClient;
 interface RestoreIssueLockRow {
   databaseNow: Date;
   deletedAt: Date;
-  parentIssueId: string | null;
-  projectId: string | null;
+  projectId: string;
   purgeAt: Date;
-  teamId: string | null;
   version: number;
 }
 
@@ -153,12 +149,10 @@ function issueResponse(row: TrashIssueRow): TrashItemResponseDto {
     id: row.id,
     identifier: row.identifier,
     name: row.title,
-    parentIssue: row.parentIssue ? { id: row.parentIssue.id, name: row.parentIssue.title } : null,
     project: row.project,
     purgeAt: row.purgeAt.toISOString(),
     resourceType: 'ISSUE',
     roleTeams: [],
-    team: row.team,
     version: row.version,
   };
 }
@@ -172,7 +166,6 @@ function projectResponse(row: TrashProjectRow): TrashItemResponseDto {
     id: row.id,
     identifier: null,
     name: row.name,
-    parentIssue: null,
     project: null,
     purgeAt: row.purgeAt.toISOString(),
     resourceType: 'PROJECT',
@@ -182,7 +175,6 @@ function projectResponse(row: TrashProjectRow): TrashItemResponseDto {
       teamId: team.id,
       teamName: team.name,
     })),
-    team: null,
     version: row.version,
   };
 }
@@ -272,8 +264,6 @@ export class TrashService {
         SELECT "deleted_at" AS "deletedAt",
                "purge_at" AS "purgeAt",
                "project_id" AS "projectId",
-               "parent_issue_id" AS "parentIssueId",
-               "team_id" AS "teamId",
                "version",
                CURRENT_TIMESTAMP AS "databaseNow"
         FROM "issues"
@@ -294,6 +284,10 @@ export class TrashService {
           version: { increment: 1 },
         },
         where: { workspaceId_id: { id: issueId, workspaceId: context.workspaceId } },
+      });
+      await transaction.teamWork.updateMany({
+        data: { deletedAt: null },
+        where: { issueId, workspaceId: context.workspaceId },
       });
       await transaction.activityEvent.create({
         data: {
@@ -331,20 +325,11 @@ export class TrashService {
         if (project?.archivedAt) warnings.push('PROJECT_ARCHIVED');
         if (project?.deletedAt) warnings.push('PROJECT_IN_TRASH');
       }
-      if (issue.teamId) {
-        const team = await transaction.team.findFirst({
-          select: { archivedAt: true },
-          where: { id: issue.teamId, workspaceId: context.workspaceId },
-        });
-        if (team?.archivedAt) warnings.push('TEAM_ARCHIVED');
-      }
-      if (issue.parentIssueId) {
-        const parentIssue = await transaction.issue.findFirst({
-          select: { deletedAt: true },
-          where: { id: issue.parentIssueId, workspaceId: context.workspaceId },
-        });
-        if (parentIssue?.deletedAt) warnings.push('PARENT_ISSUE_IN_TRASH');
-      }
+      const archivedTeamWork = await transaction.teamWork.findFirst({
+        select: { id: true },
+        where: { issueId, team: { archivedAt: { not: null } }, workspaceId: context.workspaceId },
+      });
+      if (archivedTeamWork) warnings.push('TEAM_ARCHIVED');
 
       return { id: issueId, resourceType: 'ISSUE', version: issue.version + 1, warnings };
     });

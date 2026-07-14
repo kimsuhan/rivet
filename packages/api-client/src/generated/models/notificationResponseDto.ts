@@ -8,6 +8,7 @@
 import type { NotificationActorResponseDto } from './notificationActorResponseDto';
 import type { NotificationIssueResponseDto } from './notificationIssueResponseDto';
 import type { NotificationResponseDtoType } from './notificationResponseDtoType';
+import type { NotificationTeamWorkResponseDto } from './notificationTeamWorkResponseDto';
 
 export interface NotificationResponseDto {
   id: string;
@@ -15,6 +16,8 @@ export interface NotificationResponseDto {
   /** @nullable */
   actor: NotificationActorResponseDto | null;
   issue: NotificationIssueResponseDto;
+  /** @nullable */
+  teamWork: NotificationTeamWorkResponseDto | null;
   /** @nullable */
   commentId: string | null;
   /** @nullable */

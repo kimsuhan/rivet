@@ -10,7 +10,7 @@ export type NotificationsControllerListType = typeof NotificationsControllerList
 
 
 export const NotificationsControllerListType = {
-  ISSUE_ASSIGNED: 'ISSUE_ASSIGNED',
+  TEAM_WORK_ASSIGNED: 'TEAM_WORK_ASSIGNED',
   MENTIONED: 'MENTIONED',
   COMMENT_ADDED: 'COMMENT_ADDED',
   ISSUE_COMPLETED: 'ISSUE_COMPLETED',

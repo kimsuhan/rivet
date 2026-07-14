@@ -5,10 +5,14 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
+import type { IssueSummaryResponseDto } from './issueSummaryResponseDto';
 import type { SearchIssueResultResponseDtoMatchType } from './searchIssueResultResponseDtoMatchType';
-import type { SearchIssueSummaryResponseDto } from './searchIssueSummaryResponseDto';
+import type { SearchIssueResultResponseDtoResourceType } from './searchIssueResultResponseDtoResourceType';
+import type { TeamWorkSummaryResponseDto } from './teamWorkSummaryResponseDto';
 
 export interface SearchIssueResultResponseDto {
+  resourceType: SearchIssueResultResponseDtoResourceType;
   matchType: SearchIssueResultResponseDtoMatchType;
-  issue: SearchIssueSummaryResponseDto;
+  issue: IssueSummaryResponseDto;
+  teamWork?: TeamWorkSummaryResponseDto;
 }

@@ -3,8 +3,6 @@ import type { ConfigType } from '@nestjs/config';
 import { PinoLogger } from 'nestjs-pino';
 
 import type {
-  IssueUnblockedDurationBucket,
-  IssueUnblockedProjectRole,
   ProductAnalyticsProjectRole,
   ProductAnalyticsProjectStatus,
 } from '@rivet/event-contracts';
@@ -16,6 +14,11 @@ const HTTP_TIMEOUT_MS = 2_000;
 const POSTHOG_CAPTURE_URL = 'https://us.i.posthog.com/capture/';
 
 export type WorkerProductEvent =
+  | {
+      distinctId: string;
+      name: 'team_work_created';
+      properties: { hasAssignee: boolean; workspaceId: string };
+    }
   | {
       distinctId: string;
       name: 'workspace_created';
@@ -30,7 +33,6 @@ export type WorkerProductEvent =
       distinctId: string;
       name: 'issue_created';
       properties: {
-        hasAssignee: boolean;
         hasMention: boolean;
         workspaceId: string;
       };
@@ -38,6 +40,11 @@ export type WorkerProductEvent =
   | {
       distinctId: string;
       name: 'issue_property_changed';
+      properties: { propertyTypes: string[]; workspaceId: string };
+    }
+  | {
+      distinctId: string;
+      name: 'team_work_property_changed';
       properties: { propertyTypes: string[]; workspaceId: string };
     }
   | {
@@ -52,18 +59,8 @@ export type WorkerProductEvent =
     }
   | {
       distinctId: string;
-      name: 'issue_unblocked';
-      properties: {
-        blockedProjectRole: IssueUnblockedProjectRole | null;
-        blockingDurationBucket: IssueUnblockedDurationBucket;
-        blockingProjectRole: IssueUnblockedProjectRole | null;
-        workspaceId: string;
-      };
-    }
-  | {
-      distinctId: string;
       name: 'api_handoff_created';
-      properties: { downstreamIssueCount: number; isFollowUp: boolean; workspaceId: string };
+      properties: { targetTeamWorkCount: number; isFollowUp: boolean; workspaceId: string };
     }
   | {
       distinctId: string;

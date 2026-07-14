@@ -234,19 +234,8 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
     if (consumedIssueCreateRequest.current === requestKey) return;
     consumedIssueCreateRequest.current = requestKey;
 
-    const type = searchParams.get('type');
-    const projectRole = searchParams.get('projectRole');
     setIssueCreateSeed({
-      ...(type === 'FEATURE' || type === 'TEAM_TASK' ? { type } : {}),
       ...(searchParams.get('projectId') ? { projectId: searchParams.get('projectId')! } : {}),
-      ...(projectRole === 'BACKEND' ||
-      projectRole === 'WEB_FRONTEND' ||
-      projectRole === 'APP_FRONTEND'
-        ? { projectRole }
-        : {}),
-      ...(searchParams.get('parentIssueId')
-        ? { parentIssueId: searchParams.get('parentIssueId')! }
-        : {}),
     });
     setIssueCreateOpen(true);
   }, [pathname, searchParams]);
@@ -255,7 +244,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
     if (!issueCreateOpen || searchParams.get('create') !== '1') return;
 
     const nextSearchParams = new URLSearchParams(searchParams.toString());
-    for (const key of ['create', 'type', 'projectId', 'projectRole', 'parentIssueId']) {
+    for (const key of ['create', 'projectId']) {
       nextSearchParams.delete(key);
     }
     const nextSearch = nextSearchParams.toString();
@@ -577,6 +566,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
 
       <GlobalSearch open={searchOpen} onOpenChange={changeSearchOpen} labels={labels.search} />
       <GlobalIssueCreate
+        key={issueCreateOpen ? issueCreateSeed?.projectId ?? 'new' : 'closed'}
         currentTeamKey={selectedTeamKey}
         open={issueCreateOpen}
         onOpenChange={changeIssueCreateOpen}

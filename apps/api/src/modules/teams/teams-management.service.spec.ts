@@ -33,7 +33,7 @@ describe('TeamsService management', () => {
     $executeRaw: jest.fn(),
     $queryRaw: jest.fn(),
     activityEvent: { createMany: jest.fn() },
-    issue: { updateManyAndReturn: jest.fn() },
+    teamWork: { updateManyAndReturn: jest.fn() },
     team: {
       findFirst: jest.fn(),
       update: jest.fn(),
@@ -203,7 +203,7 @@ describe('TeamsService management', () => {
   });
 
   it('does not remove a team member with an unfinished assignment', async () => {
-    const issue = { id: 'issue-1', identifier: 'WEB-1', title: '첫 작업' };
+    const issue = { id: 'team-work-1', identifier: 'WEB-1', issueId: 'issue-1', title: '첫 작업' };
     transaction.$queryRaw.mockResolvedValueOnce([{ membershipId }]).mockResolvedValueOnce([issue]);
 
     await expect(service.removeMember(workspaceId, teamId, membershipId)).rejects.toMatchObject({
@@ -243,7 +243,7 @@ describe('TeamsService management', () => {
   });
 
   it('does not archive a team with unfinished issues', async () => {
-    const issue = { id: 'issue-1', identifier: 'WEB-1', title: '첫 작업' };
+    const issue = { id: 'team-work-1', identifier: 'WEB-1', issueId: 'issue-1', title: '첫 작업' };
     transaction.$queryRaw
       .mockResolvedValueOnce([{ archivedAt: null, version: 1 }])
       .mockResolvedValueOnce([issue]);
@@ -366,7 +366,12 @@ describe('TeamsService management', () => {
   });
 
   it('requires a replacement before deleting a state used by issues', async () => {
-    const issue = { id: 'issue-1', identifier: 'WEB-1', title: '첫 작업' };
+    const issue = {
+      id: 'team-work-1',
+      identifier: 'WEB-1',
+      issueId: 'issue-1',
+      title: '첫 작업',
+    };
     transaction.$queryRaw
       .mockResolvedValueOnce([{ id: stateId, isDefault: false, name: '보류', teamId, version: 1 }])
       .mockResolvedValueOnce([
@@ -385,7 +390,12 @@ describe('TeamsService management', () => {
   });
 
   it('moves locked issues and records activities before deleting their state', async () => {
-    const issue = { id: 'issue-1', identifier: 'WEB-1', title: '첫 작업' };
+    const issue = {
+      id: 'team-work-1',
+      identifier: 'WEB-1',
+      issueId: 'issue-1',
+      title: '첫 작업',
+    };
     transaction.$queryRaw
       .mockResolvedValueOnce([{ id: stateId, isDefault: false, name: '보류', teamId, version: 1 }])
       .mockResolvedValueOnce([
@@ -393,7 +403,7 @@ describe('TeamsService management', () => {
         { id: replacementStateId, name: '할 일', position: 1, version: 1 },
       ])
       .mockResolvedValueOnce([issue]);
-    transaction.issue.updateManyAndReturn.mockResolvedValue([{ id: issue.id, version: 2 }]);
+    transaction.teamWork.updateManyAndReturn.mockResolvedValue([{ id: issue.id, version: 2 }]);
     transaction.activityEvent.createMany.mockResolvedValue({ count: 1 });
     transaction.workflowState.delete.mockResolvedValue({});
 
@@ -403,7 +413,7 @@ describe('TeamsService management', () => {
         version: 1,
       }),
     ).resolves.toBeUndefined();
-    expect(transaction.issue.updateManyAndReturn).toHaveBeenCalledWith({
+    expect(transaction.teamWork.updateManyAndReturn).toHaveBeenCalledWith({
       data: { version: { increment: 1 }, workflowStateId: replacementStateId },
       select: { id: true, version: true },
       where: { id: { in: [issue.id] }, workspaceId },
@@ -412,20 +422,21 @@ describe('TeamsService management', () => {
       data: [
         expect.objectContaining({
           actorMembershipId: membershipId,
-          eventType: 'ISSUE_UPDATED',
+          eventType: 'TEAM_WORK_CHANGED',
           fieldName: 'workflowStateId',
-          issueId: issue.id,
+          issueId: issue.issueId,
+          teamWorkId: issue.id,
           workspaceId,
         }),
       ],
     });
     const issuePayload = transaction.$executeRaw.mock.calls
       .map((call) => JSON.parse(call[2] as string) as { resourceType: string })
-      .find(({ resourceType }) => resourceType === 'ISSUE');
+      .find(({ resourceType }) => resourceType === 'TEAM_WORK');
     expect(issuePayload).toMatchObject({
       changeType: 'UPDATED',
       resourceId: issue.id,
-      resourceType: 'ISSUE',
+      resourceType: 'TEAM_WORK',
       version: 2,
       workspaceId,
     });

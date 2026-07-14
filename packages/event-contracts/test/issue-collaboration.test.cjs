@@ -6,20 +6,18 @@ const {
   COMMENT_MENTIONS_ADDED,
   ISSUE_CHANGED,
   ISSUE_CREATED,
-  ISSUE_UNBLOCKED,
   isIssueCollaborationEventType,
   validateCommentCreatedOutboxPayload,
   validateCommentMentionsAddedOutboxPayload,
   validateIssueChangedOutboxPayload,
   validateIssueCreatedOutboxPayload,
-  validateIssueUnblockedOutboxPayload,
 } = require('../dist/issue-collaboration.js');
 
 const issueId = 'f57fa7be-1fe9-4744-a8db-704bf989a3cd';
 const commentId = 'de9d55e4-6181-4a8a-8fdf-f8faf536dc99';
-const assigneeMembershipId = 'c7223ce5-74b3-4495-ae66-a3d269017f6a';
 const mentionedMembershipId = '607629d0-53e6-469d-bbc8-eb86c50a0288';
 const subscriberMembershipId = '553a6d42-4336-4a19-a9e4-f708f5f16468';
+const teamWorkId = 'c7223ce5-74b3-4495-ae66-a3d269017f6a';
 
 const validCases = [
   [
@@ -28,7 +26,6 @@ const validCases = [
     {
       schemaVersion: 1,
       issueId,
-      assigneeMembershipId,
       mentionedMembershipIds: [mentionedMembershipId],
     },
   ],
@@ -38,8 +35,7 @@ const validCases = [
     {
       schemaVersion: 1,
       issueId,
-      changedFields: ['TITLE', 'WORKFLOW_STATE'],
-      assigneeMembershipId: null,
+      changedFields: ['TITLE', 'STATUS'],
       mentionedMembershipIds: [],
       terminalCategory: 'COMPLETED',
       subscriberMembershipIds: [subscriberMembershipId],
@@ -52,6 +48,7 @@ const validCases = [
       schemaVersion: 1,
       issueId,
       commentId,
+      teamWorkId,
       mentionedMembershipIds: [mentionedMembershipId],
       subscriberMembershipIds: [subscriberMembershipId],
       hasMention: true,
@@ -64,19 +61,8 @@ const validCases = [
       schemaVersion: 1,
       issueId,
       commentId,
+      teamWorkId,
       mentionedMembershipIds: [mentionedMembershipId],
-    },
-  ],
-  [
-    ISSUE_UNBLOCKED,
-    validateIssueUnblockedOutboxPayload,
-    {
-      schemaVersion: 1,
-      issueId,
-      blockerIssueId: commentId,
-      blockingDurationBucket: 'LT_1_DAY',
-      blockedProjectRole: 'WEB_FRONTEND',
-      blockingProjectRole: 'BACKEND',
     },
   ],
 ];
@@ -149,12 +135,12 @@ test('rejects inconsistent issue-change snapshots', () => {
   for (const payload of [
     {
       ...validCases[1][2],
-      assigneeMembershipId,
-      changedFields: ['TITLE', 'WORKFLOW_STATE'],
+      assigneeMembershipId: teamWorkId,
+      changedFields: ['TITLE', 'STATUS'],
     },
     {
       ...validCases[1][2],
-      changedFields: ['TITLE', 'WORKFLOW_STATE'],
+      changedFields: ['TITLE', 'STATUS'],
       mentionedMembershipIds: [mentionedMembershipId],
     },
     {
@@ -191,20 +177,6 @@ test('requires hasMention to match the mentioned membership snapshot', () => {
     { ...validCases[2][2], mentionedMembershipIds: [], hasMention: true },
   ]) {
     assert.deepEqual(validateCommentCreatedOutboxPayload(payload), {
-      reason: 'INVALID_PAYLOAD',
-      success: false,
-    });
-  }
-});
-
-test('rejects unsafe issue-unblocked duration and role values', () => {
-  for (const payload of [
-    { ...validCases[4][2], blockingDurationBucket: '24 hours' },
-    { ...validCases[4][2], blockedProjectRole: 'DESIGN' },
-    { ...validCases[4][2], blockerIssueId: issueId },
-    { ...validCases[4][2], title: 'secret issue title' },
-  ]) {
-    assert.deepEqual(validateIssueUnblockedOutboxPayload(payload), {
       reason: 'INVALID_PAYLOAD',
       success: false,
     });

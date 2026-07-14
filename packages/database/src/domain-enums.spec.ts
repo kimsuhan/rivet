@@ -3,7 +3,7 @@ import {
   FileScope,
   IssueFileKind,
   IssuePriority,
-  IssueType,
+  IssueStatus,
   MembershipRole,
   MembershipStatus,
   StateCategory,
@@ -36,8 +36,16 @@ describe('database enum contract', () => {
     });
   });
 
-  it('keeps the M3 issue type and priority values aligned with the fixed domain codes', () => {
-    expect(IssueType).toEqual({ FEATURE: 'FEATURE', TEAM_TASK: 'TEAM_TASK' });
+  it('keeps the issue status and priority values aligned with the fixed domain codes', () => {
+    expect(IssueStatus).toEqual({
+      CANCELED: 'CANCELED',
+      DONE: 'DONE',
+      IN_PROGRESS: 'IN_PROGRESS',
+      PAUSED: 'PAUSED',
+      REVIEW: 'REVIEW',
+      TODO: 'TODO',
+      UNSORTED: 'UNSORTED',
+    });
     expect(IssuePriority).toEqual({
       HIGH: 'HIGH',
       LOW: 'LOW',

@@ -43,12 +43,10 @@ const issue: TrashItemResponseDto = {
   id: 'de38396f-7dcc-42e4-a789-205f60a84c69',
   identifier: 'WEB-21',
   name: '휴지통 화면 연결',
-  parentIssue: { id: '3428e880-2d40-440d-a3c9-c65254994a77', name: '관리 기능' },
   project: { id: 'de0f78b6-5711-4a98-9bd0-61c88577ea7a', name: 'MVP' },
   purgeAt: '2026-08-09T03:00:00.000Z',
   resourceType: 'ISSUE',
   roleTeams: [],
-  team: { id: '3631f577-2a1a-4adc-968e-efca19cd08fa', name: '웹' },
   version: 4,
 };
 
@@ -59,7 +57,6 @@ const project: TrashItemResponseDto = {
   id: 'b63fae1f-74f0-45cd-80c3-a90d497705e6',
   identifier: null,
   name: '이전 모바일 프로젝트',
-  parentIssue: null,
   project: null,
   purgeAt: '2026-08-08T03:00:00.000Z',
   resourceType: 'PROJECT',
@@ -71,7 +68,6 @@ const project: TrashItemResponseDto = {
       teamName: '보관된 백엔드',
     },
   ],
-  team: null,
   version: 2,
 };
 
@@ -138,7 +134,7 @@ describe('TrashSettingsScreen', () => {
 
     expect(await screen.findByText(issue.name)).toBeVisible();
     expect(screen.getByText(issue.deletedBy.displayName)).toBeVisible();
-    expect(screen.getByText(/팀 웹 · 프로젝트 MVP · 상위 이슈 관리 기능/)).toBeVisible();
+    expect(screen.getByText('프로젝트 MVP')).toBeVisible();
     expect(screen.getAllByRole('time')).toHaveLength(2);
     expect(trashControllerList).toHaveBeenCalledWith(
       { limit: 20, resourceType: 'ISSUE' },

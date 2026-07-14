@@ -1,1029 +1,115 @@
 'use client';
 
-import {
-  AlertCircle,
-  CircleOff,
-  Info,
-  List,
-  ListTodo,
-  MonitorUp,
-  Plus,
-  RotateCcw,
-  SearchX,
-  UserRound,
-} from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
-import { useTranslations } from 'next-intl';
-import { type DragEvent, useEffect, useRef, useState } from 'react';
+import { LayoutGrid, Plus } from 'lucide-react';
 
 import {
-  type IssueDetailResponseDto,
-  type LabelResponseDto,
-  type MemberSummaryResponseDto,
-  useLabelsControllerList,
-  useMembersControllerList,
   useTeamsControllerList,
   useTeamsControllerListWorkflowStates,
-  type WorkflowStateResponseDto,
+  useTeamWorksControllerList,
 } from '@rivet/api-client';
 
-import { PageHeading } from '@/components/layout/page-heading';
 import { ContentEmpty } from '@/components/states/content-empty';
 import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
-import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Spinner } from '@/components/ui/spinner';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Link, usePathname, useRouter } from '@/i18n/navigation';
+import { buttonVariants } from '@/components/ui/button';
+import { Link } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
-import {
-  ISSUE_PRIORITY_PRESENTATION,
-  WORKFLOW_STATE_PRESENTATION,
-} from './issue-attribute-presentation';
-import { buildTeamIssueViewHref, groupIssueBoardColumns } from './issue-board-state';
-import { IssueFilterMenu } from './issue-filter-menu';
-import { IssueInlineSelect } from './issue-inline-select';
-import { IssueLabelChips } from './issue-label-chips';
-import { getIssuePagesQueryKey, useIssuePages } from './issue-list-queries';
-import {
-  buildIssueListParams,
-  clearIssueFilters,
-  hasIssueFilters,
-  ISSUE_PRIORITIES,
-  ISSUE_SORT_DIRECTIONS,
-  ISSUE_SORT_FIELDS,
-  readIssueListState,
-  replaceSearchParam,
-  TEAM_ISSUE_TABS,
-} from './issue-list-state';
-import { type IssueOptimisticChange, useIssueInlineMutation } from './issue-mutations';
-import { isTeamTaskIssue, type TeamTaskIssue } from './issue-types';
-
-type IssueBoardCardLabels = {
-  assignee: string;
-  blocked: string;
-  conflictDescription: string;
-  conflictLatest: string;
-  conflictMine: string;
-  conflictTitle: string;
-  conflictUnknown: string;
-  dragHint: string;
-  labelOptionsEmpty: string;
-  labels: string;
-  noLabels: string;
-  errorDescription: string;
-  errorTitle: string;
-  priorities: Record<(typeof ISSUE_PRIORITIES)[number], string>;
-  priority: string;
-  projectRoles: Record<'APP_FRONTEND' | 'BACKEND' | 'WEB_FRONTEND', string>;
-  reapply: string;
-  retry: string;
-  role: string;
-  state: string;
-  unassigned: string;
-};
-
-function describeAttemptedChange(
-  change: IssueOptimisticChange,
-  labels: IssueBoardCardLabels,
-): string {
-  switch (change.kind) {
-    case 'workflowState':
-      return change.value.name;
-    case 'assignee':
-      return change.value?.user.displayName ?? labels.unassigned;
-    case 'priority':
-      return labels.priorities[change.value];
-    case 'labels':
-      return change.value.length > 0
-        ? change.value.map((label) => label.name).join(', ')
-        : labels.noLabels;
-    default:
-      return labels.conflictUnknown;
-  }
-}
-
-function describeLatestChange(
-  change: IssueOptimisticChange,
-  latest: IssueDetailResponseDto | null,
-  labels: IssueBoardCardLabels,
-): string {
-  if (!latest) return labels.conflictUnknown;
-
-  switch (change.kind) {
-    case 'workflowState':
-      return latest.status.workflowState?.name ?? labels.conflictUnknown;
-    case 'assignee':
-      return latest.assignee?.user.displayName ?? labels.unassigned;
-    case 'priority':
-      return labels.priorities[latest.priority];
-    case 'labels':
-      return latest.labels.length > 0
-        ? latest.labels.map((label) => label.name).join(', ')
-        : labels.noLabels;
-    default:
-      return labels.conflictUnknown;
-  }
-}
-
-function WorkflowStateMark({ category }: { category: WorkflowStateResponseDto['category'] }) {
-  const { icon: Icon, iconClassName } = WORKFLOW_STATE_PRESENTATION[category];
-  return <Icon aria-hidden="true" className={cn('size-4 shrink-0', iconClassName)} />;
-}
-
-function IssueBoardLoading({ label }: { label: string }) {
-  return (
-    <section aria-busy="true" aria-label={label} className="py-5">
-      <span role="status" className="sr-only">
-        {label}
-      </span>
-      <div aria-hidden="true" className="flex gap-3 overflow-hidden">
-        {Array.from({ length: 4 }, (_, columnIndex) => (
-          <div key={columnIndex} className="bg-surface-1 w-66 shrink-0 rounded-xl border xl:w-70">
-            <div className="flex min-h-10 items-center gap-2 border-b px-3">
-              <Skeleton className="size-4 motion-reduce:animate-none" />
-              <Skeleton className="h-3.5 w-20 motion-reduce:animate-none" />
-            </div>
-            <div className="flex flex-col gap-2 p-2">
-              {Array.from({ length: 3 }, (_, cardIndex) => (
-                <div key={cardIndex} className="bg-surface-2 rounded-xl p-3">
-                  <Skeleton className="h-3 w-16 motion-reduce:animate-none" />
-                  <Skeleton className="mt-3 h-4 w-full motion-reduce:animate-none" />
-                  <Skeleton className="mt-2 h-4 w-2/3 motion-reduce:animate-none" />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function IssueBoardCard({
-  activeLabels,
-  issue,
-  labels,
-  members,
-  mutation,
-  onDragEnd,
-  onDragStart,
-  onMove,
-  workflowStates,
-}: {
-  activeLabels: LabelResponseDto[];
-  issue: TeamTaskIssue;
-  labels: IssueBoardCardLabels;
-  members: MemberSummaryResponseDto[];
-  mutation: ReturnType<typeof useIssueInlineMutation>;
-  onDragEnd: () => void;
-  onDragStart: (issueId: string) => void;
-  onMove: (issue: TeamTaskIssue, state: WorkflowStateResponseDto, restoreFocus?: boolean) => void;
-  workflowStates: WorkflowStateResponseDto[];
-}) {
-  const isCurrentMutation = mutation.variables?.issue.id === issue.id;
-  const isPendingFor = (kind?: 'assignee' | 'labels' | 'priority' | 'workflowState') =>
-    mutation.isPendingFor?.(issue.id, kind) ??
-    (isCurrentMutation &&
-      mutation.isPending &&
-      (kind === undefined || mutation.variables?.change.kind === kind));
-  const isPending = isPendingFor();
-
-  function cellFailure(kind: 'assignee' | 'labels' | 'priority' | 'workflowState') {
-    const failure = mutation.failureFor?.(issue.id, kind);
-    if (failure) return failure;
-
-    const variables = mutation.variables;
-    if (!variables || variables.issue.id !== issue.id || variables.change.kind !== kind) {
-      return undefined;
-    }
-    if (!mutation.conflict && !mutation.isError) return undefined;
-
-    return {
-      attemptedChange: variables.change,
-      isConflict: Boolean(mutation.conflict),
-      latest: mutation.conflict?.latest ?? null,
-    };
-  }
-
-  function retryCell(kind: 'assignee' | 'labels' | 'priority' | 'workflowState') {
-    if (mutation.retryFor) mutation.retryFor(issue.id, kind);
-    else mutation.retry();
-  }
-
-  function reapplyCellConflict(kind: 'assignee' | 'labels' | 'priority' | 'workflowState') {
-    if (mutation.reapplyConflictFor) void mutation.reapplyConflictFor(issue.id, kind);
-    else void mutation.reapplyConflict();
-  }
-
-  const labelFailure = cellFailure('labels');
-  const conflict = labelFailure?.isConflict ? labelFailure : null;
-  const attemptedChange = conflict
-    ? describeAttemptedChange(conflict.attemptedChange, labels)
-    : labels.conflictUnknown;
-  const latestChange = conflict
-    ? describeLatestChange(conflict.attemptedChange, conflict.latest, labels)
-    : labels.conflictUnknown;
-  const hasError = Boolean(labelFailure && !labelFailure.isConflict);
-  const memberOptions = [
-    ...new Map(
-      [...(issue.assignee ? [issue.assignee] : []), ...members].map((member) => [
-        member.id,
-        member,
-      ]),
-    ).values(),
-  ];
-  const labelOptions = [
-    ...new Map([...issue.labels, ...activeLabels].map((label) => [label.id, label])).values(),
-  ];
-
-  function changeLabels(ids: string[]) {
-    mutation.mutate({
-      change: {
-        kind: 'labels',
-        value: ids.flatMap((id) => {
-          const label = labelOptions.find((candidate) => candidate.id === id);
-          return label ? [label] : [];
-        }),
-      },
-      issue,
-    });
-  }
-
-  function errorFor(kind: 'assignee' | 'priority' | 'workflowState') {
-    const failure = cellFailure(kind);
-    if (!failure) return undefined;
-
-    if (failure.isConflict) {
-      return {
-        actionLabel: labels.reapply,
-        description: labels.conflictDescription,
-        onAction: () => reapplyCellConflict(kind),
-      };
-    }
-
-    return {
-      actionLabel: labels.retry,
-      description: labels.errorDescription,
-      onAction: () => retryCell(kind),
-    };
-  }
-
-  function startDragging(event: DragEvent<HTMLDivElement>) {
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', issue.id);
-    onDragStart(issue.id);
-  }
-
-  return (
-    <Card
-      size="sm"
-      draggable={!isPendingFor('workflowState')}
-      title={labels.dragHint}
-      onDragStart={startDragging}
-      onDragEnd={onDragEnd}
-      className="min-h-22 cursor-grab active:cursor-grabbing"
-    >
-      <CardHeader>
-        <CardDescription className="font-mono text-xs">{issue.identifier}</CardDescription>
-        <CardTitle>
-          <Link
-            href={`/issues/${encodeURIComponent(issue.identifier)}`}
-            className="hover:text-primary line-clamp-2 underline-offset-4 hover:underline"
-          >
-            {issue.title}
-          </Link>
-        </CardTitle>
-        <CardAction>
-          <div
-            data-board-state-trigger={issue.id}
-            data-board-state-id={issue.status.workflowState.id}
-          >
-            <IssueInlineSelect
-              appearance="compact"
-              ariaLabel={`${issue.identifier} ${labels.state}: ${issue.status.workflowState.name}`}
-              busy={isPendingFor('workflowState')}
-              disabled={isPendingFor('workflowState')}
-              error={errorFor('workflowState')}
-              value={issue.status.workflowState.id}
-              onValueChange={(stateId) => {
-                const nextState = workflowStates.find((state) => state.id === stateId);
-                if (nextState) onMove(issue, nextState, true);
-              }}
-              options={workflowStates.map((state) => ({
-                ...WORKFLOW_STATE_PRESENTATION[state.category],
-                label: state.name,
-                value: state.id,
-              }))}
-              triggerClassName="max-w-28"
-            />
-          </div>
-        </CardAction>
-      </CardHeader>
-
-      <CardContent className="flex flex-col gap-2">
-        <div className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
-          <span className="flex min-w-0 flex-1 items-center gap-1">
-            <IssueInlineSelect
-              appearance="compact"
-              ariaLabel={`${issue.identifier} ${labels.assignee}: ${issue.assignee?.user.displayName ?? labels.unassigned}`}
-              busy={isPendingFor('assignee')}
-              disabled={isPendingFor('assignee')}
-              error={errorFor('assignee')}
-              onValueChange={(memberId) => {
-                const assignee =
-                  memberId === 'unassigned'
-                    ? null
-                    : (memberOptions.find((member) => member.id === memberId) ?? null);
-                mutation.mutate({ change: { kind: 'assignee', value: assignee }, issue });
-              }}
-              options={[
-                {
-                  icon: UserRound,
-                  iconClassName: 'text-muted-foreground',
-                  label: labels.unassigned,
-                  value: 'unassigned',
-                },
-                ...memberOptions.map((member) => ({
-                  icon: UserRound,
-                  iconClassName: 'text-muted-foreground',
-                  label: member.user.displayName,
-                  value: member.id,
-                })),
-              ]}
-              labelClassName="max-w-20"
-              value={issue.assignee?.id ?? 'unassigned'}
-            />
-          </span>
-          <IssueInlineSelect
-            appearance="compact"
-            ariaLabel={`${issue.identifier} ${labels.priority}: ${labels.priorities[issue.priority]}`}
-            busy={isPendingFor('priority')}
-            disabled={isPendingFor('priority')}
-            error={errorFor('priority')}
-            onValueChange={(priority) => {
-              if (ISSUE_PRIORITIES.includes(priority as (typeof ISSUE_PRIORITIES)[number])) {
-                mutation.mutate({
-                  change: { kind: 'priority', value: priority as TeamTaskIssue['priority'] },
-                  issue,
-                });
-              }
-            }}
-            options={ISSUE_PRIORITIES.map((priority) => ({
-              ...ISSUE_PRIORITY_PRESENTATION[priority],
-              label: labels.priorities[priority],
-              value: priority,
-            }))}
-            labelClassName="sr-only xl:not-sr-only"
-            triggerClassName="max-w-20"
-            value={issue.priority}
-          />
-          {issue.projectRole ? (
-            <Badge
-              variant="secondary"
-              aria-label={`${labels.role}: ${labels.projectRoles[issue.projectRole]}`}
-            >
-              {labels.projectRoles[issue.projectRole]}
-            </Badge>
-          ) : null}
-          {issue.blocked ? <Badge variant="outline">{labels.blocked}</Badge> : null}
-        </div>
-
-        <div className="flex min-w-0 items-center gap-1">
-          <div className="min-w-0 flex-1">
-            <IssueLabelChips emptyLabel={labels.noLabels} labels={issue.labels} />
-          </div>
-          {labelOptions.length > 0 ? (
-            <IssueFilterMenu
-              ariaLabel={`${issue.identifier} ${labels.labels}: ${issue.labels.map((label) => label.name).join(', ') || labels.noLabels}`}
-              busy={isPendingFor('labels')}
-              disabled={isPendingFor('labels')}
-              emptyLabel={labels.labelOptionsEmpty}
-              label={labels.labels}
-              onChange={changeLabels}
-              options={labelOptions.map((label) => ({
-                id: label.id,
-                label: label.name,
-                swatch: label.color,
-              }))}
-              presentation="popover"
-              selected={issue.labels.map((label) => label.id)}
-              triggerClassName="pointer-events-none shrink-0 border-transparent bg-transparent px-1.5 text-xs opacity-0 data-popup-open:pointer-events-auto data-popup-open:opacity-100 group-focus-within/card:pointer-events-auto group-focus-within/card:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [&>span]:sr-only"
-            />
-          ) : null}
-        </div>
-
-        {conflict ? (
-          <Alert className="mt-1">
-            <AlertCircle aria-hidden="true" />
-            <AlertTitle>{labels.conflictTitle}</AlertTitle>
-            <AlertDescription className="flex flex-col gap-1">
-              <span>{labels.conflictDescription}</span>
-              <span>
-                {labels.conflictLatest}: {latestChange}
-              </span>
-              <span>
-                {labels.conflictMine}: {attemptedChange}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                className="mt-1 w-fit"
-                disabled={isPending}
-                onClick={() => reapplyCellConflict('labels')}
-              >
-                <RotateCcw aria-hidden="true" data-icon="inline-start" />
-                {labels.reapply}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : hasError ? (
-          <Alert variant="destructive" className="mt-1">
-            <AlertCircle aria-hidden="true" />
-            <AlertTitle>{labels.errorTitle}</AlertTitle>
-            <AlertDescription className="flex flex-col gap-2">
-              <span>{labels.errorDescription}</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                className="w-fit"
-                disabled={isPending}
-                onClick={() => retryCell('labels')}
-              >
-                <RotateCcw aria-hidden="true" data-icon="inline-start" />
-                {labels.retry}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
+import { issueWorkHref } from './issue-work-routing';
 
 export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
-  const t = useTranslations('Issues');
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
-  const router = useRouter();
-  const [draggedIssueId, setDraggedIssueId] = useState<string | null>(null);
-  const [dragOverStateId, setDragOverStateId] = useState<string | null>(null);
-  const stateFocusTargetRef = useRef<{
-    issueId: string;
-    stateId: string;
-  } | null>(null);
-  const state = readIssueListState(searchParams, 'team');
   const teams = useTeamsControllerList({ includeArchived: false }, { query: { retry: false } });
-  const activeTeams = (teams.data?.items ?? []).filter((team) => !team.archived);
-  const selectedTeam = activeTeams.find(
-    (team) => team.key.toLocaleUpperCase() === teamKey.toLocaleUpperCase(),
+  const team = (teams.data?.items ?? []).find(
+    (item) => item.key.toUpperCase() === teamKey.toUpperCase(),
   );
-  const teamId = selectedTeam?.id ?? '';
-  const workflowStates = useTeamsControllerListWorkflowStates(teamId, {
-    query: { enabled: Boolean(selectedTeam), retry: false },
+  const works = useTeamWorksControllerList(
+    { ...(team ? { teamId: team.id } : {}), sort: 'updatedAt', sortDirection: 'desc' },
+    { query: { enabled: Boolean(team), retry: false } },
+  );
+  const workflowStates = useTeamsControllerListWorkflowStates(team?.id ?? '', {
+    query: { enabled: Boolean(team), retry: false },
   });
-  const members = useMembersControllerList(
-    { limit: 100, status: 'ACTIVE', teamId },
-    { query: { enabled: Boolean(selectedTeam), retry: false } },
-  );
-  const labels = useLabelsControllerList(
-    { includeArchived: false, limit: 100 },
-    { query: { enabled: Boolean(selectedTeam), retry: false } },
-  );
-  const listParams = buildIssueListParams(state, {
-    mode: 'team',
-    ...(selectedTeam ? { teamId } : {}),
-  });
-  const issues = useIssuePages(listParams, Boolean(selectedTeam));
-  const mutation = useIssueInlineMutation({ currentQueryKey: getIssuePagesQueryKey(listParams) });
-  const issueItems = (issues.data?.pages.flatMap((page) => page.items) ?? []).filter(
-    isTeamTaskIssue,
-  );
-  const sortedStates = (workflowStates.data?.items ?? []).toSorted(
+  const states = [...(workflowStates.data?.items ?? [])].sort(
     (left, right) => left.position - right.position,
   );
-  const columns = groupIssueBoardColumns(sortedStates, issueItems);
-  const activeLabels = (labels.data?.items ?? []).filter((label) => !label.archived);
-  const filtersActive = hasIssueFilters(state, 'team');
-  const hasActiveConditions = filtersActive || state.tab !== 'all';
-  const listHref = buildTeamIssueViewHref(teamKey, 'issues', searchParams);
-  const createSearchParams = new URLSearchParams(searchParams.toString());
-  createSearchParams.delete('cursor');
-  createSearchParams.set('create', '1');
-  createSearchParams.set('type', 'TEAM_TASK');
-  const createHref = `${pathname}?${createSearchParams.toString()}`;
-
-  useEffect(() => {
-    const stateFocusTarget = stateFocusTargetRef.current;
-    if (!stateFocusTarget) return;
-    const trigger = document.querySelector<HTMLElement>(
-      `[data-board-state-trigger="${stateFocusTarget.issueId}"][data-board-state-id="${stateFocusTarget.stateId}"] [role="combobox"]`,
-    );
-    if (!trigger) return;
-    trigger.focus();
-    stateFocusTargetRef.current = null;
-  }, [issueItems]);
-  const cardLabels: IssueBoardCardLabels = {
-    assignee: t('columns.assignee'),
-    blocked: t('board.blocked'),
-    conflictDescription: t('board.conflictDescription'),
-    conflictLatest: t('board.conflictLatest'),
-    conflictMine: t('board.conflictMine'),
-    conflictTitle: t('board.conflictTitle'),
-    conflictUnknown: t('board.conflictUnknown'),
-    dragHint: t('board.dragHint'),
-    labelOptionsEmpty: t('filters.noOptions'),
-    labels: t('columns.labels'),
-    noLabels: t('board.noLabels'),
-    errorDescription: t('board.saveErrorDescription'),
-    errorTitle: t('board.saveErrorTitle'),
-    priorities: {
-      HIGH: t('priority.HIGH'),
-      LOW: t('priority.LOW'),
-      MEDIUM: t('priority.MEDIUM'),
-      NONE: t('priority.NONE'),
-      URGENT: t('priority.URGENT'),
-    },
-    priority: t('columns.priority'),
-    projectRoles: {
-      APP_FRONTEND: t('projectRoles.APP_FRONTEND'),
-      BACKEND: t('projectRoles.BACKEND'),
-      WEB_FRONTEND: t('projectRoles.WEB_FRONTEND'),
-    },
-    reapply: t('board.reapply'),
-    retry: t('retry'),
-    role: t('board.role'),
-    state: t('columns.state'),
-    unassigned: t('unassigned'),
-  };
-
-  function replaceUrl(
-    key: Parameters<typeof replaceSearchParam>[1],
-    value: string | string[] | null,
-  ) {
-    const query = replaceSearchParam(searchParams, key, value);
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }
-
-  function clearFilters() {
-    const query = clearIssueFilters(searchParams);
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }
-
-  function clearAllConditions() {
-    const next = new URLSearchParams(clearIssueFilters(searchParams));
-    next.delete('tab');
-    const query = next.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }
-
-  function retryBoard() {
-    if (workflowStates.isError) void workflowStates.refetch();
-    if (members.isError) void members.refetch();
-    if (labels.isError) void labels.refetch();
-    if (issues.isError) void issues.refetch();
-  }
-
-  function moveIssue(
-    issue: TeamTaskIssue,
-    nextState: WorkflowStateResponseDto,
-    restoreFocus = false,
-  ) {
-    const stateChangePending =
-      mutation.isPendingFor?.(issue.id, 'workflowState') ??
-      (mutation.isPending &&
-        mutation.variables?.issue.id === issue.id &&
-        mutation.variables.change.kind === 'workflowState');
-    if (stateChangePending || issue.status.workflowState.id === nextState.id) return;
-    if (restoreFocus) {
-      stateFocusTargetRef.current = { issueId: issue.id, stateId: nextState.id };
-    }
-    mutation.mutate(
-      { change: { kind: 'workflowState', value: nextState }, issue },
-      restoreFocus
-        ? {
-            onSettled: () => {
-              requestAnimationFrame(() => {
-                if (document.activeElement === document.body) {
-                  document
-                    .querySelector<HTMLElement>(
-                      `[data-board-state-trigger="${issue.id}"] [role="combobox"]`,
-                    )
-                    ?.focus();
-                }
-                stateFocusTargetRef.current = null;
-              });
-            },
-          }
-        : undefined,
-    );
-  }
-
-  function dropIssue(event: DragEvent<HTMLElement>, nextState: WorkflowStateResponseDto) {
-    event.preventDefault();
-    const issueId = draggedIssueId ?? event.dataTransfer.getData('text/plain');
-    const issue = issueItems.find((candidate) => candidate.id === issueId);
-    setDraggedIssueId(null);
-    setDragOverStateId(null);
-    if (issue) moveIssue(issue, nextState);
-  }
-
-  if (teams.isPending) return <ContentLoading label={t('board.loading')} />;
-
-  if (teams.isError) {
-    return (
-      <ContentError
-        title={t('board.errorTitle')}
-        description={t('board.errorDescription')}
-        retryLabel={t('retry')}
-        onRetry={() => void teams.refetch()}
-        headingLevel={1}
-      />
-    );
-  }
-
-  if (!selectedTeam) {
-    return (
-      <>
-        <PageHeading title={t('team.missingTitle')} description={t('team.missingDescription')} />
-        <ContentEmpty
-          icon={CircleOff}
-          title={t('team.missingTitle')}
-          description={t('team.missingDescription')}
-        />
-      </>
-    );
-  }
-
-  const optionsPending = workflowStates.isPending || members.isPending || labels.isPending;
-  const initialError =
-    workflowStates.isError || members.isError || labels.isError || (issues.isError && !issues.data);
 
   return (
-    <section className="min-w-0">
-      <PageHeading
-        title={t('board.title', { team: selectedTeam.name })}
-        description={t('board.description', { team: selectedTeam.name })}
-      />
-
-      <div className="lg:hidden">
+    <section className="space-y-6" aria-labelledby="team-board-title">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-muted-foreground text-sm">팀 작업 워크플로</p>
+          <h1 id="team-board-title" className="text-2xl font-semibold">
+            {team?.name ?? teamKey} 보드
+          </h1>
+        </div>
+        <Link href="/issues?create=1" className={cn(buttonVariants(), 'gap-2')}>
+          <Plus className="size-4" />
+          이슈 만들기
+        </Link>
+      </header>
+      {teams.isPending || works.isPending ? (
+        <ContentLoading label="보드를 불러오는 중입니다" />
+      ) : null}
+      {teams.isError || works.isError ? (
+        <ContentError
+          title="보드를 불러오지 못했습니다"
+          description="잠시 후 다시 시도해 주세요."
+          retryLabel="다시 시도"
+          onRetry={() => {
+            void teams.refetch();
+            void works.refetch();
+          }}
+        />
+      ) : null}
+      {teams.data && !team ? (
         <ContentEmpty
-          icon={MonitorUp}
-          title={t('board.mobileTitle')}
-          description={t('board.mobileDescription')}
-        >
-          <Link href={listHref} className={buttonVariants({ size: 'lg', variant: 'outline' })}>
-            <List aria-hidden="true" data-icon="inline-start" />
-            {t('board.viewList')}
-          </Link>
-        </ContentEmpty>
-      </div>
-
-      <div className="hidden lg:block">
-        <div className="mt-4 flex items-center justify-between gap-4">
-          <Tabs
-            value={state.tab}
-            onValueChange={(value) => {
-              if (TEAM_ISSUE_TABS.includes(value as (typeof TEAM_ISSUE_TABS)[number])) {
-                replaceUrl('tab', value === 'all' ? null : value);
-              }
-            }}
-          >
-            <TabsList variant="line" aria-label={t('tabs.label')}>
-              <TabsTrigger value="all">{t('tabs.all')}</TabsTrigger>
-              <TabsTrigger value="progress">{t('tabs.progress')}</TabsTrigger>
-              <TabsTrigger value="backlog">{t('tabs.backlog')}</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <div className="flex items-center gap-2">
-            <Link
-              href={listHref}
-              className={cn(buttonVariants({ size: 'sm', variant: 'ghost' }), 'h-11 sm:h-10')}
-            >
-              <List aria-hidden="true" data-icon="inline-start" />
-              {t('board.viewList')}
-            </Link>
-            <Link href={createHref} className={cn(buttonVariants({ size: 'sm' }), 'h-11 sm:h-10')}>
-              <Plus aria-hidden="true" data-icon="inline-start" />
-              {t('create')}
-            </Link>
-          </div>
-        </div>
-
-        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 py-2.5">
-          <IssueFilterMenu
-            emptyLabel={t('filters.noOptions')}
-            label={t('filters.state')}
-            onChange={(selected) => replaceUrl('status', selected)}
-            options={sortedStates.map((workflowState) => ({
-              ...WORKFLOW_STATE_PRESENTATION[workflowState.category],
-              id: workflowState.id,
-              label: workflowState.name,
-            }))}
-            selected={state.stateIds}
-            variant="compact"
-          />
-          <IssueFilterMenu
-            emptyLabel={t('filters.noOptions')}
-            label={t('filters.assignee')}
-            onChange={(selected) => replaceUrl('assignee', selected)}
-            options={(members.data?.items ?? []).map((member) => ({
-              id: member.id,
-              label: member.user.displayName,
-            }))}
-            selected={state.assigneeIds}
-            variant="compact"
-          />
-          <IssueFilterMenu
-            emptyLabel={t('filters.noOptions')}
-            label={t('filters.priority')}
-            onChange={(selected) => replaceUrl('priority', selected)}
-            options={ISSUE_PRIORITIES.map((priority) => ({
-              ...ISSUE_PRIORITY_PRESENTATION[priority],
-              id: priority,
-              label: t(`priority.${priority}`),
-            }))}
-            selected={state.priority}
-            variant="compact"
-          />
-          <IssueFilterMenu
-            emptyLabel={t('filters.noOptions')}
-            label={t('filters.label')}
-            onChange={(selected) => replaceUrl('label', selected)}
-            options={activeLabels.map((label) => ({
-              id: label.id,
-              label: label.name,
-              swatch: label.color,
-            }))}
-            selected={state.labelIds}
-            variant="compact"
-          />
-          {filtersActive ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="hover:before:bg-muted/60 relative isolate h-11 bg-transparent px-2 text-xs before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-8 before:-translate-y-1/2 before:rounded-md before:bg-transparent hover:bg-transparent sm:h-10"
-              onClick={clearFilters}
-            >
-              <RotateCcw aria-hidden="true" data-icon="inline-start" />
-              {t('filters.reset')}
-            </Button>
-          ) : null}
-          <div className="ml-auto flex items-center gap-2">
-            <span className="text-muted-foreground hidden text-xs xl:inline">
-              {t('resultCount', { count: issueItems.length, more: issues.hasNextPage ? '+' : '' })}
-            </span>
-            <Select
-              items={ISSUE_SORT_FIELDS.map((sort) => ({
-                label: t(`sort.${sort}`),
-                value: sort,
-              }))}
-              value={state.sort}
-              onValueChange={(value) => {
-                if (
-                  value &&
-                  ISSUE_SORT_FIELDS.includes(value as (typeof ISSUE_SORT_FIELDS)[number])
-                ) {
-                  replaceUrl('sort', value === 'updatedAt' ? null : value);
-                }
-              }}
-            >
-              <SelectTrigger size="sm" variant="inline" aria-label={t('sort.fieldLabel')}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false}>
-                <SelectGroup>
-                  {ISSUE_SORT_FIELDS.map((sort) => (
-                    <SelectItem
-                      className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
-                      key={sort}
-                      value={sort}
-                    >
-                      {t(`sort.${sort}`)}
-                    </SelectItem>
+          icon={LayoutGrid}
+          title="팀을 찾을 수 없습니다"
+          description="팀 주소를 확인해 주세요."
+        />
+      ) : null}
+      {team && works.data ? (
+        <div className="grid auto-cols-[minmax(17rem,1fr)] grid-flow-col gap-4 overflow-x-auto pb-4">
+          {states.map((state) => {
+            const items = works.data.items.filter((work) => work.workflowState.id === state.id);
+            return (
+              <section
+                key={state.id}
+                className="bg-surface-2 min-h-64 rounded-xl border p-3"
+                aria-labelledby={`board-${state.id}`}
+              >
+                <header className="mb-3 flex items-center justify-between">
+                  <h2 id={`board-${state.id}`} className="text-sm font-semibold">
+                    {state.name}
+                  </h2>
+                  <Badge variant="secondary">{items.length}</Badge>
+                </header>
+                <ul className="space-y-2">
+                  {items.map((work) => (
+                    <li key={work.id}>
+                      <Link
+                        href={issueWorkHref(work.issue.identifier, work.identifier)}
+                        className="bg-background hover:border-primary/40 block rounded-lg border p-3 transition-colors"
+                      >
+                        <span className="text-muted-foreground font-mono text-xs">
+                          {work.identifier}
+                        </span>
+                        <strong className="mt-1 block text-sm font-medium">
+                          {work.issue.title}
+                        </strong>
+                        <span className="text-muted-foreground mt-2 block text-xs">
+                          {work.assignee?.user.displayName ?? '담당자 없음'}
+                        </span>
+                      </Link>
+                    </li>
                   ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <Select
-              items={ISSUE_SORT_DIRECTIONS.map((direction) => ({
-                label: t(`sort.${direction}`),
-                value: direction,
-              }))}
-              value={state.sortDirection}
-              onValueChange={(value) => {
-                if (
-                  value &&
-                  ISSUE_SORT_DIRECTIONS.includes(value as (typeof ISSUE_SORT_DIRECTIONS)[number])
-                ) {
-                  replaceUrl('direction', value === 'desc' ? null : value);
-                }
-              }}
-            >
-              <SelectTrigger size="sm" variant="inline" aria-label={t('sort.directionLabel')}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false}>
-                <SelectGroup>
-                  {ISSUE_SORT_DIRECTIONS.map((direction) => (
-                    <SelectItem
-                      className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
-                      key={direction}
-                      value={direction}
-                    >
-                      {t(`sort.${direction}`)}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
+                </ul>
+              </section>
+            );
+          })}
         </div>
-
-        <Alert className="mt-4">
-          <Info aria-hidden="true" />
-          <AlertTitle>{t('board.helpTitle')}</AlertTitle>
-          <AlertDescription>{t('board.helpDescription')}</AlertDescription>
-        </Alert>
-
-        {initialError ? (
-          <div className="py-6">
-            <ContentError
-              title={t('board.errorTitle')}
-              description={t('board.errorDescription')}
-              retryLabel={t('retry')}
-              onRetry={retryBoard}
-            />
-          </div>
-        ) : optionsPending || issues.isPending ? (
-          <IssueBoardLoading label={t('board.loading')} />
-        ) : sortedStates.length === 0 ? (
-          <ContentEmpty
-            icon={CircleOff}
-            title={t('board.noStatesTitle')}
-            description={t('board.noStatesDescription')}
-          />
-        ) : issueItems.length === 0 ? (
-          <ContentEmpty
-            icon={hasActiveConditions ? SearchX : ListTodo}
-            title={hasActiveConditions ? t('board.filteredEmptyTitle') : t('board.emptyTitle')}
-            description={
-              hasActiveConditions
-                ? t('board.filteredEmptyDescription')
-                : t('board.emptyDescription')
-            }
-          >
-            {hasActiveConditions ? (
-              <Button type="button" variant="outline" onClick={clearAllConditions}>
-                {t('board.resetView')}
-              </Button>
-            ) : null}
-          </ContentEmpty>
-        ) : (
-          <>
-            <div
-              role="region"
-              aria-label={t('board.columnsLabel')}
-              className="mt-4 flex gap-3 overflow-x-auto pb-4"
-            >
-              {columns.map((column) => {
-                const columnId = `issue-board-column-${column.state.id}`;
-                const isDropTarget = dragOverStateId === column.state.id;
-
-                return (
-                  <section
-                    key={column.state.id}
-                    aria-labelledby={columnId}
-                    onDragOver={(event) => {
-                      const draggedIssueStatePending =
-                        draggedIssueId &&
-                        (mutation.isPendingFor?.(draggedIssueId, 'workflowState') ??
-                          (mutation.isPending &&
-                            mutation.variables?.issue.id === draggedIssueId &&
-                            mutation.variables.change.kind === 'workflowState'));
-                      if (!draggedIssueId || draggedIssueStatePending) return;
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = 'move';
-                      setDragOverStateId(column.state.id);
-                    }}
-                    onDragLeave={(event) => {
-                      const relatedTarget = event.relatedTarget;
-                      if (
-                        !(relatedTarget instanceof Node) ||
-                        !event.currentTarget.contains(relatedTarget)
-                      ) {
-                        setDragOverStateId(null);
-                      }
-                    }}
-                    onDrop={(event) => dropIssue(event, column.state)}
-                    className={cn(
-                      'bg-surface-1 w-66 shrink-0 rounded-xl border transition-colors xl:w-70',
-                      isDropTarget && 'border-ring ring-ring/50 ring-2',
-                    )}
-                  >
-                    <header className="flex min-h-10 items-center gap-2 border-b px-3">
-                      <WorkflowStateMark category={column.state.category} />
-                      <h2 id={columnId} className="min-w-0 flex-1 truncate text-sm font-medium">
-                        {column.state.name}
-                      </h2>
-                      <span className="text-muted-foreground text-xs tabular-nums">
-                        {t('board.stateCount', { count: column.issues.length })}
-                      </span>
-                    </header>
-                    {column.issues.length === 0 ? (
-                      <p className="text-muted-foreground min-h-24 px-3 py-4 text-xs">
-                        {t('board.emptyColumn')}
-                      </p>
-                    ) : (
-                      <ul className="flex min-h-24 flex-col gap-2 p-2">
-                        {column.issues.map((issue) => (
-                          <li key={issue.id}>
-                            <IssueBoardCard
-                              activeLabels={activeLabels}
-                              issue={issue}
-                              labels={cardLabels}
-                              members={members.data?.items ?? []}
-                              mutation={mutation}
-                              workflowStates={sortedStates}
-                              onMove={moveIssue}
-                              onDragStart={setDraggedIssueId}
-                              onDragEnd={() => {
-                                setDraggedIssueId(null);
-                                setDragOverStateId(null);
-                              }}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </section>
-                );
-              })}
-            </div>
-
-            {issues.isFetchNextPageError ? (
-              <Alert variant="destructive" className="mt-2 pr-28">
-                <AlertCircle aria-hidden="true" />
-                <AlertTitle>{t('pagination.errorTitle')}</AlertTitle>
-                <AlertDescription>{t('pagination.errorDescription')}</AlertDescription>
-                <AlertAction>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={issues.isFetchingNextPage}
-                    onClick={() => void issues.fetchNextPage()}
-                  >
-                    {issues.isFetchingNextPage ? (
-                      <Spinner aria-hidden="true" data-icon="inline-start" />
-                    ) : (
-                      <RotateCcw aria-hidden="true" data-icon="inline-start" />
-                    )}
-                    {issues.isFetchingNextPage ? t('pagination.loading') : t('retry')}
-                  </Button>
-                </AlertAction>
-              </Alert>
-            ) : issues.hasNextPage ? (
-              <div className="flex justify-center py-5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={issues.isFetchingNextPage}
-                  onClick={() => void issues.fetchNextPage()}
-                >
-                  {issues.isFetchingNextPage ? (
-                    <Spinner aria-hidden="true" data-icon="inline-start" />
-                  ) : null}
-                  {issues.isFetchingNextPage ? t('pagination.loading') : t('pagination.more')}
-                </Button>
-              </div>
-            ) : null}
-          </>
-        )}
-      </div>
+      ) : null}
     </section>
   );
 }

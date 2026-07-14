@@ -286,21 +286,25 @@ export class MembersService {
         const openAssignments = await transaction.$queryRaw<
           Array<{ id: string; identifier: string; title: string }>
         >`
-          SELECT issue."id", issue."identifier", issue."title"
-          FROM "issues" issue
+          SELECT work."id", work."identifier", issue."title"
+          FROM "team_works" work
+          INNER JOIN "issues" issue
+            ON issue."workspace_id" = work."workspace_id"
+           AND issue."id" = work."issue_id"
           INNER JOIN "workflow_states" state
-            ON state."workspace_id" = issue."workspace_id"
-           AND state."team_id" = issue."team_id"
-           AND state."id" = issue."workflow_state_id"
-          WHERE issue."workspace_id" = ${context.workspaceId}::uuid
-            AND issue."assignee_membership_id" = ${membershipId}::uuid
+            ON state."workspace_id" = work."workspace_id"
+           AND state."team_id" = work."team_id"
+           AND state."id" = work."workflow_state_id"
+          WHERE work."workspace_id" = ${context.workspaceId}::uuid
+            AND work."assignee_membership_id" = ${membershipId}::uuid
+            AND work."deleted_at" IS NULL
             AND issue."deleted_at" IS NULL
             AND state."category" NOT IN (
               ${StateCategory.COMPLETED}::"StateCategory",
               ${StateCategory.CANCELED}::"StateCategory"
             )
-          ORDER BY issue."id"
-          FOR UPDATE OF issue
+          ORDER BY work."id"
+          FOR UPDATE OF work
         `;
         if (openAssignments.length > 0) {
           throw new ApiError({

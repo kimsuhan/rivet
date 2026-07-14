@@ -4,9 +4,10 @@ export const API_HANDOFF_CREATED = 'API_HANDOFF_CREATED' as const;
 export type ApiHandoffCreatedOutboxPayload = {
   schemaVersion: typeof API_HANDOFF_CREATED_SCHEMA_VERSION;
   issueId: string;
+  sourceTeamWorkId: string;
   handoffId: string;
   kind: 'INITIAL' | 'FOLLOW_UP';
-  downstreamIssueIds: string[];
+  targetTeamWorkIds: string[];
   candidateRecipientMembershipIds: string[];
 };
 
@@ -48,7 +49,8 @@ export function validateApiHandoffCreatedOutboxPayload(
     'issueId',
     'handoffId',
     'kind',
-    'downstreamIssueIds',
+    'sourceTeamWorkId',
+    'targetTeamWorkIds',
     'candidateRecipientMembershipIds',
   ]);
   const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -57,10 +59,12 @@ export function validateApiHandoffCreatedOutboxPayload(
     Object.keys(value).some((key) => !allowedKeys.has(key)) ||
     typeof value.issueId !== 'string' ||
     !uuidV4Pattern.test(value.issueId) ||
+    typeof value.sourceTeamWorkId !== 'string' ||
+    !uuidV4Pattern.test(value.sourceTeamWorkId) ||
     typeof value.handoffId !== 'string' ||
     !uuidV4Pattern.test(value.handoffId) ||
     (value.kind !== 'INITIAL' && value.kind !== 'FOLLOW_UP') ||
-    !isUniqueUuidV4Array(value.downstreamIssueIds) ||
+    !isUniqueUuidV4Array(value.targetTeamWorkIds) ||
     !isUniqueUuidV4Array(value.candidateRecipientMembershipIds)
   ) {
     return { reason: 'INVALID_PAYLOAD', success: false };
@@ -70,9 +74,10 @@ export function validateApiHandoffCreatedOutboxPayload(
     payload: {
       schemaVersion: API_HANDOFF_CREATED_SCHEMA_VERSION,
       issueId: value.issueId,
+      sourceTeamWorkId: value.sourceTeamWorkId,
       handoffId: value.handoffId,
       kind: value.kind,
-      downstreamIssueIds: [...value.downstreamIssueIds],
+      targetTeamWorkIds: [...value.targetTeamWorkIds],
       candidateRecipientMembershipIds: [...value.candidateRecipientMembershipIds],
     },
     success: true,

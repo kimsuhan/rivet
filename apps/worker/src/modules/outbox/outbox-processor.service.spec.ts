@@ -9,9 +9,9 @@ import {
   ISSUE_CHANGED,
   ISSUE_CREATED,
   ISSUE_PURGE_SCHEDULED,
-  ISSUE_UNBLOCKED,
   PROJECT_CREATED,
   PROJECT_STATUS_CHANGED,
+  TEAM_WORK_CREATED,
   WORKSPACE_CREATED,
   WORKSPACE_INVITATION_REQUESTED,
 } from '@rivet/event-contracts';
@@ -63,6 +63,8 @@ describe('OutboxProcessorService', () => {
     handleCommentMentionsAdded: jest.fn(),
     handleIssueChanged: jest.fn(),
     handleIssueCreated: jest.fn(),
+    handleTeamWorkChanged: jest.fn(),
+    handleTeamWorkCreated: jest.fn(),
   };
   const resourcePurgeHandler = { handleIssue: jest.fn(), handleProject: jest.fn() };
   const workspaceInvitationEmailHandler = { handle: jest.fn() };
@@ -72,6 +74,7 @@ describe('OutboxProcessorService', () => {
       issue: { count: jest.fn() },
       project: { findFirst: jest.fn() },
       workspace: { findUnique: jest.fn() },
+      teamWork: { count: jest.fn() },
     },
   };
   const outbox = {
@@ -87,6 +90,7 @@ describe('OutboxProcessorService', () => {
     jest.resetAllMocks();
     outbox.renewLock.mockResolvedValue(true);
     database.client.issue.count.mockResolvedValue(2);
+    database.client.teamWork.count.mockResolvedValue(2);
     database.client.project.findFirst.mockResolvedValue({ id: event.id });
     database.client.workspace.findUnique.mockResolvedValue({ id: event.workspaceId });
 
@@ -196,6 +200,21 @@ describe('OutboxProcessorService', () => {
 
   it.each([
     {
+      aggregateId: 'c7223ce5-74b3-4495-ae66-a3d269017f6a',
+      aggregateType: 'TEAM_WORK',
+      eventType: TEAM_WORK_CREATED,
+      payload: {
+        assigneeMembershipId: '607629d0-53e6-469d-bbc8-eb86c50a0288',
+        issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
+        schemaVersion: 1,
+        teamWorkId: 'c7223ce5-74b3-4495-ae66-a3d269017f6a',
+      },
+      expected: {
+        name: 'team_work_created',
+        properties: { hasAssignee: true, workspaceId: event.workspaceId },
+      },
+    },
+    {
       aggregateType: 'WORKSPACE',
       eventType: WORKSPACE_CREATED,
       payload: { acquisitionSource: 'direct', schemaVersion: 1 },
@@ -242,32 +261,12 @@ describe('OutboxProcessorService', () => {
         },
       },
     },
-    {
-      aggregateType: 'ISSUE',
-      eventType: ISSUE_UNBLOCKED,
-      payload: {
-        blockedProjectRole: 'WEB_FRONTEND',
-        blockerIssueId: 'de9d55e4-6181-4a8a-8fdf-f8faf536dc99',
-        blockingDurationBucket: 'LT_1_DAY',
-        blockingProjectRole: 'BACKEND',
-        issueId: event.id,
-        schemaVersion: 1,
-      },
-      expected: {
-        name: 'issue_unblocked',
-        properties: {
-          blockedProjectRole: 'WEB_FRONTEND',
-          blockingDurationBucket: 'LT_1_DAY',
-          blockingProjectRole: 'BACKEND',
-          workspaceId: event.workspaceId,
-        },
-      },
-    },
   ])('completes and captures $eventType exactly once', async (input) => {
     const analyticsEvent: ClaimedOutboxEvent = {
       ...event,
       actorMembershipId: '607629d0-53e6-469d-bbc8-eb86c50a0288',
-      aggregateId: input.eventType === WORKSPACE_CREATED ? event.workspaceId! : event.id,
+      aggregateId:
+        input.eventType === WORKSPACE_CREATED ? event.workspaceId! : input.aggregateId ?? event.id,
       aggregateType: input.aggregateType,
       eventType: input.eventType,
       payload: input.payload,
@@ -325,46 +324,6 @@ describe('OutboxProcessorService', () => {
     expect(observability.capture).not.toHaveBeenCalled();
   });
 
-  it('rejects a missing issue-unblocked reference before analytics capture', async () => {
-    const payload = {
-      blockedProjectRole: 'WEB_FRONTEND',
-      blockerIssueId: 'de9d55e4-6181-4a8a-8fdf-f8faf536dc99',
-      blockingDurationBucket: 'LT_1_DAY',
-      blockingProjectRole: 'BACKEND',
-      issueId: event.id,
-      schemaVersion: 1,
-    } as const;
-    const analyticsEvent: ClaimedOutboxEvent = {
-      ...event,
-      actorMembershipId: '607629d0-53e6-469d-bbc8-eb86c50a0288',
-      aggregateId: event.id,
-      aggregateType: 'ISSUE',
-      eventType: ISSUE_UNBLOCKED,
-      payload,
-      workspaceId: '77a49ce9-f158-4f4d-b898-bb5b309e461f',
-    };
-    database.client.issue.count.mockResolvedValue(1);
-    outbox.failPermanently.mockResolvedValue(true);
-
-    await processor.processBatch([analyticsEvent], 'worker-test');
-
-    expect(database.client.issue.count).toHaveBeenCalledWith({
-      where: {
-        id: {
-          in: [payload.issueId, payload.blockerIssueId],
-        },
-        workspaceId: analyticsEvent.workspaceId,
-      },
-    });
-    expect(outbox.failPermanently).toHaveBeenCalledWith(
-      analyticsEvent.id,
-      'worker-test',
-      'OUTBOX_EVENT_CONTRACT_INVALID',
-    );
-    expect(outbox.complete).not.toHaveBeenCalled();
-    expect(observability.capture).not.toHaveBeenCalled();
-  });
-
   it('does not capture an analytics Outbox event when completion loses its lock', async () => {
     const analyticsEvent: ClaimedOutboxEvent = {
       ...event,
@@ -392,11 +351,12 @@ describe('OutboxProcessorService', () => {
       eventType: API_HANDOFF_CREATED,
       payload: {
         candidateRecipientMembershipIds: ['c7223ce5-74b3-4495-ae66-a3d269017f6a'],
-        downstreamIssueIds: ['98ab3a6d-0d24-484e-a36a-b8028dc00465'],
         handoffId: 'de9d55e4-6181-4a8a-8fdf-f8faf536dc99',
         issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
         kind: 'INITIAL',
         schemaVersion: 1,
+        sourceTeamWorkId: '98ab3a6d-0d24-484e-a36a-b8028dc00465',
+        targetTeamWorkIds: ['c7223ce5-74b3-4495-ae66-a3d269017f6a'],
       },
       workspaceId: '77a49ce9-f158-4f4d-b898-bb5b309e461f',
     };
@@ -413,8 +373,8 @@ describe('OutboxProcessorService', () => {
       distinctId: handoffEvent.actorMembershipId,
       name: 'api_handoff_created',
       properties: {
-        downstreamIssueCount: 1,
         isFollowUp: false,
+        targetTeamWorkCount: 1,
         workspaceId: handoffEvent.workspaceId,
       },
     });
@@ -422,12 +382,23 @@ describe('OutboxProcessorService', () => {
 
   it.each([
     {
+      aggregateId: 'c7223ce5-74b3-4495-ae66-a3d269017f6a',
+      aggregateType: 'TEAM_WORK',
+      eventType: TEAM_WORK_CREATED,
+      handler: 'handleTeamWorkCreated' as const,
+      payload: {
+        assigneeMembershipId: '607629d0-53e6-469d-bbc8-eb86c50a0288',
+        issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
+        schemaVersion: 1,
+        teamWorkId: 'c7223ce5-74b3-4495-ae66-a3d269017f6a',
+      },
+    },
+    {
       aggregateId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
       aggregateType: 'ISSUE',
       eventType: ISSUE_CREATED,
       handler: 'handleIssueCreated' as const,
       payload: {
-        assigneeMembershipId: 'c7223ce5-74b3-4495-ae66-a3d269017f6a',
         issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
         mentionedMembershipIds: [],
         schemaVersion: 1,
@@ -439,7 +410,6 @@ describe('OutboxProcessorService', () => {
       eventType: ISSUE_CHANGED,
       handler: 'handleIssueChanged' as const,
       payload: {
-        assigneeMembershipId: null,
         changedFields: ['TITLE'],
         issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
         mentionedMembershipIds: [],
@@ -460,6 +430,7 @@ describe('OutboxProcessorService', () => {
         mentionedMembershipIds: [],
         schemaVersion: 1,
         subscriberMembershipIds: [],
+        teamWorkId: null,
       },
     },
     {
@@ -472,6 +443,7 @@ describe('OutboxProcessorService', () => {
         issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
         mentionedMembershipIds: ['c7223ce5-74b3-4495-ae66-a3d269017f6a'],
         schemaVersion: 1,
+        teamWorkId: null,
       },
     },
   ])('validates and dispatches $eventType', async (input) => {
@@ -531,7 +503,6 @@ describe('OutboxProcessorService', () => {
       aggregateType: 'ISSUE',
       eventType: ISSUE_CHANGED,
       payload: {
-        assigneeMembershipId: null,
         changedFields: ['TITLE'],
         issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
         mentionedMembershipIds: [],
@@ -567,11 +538,12 @@ describe('OutboxProcessorService', () => {
       eventType: API_HANDOFF_CREATED,
       payload: {
         candidateRecipientMembershipIds: [],
-        downstreamIssueIds: [],
         handoffId: 'de9d55e4-6181-4a8a-8fdf-f8faf536dc99',
         issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
         kind: 'FOLLOW_UP',
         schemaVersion: 1,
+        sourceTeamWorkId: '98ab3a6d-0d24-484e-a36a-b8028dc00465',
+        targetTeamWorkIds: [],
       },
       workspaceId: '77a49ce9-f158-4f4d-b898-bb5b309e461f',
       ...override,
@@ -597,11 +569,12 @@ describe('OutboxProcessorService', () => {
       eventType: API_HANDOFF_CREATED,
       payload: {
         candidateRecipientMembershipIds: [],
-        downstreamIssueIds: [],
         handoffId: 'de9d55e4-6181-4a8a-8fdf-f8faf536dc99',
         issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
         kind: 'INITIAL',
         schemaVersion: 2,
+        sourceTeamWorkId: '98ab3a6d-0d24-484e-a36a-b8028dc00465',
+        targetTeamWorkIds: [],
       },
       workspaceId: '77a49ce9-f158-4f4d-b898-bb5b309e461f',
     };

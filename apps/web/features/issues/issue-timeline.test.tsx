@@ -1,10 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { PropsWithChildren, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { HANDOFF_TEMPLATE } from './issue-handoff-validation';
 import { IssueTimeline } from './issue-timeline';
 
 const mocks = vi.hoisted(() => ({
@@ -141,8 +140,8 @@ vi.mock('next-intl', () => ({
   },
 }));
 
-vi.mock('@/features/collaboration/markdown-editor', () => ({
-  MarkdownEditor: ({
+vi.mock('@/features/collaboration/markdown-editor', () => {
+  const Editor = ({
     disabled,
     onCanSubmitChange,
     onChange,
@@ -162,8 +161,9 @@ vi.mock('@/features/collaboration/markdown-editor', () => ({
         onCanSubmitChange(true);
       }}
     />
-  ),
-}));
+  );
+  return { CommentEditor: Editor, MarkdownEditor: Editor };
+});
 
 vi.mock('@/features/collaboration/markdown-renderer', () => ({
   MarkdownRenderer: ({ markdown }: { markdown: string }) => (
@@ -345,147 +345,6 @@ describe('IssueTimeline', () => {
     expect(await screen.findByText('새 댓글')).toBeVisible();
   });
 
-  it('작업 전달 앵커와 API 링크를 유지하고 본문은 공용 Markdown 렌더러로 표시한다', async () => {
-    window.history.replaceState({}, '', '/issues/API-1#handoff-handoff-id');
-    const bodyMarkdown = HANDOFF_TEMPLATE.replace(
-      '## API 명세 링크\n\n해당 없음',
-      '## API 명세 링크\n\nhttps://api.example.com/openapi.json',
-    );
-    mocks.timeline.mockResolvedValueOnce({
-      items: [
-        {
-          createdAt: '2026-07-01T00:00:00.000Z',
-          handoff: {
-            author: {
-              id: 'membership-me',
-              role: 'MEMBER',
-              status: 'ACTIVE',
-              user: { avatarFileId: null, displayName: '나', id: 'user-me' },
-            },
-            bodyMarkdown,
-            createdAt: '2026-07-01T00:00:00.000Z',
-            id: 'handoff-id',
-            kind: 'INITIAL',
-            sequenceNumber: 1,
-          },
-          type: 'HANDOFF',
-        },
-      ],
-      nextCursor: null,
-    });
-    render(
-      <IssueTimeline
-        currentMembershipId="membership-me"
-        issueId="issue-id"
-        mentionOptions={[]}
-        mode="handoffs"
-      />,
-      { wrapper: Wrapper },
-    );
-
-    await waitFor(() => expect(document.getElementById('handoff-handoff-id')).not.toBeNull());
-    const handoff = document.getElementById('handoff-handoff-id');
-    expect(handoff).not.toBeNull();
-    if (!handoff) return;
-    await waitFor(() => expect(handoff.querySelector('details')).toHaveAttribute('open'));
-    expect(document.activeElement).toBe(document.body);
-    expect(within(handoff).getByTestId('markdown-renderer')).toHaveTextContent('프론트 주의사항');
-    expect(within(handoff).getByRole('link')).toHaveAttribute(
-      'href',
-      'https://api.example.com/openapi.json',
-    );
-  });
-
-  it('최근 항목에 전달이 없어도 다음 커서에서 백엔드의 최근 전달을 찾는다', async () => {
-    mocks.timeline
-      .mockResolvedValueOnce({
-        items: [
-          {
-            activity: {
-              actor: null,
-              after: null,
-              before: null,
-              eventType: 'ISSUE_UPDATED',
-              fieldName: 'state',
-              id: 'newer-activity-id',
-            },
-            createdAt: '2026-07-02T00:00:00.000Z',
-            type: 'ACTIVITY',
-          },
-        ],
-        nextCursor: 'older-page',
-      })
-      .mockResolvedValueOnce({
-        items: [
-          {
-            createdAt: '2026-07-01T00:00:00.000Z',
-            handoff: {
-              author: ownComment.author,
-              bodyMarkdown: HANDOFF_TEMPLATE,
-              createdAt: '2026-07-01T00:00:00.000Z',
-              id: 'older-handoff-id',
-              kind: 'INITIAL',
-              sequenceNumber: 1,
-            },
-            type: 'HANDOFF',
-          },
-        ],
-        nextCursor: null,
-      });
-
-    render(
-      <IssueTimeline
-        currentMembershipId="membership-me"
-        issueId="issue-id"
-        mentionOptions={[]}
-        mode="latest-handoff"
-      />,
-      { wrapper: Wrapper },
-    );
-
-    expect(await screen.findByRole('heading', { name: 'handoff.initial' })).toBeVisible();
-    expect(mocks.timeline).toHaveBeenLastCalledWith(
-      'issue-id',
-      { cursor: 'older-page', limit: 100, sortDirection: 'desc' },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-  });
-
-  it('최근 전달의 다음 커서 조회가 실패하면 자동 재시도하지 않는다', async () => {
-    mocks.timeline
-      .mockResolvedValueOnce({
-        items: [
-          {
-            activity: {
-              actor: null,
-              after: null,
-              before: null,
-              eventType: 'ISSUE_UPDATED',
-              fieldName: 'state',
-              id: 'newer-activity-id',
-            },
-            createdAt: '2026-07-02T00:00:00.000Z',
-            type: 'ACTIVITY',
-          },
-        ],
-        nextCursor: 'older-page',
-      })
-      .mockRejectedValueOnce(new Error('older page failed'));
-
-    render(
-      <IssueTimeline
-        currentMembershipId="membership-me"
-        issueId="issue-id"
-        mentionOptions={[]}
-        mode="latest-handoff"
-      />,
-      { wrapper: Wrapper },
-    );
-
-    expect(await screen.findByText('handoff.errorTitle')).toBeVisible();
-    await waitFor(() => expect(mocks.timeline).toHaveBeenCalledTimes(2));
-  });
-
   it('휴지통 이동과 복구 활동을 서로 다른 의미로 표시한다', async () => {
     mocks.timeline.mockResolvedValueOnce({
       items: [
@@ -531,62 +390,6 @@ describe('IssueTimeline', () => {
     expect(screen.getByText('timeline.activity.restored')).toBeVisible();
   });
 
-  it('백엔드 전달 활동의 후행 작업을 한 카드 안의 이슈 링크로 표시한다', async () => {
-    mocks.timeline.mockResolvedValueOnce({
-      items: [
-        {
-          activity: {
-            actor: ownComment.author,
-            after: {
-              backendIssue: { identifier: 'API-1', title: '백엔드 구현' },
-              handoffId: 'handoff-id',
-              downstreamIssues: [
-                { id: 'web-id', identifier: 'WEB-2', title: '웹 연결' },
-                { id: 'app-id', identifier: 'APP-3', title: '앱 연결' },
-                { identifier: null, title: '잘못된 항목' },
-              ],
-            },
-            before: null,
-            eventType: 'BACKEND_WORK_DELIVERED',
-            fieldName: null,
-            id: 'delivery-activity-id',
-          },
-          createdAt: '2026-07-01T03:00:00.000Z',
-          type: 'ACTIVITY',
-        },
-      ],
-      nextCursor: null,
-    });
-
-    render(
-      <IssueTimeline
-        currentMembershipId="membership-me"
-        issueId="feature-id"
-        issueIdentifier="FEAT-1"
-        mentionOptions={[]}
-        mode="activity"
-      />,
-      { wrapper: Wrapper },
-    );
-
-    const label = await screen.findByText('timeline.activity.backendDelivered');
-    const activity = label.closest('li');
-    expect(activity).not.toBeNull();
-    if (!activity) return;
-    expect(within(activity).getByRole('link', { name: 'WEB-2 · 웹 연결' })).toHaveAttribute(
-      'href',
-      '/issues/WEB-2?tab=work',
-    );
-    expect(within(activity).getByRole('link', { name: 'APP-3 · 앱 연결' })).toHaveAttribute(
-      'href',
-      '/issues/APP-3?tab=work',
-    );
-    expect(
-      within(activity).getByRole('link', { name: 'timeline.activity.openHandoff' }),
-    ).toHaveAttribute('href', '/issues/FEAT-1?tab=relations#handoff-handoff-id');
-    expect(within(activity).queryByText('잘못된 항목')).not.toBeInTheDocument();
-  });
-
   it('댓글 모드와 활동 모드는 같은 응답에서 서로의 항목을 섞어 표시하지 않는다', async () => {
     mocks.timeline.mockResolvedValue({
       items: [
@@ -604,14 +407,30 @@ describe('IssueTimeline', () => {
           type: 'ACTIVITY',
         },
         {
+          activity: {
+            actor: ownComment.author,
+            after: null,
+            before: null,
+            eventType: 'TEAM_WORK_CHANGED',
+            fieldName: 'workNoteMarkdown',
+            id: 'team-work-activity-id',
+            teamWorkId: 'team-work-id',
+            teamWorkIdentifier: 'WEB-2',
+          },
+          createdAt: '2026-07-01T00:01:30.000Z',
+          type: 'ACTIVITY',
+        },
+        {
           createdAt: '2026-07-01T00:02:00.000Z',
           handoff: {
             author: ownComment.author,
-            bodyMarkdown: HANDOFF_TEMPLATE,
+            bodyMarkdown: '전달 본문',
             createdAt: '2026-07-01T00:02:00.000Z',
             id: 'handoff-id',
             kind: 'INITIAL',
             sequenceNumber: 1,
+            sourceTeamWorkId: 'source-work-id',
+            targetTeamWorkIds: ['target-work-id'],
           },
           type: 'HANDOFF',
         },
@@ -640,7 +459,12 @@ describe('IssueTimeline', () => {
       { wrapper: Wrapper },
     );
     expect(await screen.findByText('timeline.activity.created')).toBeVisible();
-    expect(screen.getByText('timeline.activity.handoffInitial')).toBeVisible();
+    expect(screen.getByText('timeline.activity.fields.teamWorkWorkNote')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'WEB-2' })).toHaveAttribute(
+      'href',
+      '/issues/API-1?tab=work&work=WEB-2',
+    );
+    expect(screen.queryByText('timeline.activity.handoffInitial')).not.toBeInTheDocument();
     expect(screen.queryByText('첫 댓글')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'mock-editor' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('markdown-renderer')).not.toBeInTheDocument();

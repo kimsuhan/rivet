@@ -10,5 +10,5 @@ import type { InitialRoleAssignmentDtoProjectRole } from './initialRoleAssignmen
 export interface InitialRoleAssignmentDto {
   projectRole: InitialRoleAssignmentDtoProjectRole;
   /** @nullable */
-  assigneeMembershipId: string | null;
+  assigneeMembershipId?: string | null;
 }

@@ -5,11 +5,8 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { InlineHandoffDto } from './inlineHandoffDto';
-import type { UpdateIssueDtoFeatureStatus } from './updateIssueDtoFeatureStatus';
-import type { UpdateIssueDtoFeatureStatusAction } from './updateIssueDtoFeatureStatusAction';
 import type { UpdateIssueDtoPriority } from './updateIssueDtoPriority';
-import type { UpdateIssueDtoProjectRole } from './updateIssueDtoProjectRole';
+import type { UpdateIssueDtoStatusAction } from './updateIssueDtoStatusAction';
 
 export interface UpdateIssueDto {
   /** @minimum 1 */
@@ -24,27 +21,8 @@ export interface UpdateIssueDto {
      * @nullable
      */
   descriptionMarkdown?: string | null;
-  /** 팀 작업의 팀은 변경할 수 없으며 현재 팀 ID만 허용됩니다. */
-  teamId?: string;
-  workflowStateId?: string;
-  /** @deprecated */
-  featureStatus?: UpdateIssueDtoFeatureStatus;
-  featureStatusAction?: UpdateIssueDtoFeatureStatusAction;
-  /**
-     * 빠른 이슈 완료 시 취소 제외 하위 팀 작업이 모두 완료됐는지 재검증합니다.
-     * @deprecated
-     */
-  requireCompletedTeamTasks?: boolean;
-  /** @nullable */
-  projectId?: string | null;
-  /** @nullable */
-  projectRole?: UpdateIssueDtoProjectRole;
-  /** @nullable */
-  parentIssueId?: string | null;
-  /** @nullable */
-  assigneeMembershipId?: string | null;
   priority?: UpdateIssueDtoPriority;
   /** @maxItems 100 */
   labelIds?: string[];
-  handoff?: InlineHandoffDto;
+  statusAction?: UpdateIssueDtoStatusAction;
 }

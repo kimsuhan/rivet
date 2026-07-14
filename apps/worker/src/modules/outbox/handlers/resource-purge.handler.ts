@@ -69,12 +69,6 @@ export class ResourcePurgeHandler {
       await transaction.issueLabel.deleteMany({
         where: { issueId: payload.issueId, workspaceId },
       });
-      await transaction.issueBlockRelation.deleteMany({
-        where: {
-          OR: [{ blockedIssueId: payload.issueId }, { blockingIssueId: payload.issueId }],
-          workspaceId,
-        },
-      });
       await transaction.comment.deleteMany({
         where: { issueId: payload.issueId, workspaceId },
       });

@@ -31,12 +31,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { UserAvatar } from '@/components/user-avatar';
-import { MarkdownEditor, type MentionOption } from '@/features/collaboration/markdown-editor';
+import { CommentEditor, type MentionOption } from '@/features/collaboration/markdown-editor';
 import { MarkdownRenderer } from '@/features/collaboration/markdown-renderer';
 import { Link } from '@/i18n/navigation';
 
 import { markdownEditorLabels } from './issue-collaboration-labels';
-import { IssueHandoffCard } from './issue-handoff-card';
+import { issueWorkHref } from './issue-work-routing';
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('ko-KR', {
@@ -53,44 +53,32 @@ function activityLabel(
   if (eventType === 'ISSUE_CREATED') return t('timeline.activity.created');
   if (eventType === 'ISSUE_TRASHED') return t('timeline.activity.trashed');
   if (eventType === 'ISSUE_RESTORED') return t('timeline.activity.restored');
-  if (eventType === 'ISSUE_BLOCK_RELATION_ADDED') return t('timeline.activity.blockAdded');
-  if (eventType === 'ISSUE_BLOCK_RELATION_REMOVED') return t('timeline.activity.blockRemoved');
-  if (eventType === 'BACKEND_WORK_DELIVERED') return t('timeline.activity.backendDelivered');
-  if (eventType !== 'ISSUE_UPDATED') return t('timeline.activity.updated');
+  if (eventType === 'TEAM_WORK_CREATED') return t('timeline.activity.teamWorkCreated');
+  if (eventType === 'TEAM_WORK_REMOVED') return t('timeline.activity.teamWorkRemoved');
+  if (eventType === 'TEAM_WORK_ASSIGNEE_CHANGED') {
+    return t('timeline.activity.fields.teamWorkAssignee');
+  }
+  if (eventType === 'TEAM_WORK_CHANGED') {
+    const teamWorkFields: Record<string, string> = {
+      assigneeMembershipId: 'teamWorkAssignee',
+      workNoteMarkdown: 'teamWorkWorkNote',
+      workflowStateId: 'teamWorkState',
+    };
+    return t(
+      `timeline.activity.fields.${teamWorkFields[fieldName ?? ''] ?? 'teamWorkDefault'}` as never,
+    );
+  }
+  if (eventType !== 'ISSUE_CHANGED') return t('timeline.activity.updated');
 
   const fields: Record<string, string> = {
-    assigneeMembershipId: 'assignee',
     descriptionMarkdown: 'description',
-    featureStatus: 'state',
     labelIds: 'labels',
-    parentIssueId: 'parent',
     priority: 'priority',
     projectId: 'project',
-    projectRole: 'projectRole',
+    status: 'state',
     title: 'title',
-    workflowStateId: 'state',
   };
   return t(`timeline.activity.fields.${fields[fieldName ?? ''] ?? 'default'}` as never);
-}
-
-function linkedDownstreamIssues(after: Record<string, unknown> | null): Array<{
-  identifier: string;
-  title: string;
-}> {
-  const downstreamIssues = after?.downstreamIssues;
-  if (!Array.isArray(downstreamIssues)) return [];
-
-  return downstreamIssues.flatMap((value) => {
-    if (!value || typeof value !== 'object') return [];
-    const { identifier, title } = value as Record<string, unknown>;
-    return typeof identifier === 'string' && typeof title === 'string'
-      ? [{ identifier, title }]
-      : [];
-  });
-}
-
-function handoffIdFromActivity(after: Record<string, unknown> | null): string | null {
-  return typeof after?.handoffId === 'string' ? after.handoffId : null;
 }
 
 function commentError(error: unknown, t: (key: string) => string): string {
@@ -240,7 +228,7 @@ function CommentItem({
           </p>
         ) : isEditing ? (
           <div className="mt-3 flex flex-col gap-3">
-            <MarkdownEditor
+            <CommentEditor
               charLimit={50_000}
               disabled={updateComment.isPending}
               error={
@@ -373,7 +361,7 @@ export function IssueTimeline({
   issueId: string;
   issueIdentifier?: string;
   mentionOptions: MentionOption[];
-  mode?: 'activity' | 'comments' | 'handoffs' | 'latest-handoff';
+  mode?: 'activity' | 'comments';
 }) {
   const t = useTranslations('IssueDetail');
   const markdownT = useTranslations('Markdown');
@@ -381,20 +369,18 @@ export function IssueTimeline({
   const [commentDraft, setCommentDraft] = useState('');
   const [canSubmitComment, setCanSubmitComment] = useState(true);
   const createComment = useIssueCollaborationControllerCreateComment();
-  const sortDirection = mode === 'latest-handoff' ? 'desc' : 'asc';
-  const pageLimit = mode === 'latest-handoff' ? 100 : 20;
   const timeline = useInfiniteQuery({
     initialPageParam: null as string | null,
     queryKey: getIssueCollaborationControllerTimelineQueryKey(issueId, {
-      limit: pageLimit,
-      sortDirection,
+      limit: 20,
+      sortDirection: 'asc',
     }),
     queryFn: ({ pageParam, signal }) =>
       issueCollaborationControllerTimeline(
         issueId,
         {
-          limit: pageLimit,
-          sortDirection,
+          limit: 20,
+          sortDirection: 'asc',
           ...(pageParam ? { cursor: pageParam } : {}),
         },
         { signal },
@@ -448,18 +434,9 @@ export function IssueTimeline({
   );
   const items = allItems.filter((item) => {
     if (mode === 'comments') return item.type === 'COMMENT';
-    if (mode === 'activity') return item.type !== 'COMMENT';
-    return item.type === 'HANDOFF';
+    return item.type === 'ACTIVITY';
   });
-  const visibleItems = mode === 'latest-handoff' ? items.slice(0, 1) : items;
   const commentBody = commentDraft.trim().length ? commentDraft : null;
-  const {
-    fetchNextPage,
-    hasNextPage,
-    isError: isTimelineError,
-    isFetchingNextPage,
-    isPending: isTimelinePending,
-  } = timeline;
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -472,55 +449,18 @@ export function IssueTimeline({
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [mode, visibleItems.length]);
-
-  useEffect(() => {
-    if (
-      mode !== 'latest-handoff' ||
-      isTimelinePending ||
-      isFetchingNextPage ||
-      isTimelineError ||
-      visibleItems.length > 0 ||
-      !hasNextPage
-    ) {
-      return;
-    }
-
-    void fetchNextPage();
-  }, [
-    fetchNextPage,
-    hasNextPage,
-    isTimelineError,
-    isFetchingNextPage,
-    isTimelinePending,
-    mode,
-    visibleItems.length,
-  ]);
+  }, [items.length, mode]);
 
   const loadingLabel =
-    mode === 'comments'
-      ? t('timeline.comments.loading')
-      : mode === 'activity'
-        ? t('timeline.activity.loading')
-        : t('handoff.loading');
+    mode === 'comments' ? t('timeline.comments.loading') : t('timeline.activity.loading');
   const errorTitle =
-    mode === 'comments'
-      ? t('timeline.comments.errorTitle')
-      : mode === 'activity'
-        ? t('timeline.activity.errorTitle')
-        : t('handoff.errorTitle');
+    mode === 'comments' ? t('timeline.comments.errorTitle') : t('timeline.activity.errorTitle');
   const errorDescription =
     mode === 'comments'
       ? t('timeline.comments.errorDescription')
-      : mode === 'activity'
-        ? t('timeline.activity.errorDescription')
-        : t('handoff.errorDescription');
+      : t('timeline.activity.errorDescription');
   const loadMoreLabel =
-    mode === 'comments'
-      ? t('timeline.comments.loadMore')
-      : mode === 'activity'
-        ? t('timeline.activity.loadMore')
-        : t('handoff.loadMore');
+    mode === 'comments' ? t('timeline.comments.loadMore') : t('timeline.activity.loadMore');
   const timelineError = timeline.isError ? (
     <Alert variant="destructive" className="mt-3">
       <AlertTitle>{errorTitle}</AlertTitle>
@@ -533,39 +473,11 @@ export function IssueTimeline({
     </Alert>
   ) : null;
 
-  if (mode === 'latest-handoff') {
-    return (
-      <div className="mt-4">
-        {timeline.data ? timelineError : null}
-        {timeline.isError && !timeline.data ? (
-          timelineError
-        ) : timeline.isPending || timeline.isFetchingNextPage ? (
-          <p role="status" className="text-muted-foreground text-sm">
-            {loadingLabel}
-          </p>
-        ) : visibleItems[0]?.type === 'HANDOFF' ? (
-          <IssueHandoffCard anchor={false} handoff={visibleItems[0].handoff} />
-        ) : null}
-      </div>
-    );
-  }
-
-  const title =
-    mode === 'comments'
-      ? t('timeline.comments.title')
-      : mode === 'handoffs'
-        ? t('handoff.historyTitle')
-        : t('timeline.activity.title');
-  const titleId =
-    mode === 'comments'
-      ? 'issue-comments-title'
-      : mode === 'handoffs'
-        ? 'handoff-history-title'
-        : 'issue-activity-title';
+  const title = mode === 'comments' ? t('timeline.comments.title') : t('timeline.activity.title');
+  const titleId = mode === 'comments' ? 'issue-comments-title' : 'issue-activity-title';
 
   return (
     <section
-      id={mode === 'handoffs' ? 'handoff-history' : undefined}
       aria-labelledby={titleId}
       className={mode === 'activity' ? 'scroll-mt-20' : 'mt-8 scroll-mt-20'}
     >
@@ -587,17 +499,13 @@ export function IssueTimeline({
         <p role="status" className="text-muted-foreground mt-3 text-sm">
           {loadingLabel}
         </p>
-      ) : visibleItems.length === 0 && !timeline.hasNextPage ? (
+      ) : items.length === 0 && !timeline.hasNextPage ? (
         <p className="text-muted-foreground mt-3 border-y py-4 text-sm">
-          {mode === 'comments'
-            ? t('timeline.comments.empty')
-            : mode === 'handoffs'
-              ? t('handoff.emptyHistory')
-              : t('timeline.activity.empty')}
+          {mode === 'comments' ? t('timeline.comments.empty') : t('timeline.activity.empty')}
         </p>
-      ) : visibleItems.length > 0 ? (
+      ) : items.length > 0 ? (
         <ol className="mt-4 border-l pl-4">
-          {visibleItems.map((item) => {
+          {items.map((item) => {
             if (item.type === 'COMMENT') {
               return (
                 <CommentItem
@@ -613,51 +521,7 @@ export function IssueTimeline({
               );
             }
 
-            if (item.type === 'HANDOFF' && mode === 'handoffs') {
-              return (
-                <li key={item.handoff.id} className="relative pb-4 last:pb-0">
-                  <span className="bg-primary absolute top-2 -left-[1.31rem] size-2 rounded-full" />
-                  <IssueHandoffCard handoff={item.handoff} />
-                </li>
-              );
-            }
-
-            if (item.type === 'HANDOFF') {
-              return (
-                <li key={item.handoff.id} className="relative pb-4 last:pb-0">
-                  <span className="bg-primary absolute top-2 -left-[1.31rem] size-2 rounded-full" />
-                  <div className="min-w-0 py-1 text-sm">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <UserAvatar
-                        avatarFileId={item.handoff.author.user.avatarFileId}
-                        displayName={item.handoff.author.user.displayName}
-                        size="sm"
-                      />
-                      <span className="font-medium">
-                        {item.handoff.kind === 'INITIAL'
-                          ? t('timeline.activity.handoffInitial')
-                          : t('timeline.activity.handoffFollowUp')}
-                      </span>
-                      <time dateTime={item.createdAt} className="text-muted-foreground text-xs">
-                        {formatDate(item.createdAt)}
-                      </time>
-                    </div>
-                    <Link
-                      href={`/issues/${encodeURIComponent(issueIdentifier)}?tab=relations#handoff-${item.handoff.id}`}
-                      className="mt-1 inline-flex pl-8 text-sm font-medium underline-offset-4 hover:underline"
-                    >
-                      {t('timeline.activity.openHandoff')}
-                    </Link>
-                  </div>
-                </li>
-              );
-            }
-
-            const downstreamIssues =
-              item.activity.eventType === 'BACKEND_WORK_DELIVERED'
-                ? linkedDownstreamIssues(item.activity.after)
-                : [];
-            const handoffId = handoffIdFromActivity(item.activity.after);
+            if (item.type !== 'ACTIVITY') return null;
             return (
               <li key={item.activity.id} className="relative pb-4 last:pb-0">
                 <span className="bg-border absolute top-2 -left-[1.31rem] size-2 rounded-full" />
@@ -673,6 +537,14 @@ export function IssueTimeline({
                     <span className="font-medium">
                       {activityLabel(item.activity.eventType, item.activity.fieldName, t)}
                     </span>
+                    {item.activity.teamWorkIdentifier ? (
+                      <Link
+                        href={issueWorkHref(issueIdentifier, item.activity.teamWorkIdentifier)}
+                        className="text-muted-foreground font-mono text-xs underline-offset-4 hover:underline"
+                      >
+                        {item.activity.teamWorkIdentifier}
+                      </Link>
+                    ) : null}
                     <time dateTime={item.createdAt} className="text-muted-foreground text-xs">
                       {formatDate(item.createdAt)}
                     </time>
@@ -681,28 +553,6 @@ export function IssueTimeline({
                     <p className="text-muted-foreground mt-0.5 pl-8 text-xs">
                       {item.activity.actor.user.displayName}
                     </p>
-                  ) : null}
-                  {handoffId ? (
-                    <Link
-                      href={`/issues/${encodeURIComponent(issueIdentifier)}?tab=relations#handoff-${handoffId}`}
-                      className="mt-1 inline-flex pl-8 text-sm font-medium underline-offset-4 hover:underline"
-                    >
-                      {t('timeline.activity.openHandoff')}
-                    </Link>
-                  ) : null}
-                  {downstreamIssues.length > 0 ? (
-                    <ul className="mt-2 flex flex-col gap-1 pl-8">
-                      {downstreamIssues.map((issue) => (
-                        <li key={issue.identifier}>
-                          <Link
-                            href={`/issues/${encodeURIComponent(issue.identifier)}?tab=work`}
-                            className="text-sm font-medium underline-offset-4 hover:underline"
-                          >
-                            {issue.identifier} · {issue.title}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
                   ) : null}
                 </div>
               </li>
@@ -734,7 +584,7 @@ export function IssueTimeline({
               {t('timeline.comments.write')}
             </h3>
           </div>
-          <MarkdownEditor
+          <CommentEditor
             charLimit={50_000}
             disabled={createComment.isPending}
             error={

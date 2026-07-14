@@ -56,10 +56,7 @@ vi.mock('@/features/issues/global-issue-create', () => ({
     open: boolean;
     onOpenChange: (open: boolean) => void;
     seed: {
-      parentIssueId?: string;
       projectId?: string;
-      projectRole?: string;
-      type?: string;
     } | null;
   }) =>
     open ? (
@@ -67,10 +64,7 @@ vi.mock('@/features/issues/global-issue-create', () => ({
         role="dialog"
         aria-label="이슈 만들기 모달"
         data-current-team-key={currentTeamKey ?? ''}
-        data-parent-issue-id={seed?.parentIssueId ?? ''}
         data-project-id={seed?.projectId ?? ''}
-        data-project-role={seed?.projectRole ?? ''}
-        data-type={seed?.type ?? ''}
       >
         <button type="button" onClick={() => onOpenChange(false)}>
           모달 닫기
@@ -141,42 +135,18 @@ const labels = {
     uploading: '업로드 중',
   },
   issueCreate: {
-    assigneeLabel: '담당자',
-    assigneePlaceholder: '담당자 선택',
     cancel: '취소',
     close: '이슈 만들기 닫기',
     description: '설명',
-    discardChanges: '버리기',
-    discardDescription: '버리기 설명',
-    discardTitle: '버릴까요?',
     errorDescription: '오류 설명',
     errorTitle: '오류',
-    featureStatuses: {
-      CANCELED: '취소',
-      DONE: '완료',
-      IN_PROGRESS: '진행 중',
-      PAUSED: '일시 중지',
-      REVIEW: '검토',
-      TODO: '할 일',
-      UNSORTED: '분류 안 됨',
-    },
-    featureType: '이슈',
-    initialRoleSelected: '선택됨',
     initialRolesDescription: '선택하지 않아도 됩니다.',
     initialRolesLabel: '처음 작업할 팀 (선택)',
     labelsLabel: '라벨',
-    labelsUnavailable: '라벨 오류',
-    keepEditing: '계속 작성',
-    mobileDescription: '데스크톱에서 만들어 주세요.',
-    mobileTitle: '데스크톱 전용',
     noLabels: '라벨 없음',
-    noParent: '상위 이슈 없음',
-    noProject: '프로젝트 없음',
     optionsErrorDescription: '항목 오류 설명',
     optionsErrorTitle: '항목 오류',
     optionsLoading: '불러오는 중',
-    parentLabel: '상위 이슈',
-    parentPlaceholder: '상위 이슈 선택',
     priorities: {
       HIGH: '높음',
       LOW: '낮음',
@@ -188,38 +158,17 @@ const labels = {
     projectLabel: '프로젝트',
     projectPlaceholder: '프로젝트 선택',
     projectRequired: '프로젝트 필요',
-    projectRoleLabel: '프로젝트 역할',
-    projectRolePlaceholder: '역할 선택',
-    projectRoleRequired: '역할 필요',
     projectRoles: {
       APP_FRONTEND: '앱 프론트',
       BACKEND: '백엔드',
       WEB_FRONTEND: '웹 프론트',
     },
-    retry: '다시 시도',
-    shortcutHint: '단축키',
-    stateLabel: '상태',
-    statePlaceholder: '상태 선택',
-    stateRequired: '상태 필요',
     submit: '이슈 만들기',
     submitting: '만드는 중',
-    teamLabel: '팀',
-    teamLockedByRole: '역할의 담당 팀으로 고정됩니다.',
-    teamPlaceholder: '팀 선택',
-    teamRequired: '팀 필요',
-    teamTaskClose: '팀 작업 만들기 닫기',
-    teamTaskDescription: '팀 작업 설명',
-    teamTaskSubmit: '팀 작업 만들기',
-    teamTaskSubmitting: '팀 작업 만드는 중',
-    teamTaskTitle: '팀 작업 만들기',
-    teamTaskType: '팀 작업',
     title: '이슈 만들기',
     titleLabel: '제목',
     titlePlaceholder: '제목 입력',
     titleRequired: '제목 필요',
-    titleTooLong: '제목이 너무 김',
-    typeLabel: '이슈 유형',
-    unassigned: '담당자 없음',
   },
   search: {
     close: '검색 닫기',
@@ -229,8 +178,8 @@ const labels = {
     errorDescription: '검색 오류 설명',
     errorTitle: '검색 오류',
     exactMatch: 'ID 일치',
-    feature: '이슈',
-    featureStatuses: {
+    issue: '이슈',
+    issueStatuses: {
       CANCELED: '취소',
       DONE: '완료',
       IN_PROGRESS: '진행 중',
@@ -265,7 +214,7 @@ const labels = {
       STARTED: '진행 중',
       UNSTARTED: '할 일',
     },
-    teamTask: '팀 작업',
+    teamWork: '팀 작업',
     title: '검색',
   },
   skipToContent: '본문으로 건너뛰기',
@@ -462,12 +411,12 @@ describe('AppShell', () => {
     expect(window.location.search).toBe('?tab=backlog');
   });
 
-  it('프로젝트 하위 작업 create 요청을 seed로 전달하고 전용 query만 소비한다', async () => {
+  it('프로젝트 create 요청은 프로젝트만 seed로 전달하고 전용 query만 소비한다', async () => {
     pathname = '/projects/project-1';
     window.history.replaceState(
       {},
       '',
-      '/ko/projects/project-1?create=1&type=TEAM_TASK&projectId=project-1&projectRole=BACKEND&parentIssueId=feature-1&role=WEB_FRONTEND#tree',
+      '/ko/projects/project-1?create=1&projectId=project-1&view=active#tree',
     );
 
     render(
@@ -477,12 +426,9 @@ describe('AppShell', () => {
     );
 
     const dialog = await screen.findByRole('dialog', { name: '이슈 만들기 모달' });
-    expect(dialog).toHaveAttribute('data-type', 'TEAM_TASK');
     expect(dialog).toHaveAttribute('data-project-id', 'project-1');
-    expect(dialog).toHaveAttribute('data-project-role', 'BACKEND');
-    expect(dialog).toHaveAttribute('data-parent-issue-id', 'feature-1');
     expect(window.location.pathname).toBe('/ko/projects/project-1');
-    expect(window.location.search).toBe('?role=WEB_FRONTEND');
+    expect(window.location.search).toBe('?view=active');
     expect(window.location.hash).toBe('#tree');
   });
 

@@ -29,6 +29,7 @@ const NOTIFICATION_SELECT = {
   id: true,
   issue: { select: { id: true, identifier: true, title: true } },
   readAt: true,
+  teamWork: { select: { id: true, identifier: true } },
   type: true,
 } satisfies Prisma.NotificationSelect;
 
@@ -117,6 +118,7 @@ function toResponse(notification: NotificationRow): NotificationResponseDto {
     id: notification.id,
     issue: notification.issue,
     readAt: notification.readAt?.toISOString() ?? null,
+    teamWork: notification.teamWork,
     type: notification.type,
   };
 }

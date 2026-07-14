@@ -5,7 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
-import { MembershipRole, MembershipStatus, StateCategory } from '@rivet/database';
+import { MembershipRole, MembershipStatus, ProjectRole, StateCategory } from '@rivet/database';
 
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
@@ -191,7 +191,9 @@ describe('M2 team and workflow management', () => {
       await database.client.issueLabel.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
       });
+      await database.client.teamWork.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.issue.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+      await database.client.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.workflowState.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
       });
@@ -352,14 +354,29 @@ describe('M2 team and workflow management', () => {
     const replacementState = reordered.body.items.find(
       (state: { name: string }) => state.name === '대기',
     ) as { id: string; name: string; version: number };
+    const project = await database.client.project.create({
+      data: { name: '조직 안전장치 프로젝트', workspaceId },
+    });
     const issue = await database.client.issue.create({
+      data: {
+        createdByMembershipId: adminMembershipId,
+        identifier: 'F-9001',
+        projectId: project.id,
+        sequenceNumber: 1,
+        title: '조직 안전장치 검증',
+        workspaceId,
+      },
+      select: { id: true },
+    });
+    const teamWork = await database.client.teamWork.create({
       data: {
         assigneeMembershipId: memberMembershipId,
         createdByMembershipId: adminMembershipId,
         identifier: 'MGT-1',
+        issueId: issue.id,
+        projectRole: ProjectRole.BACKEND,
         sequenceNumber: 1,
         teamId,
-        title: '조직 안전장치 검증',
         workflowStateId: deletableState.id,
         workspaceId,
       },
@@ -375,7 +392,11 @@ describe('M2 team and workflow management', () => {
       .expect(409);
     expect(blockedStateDelete.body).toMatchObject({
       code: 'WORKFLOW_STATE_IN_USE',
-      details: { issues: [expect.objectContaining({ id: issue.id, identifier: 'MGT-1' })] },
+      details: {
+        issues: [
+          expect.objectContaining({ id: teamWork.id, identifier: 'MGT-1', issueId: issue.id }),
+        ],
+      },
     });
 
     await request(app.getHttpServer())
@@ -386,19 +407,19 @@ describe('M2 team and workflow management', () => {
       .set('X-CSRF-Token', adminCsrfToken)
       .expect(204);
     await expect(
-      database.client.issue.findUniqueOrThrow({
+      database.client.teamWork.findUniqueOrThrow({
         select: { version: true, workflowStateId: true },
-        where: { id: issue.id },
+        where: { id: teamWork.id },
       }),
     ).resolves.toEqual({ version: 2, workflowStateId: replacementState.id });
     await expect(
       database.client.activityEvent.findFirstOrThrow({
         select: { actorMembershipId: true, eventType: true, fieldName: true },
-        where: { issueId: issue.id },
+        where: { issueId: issue.id, teamWorkId: teamWork.id },
       }),
     ).resolves.toEqual({
       actorMembershipId: adminMembershipId,
-      eventType: 'ISSUE_UPDATED',
+      eventType: 'TEAM_WORK_CHANGED',
       fieldName: 'workflowStateId',
     });
 
@@ -419,7 +440,9 @@ describe('M2 team and workflow management', () => {
       .expect(409);
     expect(blockedArchive.body.code).toBe('TEAM_HAS_OPEN_ISSUES');
 
+    await database.client.teamWork.deleteMany({ where: { issueId: issue.id } });
     await database.client.issue.delete({ where: { id: issue.id } });
+    await database.client.project.delete({ where: { id: project.id } });
     const compactedWorkflow = await request(app.getHttpServer())
       .get(`/api/v1/teams/${teamId}/workflow-states`)
       .set('Cookie', memberCookie)

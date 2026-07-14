@@ -11,7 +11,8 @@ const validPayload = {
   issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
   handoffId: 'de9d55e4-6181-4a8a-8fdf-f8faf536dc99',
   kind: 'INITIAL',
-  downstreamIssueIds: ['c7223ce5-74b3-4495-ae66-a3d269017f6a'],
+  sourceTeamWorkId: 'c7223ce5-74b3-4495-ae66-a3d269017f6a',
+  targetTeamWorkIds: ['553a6d42-4336-4a19-a9e4-f708f5f16468'],
   candidateRecipientMembershipIds: ['607629d0-53e6-469d-bbc8-eb86c50a0288'],
 };
 
@@ -40,7 +41,7 @@ test('rejects non-v4 IDs, duplicate IDs, invalid kinds, and extra fields', () =>
     { ...validPayload, handoffId: 'invalid' },
     {
       ...validPayload,
-      downstreamIssueIds: [validPayload.issueId, validPayload.issueId],
+      targetTeamWorkIds: [validPayload.issueId, validPayload.issueId],
     },
     {
       ...validPayload,

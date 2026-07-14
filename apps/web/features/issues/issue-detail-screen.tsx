@@ -1,67 +1,36 @@
 'use client';
 
-import { useQueryClient } from '@tanstack/react-query';
-import {
-  Check,
-  CircleDot,
-  FileQuestion,
-  FolderKanban,
-  GitBranch,
-  MoreHorizontal,
-  RotateCcw,
-  Send,
-  Trash2,
-  UserRound,
-} from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Check, CircleAlert, Play, Save, UserRound } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { type ComponentRef, type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   ApiError,
-  type CreateIssueResponseDto,
-  getIssueCollaborationControllerTimelineQueryKey,
   getIssuesControllerGetQueryKey,
-  getIssuesControllerListQueryKey,
-  getProjectsControllerGetQueryKey,
-  getProjectsControllerListQueryKey,
-  getSearchControllerIssuesQueryKey,
-  getTrashControllerListQueryKey,
+  getTeamWorksControllerGetQueryKey,
   type IssueDetailResponseDto,
-  type IssueHandoffFlowResponseDto,
-  type IssueLabelSummaryResponseDto,
-  type IssueSummaryResponseDto,
-  type IssueWorkflowRelationResponseDto,
-  type IssueWorkflowStateSummaryResponseDto,
-  type UpdateIssueResponseDto,
+  type IssueMemberSummaryResponseDto,
+  type TeamWorkDetailResponseDto,
+  teamWorksControllerUpdate,
+  type TeamWorkSummaryResponseDto,
   useAuthControllerGetSession,
   useIssueCollaborationControllerCreateHandoff,
   useIssuesControllerGet,
-  useIssuesControllerList,
   useIssuesControllerStart,
-  useIssuesControllerTrash,
-  useLabelsControllerList,
+  useIssuesControllerUpdate,
   useMembersControllerList,
   useProjectsControllerGet,
   useTeamsControllerListWorkflowStates,
+  useTeamWorksControllerGet,
 } from '@rivet/api-client';
 
-import { ContentEmpty } from '@/components/states/content-empty';
 import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -71,2350 +40,1209 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { UserAvatar } from '@/components/user-avatar';
-import { MarkdownEditor, type MentionOption } from '@/features/collaboration/markdown-editor';
-import { Link, usePathname, useRouter } from '@/i18n/navigation';
-import { cn } from '@/lib/utils';
-
 import {
-  FEATURE_ISSUE_PRIORITIES as PRIORITIES,
-} from './feature-issue-list-state';
+  HandoffEditor,
+  IssueDescriptionEditor,
+  WorkNoteEditor,
+} from '@/features/collaboration/markdown-editor';
+import { MarkdownRenderer } from '@/features/collaboration/markdown-renderer';
+import { Link, usePathname, useRouter } from '@/i18n/navigation';
+
 import { IssueAttachments } from './issue-attachments';
 import {
-  ISSUE_PRIORITY_PRESENTATION,
-  WORKFLOW_STATE_PRESENTATION,
+  CompactAssigneeTrigger,
+  IssueStatusDisplay,
+  PriorityDisplay,
+  StatusTrigger,
+  TeamWorkStatusDisplay,
 } from './issue-attribute-presentation';
 import { markdownEditorLabels } from './issue-collaboration-labels';
-import { IssueDescription } from './issue-description';
-import { IssueFilterMenu } from './issue-filter-menu';
-import { IssueHandoffCard } from './issue-handoff-card';
-import { HANDOFF_TEMPLATE, handoffBodyError } from './issue-handoff-validation';
-import { IssueInlineSelect } from './issue-inline-select';
-import { IssueLabelChips } from './issue-label-chips';
-import { useIssueInlineMutation } from './issue-mutations';
-import { IssueRelations } from './issue-relations';
-import { IssueTimeline } from './issue-timeline';
 import {
-  type FeatureIssue,
-  isFeatureIssue,
-  isTeamTaskIssue,
-  type TeamTaskIssue,
-} from './issue-types';
+  FOLLOW_UP_HANDOFF_TEMPLATE,
+  HANDOFF_TEMPLATE,
+  handoffBodyError,
+} from './issue-handoff-validation';
+import { IssueTimeline } from './issue-timeline';
+import { issueWorkHref, matchesRequestedTeamWork } from './issue-work-routing';
 
-const START_ROLES = ['BACKEND', 'WEB_FRONTEND', 'APP_FRONTEND'] as const;
+const ROLE_LABELS = {
+  BACKEND: '백엔드',
+  WEB_FRONTEND: '웹 프론트',
+  APP_FRONTEND: '앱 프론트',
+} as const;
+type ProjectRole = 'BACKEND' | 'WEB_FRONTEND' | 'APP_FRONTEND';
 
-type DetailMutation = ReturnType<typeof useIssueInlineMutation>;
-type DetailTab = 'activity' | 'relations' | 'work';
-type FrontendRole = 'APP_FRONTEND' | 'WEB_FRONTEND';
-
-const DETAIL_TABS: DetailTab[] = ['work', 'relations', 'activity'];
-
-function isDetailTab(value: string | null): value is DetailTab {
-  return value !== null && DETAIL_TABS.includes(value as DetailTab);
-}
-
-function tabForHash(
-  issue: FeatureIssue<IssueDetailResponseDto> | TeamTaskIssue<IssueDetailResponseDto>,
-  hash: string,
-): DetailTab | null {
-  if (hash.startsWith('#comment-')) return 'work';
-  if (hash.startsWith('#handoff-')) {
-    return issue.type === 'TEAM_TASK' && issue.projectRole !== 'BACKEND' ? 'work' : 'relations';
+function mutationErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && typeof error.body === 'object' && error.body !== null) {
+    const message = (error.body as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
   }
-  if (
-    hash === '#feature-progress-title' ||
-    hash === '#handoff-history' ||
-    hash === '#issue-relations-title' ||
-    hash === '#issue-relations-empty-title' ||
-    hash === '#parent-feature-title'
-  ) {
-    return 'relations';
-  }
-  return null;
+  return '요청을 저장하지 못했습니다. 최신 값을 확인하고 다시 시도해 주세요.';
 }
 
-function uniqueById<T extends { id: string }>(items: T[]): T[] {
-  return [...new Map(items.map((item) => [item.id, item])).values()];
-}
-
-function orderWorkflowTasks(
-  tasks: IssueSummaryResponseDto[],
-  relations: IssueWorkflowRelationResponseDto[],
-): IssueSummaryResponseDto[] {
-  const taskById = new Map(tasks.map((task) => [task.id, task]));
-  const originalPosition = new Map(tasks.map((task, index) => [task.id, index]));
-  const incomingCount = new Map(tasks.map((task) => [task.id, 0]));
-  const downstreamIds = new Map(tasks.map((task) => [task.id, new Set<string>()]));
-
-  for (const relation of relations) {
-    if (!taskById.has(relation.blockingIssueId) || !taskById.has(relation.blockedIssueId)) {
-      continue;
-    }
-    const downstream = downstreamIds.get(relation.blockingIssueId)!;
-    if (downstream.has(relation.blockedIssueId)) continue;
-    downstream.add(relation.blockedIssueId);
-    incomingCount.set(
-      relation.blockedIssueId,
-      (incomingCount.get(relation.blockedIssueId) ?? 0) + 1,
-    );
-  }
-
-  const ready = tasks.filter((task) => incomingCount.get(task.id) === 0);
-  const ordered: IssueSummaryResponseDto[] = [];
-  while (ready.length > 0) {
-    ready.sort(
-      (left, right) => (originalPosition.get(left.id) ?? 0) - (originalPosition.get(right.id) ?? 0),
-    );
-    const task = ready.shift()!;
-    ordered.push(task);
-    for (const downstreamId of downstreamIds.get(task.id) ?? []) {
-      const nextCount = (incomingCount.get(downstreamId) ?? 1) - 1;
-      incomingCount.set(downstreamId, nextCount);
-      if (nextCount === 0) ready.push(taskById.get(downstreamId)!);
-    }
-  }
-
-  return ordered.length === tasks.length ? ordered : tasks;
-}
-
-function affectedHandoffIssues(error: unknown): Array<{ identifier: string; title: string }> {
-  if (!(error instanceof ApiError) || !error.body || typeof error.body !== 'object') return [];
-  const details = (error.body as Record<string, unknown>).details;
-  if (!details || typeof details !== 'object') return [];
-  const issues = (details as Record<string, unknown>).issues;
-  if (!Array.isArray(issues)) return [];
-
-  return issues.flatMap((value) => {
-    if (!value || typeof value !== 'object') return [];
-    const { identifier, title } = value as Record<string, unknown>;
-    return typeof identifier === 'string' && typeof title === 'string'
-      ? [{ identifier, title }]
-      : [];
-  });
-}
-
-function PropertyRow({ children, label }: { children: React.ReactNode; label: string }) {
-  return (
-    <div className="grid min-h-11 grid-cols-[6rem_minmax(0,1fr)] items-center gap-3">
-      <dt className="text-muted-foreground text-sm">{label}</dt>
-      <dd className="min-w-0">{children}</dd>
-    </div>
-  );
-}
-
-function isPropertyMutation(mutation: DetailMutation): boolean {
-  const change = mutation.variables?.change;
-  if (!change || (change.kind === 'workflowState' && change.handoff)) return false;
-  return ['assignee', 'featureStatus', 'labels', 'priority', 'workflowState'].includes(change.kind);
-}
-
-function PropertyMutationError({ mutation }: { mutation: DetailMutation }) {
-  const t = useTranslations('IssueDetail');
-  if (!mutation.isError || mutation.conflict || !isPropertyMutation(mutation)) return null;
-  const errorCode = mutation.error instanceof ApiError ? mutation.error.body.code : null;
-
-  return (
-    <Alert variant="destructive" className="mt-3">
-      <AlertTitle>
-        {errorCode === 'ISSUE_PROJECT_IMMUTABLE'
-          ? t('projectImmutableErrorTitle')
-          : t('saveErrorTitle')}
-      </AlertTitle>
-      <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-        <span>
-          {errorCode === 'ISSUE_PROJECT_IMMUTABLE'
-            ? t('projectImmutableErrorDescription')
-            : t('saveErrorDescription')}
-        </span>
-        {errorCode === 'ISSUE_PROJECT_IMMUTABLE' && mutation.latestRecoveryFailed ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="min-h-11 lg:min-h-9"
-            onClick={() => void mutation.refreshLatest()}
-          >
-            {t('refreshLatest')}
-          </Button>
-        ) : errorCode !== 'ISSUE_PROJECT_IMMUTABLE' ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="min-h-11 lg:min-h-9"
-            onClick={mutation.retry}
-          >
-            {t('retry')}
-          </Button>
-        ) : null}
-      </AlertDescription>
-    </Alert>
-  );
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'Asia/Seoul',
-  }).format(new Date(value));
-}
-
-export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
-  const t = useTranslations('IssueDetail');
-  const issue = useIssuesControllerGet(issueRef, { query: { retry: false } });
-
-  if (issue.isPending) return <ContentLoading label={t('loading')} />;
-
-  if (issue.isError) {
-    if (issue.error instanceof ApiError && issue.error.status === 404) {
-      return (
-        <ContentEmpty
-          icon={FileQuestion}
-          headingLevel={1}
-          title={t('notFoundTitle')}
-          description={t('notFoundDescription')}
-        >
-          <Link href="/my-issues" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            {t('backToMyIssues')}
-          </Link>
-        </ContentEmpty>
-      );
-    }
-
-    return (
-      <ContentError
-        headingLevel={1}
-        title={t('errorTitle')}
-        description={t('errorDescription')}
-        retryLabel={t('retry')}
-        onRetry={() => void issue.refetch()}
-      />
-    );
-  }
-
-  if (!isTeamTaskIssue(issue.data) && !isFeatureIssue(issue.data)) {
-    return (
-      <ContentError
-        headingLevel={1}
-        title={t('invalidContractTitle')}
-        description={t('invalidContractDescription')}
-        retryLabel={t('retry')}
-        onRetry={() => void issue.refetch()}
-      />
-    );
-  }
-
-  return (
-    <IssueDetailContent issue={issue.data} onReload={async () => (await issue.refetch()).data} />
-  );
-}
-
-function IssueDetailContent({
-  issue,
-  onReload,
-}: {
-  issue: FeatureIssue<IssueDetailResponseDto> | TeamTaskIssue<IssueDetailResponseDto>;
-  onReload: () => Promise<IssueDetailResponseDto | undefined>;
-}) {
-  const t = useTranslations('IssueDetail');
+function useTeamWorkCellMutation(
+  issue: IssueDetailResponseDto,
+  work: TeamWorkSummaryResponseDto,
+  field: 'assignee' | 'workNoteMarkdown' | 'workflowState',
+) {
   const queryClient = useQueryClient();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const search = searchParams.toString();
-  const requestedTab = searchParams.get('tab');
-  const [locationHash, setLocationHash] = useState('');
-  const [optimisticTab, setOptimisticTab] = useState<{
-    sourceSearch: string;
-    value: DetailTab;
-  } | null>(null);
-  const hashTab = tabForHash(issue, locationHash);
-  const activeTab =
-    hashTab ??
-    (optimisticTab?.sourceSearch === search
-      ? optimisticTab.value
-      : isDetailTab(requestedTab)
-        ? requestedTab
-        : 'work');
-  const collaborationMembers = useMembersControllerList(
-    { limit: 100, status: 'ACTIVE' },
-    { query: { retry: false } },
-  );
-  const session = useAuthControllerGetSession({ query: { retry: false } });
-  const mutation = useIssueInlineMutation();
-  const trash = useIssuesControllerTrash();
-  const labels = useLabelsControllerList(
-    { includeArchived: true, limit: 100 },
-    { query: { retry: false } },
-  );
-  const [titleDraft, setTitleDraft] = useState<{ submitted: boolean; value: string } | null>(null);
-  const [trashOpen, setTrashOpen] = useState(false);
-  const [trashError, setTrashError] = useState<
-    'BLOCKS_OTHERS' | 'CONFLICT' | 'ERROR' | 'HAS_CHILDREN' | null
-  >(null);
-  const showSubmittedTitle =
-    titleDraft?.submitted === true &&
-    mutation.variables?.change.kind === 'title' &&
-    (mutation.isPending || mutation.isError);
-  const titleValue =
-    titleDraft && (!titleDraft.submitted || showSubmittedTitle) ? titleDraft.value : issue.title;
-  const trimmedTitle = titleValue.trim();
-  const titleError =
-    trimmedTitle.length === 0
-      ? t('titleRequired')
-      : trimmedTitle.length > 500
-        ? t('titleTooLong')
-        : null;
-  const labelItems = uniqueById([...issue.labels, ...(labels.data?.items ?? [])]);
-  const mentionOptions = (collaborationMembers.data?.items ?? []).map((member) => ({
-    displayName: member.user.displayName,
-    membershipId: member.id,
-  }));
-  const currentMembershipId = session.data?.authenticated
-    ? (session.data.membership?.id ?? null)
-    : null;
-  const mutationErrorCode = mutation.error instanceof ApiError ? mutation.error.body.code : null;
-  const isHandoffMutation =
-    mutation.variables?.change.kind === 'workflowState' &&
-    Boolean(mutation.variables.change.handoff);
-
-  const tabHref = useCallback(
-    (tab: DetailTab, anchor?: string): string => {
-      const next = new URLSearchParams(search);
-      next.set('tab', tab);
-      const query = next.toString();
-      return `${pathname}${query ? `?${query}` : ''}${anchor ? `#${anchor}` : ''}`;
+  return useMutation({
+    mutationFn: async (change: {
+      assignee?: IssueMemberSummaryResponseDto | null;
+      assigneeMembershipId?: string | null;
+      handoff?: { bodyMarkdown: string; destinationRoles?: Array<'APP_FRONTEND' | 'WEB_FRONTEND'> };
+      workNoteMarkdown?: string | null;
+      workflowState?: {
+        id: string;
+        name: string;
+        category: TeamWorkSummaryResponseDto['stateCategory'];
+        position: number;
+        isDefault: boolean;
+        version: number;
+      };
+    }) =>
+      teamWorksControllerUpdate(work.id, {
+        version: work.version,
+        ...(change.assigneeMembershipId !== undefined
+          ? { assigneeMembershipId: change.assigneeMembershipId }
+          : {}),
+        ...(change.workNoteMarkdown !== undefined
+          ? { workNoteMarkdown: change.workNoteMarkdown }
+          : {}),
+        ...(change.workflowState ? { workflowStateId: change.workflowState.id } : {}),
+        ...(change.handoff ? { handoff: change.handoff } : {}),
+      }),
+    onMutate: async (change) => {
+      const issueKeys = [
+        getIssuesControllerGetQueryKey(issue.id),
+        getIssuesControllerGetQueryKey(issue.identifier),
+      ];
+      const detailKeys = [
+        getTeamWorksControllerGetQueryKey(work.id),
+        getTeamWorksControllerGetQueryKey(work.identifier),
+      ];
+      await Promise.all(
+        [...issueKeys, ...detailKeys].map((queryKey) => queryClient.cancelQueries({ queryKey })),
+      );
+      const previousIssues = issueKeys.map((queryKey) =>
+        queryClient.getQueryData<IssueDetailResponseDto>(queryKey),
+      );
+      const previousDetails = detailKeys.map((queryKey) =>
+        queryClient.getQueryData<TeamWorkDetailResponseDto>(queryKey),
+      );
+      const patch = {
+        ...(change.assignee !== undefined ? { assignee: change.assignee } : {}),
+        ...(change.workNoteMarkdown !== undefined
+          ? { workNoteMarkdown: change.workNoteMarkdown }
+          : {}),
+        ...(change.workflowState
+          ? { stateCategory: change.workflowState.category, workflowState: change.workflowState }
+          : {}),
+      };
+      issueKeys.forEach((queryKey) =>
+        queryClient.setQueryData<IssueDetailResponseDto>(queryKey, (current) =>
+          current
+            ? {
+                ...current,
+                teamWorks: current.teamWorks.map((item) =>
+                  item.id === work.id ? { ...item, ...patch } : item,
+                ),
+              }
+            : current,
+        ),
+      );
+      detailKeys.forEach((queryKey) =>
+        queryClient.setQueryData<TeamWorkDetailResponseDto>(queryKey, (current) =>
+          current ? { ...current, ...patch } : current,
+        ),
+      );
+      return { detailKeys, issueKeys, previousDetails, previousIssues };
     },
-    [pathname, search],
-  );
-
-  useEffect(() => {
-    const syncHash = () => setLocationHash(window.location.hash);
-    const syncClickedHash = (event: MouseEvent) => {
-      if (!(event.target instanceof Element)) return;
-      const link = event.target.closest<HTMLAnchorElement>('a[href*="#"]');
-      if (!link) return;
-
-      const url = new URL(link.href, window.location.href);
-      if (url.origin === window.location.origin && url.pathname === window.location.pathname) {
-        setLocationHash(url.hash);
-      }
-    };
-
-    syncHash();
-    window.addEventListener('hashchange', syncHash);
-    window.addEventListener('popstate', syncHash);
-    document.addEventListener('click', syncClickedHash);
-    return () => {
-      window.removeEventListener('hashchange', syncHash);
-      window.removeEventListener('popstate', syncHash);
-      document.removeEventListener('click', syncClickedHash);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (hashTab) {
-      if (requestedTab !== hashTab) {
-        router.replace(tabHref(hashTab, locationHash.slice(1)), { scroll: false });
-      }
-      return;
-    }
-
-    if (isDetailTab(requestedTab)) {
-      return;
-    }
-
-    if (requestedTab !== null) {
-      router.replace(tabHref('work'), { scroll: false });
-    }
-  }, [hashTab, locationHash, requestedTab, router, tabHref]);
-
-  useEffect(() => {
-    if (!locationHash) return;
-    const frame = requestAnimationFrame(() => {
-      const target = document.getElementById(locationHash.slice(1));
-      if (target && !target.closest('[hidden]')) {
-        target.querySelector('details')?.setAttribute('open', '');
-        target.scrollIntoView?.({ block: 'center' });
-      }
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [activeTab, issue.id, locationHash]);
-
-  useEffect(() => {
-    if (!optimisticTab || optimisticTab.sourceSearch === search) return;
-    const frame = requestAnimationFrame(() => setOptimisticTab(null));
-    return () => cancelAnimationFrame(frame);
-  }, [optimisticTab, search]);
-
-  function changeTab(value: string): void {
-    if (!isDetailTab(value)) return;
-    setOptimisticTab({ sourceSearch: search, value });
-    setLocationHash('');
-    router.replace(tabHref(value), { scroll: false });
-  }
-
-  function submitTitle(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (titleError || trimmedTitle === issue.title || mutation.isPending) return;
-
-    setTitleDraft({ submitted: true, value: trimmedTitle });
-    mutation.mutate(
-      { change: { kind: 'title', value: trimmedTitle }, issue },
-      { onSuccess: () => setTitleDraft(null) },
-    );
-  }
-
-  async function finishTrash(): Promise<void> {
-    const invalidations = [
-      queryClient.invalidateQueries({ queryKey: getIssuesControllerListQueryKey() }),
-      queryClient.invalidateQueries({ queryKey: getProjectsControllerListQueryKey() }),
-      queryClient.invalidateQueries({ queryKey: getSearchControllerIssuesQueryKey() }),
-      queryClient.invalidateQueries({ queryKey: getTrashControllerListQueryKey() }),
-    ];
-    if (issue.project?.id) {
-      invalidations.push(
-        queryClient.invalidateQueries({
-          queryKey: getProjectsControllerGetQueryKey(issue.project.id),
-        }),
+    onError: (_error, _change, context) => {
+      context?.issueKeys.forEach((queryKey, index) =>
+        queryClient.setQueryData(queryKey, context.previousIssues[index]),
       );
-    }
-    await Promise.allSettled(invalidations);
-    queryClient.removeQueries({ queryKey: getIssuesControllerGetQueryKey(issue.id) });
-    queryClient.removeQueries({ queryKey: getIssuesControllerGetQueryKey(issue.identifier) });
-    router.push('/my-issues');
-  }
-
-  function moveToTrash(): void {
-    trash.mutate(
-      { data: { version: issue.version }, issueId: issue.id },
-      {
-        onError: (error) => {
-          const code = error.body.code;
-          setTrashOpen(false);
-          setTrashError(
-            code === 'VERSION_CONFLICT'
-              ? 'CONFLICT'
-              : code === 'ISSUE_HAS_CHILDREN'
-                ? 'HAS_CHILDREN'
-                : code === 'ISSUE_BLOCKS_OTHERS'
-                  ? 'BLOCKS_OTHERS'
-                  : 'ERROR',
-          );
-          if (code === 'VERSION_CONFLICT') void onReload();
-        },
-        onSuccess: finishTrash,
-      },
-    );
-  }
-
-  function latestValue(source: IssueDetailResponseDto | null): string {
-    const change = mutation.conflict?.attemptedChange;
-    if (!source || !change) return t('conflict.unknown');
-
-    switch (change.kind) {
-      case 'title':
-        return source.title;
-      case 'description':
-        return source.descriptionMarkdown ?? t('description.emptyValue');
-      case 'workflowState':
-        return source.status.workflowState?.name ?? t('conflict.unknown');
-      case 'featureStatus':
-        return source.status.featureStatus
-          ? t(`featureStatuses.${source.status.featureStatus}`)
-          : t('conflict.unknown');
-      case 'assignee':
-        return source.assignee?.user.displayName ?? t('unassigned');
-      case 'priority':
-        return t(`priorities.${source.priority}`);
-      case 'labels':
-        return source.labels.map((label) => label.name).join(', ') || t('noLabels');
-    }
-  }
-
-  function attemptedValue(): string {
-    const change = mutation.conflict?.attemptedChange;
-    if (!change) return t('conflict.unknown');
-
-    switch (change.kind) {
-      case 'title':
-        return change.value;
-      case 'description':
-        return change.value ?? t('description.emptyValue');
-      case 'workflowState':
-        return change.value.name;
-      case 'featureStatus':
-        return t(`featureStatuses.${change.value}`);
-      case 'assignee':
-        return change.value?.user.displayName ?? t('unassigned');
-      case 'priority':
-        return t(`priorities.${change.value}`);
-      case 'labels':
-        return change.value.map((label) => label.name).join(', ') || t('noLabels');
-    }
-  }
-
-  return (
-    <article aria-busy={mutation.isPending} className="mx-auto w-full max-w-6xl overflow-x-hidden">
-      <header className="border-b pb-5">
-        <h1 className="sr-only">
-          {issue.identifier}: {issue.title}
-        </h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted-foreground text-sm font-medium tracking-wide">
-            {issue.identifier}
-          </span>
-          {issue.type === 'TEAM_TASK' ? <Badge variant="secondary">{t('teamTask')}</Badge> : null}
-          {mutation.isPending ? (
-            <span
-              role="status"
-              className="text-muted-foreground inline-flex items-center gap-1.5 text-xs"
-            >
-              <Spinner className="size-3.5" />
-              {t('saving')}
-            </span>
-          ) : null}
-          <Button
-            type="button"
-            size="sm"
-            variant="destructive"
-            className="ml-auto min-h-11 lg:min-h-8"
-            disabled={mutation.isPending || trash.isPending}
-            onClick={() => {
-              trash.reset();
-              setTrashError(null);
-              setTrashOpen(true);
-            }}
-          >
-            <Trash2 aria-hidden="true" data-icon="inline-start" />
-            {t('trash.action')}
-          </Button>
-        </div>
-
-        {issue.type === 'TEAM_TASK' && issue.parentIssue ? (
-          <nav aria-label={t('parentFeature')} className="mt-3">
-            <Link
-              href={`/issues/${encodeURIComponent(issue.parentIssue.identifier)}?tab=relations`}
-              className="text-muted-foreground hover:text-foreground inline-flex max-w-full items-center gap-1.5 truncate text-sm underline-offset-4 hover:underline"
-            >
-              <GitBranch aria-hidden="true" className="size-3.5 shrink-0" />
-              <span className="truncate">
-                {issue.parentIssue.identifier} · {issue.parentIssue.title}
-              </span>
-            </Link>
-          </nav>
-        ) : null}
-
-        <form className="mt-2 flex max-w-4xl items-start gap-2" onSubmit={submitTitle} noValidate>
-          <div className="min-w-0 flex-1">
-            <label htmlFor="issue-detail-title" className="sr-only">
-              {t('titleLabel')}
-            </label>
-            <Input
-              id="issue-detail-title"
-              className="h-auto border-transparent px-0 py-1 text-xl leading-8 font-semibold shadow-none focus-visible:border-transparent focus-visible:ring-0 sm:text-2xl"
-              aria-invalid={Boolean(titleError)}
-              aria-errormessage={titleError ? 'issue-detail-title-error' : undefined}
-              autoComplete="off"
-              disabled={mutation.isPending}
-              maxLength={500}
-              value={titleValue}
-              onChange={(event) => setTitleDraft({ submitted: false, value: event.target.value })}
-            />
-            {titleError ? (
-              <p id="issue-detail-title-error" className="text-destructive mt-1 text-sm">
-                {titleError}
-              </p>
-            ) : null}
-          </div>
-          <Button
-            type="submit"
-            size="sm"
-            variant="outline"
-            disabled={Boolean(titleError) || trimmedTitle === issue.title || mutation.isPending}
-          >
-            {t('saveTitle')}
-          </Button>
-        </form>
-      </header>
-
-      {trashError ? (
-        <Alert variant="destructive" className="mt-5">
-          <AlertTitle>
-            {trashError === 'CONFLICT'
-              ? t('trash.conflictTitle')
-              : trashError === 'HAS_CHILDREN'
-                ? t('trash.childrenTitle')
-                : trashError === 'BLOCKS_OTHERS'
-                  ? t('trash.blocksTitle')
-                  : t('trash.errorTitle')}
-          </AlertTitle>
-          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-            <span>
-              {trashError === 'CONFLICT'
-                ? t('trash.conflictDescription')
-                : trashError === 'HAS_CHILDREN'
-                  ? t('trash.childrenDescription')
-                  : trashError === 'BLOCKS_OTHERS'
-                    ? t('trash.blocksDescription')
-                    : t('trash.errorDescription')}
-            </span>
-            {trashError === 'HAS_CHILDREN' || trashError === 'BLOCKS_OTHERS' ? (
-              <a
-                href={
-                  trashError === 'HAS_CHILDREN'
-                    ? tabHref('relations', 'feature-progress-title')
-                    : tabHref('relations', 'issue-relations-title')
-                }
-                className={buttonVariants({ size: 'sm', variant: 'outline' })}
-              >
-                {trashError === 'HAS_CHILDREN' ? t('trash.openChildren') : t('trash.openRelations')}
-              </a>
-            ) : null}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {mutation.conflict ? (
-        <Alert className="mt-5 border-amber-500/40 bg-amber-500/10">
-          <RotateCcw aria-hidden="true" />
-          <AlertTitle>{t('conflict.title')}</AlertTitle>
-          <AlertDescription className="space-y-3">
-            <p>{t('conflict.description')}</p>
-            <dl className="grid gap-2 sm:grid-cols-2">
-              <div>
-                <dt className="font-medium">{t('conflict.latest')}</dt>
-                <dd className="mt-0.5 break-words">{latestValue(mutation.conflict.latest)}</dd>
-              </div>
-              <div>
-                <dt className="font-medium">{t('conflict.mine')}</dt>
-                <dd className="mt-0.5 break-words">{attemptedValue()}</dd>
-              </div>
-            </dl>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={mutation.isPending}
-              onClick={() => void mutation.reapplyConflict()}
-            >
-              {t('conflict.reapply')}
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {mutation.isError &&
-      !mutation.conflict &&
-      !isHandoffMutation &&
-      mutationErrorCode !== 'HANDOFF_REQUIRES_COMPLETION' &&
-      mutation.variables?.change.kind !== 'description' &&
-      !isPropertyMutation(mutation) ? (
-        <Alert variant="destructive" className="mt-5">
-          <AlertTitle>
-            {mutationErrorCode === 'ISSUE_PROJECT_IMMUTABLE'
-              ? t('projectImmutableErrorTitle')
-              : t('saveErrorTitle')}
-          </AlertTitle>
-          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-            <span>
-              {mutationErrorCode === 'ISSUE_PROJECT_IMMUTABLE'
-                ? t('projectImmutableErrorDescription')
-                : t('saveErrorDescription')}
-            </span>
-            {mutationErrorCode === 'ISSUE_PROJECT_IMMUTABLE' && mutation.latestRecoveryFailed ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void mutation.refreshLatest()}
-              >
-                {t('refreshLatest')}
-              </Button>
-            ) : mutationErrorCode !== 'ISSUE_PROJECT_IMMUTABLE' ? (
-              <Button type="button" size="sm" variant="outline" onClick={mutation.retry}>
-                {t('retry')}
-              </Button>
-            ) : null}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {collaborationMembers.isError ? (
-        <Alert variant="destructive" className="mt-5">
-          <AlertTitle>{t('collaborationMembersErrorTitle')}</AlertTitle>
-          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-            <span>{t('collaborationMembersErrorDescription')}</span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => void collaborationMembers.refetch()}
-            >
-              {t('retry')}
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <Tabs value={activeTab} onValueChange={changeTab} className="mt-5 gap-0">
-        <TabsList
-          activateOnFocus
-          aria-label={t('tabs.label')}
-          variant="line"
-          className="grid h-11 w-full grid-cols-3 border-b p-0 sm:flex sm:w-fit"
-        >
-          <TabsTrigger className="min-h-11 px-4 sm:min-h-9" value="work">
-            {t('tabs.work')}
-          </TabsTrigger>
-          <TabsTrigger className="min-h-11 px-4 sm:min-h-9" value="relations">
-            {t('tabs.relations')}
-          </TabsTrigger>
-          <TabsTrigger className="min-h-11 px-4 sm:min-h-9" value="activity">
-            {t('tabs.activity')}
-          </TabsTrigger>
-        </TabsList>
-
-        {issue.type === 'FEATURE' ? (
-          <FeatureIssueBody
-            currentMembershipId={currentMembershipId}
-            issue={issue}
-            labelItems={labelItems}
-            mentionOptions={mentionOptions}
-            mutation={mutation}
-            tabHref={tabHref}
-          />
-        ) : (
-          <TeamTaskIssueBody
-            currentMembershipId={currentMembershipId}
-            issue={issue}
-            labelItems={labelItems}
-            mentionOptions={mentionOptions}
-            mutation={mutation}
-            onReload={onReload}
-            tabHref={tabHref}
-          />
-        )}
-      </Tabs>
-
-      <AlertDialog
-        open={trashOpen}
-        onOpenChange={(open) => {
-          if (!trash.isPending) setTrashOpen(open);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('trash.title')}</AlertDialogTitle>
-            <AlertDialogDescription className="flex flex-col gap-2 text-left">
-              <strong className="text-foreground font-medium">
-                {issue.identifier} · {issue.title}
-              </strong>
-              <span>{t('trash.description')}</span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={trash.isPending}>{t('cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              type="button"
-              variant="destructive"
-              disabled={trash.isPending}
-              onClick={moveToTrash}
-            >
-              {trash.isPending ? (
-                <Spinner aria-hidden="true" data-icon="inline-start" />
-              ) : (
-                <Trash2 aria-hidden="true" data-icon="inline-start" />
-              )}
-              {t('trash.confirm')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-          {trash.isPending ? (
-            <span role="status" className="sr-only">
-              {t('trash.moving')}
-            </span>
-          ) : null}
-        </AlertDialogContent>
-      </AlertDialog>
-    </article>
-  );
+      context?.detailKeys.forEach((queryKey, index) =>
+        queryClient.setQueryData(queryKey, context.previousDetails[index]),
+      );
+    },
+    onSuccess: (result) => {
+      for (const queryKey of [
+        getIssuesControllerGetQueryKey(issue.id),
+        getIssuesControllerGetQueryKey(issue.identifier),
+      ]) {
+        queryClient.setQueryData<IssueDetailResponseDto>(queryKey, (current) =>
+          current
+            ? {
+                ...current,
+                ...result.issue,
+                teamWorks: current.teamWorks.map((item) =>
+                  item.id === work.id ? { ...item, ...result.teamWork } : item,
+                ),
+              }
+            : current,
+        );
+      }
+      queryClient.setQueryData(getTeamWorksControllerGetQueryKey(work.id), result.teamWork);
+      queryClient.setQueryData(getTeamWorksControllerGetQueryKey(work.identifier), result.teamWork);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: getIssuesControllerGetQueryKey(issue.id) });
+      void queryClient.invalidateQueries({
+        queryKey: getIssuesControllerGetQueryKey(issue.identifier),
+      });
+      void queryClient.invalidateQueries({ queryKey: getTeamWorksControllerGetQueryKey(work.id) });
+      void queryClient.invalidateQueries({
+        queryKey: getTeamWorksControllerGetQueryKey(work.identifier),
+      });
+    },
+    mutationKey: ['team-work-cell', work.id, field],
+  });
 }
 
-function IssueLabels({
+function TeamWorkPanel({
+  highlightedHandoffId,
   issue,
-  labelItems,
-  mutation,
+  work,
 }: {
-  issue: FeatureIssue<IssueDetailResponseDto> | TeamTaskIssue<IssueDetailResponseDto>;
-  labelItems: IssueLabelSummaryResponseDto[];
-  mutation: DetailMutation;
-}) {
-  const t = useTranslations('IssueDetail');
-  const selectedIds = issue.labels.map((label) => label.id);
-
-  return (
-    <div className="flex min-w-0 items-center gap-1">
-      <div className="min-w-0 flex-1">
-        <IssueLabelChips emptyLabel={t('noLabels')} labels={issue.labels} showEmpty />
-      </div>
-      {labelItems.length > 0 ? (
-        <IssueFilterMenu
-          ariaLabel={`${t('labels')}: ${issue.labels.map((label) => label.name).join(', ') || t('noLabels')}`}
-          busy={mutation.isPending && mutation.variables?.change.kind === 'labels'}
-          disabled={mutation.isPending}
-          emptyLabel={t('noLabels')}
-          label={t('labels')}
-          onChange={(ids) => {
-            mutation.mutate({
-              change: {
-                kind: 'labels',
-                value: ids.flatMap((id) => {
-                  const label = labelItems.find((item) => item.id === id);
-                  return label ? [label] : [];
-                }),
-              },
-              issue,
-            });
-          }}
-          options={labelItems.map((label) => ({
-            disabled: label.archived && !selectedIds.includes(label.id),
-            id: label.id,
-            label: label.name,
-            ...(label.archived ? { suffix: t('archived') } : {}),
-            swatch: label.color,
-          }))}
-          presentation="popover"
-          selected={selectedIds}
-          triggerClassName="shrink-0 border-transparent bg-transparent px-1.5 [&>span]:sr-only"
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function PriorityEditor({
-  issue,
-  mutation,
-}: {
+  highlightedHandoffId: string | null;
   issue: IssueDetailResponseDto;
-  mutation: DetailMutation;
+  work: TeamWorkSummaryResponseDto;
 }) {
-  const t = useTranslations('IssueDetail');
-  const currentLabel = t(`priorities.${issue.priority}`);
-  return (
-    <IssueInlineSelect
-      appearance="comfortable"
-      ariaLabel={`${t('priority')}: ${currentLabel}`}
-      busy={mutation.isPending && mutation.variables?.change.kind === 'priority'}
-      disabled={mutation.isPending}
-      value={issue.priority}
-      onValueChange={(value) => {
-        if (PRIORITIES.includes(value as (typeof PRIORITIES)[number])) {
-          mutation.mutate({
-            change: { kind: 'priority', value: value as (typeof PRIORITIES)[number] },
-            issue,
-          });
-        }
-      }}
-      options={PRIORITIES.map((priority) => ({
-        ...ISSUE_PRIORITY_PRESENTATION[priority],
-        label: t(`priorities.${priority}`),
-        value: priority,
-      }))}
-      triggerClassName="min-w-36 max-w-full"
-    />
-  );
-}
-
-function WorkflowTaskStep({
-  current,
-  orderLabel,
-  ordered,
-  task,
-}: {
-  current: boolean;
-  orderLabel: string | undefined;
-  ordered: boolean;
-  task: IssueSummaryResponseDto;
-}) {
-  const t = useTranslations('IssueDetail');
-  const role = task.projectRole ? t(`projectRoles.${task.projectRole}`) : t('workflow.teamTask');
-  const state = task.status.workflowState?.name ?? t(`stateCategories.${task.status.category}`);
-  const completed = task.status.category === 'COMPLETED';
-  const stage = current
-    ? t('workflow.current')
-    : completed
-      ? t('workflow.completed')
-      : t('workflow.canceled');
-
-  return (
-    <li className={cn('relative', ordered && 'border-border border-l pl-6')}>
-      {ordered ? (
-        <span
-          aria-hidden="true"
-          className={cn(
-            'border-border bg-background absolute top-3 -left-2 flex size-4 items-center justify-center rounded-full border',
-            current && 'border-primary text-primary',
-            !current && completed && 'border-success/60 text-success',
-            !current && !completed && 'text-muted-foreground',
-          )}
-        >
-          {completed ? <Check className="size-2.5" /> : <CircleDot className="size-2.5" />}
-        </span>
-      ) : null}
-      <div
-        className={cn(
-          'min-w-0 rounded-lg border px-3 py-2',
-          current ? 'bg-surface-1' : 'bg-background',
-        )}
-      >
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Badge variant={current ? 'secondary' : 'outline'}>{stage}</Badge>
-          <span className="text-sm font-medium">{role}</span>
-          <span className="text-muted-foreground text-xs">{state}</span>
-          {orderLabel ? <Badge variant="outline">{orderLabel}</Badge> : null}
-        </div>
-        <Link
-          href={`/issues/${encodeURIComponent(task.identifier)}`}
-          className="mt-1 block min-w-0 truncate text-sm font-medium underline-offset-4 hover:underline"
-        >
-          {task.identifier} · {task.title}
-        </Link>
-        <p className="text-muted-foreground mt-1 text-xs">
-          {task.assignee?.user.displayName ?? t('unassigned')}
-        </p>
-      </div>
-    </li>
-  );
-}
-
-function FeatureIssueBody({
-  currentMembershipId,
-  issue,
-  labelItems,
-  mentionOptions,
-  mutation,
-  tabHref,
-}: {
-  currentMembershipId: string | null;
-  issue: FeatureIssue<IssueDetailResponseDto>;
-  labelItems: IssueLabelSummaryResponseDto[];
-  mentionOptions: MentionOption[];
-  mutation: DetailMutation;
-  tabHref: (tab: DetailTab, anchor?: string) => string;
-}) {
-  const t = useTranslations('IssueDetail');
   const queryClient = useQueryClient();
-  const router = useRouter();
-  const projectId = issue.project?.id ?? null;
-  const children = useIssuesControllerList(
-    { limit: 100, parentIssueId: issue.id, type: 'TEAM_TASK' },
+  const markdown = useTranslations('Markdown');
+  const editorLabels = markdownEditorLabels(
+    (key) => markdown(key as never),
+    (key) => String(markdown.raw(key as never)),
+  );
+  const states = useTeamsControllerListWorkflowStates(work.team.id, { query: { retry: false } });
+  const members = useMembersControllerList(
+    { limit: 100, status: 'ACTIVE', teamId: work.team.id },
     { query: { retry: false } },
   );
-  const project = useProjectsControllerGet(projectId ?? '', {
-    query: { enabled: Boolean(projectId), retry: false },
-  });
-  const start = useIssuesControllerStart();
-  const firstStartRoleRef = useRef<ComponentRef<typeof Checkbox>>(null);
-  const [startOpen, setStartOpen] = useState(false);
-  const [startRoles, setStartRoles] = useState<Array<'APP_FRONTEND' | 'BACKEND' | 'WEB_FRONTEND'>>(
+  const stateMutation = useTeamWorkCellMutation(issue, work, 'workflowState');
+  const assigneeMutation = useTeamWorkCellMutation(issue, work, 'assignee');
+  const noteMutation = useTeamWorkCellMutation(issue, work, 'workNoteMarkdown');
+  const followUpMutation = useIssueCollaborationControllerCreateHandoff();
+  const [workNoteMarkdown, setWorkNoteMarkdown] = useState(work.workNoteMarkdown ?? '');
+  const [editingWorkNote, setEditingWorkNote] = useState(false);
+  const [completionStateId, setCompletionStateId] = useState<string | null>(null);
+  const [handoffBody, setHandoffBody] = useState('');
+  const [destinationRoles, setDestinationRoles] = useState<Array<'APP_FRONTEND' | 'WEB_FRONTEND'>>(
     [],
   );
-  const childItems = children.data?.items ?? [];
-  const workflowRelations = issue.workflowRelations ?? [];
-  const orderedChildItems = orderWorkflowTasks(childItems, workflowRelations);
-  const completedTasks = orderedChildItems.filter(
-    (task) => task.status.category === 'COMPLETED' || task.status.category === 'CANCELED',
-  );
-  const currentTasks = orderedChildItems.filter(
-    (task) => task.status.category !== 'COMPLETED' && task.status.category !== 'CANCELED',
-  );
-  const backendInProgress = currentTasks.some((task) => task.projectRole === 'BACKEND');
-  const hasFrontendTask = childItems.some(
-    (task) => task.projectRole === 'WEB_FRONTEND' || task.projectRole === 'APP_FRONTEND',
-  );
-  const availableStartRoles = (project.data?.roleTeams ?? []).map(({ role }) => role);
-  const startRoleOptions = START_ROLES.filter(
-    (role) => availableStartRoles.includes(role) || startRoles.includes(role),
-  );
-  const handoffFlows = issue.handoffFlows ?? [];
-  const taskById = new Map(childItems.map((task) => [task.id, task]));
-  const orderedTaskIds = new Set(workflowRelations.map(({ blockedIssueId }) => blockedIssueId));
-  const expectedRoles =
-    backendInProgress && !hasFrontendTask && handoffFlows.length === 0
-      ? (project.data?.roleTeams ?? []).map(({ role }) => role).filter((role) => role !== 'BACKEND')
-      : [];
-  const allTasksComplete =
-    Boolean(issue.progress?.total) && issue.progress?.completed === issue.progress?.total;
-  const startErrorMessage =
-    start.isError && start.error instanceof ApiError
-      ? (start.error.body.fieldErrors.initialRoles?.[0] ?? t('workflow.startErrorDescription'))
-      : start.isError
-        ? t('workflow.startErrorDescription')
-        : null;
+  const [handoffGuideOpen, setHandoffGuideOpen] = useState(false);
+  const [followUpBody, setFollowUpBody] = useState('');
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpGuideOpen, setFollowUpGuideOpen] = useState(false);
+  const [followUpSuccess, setFollowUpSuccess] = useState(false);
+  const [savedFollowUpSequence, setSavedFollowUpSequence] = useState<number | null>(null);
+  const project = useProjectsControllerGet(issue.project.id, { query: { retry: false } });
 
-  function taskOrderLabel(task: IssueSummaryResponseDto): string | undefined {
-    const incoming = workflowRelations.filter(({ blockedIssueId }) => blockedIssueId === task.id);
-    const active = incoming.filter(({ resolved }) => !resolved);
-    if (active.length === 1) {
-      const blocker = taskById.get(active[0]!.blockingIssueId);
-      if (blocker) return t('workflow.waitForTask', { identifier: blocker.identifier });
+  const frontRoles = (project.data?.roleTeams ?? []).flatMap(({ role }) =>
+    role === 'WEB_FRONTEND' || role === 'APP_FRONTEND' ? [role] : [],
+  );
+  const requiresHandoff =
+    work.projectRole === 'BACKEND' &&
+    frontRoles.length > 0 &&
+    !issue.handoffFlows.some(
+      (handoff) => handoff.kind === 'INITIAL' && handoff.sourceTeamWork.id === work.id,
+    );
+  const handoffBodyInvalid = handoffBodyError(handoffBody) === 'content';
+
+  function saveState(stateId: string) {
+    const state = states.data?.items.find((item) => item.id === stateId);
+    if (!state) return;
+    if (state.category === 'COMPLETED' && requiresHandoff) {
+      setCompletionStateId(state.id);
+      setDestinationRoles(frontRoles);
+      return;
     }
-    if (active.length > 0 || (task.blocked && incoming.length === 0)) {
-      return t('workflow.waitForPredecessors');
-    }
-    if (incoming.length > 0) return t('workflow.available');
-    return undefined;
+    stateMutation.mutate({ workflowState: state });
   }
 
-  function openStart() {
-    setStartRoles([]);
-    start.reset();
-    setStartOpen(true);
-  }
-
-  function startFirstTasks() {
-    if (start.isPending || startRoles.length === 0) return;
-    start.mutate(
-      { data: { initialRoles: startRoles }, issueId: issue.id },
+  function createFollowUp() {
+    const sequenceNumber = nextFollowUpSequence;
+    followUpMutation.mutate(
       {
-        onError: () => {
-          void project.refetch();
-          firstStartRoleRef.current?.focus();
-        },
-        onSuccess: (result: CreateIssueResponseDto) => {
-          setStartOpen(false);
-          const updatedIssue = result.issue;
-          queryClient.setQueryData(getIssuesControllerGetQueryKey(issue.id), updatedIssue);
-          queryClient.setQueryData(getIssuesControllerGetQueryKey(issue.identifier), updatedIssue);
-          void Promise.allSettled([
-            queryClient.invalidateQueries({ queryKey: getIssuesControllerListQueryKey() }),
-            issue.project
-              ? queryClient.invalidateQueries({
-                  queryKey: getProjectsControllerGetQueryKey(issue.project.id),
-                })
-              : Promise.resolve(),
+        teamWorkId: work.id,
+        data: { bodyMarkdown: followUpBody, kind: 'FOLLOW_UP' },
+      },
+      {
+        onSuccess: () => {
+          setFollowUpBody('');
+          setFollowUpGuideOpen(false);
+          setFollowUpOpen(false);
+          setSavedFollowUpSequence(sequenceNumber);
+          setFollowUpSuccess(true);
+          void Promise.all([
+            queryClient.invalidateQueries({ queryKey: getIssuesControllerGetQueryKey(issue.id) }),
+            queryClient.invalidateQueries({
+              queryKey: getIssuesControllerGetQueryKey(issue.identifier),
+            }),
           ]);
         },
       },
     );
   }
 
-  return (
-    <>
-      <div className="grid gap-8 py-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="min-w-0">
-          <TabsContent value="work" keepMounted className="data-[hidden]:hidden">
-            <section aria-labelledby="current-work-summary-title">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 id="current-work-summary-title" className="text-base font-semibold">
-                  {t('workSummary.title')}
-                </h2>
-                {issue.progress && issue.progress.total > 0 ? (
-                  <span className="text-muted-foreground text-sm tabular-nums">
-                    {t('workflow.progress', {
-                      completed: issue.progress.completed,
-                      percentage: issue.progress.percentage,
-                      total: issue.progress.total,
-                    })}
-                  </span>
-                ) : null}
-              </div>
-              {issue.progress && issue.progress.total > 0 ? (
-                <Progress
-                  value={issue.progress.percentage}
-                  aria-label={t('workflow.progress', {
-                    completed: issue.progress.completed,
-                    percentage: issue.progress.percentage,
-                    total: issue.progress.total,
-                  })}
-                  className="mt-3 w-full gap-1.5"
-                >
-                  <ProgressLabel className="sr-only">
-                    {t('workflow.progress', {
-                      completed: issue.progress.completed,
-                      percentage: issue.progress.percentage,
-                      total: issue.progress.total,
-                    })}
-                  </ProgressLabel>
-                  <ProgressValue className="sr-only" />
-                </Progress>
-              ) : null}
-              {allTasksComplete && issue.status.featureStatus === 'REVIEW' ? (
-                <Alert className="mt-4">
-                  <Check aria-hidden="true" />
-                  <AlertTitle>{t('workflow.allComplete')}</AlertTitle>
-                  <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-                    <span>{t('workflow.allCompleteDescription')}</span>
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={mutation.isPending}
-                      onClick={() =>
-                        mutation.mutate({
-                          change: { action: 'COMPLETE', kind: 'featureStatus', value: 'DONE' },
-                          issue,
-                        })
-                      }
-                    >
-                      {t('workflow.completeIssue')}
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-              {children.isError ? (
-                <Alert variant="destructive" className="mt-3">
-                  <AlertTitle>{t('children.errorTitle')}</AlertTitle>
-                  <AlertDescription>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void children.refetch()}
-                    >
-                      {t('retry')}
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              ) : children.isPending ? (
-                <p role="status" className="text-muted-foreground mt-4 text-sm">
-                  {t('workflow.loading')}
-                </p>
-              ) : childItems.length === 0 ? (
-                <ContentEmpty
-                  icon={GitBranch}
-                  headingLevel={3}
-                  title={t('workflow.emptyTitle')}
-                  description={t('workflow.emptyDescription')}
-                >
-                  <Button
-                    type="button"
-                    disabled={
-                      project.isPending || project.isError || availableStartRoles.length === 0
-                    }
-                    onClick={openStart}
-                  >
-                    {t('workflow.start')}
-                  </Button>
-                </ContentEmpty>
-              ) : (
-                <div className="mt-4 space-y-4">
-                  <p className="text-muted-foreground text-sm">
-                    {t('workSummary.completed', {
-                      completed: issue.progress?.completed ?? completedTasks.length,
-                      total: issue.progress?.total ?? childItems.length,
-                    })}
-                  </p>
-                  {currentTasks.length > 0 ? (
-                    <ul className="flex flex-col gap-2">
-                      {currentTasks.map((task) => (
-                        <WorkflowTaskStep
-                          key={task.id}
-                          current
-                          orderLabel={taskOrderLabel(task)}
-                          ordered={false}
-                          task={task}
-                        />
-                      ))}
-                    </ul>
-                  ) : null}
-                  <Link
-                    href={tabHref('relations', 'feature-progress-title')}
-                    className={buttonVariants({ size: 'sm', variant: 'outline' })}
-                  >
-                    {t('workSummary.openRelations')}
-                  </Link>
-                </div>
-              )}
-            </section>
-            <div className="mt-8">
-              <IssueDescription issue={issue} mentionOptions={mentionOptions} mutation={mutation} />
-            </div>
-            <IssueAttachments issue={issue} />
-            <IssueTimeline
-              currentMembershipId={currentMembershipId}
-              issueId={issue.id}
-              issueIdentifier={issue.identifier}
-              mentionOptions={mentionOptions}
-              mode="comments"
-            />
-          </TabsContent>
-
-          <TabsContent value="relations" keepMounted className="data-[hidden]:hidden">
-            <section className="scroll-mt-6" aria-labelledby="feature-progress-title">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 id="feature-progress-title" className="text-base font-semibold">
-                  {t('workflow.title')}
-                </h2>
-                <div className="flex flex-wrap items-center gap-2">
-                  {issue.progress && issue.progress.total > 0 ? (
-                    <span className="text-muted-foreground text-sm tabular-nums">
-                      {t('workflow.progress', {
-                        completed: issue.progress.completed,
-                        percentage: issue.progress.percentage,
-                        total: issue.progress.total,
-                      })}
-                    </span>
-                  ) : null}
-                  {projectId ? (
-                    <Select
-                      items={[{ label: t('workflow.addTask'), value: 'TEAM_TASK' }]}
-                      value={null}
-                      onValueChange={(value) => {
-                        if (value === 'TEAM_TASK') {
-                          router.push(
-                            `/issues/${encodeURIComponent(issue.identifier)}?tab=relations&create=1&type=TEAM_TASK&projectId=${encodeURIComponent(projectId)}&parentIssueId=${encodeURIComponent(issue.id)}#feature-progress-title`,
-                          );
-                        }
-                      }}
-                    >
-                      <SelectTrigger
-                        size="sm"
-                        variant="inline"
-                        aria-label={t('workflow.moreActions')}
-                        title={t('workflow.moreActions')}
-                        className="min-w-11 justify-center p-0 [&_[data-slot=select-value]]:sr-only [&>svg:last-child]:hidden"
-                      >
-                        <MoreHorizontal aria-hidden="true" />
-                        <SelectValue placeholder={t('workflow.moreActions')} />
-                      </SelectTrigger>
-                      <SelectContent alignItemWithTrigger={false}>
-                        <SelectGroup>
-                          <SelectItem
-                            className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
-                            value="TEAM_TASK"
-                          >
-                            {t('workflow.addTask')}
-                          </SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  ) : null}
-                </div>
-              </div>
-              {issue.progress && issue.progress.total > 0 ? (
-                <Progress
-                  value={issue.progress.percentage}
-                  aria-label={t('workflow.progress', {
-                    completed: issue.progress.completed,
-                    percentage: issue.progress.percentage,
-                    total: issue.progress.total,
-                  })}
-                  className="mt-3 w-full gap-1.5"
-                >
-                  <ProgressLabel className="sr-only">
-                    {t('workflow.progress', {
-                      completed: issue.progress.completed,
-                      percentage: issue.progress.percentage,
-                      total: issue.progress.total,
-                    })}
-                  </ProgressLabel>
-                  <ProgressValue className="sr-only" />
-                </Progress>
-              ) : null}
-              {children.isError ? (
-                <Alert variant="destructive" className="mt-3">
-                  <AlertTitle>{t('children.errorTitle')}</AlertTitle>
-                  <AlertDescription>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void children.refetch()}
-                    >
-                      {t('retry')}
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              ) : children.isPending ? (
-                <p role="status" className="text-muted-foreground mt-4 text-sm">
-                  {t('workflow.loading')}
-                </p>
-              ) : childItems.length === 0 ? (
-                <ContentEmpty
-                  icon={GitBranch}
-                  headingLevel={3}
-                  title={t('workflow.emptyTitle')}
-                  description={t('workflow.emptyDescription')}
-                >
-                  <Button
-                    type="button"
-                    disabled={
-                      project.isPending || project.isError || availableStartRoles.length === 0
-                    }
-                    onClick={openStart}
-                  >
-                    {t('workflow.start')}
-                  </Button>
-                </ContentEmpty>
-              ) : (
-                <div className="mt-5 flex flex-col gap-5">
-                  {completedTasks.length > 0 ? (
-                    <section aria-labelledby="workflow-completed-title">
-                      <h3
-                        id="workflow-completed-title"
-                        className="text-muted-foreground mb-2 text-sm font-medium"
-                      >
-                        {t('workflow.completedWork')}
-                      </h3>
-                      <ul className="flex flex-col gap-2">
-                        {completedTasks.map((task) => (
-                          <WorkflowTaskStep
-                            key={task.id}
-                            current={false}
-                            orderLabel={taskOrderLabel(task)}
-                            ordered={orderedTaskIds.has(task.id)}
-                            task={task}
-                          />
-                        ))}
-                      </ul>
-                    </section>
-                  ) : null}
-
-                  {handoffFlows.length > 0 ? (
-                    <section aria-labelledby="workflow-handoffs-title">
-                      <h3
-                        id="workflow-handoffs-title"
-                        className="text-muted-foreground mb-2 text-sm font-medium"
-                      >
-                        {t('workflow.handoffs')}
-                      </h3>
-                      <div className="flex flex-col gap-3">
-                        {handoffFlows.map((flow) => {
-                          const ordered = flow.downstreamIssues.some((downstream) =>
-                            workflowRelations.some(
-                              (relation) =>
-                                relation.blockingIssueId === flow.sourceIssue.id &&
-                                relation.blockedIssueId === downstream.id,
-                            ),
-                          );
-                          return (
-                            <div
-                              key={flow.sourceIssue.id}
-                              className={cn(
-                                'flex flex-col gap-3',
-                                ordered && 'border-border border-l pl-5',
-                              )}
-                            >
-                              {flow.handoffs.map((handoff) => (
-                                <IssueHandoffCard
-                                  key={handoff.id}
-                                  downstreamIssues={flow.downstreamIssues}
-                                  handoff={handoff}
-                                  headingLevel={4}
-                                  sourceIssue={flow.sourceIssue}
-                                />
-                              ))}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  ) : null}
-
-                  {currentTasks.length > 0 ? (
-                    <section aria-labelledby="workflow-current-title">
-                      <h3
-                        id="workflow-current-title"
-                        className="text-muted-foreground mb-2 text-sm font-medium"
-                      >
-                        {t('workflow.currentWork')}
-                      </h3>
-                      <ul className="flex flex-col gap-2">
-                        {currentTasks.map((task) => (
-                          <WorkflowTaskStep
-                            key={task.id}
-                            current
-                            orderLabel={taskOrderLabel(task)}
-                            ordered={orderedTaskIds.has(task.id)}
-                            task={task}
-                          />
-                        ))}
-                      </ul>
-                    </section>
-                  ) : null}
-
-                  {expectedRoles.length > 0 ? (
-                    <section aria-labelledby="workflow-expected-title">
-                      <h3
-                        id="workflow-expected-title"
-                        className="text-muted-foreground mb-2 text-sm font-medium"
-                      >
-                        {t('workflow.expectedWork')}
-                      </h3>
-                      <ul className="flex flex-col gap-2">
-                        {expectedRoles.map((role) => (
-                          <li
-                            key={role}
-                            className="border-border text-muted-foreground relative border-l border-dashed pl-6"
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="border-border bg-background absolute top-3 -left-2 size-4 rounded-full border border-dashed"
-                            />
-                            <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-sm">
-                              <Badge variant="outline">{t(`projectRoles.${role}`)}</Badge>
-                              <span>{t('workflow.expected')}</span>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  ) : null}
-                </div>
-              )}
-              {project.isError ? (
-                <Alert variant="destructive" className="mt-4">
-                  <AlertTitle>{t('workflow.projectErrorTitle')}</AlertTitle>
-                  <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-                    <span>{t('workflow.projectErrorDescription')}</span>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void project.refetch()}
-                    >
-                      {t('retry')}
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-            </section>
-          </TabsContent>
-
-          <TabsContent value="activity" keepMounted className="data-[hidden]:hidden">
-            <IssueTimeline
-              currentMembershipId={currentMembershipId}
-              issueId={issue.id}
-              issueIdentifier={issue.identifier}
-              mentionOptions={mentionOptions}
-              mode="activity"
-            />
-          </TabsContent>
-        </div>
-
-        <aside
-          aria-labelledby="issue-properties-title"
-          className="min-w-0 border-t pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
-        >
-          <h2 id="issue-properties-title" className="text-sm font-semibold">
-            {t('properties')}
-          </h2>
-          <dl className="mt-3 grid gap-1">
-            <PropertyRow label={t('state')}>
-              <span className="inline-flex min-h-11 items-center text-sm">
-                {t(`featureStatuses.${issue.status.featureStatus}`)}
-              </span>
-            </PropertyRow>
-            <PropertyRow label={t('priority')}>
-              <PriorityEditor issue={issue} mutation={mutation} />
-            </PropertyRow>
-            <PropertyRow label={t('project')}>
-              <span className="flex min-w-0 items-center gap-2 text-sm">
-                <FolderKanban
-                  aria-hidden="true"
-                  className="text-muted-foreground size-4 shrink-0"
-                />
-                <span className="truncate">{issue.project?.name}</span>
-              </span>
-            </PropertyRow>
-            <PropertyRow label={t('labels')}>
-              <IssueLabels issue={issue} labelItems={labelItems} mutation={mutation} />
-            </PropertyRow>
-          </dl>
-          <PropertyMutationError mutation={mutation} />
-          <IssueInformation issue={issue} />
-        </aside>
-      </div>
-
-      <Dialog
-        open={startOpen}
-        onOpenChange={(open) => {
-          if (!start.isPending) setStartOpen(open);
-        }}
-      >
-        <DialogContent closeLabel={t('workflow.startClose')}>
-          <DialogHeader>
-            <DialogTitle>{t('workflow.startTitle')}</DialogTitle>
-            <DialogDescription>{t('workflow.startDialogDescription')}</DialogDescription>
-          </DialogHeader>
-          <FieldSet data-invalid={Boolean(startErrorMessage)}>
-            <FieldLegend variant="label">{t('workflow.startRolesLabel')}</FieldLegend>
-            <FieldDescription>{t('workflow.startRolesDescription')}</FieldDescription>
-            <div className="grid gap-2 sm:grid-cols-3">
-              {startRoleOptions.map((role) => {
-                const checked = startRoles.includes(role);
-                return (
-                  <Field key={role} orientation="horizontal" className="rounded-lg border p-3">
-                    <Checkbox
-                      ref={role === startRoleOptions[0] ? firstStartRoleRef : undefined}
-                      id={`issue-start-role-${role}`}
-                      checked={checked}
-                      aria-invalid={Boolean(startErrorMessage)}
-                      aria-errormessage={startErrorMessage ? 'issue-start-roles-error' : undefined}
-                      onCheckedChange={(nextChecked) => {
-                        setStartRoles((current) =>
-                          nextChecked
-                            ? [...new Set([...current, role])]
-                            : current.filter((value) => value !== role),
-                        );
-                      }}
-                    />
-                    <FieldLabel htmlFor={`issue-start-role-${role}`}>
-                      <span>{t(`projectRoles.${role}`)}</span>
-                      {checked ? (
-                        <span className="text-muted-foreground text-xs">
-                          {t('workflow.roleSelected')}
-                        </span>
-                      ) : null}
-                    </FieldLabel>
-                  </Field>
-                );
-              })}
-            </div>
-            <FieldError id="issue-start-roles-error">{startErrorMessage}</FieldError>
-          </FieldSet>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setStartOpen(false)}>
-              {t('cancel')}
-            </Button>
-            <Button
-              type="button"
-              disabled={startRoles.length === 0 || start.isPending}
-              onClick={startFirstTasks}
-            >
-              {start.isPending ? <Spinner aria-hidden="true" data-icon="inline-start" /> : null}
-              {t('workflow.start')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+  const relatedHandoffs = issue.handoffFlows.filter(
+    (handoff) =>
+      handoff.sourceTeamWork.id === work.id ||
+      handoff.targets.some((target) => target.teamWork.id === work.id),
   );
-}
-
-function IssueInformation({ issue }: { issue: IssueDetailResponseDto }) {
-  const t = useTranslations('IssueDetail');
-  return (
-    <section aria-labelledby="issue-information-title" className="mt-4 border-t pt-4">
-      <h3 id="issue-information-title" className="text-sm font-semibold">
-        {t('information')}
-      </h3>
-      <dl className="mt-2 grid gap-0.5">
-        <PropertyRow label={t('createdBy')}>
-          <span className="flex min-w-0 items-center gap-2 text-sm">
-            <UserAvatar
-              avatarFileId={issue.createdBy.user.avatarFileId}
-              displayName={issue.createdBy.user.displayName}
-              size="sm"
-            />
-            <span className="truncate">{issue.createdBy.user.displayName}</span>
-          </span>
-        </PropertyRow>
-        <PropertyRow label={t('createdAt')}>
-          <time dateTime={issue.createdAt} className="text-sm">
-            {formatDate(issue.createdAt)}
-          </time>
-        </PropertyRow>
-        <PropertyRow label={t('updatedAt')}>
-          <time dateTime={issue.updatedAt} className="text-sm">
-            {formatDate(issue.updatedAt)}
-          </time>
-        </PropertyRow>
-      </dl>
-    </section>
+  const latestRelatedHandoff =
+    relatedHandoffs.find((handoff) => handoff.id === highlightedHandoffId) ?? relatedHandoffs[0];
+  const hasInitialHandoff = issue.handoffFlows.some(
+    (handoff) =>
+      handoff.kind === 'INITIAL' &&
+      (work.projectRole === 'BACKEND'
+        ? handoff.sourceTeamWork.id === work.id
+        : handoff.targets.some((target) => target.teamWork.id === work.id)),
   );
-}
-
-function ReceivedHandoffSummary({
-  flows,
-  parentIssue,
-  tabHref,
-}: {
-  flows: IssueHandoffFlowResponseDto[];
-  parentIssue: IssueDetailResponseDto['parentIssue'];
-  tabHref: (tab: DetailTab, anchor?: string) => string;
-}) {
-  const t = useTranslations('IssueDetail');
-  const initialHandoffs = flows.flatMap((flow) => {
-    const initial = flow.handoffs.find((handoff) => handoff.kind === 'INITIAL');
-    return initial ? [{ flow, handoff: initial }] : [];
-  });
-  const followUpCount = flows.reduce(
-    (count, flow) => count + flow.handoffs.filter((handoff) => handoff.kind === 'FOLLOW_UP').length,
-    0,
+  const initialHandoff = issue.handoffFlows.find(
+    (handoff) => handoff.kind === 'INITIAL' && handoff.sourceTeamWork.id === work.id,
   );
+  const followUpRecipientWorks = initialHandoff?.targets.map((target) => target.teamWork) ?? [];
+  const nextFollowUpSequence =
+    Math.max(
+      0,
+      ...issue.handoffFlows
+        .filter((handoff) => handoff.sourceTeamWork.id === work.id)
+        .map((handoff) => handoff.sequenceNumber),
+    ) + 1;
+  const followUpBodyInvalid = handoffBodyError(followUpBody) === 'content';
+  const error =
+    stateMutation.error ?? assigneeMutation.error ?? noteMutation.error ?? followUpMutation.error;
 
   return (
-    <section aria-labelledby="received-handoff-title">
-      <div className="flex items-center gap-2">
-        <Send aria-hidden="true" className="text-muted-foreground size-4" />
-        <h2 id="received-handoff-title" className="text-base font-semibold">
-          {t('handoff.receivedTitle')}
+    <section className="border-b pb-6" aria-labelledby="selected-work-title">
+      <header className="flex flex-wrap items-start justify-between gap-3 pb-3">
+        <h2 id="selected-work-title" className="text-lg font-semibold">
+          {ROLE_LABELS[work.projectRole]} · {work.team.name}
         </h2>
-      </div>
-      <p className="text-muted-foreground mt-1 text-sm">{t('handoff.receivedDescription')}</p>
-      <div className="mt-4 flex flex-col gap-4">
-        {initialHandoffs.map(({ flow, handoff }) => (
-          <IssueHandoffCard
-            key={handoff.id}
-            handoff={handoff}
-            parentIssue={parentIssue}
-            sourceIssue={flow.sourceIssue}
+      </header>
+      {error ? (
+        <Alert variant="destructive" className="mt-4">
+          <CircleAlert />
+          <AlertTitle>변경을 저장하지 못했습니다</AlertTitle>
+          <AlertDescription>{mutationErrorMessage(error)}</AlertDescription>
+        </Alert>
+      ) : null}
+      <dl className="mt-2 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+        <div className="flex min-h-10 items-center justify-between gap-3">
+          <dt className="text-muted-foreground">상태</dt>
+          <dd>
+            <StatusTrigger
+              identifier={work.identifier}
+              value={work.workflowState.id}
+              states={states.data?.items ?? []}
+              busy={stateMutation.isPending}
+              disabled={
+                stateMutation.isPending ||
+                states.isPending ||
+                (work.projectRole === 'BACKEND' &&
+                  !hasInitialHandoff &&
+                  (project.isPending || project.isError))
+              }
+              onValueChange={saveState}
+            />
+          </dd>
+        </div>
+        <div className="flex min-h-10 items-center justify-between gap-3">
+          <dt className="text-muted-foreground">담당자</dt>
+          <dd className="flex items-center gap-2">
+            <CompactAssigneeTrigger
+              identifier={work.identifier}
+              assignee={work.assignee}
+              members={(members.data?.items ?? []) as IssueMemberSummaryResponseDto[]}
+              busy={assigneeMutation.isPending}
+              disabled={assigneeMutation.isPending || members.isPending}
+              onValueChange={(id) => {
+                const member = members.data?.items.find((item) => item.id === id);
+                assigneeMutation.mutate({
+                  assignee: member ? (member as IssueMemberSummaryResponseDto) : null,
+                  assigneeMembershipId: id || null,
+                });
+              }}
+            />
+            {assigneeMutation.isPending ? (
+              <span className="text-muted-foreground text-xs">담당자 저장 중…</span>
+            ) : null}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-muted-foreground">작업 준비</dt>
+          <dd>{work.readinessStatus === 'API_HANDOFF_PENDING' ? 'API 전달 대기' : '작업 가능'}</dd>
+        </div>
+      </dl>
+      <section className="mt-5 border-t pt-4" aria-labelledby="work-note-title">
+        <div className="flex items-center justify-between gap-3">
+          <h3 id="work-note-title" className="text-sm font-medium">
+            작업 노트
+          </h3>
+          {!editingWorkNote ? (
+            <Button
+              aria-label="작업 노트 편집"
+              size="sm"
+              variant="ghost"
+              onClick={() => setEditingWorkNote(true)}
+            >
+              {work.workNoteMarkdown ? '편집' : '작업 노트 추가'}
+            </Button>
+          ) : null}
+        </div>
+        {editingWorkNote ? (
+          <>
+            <div className="mt-3">
+              <WorkNoteEditor
+                charLimit={10_000}
+                labels={editorLabels}
+                onChange={setWorkNoteMarkdown}
+                status={noteMutation.isPending ? '저장 중…' : null}
+                value={workNoteMarkdown}
+              />
+            </div>
+            <div className="mt-2 flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setWorkNoteMarkdown(work.workNoteMarkdown ?? '');
+                  setEditingWorkNote(false);
+                }}
+              >
+                취소
+              </Button>
+              <Button
+                size="sm"
+                disabled={
+                  noteMutation.isPending || workNoteMarkdown === (work.workNoteMarkdown ?? '')
+                }
+                onClick={() =>
+                  noteMutation.mutate(
+                    { workNoteMarkdown: workNoteMarkdown.trim() || null },
+                    { onSuccess: () => setEditingWorkNote(false) },
+                  )
+                }
+              >
+                {noteMutation.isPending ? <Spinner /> : <Save className="size-3.5" />}노트 저장
+              </Button>
+            </div>
+          </>
+        ) : work.workNoteMarkdown ? (
+          <MarkdownRenderer
+            className="mt-3"
+            imageUnavailableLabel="이미지를 표시할 수 없습니다"
+            markdown={work.workNoteMarkdown}
           />
-        ))}
-        {followUpCount > 0 ? (
-          <div className="rounded-xl border px-3 py-2.5">
-            <p className="text-sm font-medium">
-              {t('handoff.followUpNotice', { count: followUpCount })}
-            </p>
-            <p className="text-muted-foreground mt-1 text-sm">
-              {t('handoff.followUpHistoryDescription')}
+        ) : null}
+      </section>
+      {completionStateId ? (
+        <section className="mt-5 border-t pt-4">
+          <h3 className="font-medium">프론트에 전달하고 완료</h3>
+          <p className="text-muted-foreground mt-1 text-sm">
+            변경 내용을 적고 전달할 프론트 역할을 선택해 주세요. 기존에 작성한 전달은 수정되지
+            않습니다.
+          </p>
+          <div className="border-border bg-muted/40 mt-3 rounded-lg border px-3 py-2.5 text-sm">
+            <p className="text-muted-foreground text-xs font-medium">전달 관계</p>
+            <p className="mt-1 font-medium">
+              {work.identifier} · {ROLE_LABELS[work.projectRole]} →{' '}
+              {destinationRoles.length > 0
+                ? destinationRoles.map((role) => ROLE_LABELS[role]).join(', ')
+                : '전달할 프론트 역할을 선택해 주세요'}
             </p>
           </div>
-        ) : null}
-        <Link
-          href={tabHref('relations', 'handoff-history')}
-          className={buttonVariants({ size: 'sm', variant: 'outline' })}
-        >
-          {t('handoff.openHistory')}
-        </Link>
-      </div>
-    </section>
-  );
-}
-
-function TeamTaskIssueBody({
-  currentMembershipId,
-  issue,
-  labelItems,
-  mentionOptions,
-  mutation,
-  onReload,
-  tabHref,
-}: {
-  currentMembershipId: string | null;
-  issue: TeamTaskIssue<IssueDetailResponseDto>;
-  labelItems: IssueLabelSummaryResponseDto[];
-  mentionOptions: MentionOption[];
-  mutation: DetailMutation;
-  onReload: () => Promise<IssueDetailResponseDto | undefined>;
-  tabHref: (tab: DetailTab, anchor?: string) => string;
-}) {
-  const t = useTranslations('IssueDetail');
-  const markdownT = useTranslations('Markdown');
-  const queryClient = useQueryClient();
-  const router = useRouter();
-  const states = useTeamsControllerListWorkflowStates(issue.team.id, { query: { retry: false } });
-  const members = useMembersControllerList(
-    { limit: 100, status: 'ACTIVE', teamId: issue.team.id },
-    { query: { retry: false } },
-  );
-  const project = useProjectsControllerGet(issue.project?.id ?? '', {
-    query: { enabled: Boolean(issue.project?.id), retry: false },
-  });
-  const createHandoff = useIssueCollaborationControllerCreateHandoff();
-  const [handoffMode, setHandoffMode] = useState<'COMPLETE' | 'CREATE' | null>(null);
-  const [completionState, setCompletionState] =
-    useState<IssueWorkflowStateSummaryResponseDto | null>(null);
-  const [handoffBody, setHandoffBody] = useState(HANDOFF_TEMPLATE);
-  const [handoffCanSubmit, setHandoffCanSubmit] = useState(true);
-  const [destinationRoles, setDestinationRoles] = useState<FrontendRole[]>([]);
-  const [destinationError, setDestinationError] = useState(false);
-  const stateItems = uniqueById([
-    ...(states.data?.items ?? []),
-    issue.status.workflowState,
-  ]).toSorted((left, right) => left.position - right.position);
-  const memberItems = uniqueById([
-    ...(issue.assignee ? [issue.assignee] : []),
-    ...(members.data?.items ?? []),
-  ]);
-  const frontendRoles = (project.data?.roleTeams ?? [])
-    .map(({ role }) => role)
-    .filter((role): role is FrontendRole => role !== 'BACKEND');
-  const completionTarget = stateItems.find((state) => state.category === 'COMPLETED') ?? null;
-  const needsInitialHandoff =
-    issue.projectRole === 'BACKEND' &&
-    issue.parentIssue !== null &&
-    issue.handoffSummary?.hasInitial !== true &&
-    frontendRoles.length > 0;
-  const showBackendHandoff =
-    issue.projectRole === 'BACKEND' &&
-    (issue.handoffSummary?.hasInitial === true || needsInitialHandoff);
-  const bodyError = handoffBodyError(handoffBody);
-  const handoffMutationError = createHandoff.isError
-    ? createHandoff.error
-    : handoffMode === 'COMPLETE' && mutation.isError
-      ? mutation.error
-      : null;
-  const handoffErrorCode =
-    handoffMutationError instanceof ApiError ? handoffMutationError.body.code : null;
-  const handoffFieldError =
-    handoffErrorCode === 'MARKDOWN_INVALID'
-      ? t('handoff.contentError')
-      : handoffErrorCode === 'MENTION_INVALID'
-        ? t('handoff.mentionError')
-        : handoffErrorCode?.startsWith('FILE_')
-          ? t('handoff.fileError')
-          : null;
-  const handoffSaveErrorDescription =
-    handoffErrorCode === 'HANDOFF_REQUIRES_COMPLETION'
-      ? t('handoff.completionRequiredError')
-      : handoffErrorCode === 'PROJECT_FRONTEND_ROLE_REQUIRED'
-        ? t('handoff.projectRoleError')
-        : handoffErrorCode === 'DOWNSTREAM_TASK_SCOPE_CONFLICT'
-          ? t('handoff.scopeConflictError')
-          : handoffErrorCode === 'DOWNSTREAM_TASK_ALREADY_CLOSED'
-            ? t('handoff.closedTaskError')
-            : handoffErrorCode === 'ISSUE_VERSION_CONFLICT'
-              ? t('handoff.versionConflictError')
-              : t('handoff.saveErrorDescription');
-  const handoffAffectedIssues =
-    handoffErrorCode === 'DOWNSTREAM_TASK_SCOPE_CONFLICT' ||
-    handoffErrorCode === 'DOWNSTREAM_TASK_ALREADY_CLOSED'
-      ? affectedHandoffIssues(handoffMutationError)
-      : [];
-  const receivedHandoffFlows = issue.projectRole === 'BACKEND' ? [] : (issue.handoffFlows ?? []);
-  const activeBlockers = issue.blockers.filter(({ resolved }) => !resolved);
-  const waitingMessage =
-    activeBlockers.length === 1
-      ? t('workflow.waitForTask', { identifier: activeBlockers[0]!.issue.identifier })
-      : activeBlockers.length > 1 || issue.blocked
-        ? t('workflow.waitForPredecessors')
-        : null;
-
-  function openHandoff(mode: 'COMPLETE' | 'CREATE', state?: IssueWorkflowStateSummaryResponseDto) {
-    setCompletionState(state ?? null);
-    setHandoffBody(HANDOFF_TEMPLATE);
-    setHandoffCanSubmit(true);
-    setDestinationRoles(mode === 'COMPLETE' ? frontendRoles : []);
-    setDestinationError(false);
-    createHandoff.reset();
-    mutation.reset();
-    setHandoffMode(mode);
-  }
-
-  function changeState(state: IssueWorkflowStateSummaryResponseDto) {
-    if (state.id === issue.status.workflowState.id || mutation.isPending) return;
-    if (
-      state.category === 'COMPLETED' &&
-      issue.projectRole === 'BACKEND' &&
-      issue.parentIssue !== null &&
-      issue.handoffSummary?.hasInitial !== true &&
-      project.isPending
-    ) {
-      return;
-    }
-    if (state.category === 'COMPLETED' && needsInitialHandoff) {
-      openHandoff('COMPLETE', state);
-      return;
-    }
-
-    mutation.mutate(
-      { change: { kind: 'workflowState', value: state }, issue },
-      {
-        onError: (error) => {
-          if (error instanceof ApiError && error.body.code === 'HANDOFF_REQUIRED') {
-            openHandoff('COMPLETE', state);
-          }
-        },
-      },
-    );
-  }
-
-  async function refreshHandoffs(extraIssues: Array<{ id: string; identifier: string }> = []) {
-    const detailRefs = new Set([issue.id, issue.identifier]);
-    for (const relatedIssue of [
-      ...(issue.parentIssue ? [issue.parentIssue] : []),
-      ...issue.blocking.map((relation) => relation.issue),
-      ...(issue.handoffFlows ?? []).flatMap((flow) => flow.downstreamIssues),
-      ...extraIssues,
-    ]) {
-      detailRefs.add(relatedIssue.id);
-      detailRefs.add(relatedIssue.identifier);
-    }
-
-    await Promise.allSettled([
-      ...[...detailRefs].map((issueRef) =>
-        queryClient.invalidateQueries({ queryKey: getIssuesControllerGetQueryKey(issueRef) }),
-      ),
-      queryClient.invalidateQueries({ queryKey: getIssuesControllerListQueryKey() }),
-      queryClient.invalidateQueries({ queryKey: getProjectsControllerListQueryKey() }),
-      queryClient.invalidateQueries({
-        queryKey: getIssueCollaborationControllerTimelineQueryKey(issue.id),
-      }),
-      issue.project
-        ? queryClient.invalidateQueries({
-            queryKey: getProjectsControllerGetQueryKey(issue.project.id),
-          })
-        : Promise.resolve(),
-    ]);
-  }
-
-  function focusFirstDestination() {
-    const firstRole = frontendRoles[0];
-    if (firstRole) document.getElementById(`handoff-destination-${firstRole}`)?.focus();
-  }
-
-  function submitHandoff() {
-    if (bodyError || !handoffCanSubmit) return;
-
-    if (handoffMode === 'COMPLETE' && completionState) {
-      if (destinationRoles.length === 0) {
-        setDestinationError(true);
-        requestAnimationFrame(focusFirstDestination);
-        return;
-      }
-      setDestinationError(false);
-      mutation.mutate(
-        {
-          change: {
-            handoff: { bodyMarkdown: handoffBody, destinationRoles },
-            kind: 'workflowState',
-            value: completionState,
-          },
-          issue,
-        },
-        {
-          onError: (error) => {
-            if (!(error instanceof ApiError)) return;
-            if (error.body.code === 'HANDOFF_DESTINATION_REQUIRED') {
-              setDestinationError(true);
-              requestAnimationFrame(focusFirstDestination);
-            }
-            if (error.body.code === 'PROJECT_FRONTEND_ROLE_REQUIRED') {
-              void project.refetch().then(({ data }) => {
-                setDestinationRoles(
-                  (data?.roleTeams ?? [])
-                    .map(({ role }) => role)
-                    .filter((role): role is FrontendRole => role !== 'BACKEND'),
-                );
-              });
-            }
-            if (error.body.code === 'HANDOFF_REQUIRES_COMPLETION') {
-              void Promise.allSettled([states.refetch(), project.refetch()]);
-              void onReload();
-            }
-            if (error.body.code === 'ISSUE_VERSION_CONFLICT') {
-              void Promise.allSettled([states.refetch(), project.refetch()]);
-              void onReload().then((latest) => {
-                if (
-                  latest?.type !== 'TEAM_TASK' ||
-                  latest.status.category !== 'COMPLETED' ||
-                  latest.handoffSummary?.hasInitial !== true
-                ) {
-                  return;
-                }
-
-                setHandoffMode(null);
-                void refreshHandoffs();
-                const parent = latest.parentIssue ?? issue.parentIssue;
-                if (parent) {
-                  router.push(
-                    `/issues/${encodeURIComponent(parent.identifier)}?tab=relations#feature-progress-title`,
-                  );
-                }
-              });
-            }
-          },
-          onSuccess: (response: UpdateIssueResponseDto) => {
-            setHandoffMode(null);
-            const parent = response.updatedParentIssue ?? issue.parentIssue;
-            void refreshHandoffs([
-              ...(parent ? [parent] : []),
-              ...(response.downstreamTeamTasks ?? []),
-            ]);
-            if (parent) {
-              router.push(
-                `/issues/${encodeURIComponent(parent.identifier)}?tab=relations#feature-progress-title`,
-              );
-            }
-          },
-        },
-      );
-      return;
-    }
-
-    createHandoff.mutate(
-      {
-        data: {
-          bodyMarkdown: handoffBody,
-          kind: issue.handoffSummary?.hasInitial ? 'FOLLOW_UP' : 'INITIAL',
-        },
-        issueId: issue.id,
-      },
-      {
-        onSuccess: () => {
-          setHandoffMode(null);
-          void refreshHandoffs().catch(() => undefined);
-        },
-      },
-    );
-  }
-
-  const optionsError = states.isError || members.isError || project.isError;
-
-  return (
-    <>
-      <div className="grid gap-8 py-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="min-w-0">
-          <TabsContent value="work" keepMounted className="data-[hidden]:hidden">
-            {waitingMessage ? (
-              <Alert>
-                <CircleDot aria-hidden="true" />
-                <AlertTitle>{waitingMessage}</AlertTitle>
-                <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-                  <span>{t('workSummary.waitingDescription')}</span>
-                  <Link
-                    href={tabHref('relations', 'issue-relations-title')}
-                    className={buttonVariants({ size: 'sm', variant: 'outline' })}
-                  >
-                    {t('workSummary.openOrder')}
-                  </Link>
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            {receivedHandoffFlows.length > 0 ? (
-              <div className={waitingMessage ? 'mt-6' : undefined}>
-                <ReceivedHandoffSummary
-                  flows={receivedHandoffFlows}
-                  parentIssue={issue.parentIssue}
-                  tabHref={tabHref}
-                />
-              </div>
-            ) : null}
-
-            {showBackendHandoff ? (
-              <section
-                aria-labelledby="issue-handoff-title"
-                className={waitingMessage ? 'mt-6' : undefined}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <Send aria-hidden="true" className="text-muted-foreground size-4" />
-                  <h2 id="issue-handoff-title" className="text-base font-semibold">
-                    {t('handoff.title')}
-                  </h2>
-                  <Badge variant="secondary">
-                    {t('handoff.count', { count: issue.handoffSummary?.count ?? 0 })}
-                  </Badge>
-                  {issue.handoffSummary?.hasInitial || needsInitialHandoff ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={issue.handoffSummary?.hasInitial ? 'outline' : 'default'}
-                      className="ml-auto hidden lg:inline-flex"
-                      disabled={
-                        mutation.isPending ||
-                        states.isPending ||
-                        project.isPending ||
-                        (!issue.handoffSummary?.hasInitial && !completionTarget)
-                      }
-                      onClick={() => {
-                        if (issue.handoffSummary?.hasInitial) openHandoff('CREATE');
-                        else if (completionTarget) openHandoff('COMPLETE', completionTarget);
-                      }}
-                    >
-                      {issue.handoffSummary?.hasInitial
-                        ? t('handoff.addFollowUp')
-                        : t('handoff.submitAndComplete')}
-                    </Button>
-                  ) : null}
-                </div>
-                <p className="text-muted-foreground mt-1 text-sm">{t('handoff.description')}</p>
-                <p className="text-muted-foreground mt-2 text-sm lg:hidden">
-                  {t('handoff.mobileWrite')}
-                </p>
-                {issue.handoffSummary?.hasInitial ? (
-                  <>
-                    <IssueTimeline
-                      currentMembershipId={currentMembershipId}
-                      issueId={issue.id}
-                      issueIdentifier={issue.identifier}
-                      mentionOptions={mentionOptions}
-                      mode="latest-handoff"
-                    />
-                    <Link
-                      href={tabHref('relations', 'handoff-history')}
-                      className={buttonVariants({ size: 'sm', variant: 'outline' })}
-                    >
-                      {t('handoff.openHistory')}
-                    </Link>
-                  </>
-                ) : null}
-              </section>
-            ) : null}
-
-            <div
-              className={
-                waitingMessage || receivedHandoffFlows.length > 0 || showBackendHandoff
-                  ? 'mt-8'
-                  : undefined
-              }
-            >
-              <IssueDescription issue={issue} mentionOptions={mentionOptions} mutation={mutation} />
-            </div>
-            <IssueAttachments issue={issue} />
-            <IssueTimeline
-              currentMembershipId={currentMembershipId}
-              issueId={issue.id}
-              issueIdentifier={issue.identifier}
-              mentionOptions={mentionOptions}
-              mode="comments"
-            />
-          </TabsContent>
-
-          <TabsContent value="relations" keepMounted className="data-[hidden]:hidden">
-            {issue.parentIssue || issue.project || issue.projectRole ? (
-              <section aria-labelledby="parent-feature-title">
-                <h2 id="parent-feature-title" className="text-base font-semibold">
-                  {t('relations.contextTitle')}
-                </h2>
-                <dl className="mt-3 divide-y border-y text-sm">
-                  {issue.parentIssue ? (
-                    <div className="grid gap-1 py-3 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-3">
-                      <dt className="text-muted-foreground">{t('parentFeature')}</dt>
-                      <dd className="min-w-0">
-                        <Link
-                          href={`/issues/${encodeURIComponent(issue.parentIssue.identifier)}?tab=relations`}
-                          className="block truncate font-medium underline-offset-4 hover:underline"
-                        >
-                          {issue.parentIssue.identifier} · {issue.parentIssue.title}
-                        </Link>
-                      </dd>
-                    </div>
-                  ) : null}
-                  {issue.project ? (
-                    <div className="grid gap-1 py-3 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-3">
-                      <dt className="text-muted-foreground">{t('project')}</dt>
-                      <dd className="font-medium">{issue.project.name}</dd>
-                    </div>
-                  ) : null}
-                  {issue.projectRole ? (
-                    <div className="grid gap-1 py-3 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-3">
-                      <dt className="text-muted-foreground">{t('projectRole')}</dt>
-                      <dd>
-                        <Badge variant="secondary">{t(`projectRoles.${issue.projectRole}`)}</Badge>
-                      </dd>
-                    </div>
-                  ) : null}
-                </dl>
-              </section>
-            ) : null}
-
-            <IssueRelations issue={issue} t={(key) => t(key as never)} />
-
-            {receivedHandoffFlows.length > 0 ? (
-              <section
-                id="handoff-history"
-                className="mt-8 scroll-mt-20"
-                aria-labelledby="handoff-history-title"
-              >
-                <div className="flex items-center gap-2">
-                  <Send aria-hidden="true" className="text-muted-foreground size-4" />
-                  <h2 id="handoff-history-title" className="text-base font-semibold">
-                    {t('handoff.historyTitle')}
-                  </h2>
-                </div>
-                <div className="mt-4 flex flex-col gap-4">
-                  {receivedHandoffFlows.map((flow) => (
-                    <div key={flow.sourceIssue.id} className="flex flex-col gap-3">
-                      {flow.handoffs.map((handoff) => (
-                        <IssueHandoffCard
-                          key={handoff.id}
-                          anchor={false}
-                          handoff={handoff}
-                          parentIssue={issue.parentIssue}
-                          sourceIssue={flow.sourceIssue}
-                        />
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ) : issue.projectRole === 'BACKEND' && issue.handoffSummary?.hasInitial ? (
-              <IssueTimeline
-                currentMembershipId={currentMembershipId}
-                issueId={issue.id}
-                issueIdentifier={issue.identifier}
-                mentionOptions={mentionOptions}
-                mode="handoffs"
-              />
-            ) : null}
-          </TabsContent>
-
-          <TabsContent value="activity" keepMounted className="data-[hidden]:hidden">
-            <IssueTimeline
-              currentMembershipId={currentMembershipId}
-              issueId={issue.id}
-              issueIdentifier={issue.identifier}
-              mentionOptions={mentionOptions}
-              mode="activity"
-            />
-          </TabsContent>
-        </div>
-
-        <aside
-          aria-labelledby="issue-properties-title"
-          className="min-w-0 border-t pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6"
-        >
-          <h2 id="issue-properties-title" className="text-sm font-semibold">
-            {t('properties')}
-          </h2>
-          {optionsError ? (
-            <Alert variant="destructive" className="mt-3">
-              <AlertTitle>{t('optionsErrorTitle')}</AlertTitle>
-              <AlertDescription className="space-y-2">
-                <p>{t('optionsErrorDescription')}</p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (states.isError) void states.refetch();
-                    if (members.isError) void members.refetch();
-                    if (project.isError) void project.refetch();
-                  }}
-                >
-                  {t('retry')}
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          <dl className="mt-3 grid gap-1">
-            <PropertyRow label={t('state')}>
-              <IssueInlineSelect
-                appearance="comfortable"
-                ariaLabel={`${t('state')}: ${issue.status.workflowState.name}`}
-                busy={mutation.isPending && mutation.variables?.change.kind === 'workflowState'}
-                disabled={
-                  states.isPending ||
-                  mutation.isPending ||
-                  (issue.projectRole === 'BACKEND' &&
-                    issue.parentIssue !== null &&
-                    issue.handoffSummary?.hasInitial !== true &&
-                    project.isPending)
-                }
-                value={issue.status.workflowState.id}
-                onValueChange={(value) => {
-                  const state = stateItems.find((item) => item.id === value);
-                  if (state) changeState(state);
-                }}
-                options={stateItems.map((state) => ({
-                  ...WORKFLOW_STATE_PRESENTATION[state.category],
-                  label: state.name,
-                  value: state.id,
-                }))}
-                triggerClassName="min-w-36 max-w-full"
-              />
-            </PropertyRow>
-            <PropertyRow label={t('assignee')}>
-              <IssueInlineSelect
-                appearance="comfortable"
-                ariaLabel={`${t('assignee')}: ${issue.assignee?.user.displayName ?? t('unassigned')}`}
-                busy={mutation.isPending && mutation.variables?.change.kind === 'assignee'}
-                disabled={members.isPending || mutation.isPending}
-                options={[
-                  {
-                    icon: UserRound,
-                    iconClassName: 'text-muted-foreground',
-                    label: t('unassigned'),
-                    value: 'unassigned',
-                  },
-                  ...memberItems.map((member) => ({
-                    icon: UserRound,
-                    iconClassName: 'text-muted-foreground',
-                    label: member.user.displayName,
-                    value: member.id,
-                  })),
-                ]}
-                onValueChange={(value) => {
-                  const assignee =
-                    value === 'unassigned'
-                      ? null
-                      : (memberItems.find((item) => item.id === value) ?? null);
-                  mutation.mutate({ change: { kind: 'assignee', value: assignee }, issue });
-                }}
-                triggerClassName="min-w-36 max-w-full"
-                value={issue.assignee?.id ?? 'unassigned'}
-              />
-            </PropertyRow>
-            <PropertyRow label={t('priority')}>
-              <PriorityEditor issue={issue} mutation={mutation} />
-            </PropertyRow>
-            <PropertyRow label={t('team')}>
-              <span className="block truncate text-sm">
-                {issue.team.name} ({issue.team.key})
-              </span>
-            </PropertyRow>
-            {issue.project ? (
-              <PropertyRow label={t('project')}>
-                <span className="flex min-w-0 items-center gap-2 text-sm">
-                  <FolderKanban
-                    aria-hidden="true"
-                    className="text-muted-foreground size-4 shrink-0"
+          <fieldset className="mt-3 space-y-2">
+            <legend className="text-sm font-medium">전달 대상</legend>
+            <div className="flex flex-wrap gap-3">
+              {frontRoles.map((role) => (
+                <label key={role} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={destinationRoles.includes(role)}
+                    onCheckedChange={(checked) =>
+                      setDestinationRoles((current) =>
+                        checked ? [...current, role] : current.filter((item) => item !== role),
+                      )
+                    }
                   />
-                  <span className="truncate">{issue.project.name}</span>
-                </span>
-              </PropertyRow>
-            ) : null}
-            {issue.projectRole ? (
-              <PropertyRow label={t('projectRole')}>
-                <Badge variant="secondary">{t(`projectRoles.${issue.projectRole}`)}</Badge>
-              </PropertyRow>
-            ) : null}
-            <PropertyRow label={t('labels')}>
-              <IssueLabels issue={issue} labelItems={labelItems} mutation={mutation} />
-            </PropertyRow>
-          </dl>
-          <PropertyMutationError mutation={mutation} />
-          <IssueInformation issue={issue} />
-        </aside>
-      </div>
-
-      <Dialog open={handoffMode !== null} onOpenChange={(open) => !open && setHandoffMode(null)}>
-        <DialogContent className="sm:max-w-2xl" closeLabel={t('handoff.close')}>
-          <DialogHeader>
-            <DialogTitle>
-              {handoffMode === 'COMPLETE'
-                ? t('handoff.completeTitle')
-                : issue.handoffSummary?.hasInitial
-                  ? t('handoff.followUpTitle')
-                  : t('handoff.initialTitle')}
-            </DialogTitle>
-            <DialogDescription>
-              {handoffMode === 'COMPLETE'
-                ? t('handoff.completeDescription')
-                : t('handoff.editorDescription')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="hidden lg:block">
-            <p className="text-sm font-medium">{t('handoff.bodyLabel')}</p>
-            <MarkdownEditor
+                  {ROLE_LABELS[role]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div className="mt-3 grid gap-2">
+            <HandoffEditor
               charLimit={50_000}
-              className="mt-2"
-              disabled={createHandoff.isPending || mutation.isPending}
-              error={handoffFieldError}
-              labels={markdownEditorLabels(
-                (key) => markdownT(key as never),
-                (key) => String(markdownT.raw(key as never)),
-              )}
-              mentionsEnabled={false}
-              status={createHandoff.isPending || mutation.isPending ? t('handoff.saving') : null}
-              value={handoffBody}
-              onCanSubmitChange={setHandoffCanSubmit}
+              labels={editorLabels}
               onChange={setHandoffBody}
+              value={handoffBody}
             />
-            {handoffMode === 'COMPLETE' ? (
-              <FieldSet className="mt-4" data-invalid={destinationError}>
-                <FieldLegend variant="label">{t('handoff.destinationLabel')}</FieldLegend>
-                <FieldDescription>{t('handoff.destinationDescription')}</FieldDescription>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {frontendRoles.map((role) => {
-                    const checked = destinationRoles.includes(role);
-                    const disabled = frontendRoles.length === 1;
-                    return (
-                      <Field
-                        key={role}
-                        orientation="horizontal"
-                        data-disabled={disabled}
-                        className="rounded-lg border p-3"
-                      >
-                        <Checkbox
-                          id={`handoff-destination-${role}`}
-                          checked={checked}
-                          disabled={disabled}
-                          aria-invalid={destinationError}
-                          aria-errormessage={
-                            destinationError ? 'handoff-destination-error' : undefined
-                          }
-                          onCheckedChange={(nextChecked) => {
-                            setDestinationError(false);
-                            setDestinationRoles((current) =>
-                              nextChecked
-                                ? [...new Set([...current, role])]
-                                : current.filter((value) => value !== role),
-                            );
-                          }}
-                        />
-                        <FieldLabel htmlFor={`handoff-destination-${role}`}>
-                          {t(`projectRoles.${role}`)}
-                        </FieldLabel>
-                      </Field>
-                    );
-                  })}
-                </div>
-                <FieldError id="handoff-destination-error">
-                  {destinationError ? t('handoff.destinationRequired') : null}
-                </FieldError>
-              </FieldSet>
-            ) : null}
-            {bodyError ? (
-              <p className="text-destructive mt-2 text-sm">
-                {bodyError === 'link' ? t('handoff.linkError') : t('handoff.contentError')}
+            {handoffBodyInvalid ? (
+              <p className="text-destructive text-sm" role="alert">
+                전달할 변경 내용을 입력해 주세요.
               </p>
             ) : null}
-            {handoffMutationError && !handoffFieldError ? (
-              <Alert variant="destructive" className="mt-3">
-                <AlertTitle>{t('handoff.saveErrorTitle')}</AlertTitle>
+          </div>
+          <details
+            className="mt-3"
+            open={handoffGuideOpen}
+            onToggle={(event) => setHandoffGuideOpen(event.currentTarget.open)}
+          >
+            <summary className="cursor-pointer text-sm font-medium">작성 가이드 보기</summary>
+            <div className="text-muted-foreground mt-2 space-y-2 text-sm">
+              <p>
+                변경 요약, API 명세 링크, 사용 가능 환경, 요청·응답 변경, 프론트 주의사항을 필요한
+                만큼만 적어 주세요.
+              </p>
+              <Button
+                size="sm"
+                type="button"
+                variant="ghost"
+                onClick={() => setHandoffBody(HANDOFF_TEMPLATE)}
+              >
+                가이드 삽입
+              </Button>
+            </div>
+          </details>
+          <Alert className="mt-3">
+            <AlertTitle>알림 대상</AlertTitle>
+            <AlertDescription>
+              선택한 프론트 작업의 담당자와 구독자에게 알립니다. 새 미할당 작업은 대상 팀의 활성
+              멤버에게 알립니다.
+            </AlertDescription>
+          </Alert>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setHandoffBody('');
+                setDestinationRoles([]);
+                setHandoffGuideOpen(false);
+                setCompletionStateId(null);
+              }}
+            >
+              취소
+            </Button>
+            <Button
+              disabled={
+                stateMutation.isPending || destinationRoles.length === 0 || handoffBodyInvalid
+              }
+              onClick={() => {
+                const state = states.data?.items.find((item) => item.id === completionStateId);
+                if (state)
+                  stateMutation.mutate(
+                    {
+                      handoff: { bodyMarkdown: handoffBody, destinationRoles },
+                      workflowState: state,
+                    },
+                    {
+                      onSuccess: () => {
+                        setHandoffBody('');
+                        setDestinationRoles([]);
+                        setHandoffGuideOpen(false);
+                        setCompletionStateId(null);
+                      },
+                    },
+                  );
+              }}
+            >
+              전달하고 완료
+            </Button>
+          </div>
+        </section>
+      ) : null}
+      <section className="mt-6 border-t pt-4" aria-labelledby="handoff-context-title">
+        <div className="flex items-center justify-between gap-3">
+          <h3 id="handoff-context-title" className="text-sm font-semibold">
+            {work.projectRole === 'BACKEND' ? '보낸 전달' : '받은 전달'}
+          </h3>
+          <Link
+            className="text-primary text-sm underline underline-offset-4"
+            href={`/issues/${encodeURIComponent(issue.identifier)}?tab=handoffs&work=${encodeURIComponent(work.identifier)}${highlightedHandoffId ? `&handoff=${encodeURIComponent(highlightedHandoffId)}` : ''}`}
+            scroll={false}
+          >
+            전체 전달 보기
+          </Link>
+        </div>
+        {relatedHandoffs.length ? (
+          <ul className="mt-3 space-y-4">
+            {latestRelatedHandoff ? (
+              <LatestHandoff
+                key={`${latestRelatedHandoff.id}-${highlightedHandoffId ?? ''}`}
+                handoff={latestRelatedHandoff}
+                initiallyExpanded={Boolean(highlightedHandoffId)}
+              />
+            ) : null}
+          </ul>
+        ) : (
+          <p className="text-muted-foreground mt-2 text-sm">아직 전달된 내용이 없습니다.</p>
+        )}
+        {work.projectRole === 'BACKEND' && hasInitialHandoff ? (
+          <>
+            {followUpSuccess ? (
+              <Alert className="mt-4">
+                <Check />
+                <AlertTitle>
+                  추가 전달 #{savedFollowUpSequence ?? nextFollowUpSequence}이 이력에 저장되었습니다
+                </AlertTitle>
                 <AlertDescription>
-                  <p>{handoffSaveErrorDescription}</p>
-                  {handoffAffectedIssues.length > 0 ? (
-                    <ul className="mt-2 flex flex-col gap-1">
-                      {handoffAffectedIssues.map((affectedIssue) => (
-                        <li key={affectedIssue.identifier}>
-                          <Link href={`/issues/${encodeURIComponent(affectedIssue.identifier)}`}>
-                            {affectedIssue.identifier} · {affectedIssue.title}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
+                  {followUpRecipientWorks.length > 0
+                    ? `${followUpRecipientWorks.map((target) => target.identifier).join(', ')} 작업의 담당자와 구독자에게 알림이 생성됩니다.`
+                    : '최초 전달 대상 작업의 담당자와 구독자에게 알림이 생성됩니다.'}
                 </AlertDescription>
               </Alert>
             ) : null}
-          </div>
-          <p className="text-muted-foreground py-6 text-sm lg:hidden">{t('handoff.mobileWrite')}</p>
-          <DialogFooter className="hidden lg:flex">
-            <Button type="button" variant="outline" onClick={() => setHandoffMode(null)}>
-              {t('cancel')}
-            </Button>
             <Button
-              type="button"
-              disabled={
-                Boolean(bodyError) ||
-                !handoffCanSubmit ||
-                createHandoff.isPending ||
-                mutation.isPending
-              }
-              onClick={submitHandoff}
+              className="mt-4"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setFollowUpSuccess(false);
+                setFollowUpOpen(true);
+              }}
             >
-              {handoffMode === 'COMPLETE' ? t('handoff.submitAndComplete') : t('handoff.submit')}
+              추가 전달 작성
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+            <Dialog
+              open={followUpOpen}
+              onOpenChange={(open) => {
+                if (!open && !followUpMutation.isPending) {
+                  setFollowUpGuideOpen(false);
+                }
+                setFollowUpOpen(open);
+              }}
+            >
+              <DialogContent closeLabel="추가 전달 작성 닫기" className="sm:max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>추가 전달 작성</DialogTitle>
+                  <DialogDescription>
+                    최초 전달 이후의 변경만 새 이력으로 남깁니다. 기존 전달과 프론트 작업은 바뀌지
+                    않습니다.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="border-border bg-muted/40 rounded-lg border px-3 py-2.5 text-sm">
+                  <p className="text-muted-foreground text-xs font-medium">전달 관계</p>
+                  <p className="mt-1 font-medium">
+                    {work.identifier} · {ROLE_LABELS[work.projectRole]} →{' '}
+                    {followUpRecipientWorks.length > 0
+                      ? followUpRecipientWorks
+                          .map(
+                            (target) => `${target.identifier} · ${ROLE_LABELS[target.projectRole]}`,
+                          )
+                          .join(', ')
+                      : '최초 전달 대상 작업'}
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <HandoffEditor
+                    charLimit={50_000}
+                    labels={editorLabels}
+                    onChange={setFollowUpBody}
+                    status={followUpMutation.isPending ? '저장 중…' : null}
+                    value={followUpBody}
+                  />
+                  {followUpBodyInvalid ? (
+                    <p className="text-destructive text-sm" role="alert">
+                      전달할 변경 내용을 입력해 주세요.
+                    </p>
+                  ) : null}
+                </div>
+                <details
+                  open={followUpGuideOpen}
+                  onToggle={(event) => setFollowUpGuideOpen(event.currentTarget.open)}
+                >
+                  <summary className="cursor-pointer text-sm font-medium">작성 가이드 보기</summary>
+                  <div className="text-muted-foreground mt-2 space-y-2 text-sm">
+                    <p>
+                      변경 요약, 변경된 API 또는 요청·응답, 프론트에서 필요한 조치를 필요한 만큼만
+                      적어 주세요.
+                    </p>
+                    <Button
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setFollowUpBody(FOLLOW_UP_HANDOFF_TEMPLATE)}
+                    >
+                      가이드 삽입
+                    </Button>
+                  </div>
+                </details>
+                <Alert>
+                  <AlertTitle>알림 대상</AlertTitle>
+                  <AlertDescription>
+                    {followUpRecipientWorks.length > 0
+                      ? `${followUpRecipientWorks.map((target) => target.identifier).join(', ')} 작업의 담당자와 구독자에게만 알립니다.`
+                      : '최초 전달 대상 작업의 담당자와 구독자에게만 알립니다.'}
+                  </AlertDescription>
+                </Alert>
+                <DialogFooter>
+                  <Button
+                    disabled={followUpMutation.isPending}
+                    type="button"
+                    variant="outline"
+                    onClick={() => setFollowUpOpen(false)}
+                  >
+                    취소
+                  </Button>
+                  <Button
+                    disabled={followUpMutation.isPending || followUpBodyInvalid}
+                    type="button"
+                    onClick={createFollowUp}
+                  >
+                    {followUpMutation.isPending ? <Spinner /> : null}추가 전달 저장
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </>
+        ) : null}
+      </section>
+    </section>
+  );
+}
+
+function LatestHandoff({
+  handoff,
+  initiallyExpanded,
+}: {
+  handoff: IssueDetailResponseDto['handoffFlows'][number];
+  initiallyExpanded: boolean;
+}) {
+  const [expanded, setExpanded] = useState(initiallyExpanded);
+
+  return (
+    <li id={`handoff-${handoff.id}`} className="border-primary/50 border-l-2 pl-4 text-sm">
+      <p className="font-medium">
+        {handoff.kind === 'INITIAL' ? '최초 전달' : '추가 전달'} #{handoff.sequenceNumber}
+      </p>
+      <Button
+        className="mt-1"
+        size="sm"
+        variant="ghost"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        {expanded ? '내용 접기' : '내용 펼치기'}
+      </Button>
+      {expanded ? (
+        <>
+          <MarkdownRenderer
+            className="mt-2"
+            imageUnavailableLabel="이미지를 표시할 수 없습니다"
+            markdown={handoff.bodyMarkdown}
+          />
+          <Button
+            className="mt-2"
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              document
+                .getElementById('comments')
+                ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
+          >
+            댓글로 질문
+          </Button>
+        </>
+      ) : null}
+    </li>
+  );
+}
+
+function HandoffHistoryItem({
+  handoff,
+  initiallyExpanded,
+  pathname,
+  searchParams,
+}: {
+  handoff: IssueDetailResponseDto['handoffFlows'][number];
+  initiallyExpanded: boolean;
+  pathname: string;
+  searchParams: ReturnType<typeof useSearchParams>;
+}) {
+  const router = useRouter();
+  const [expanded, setExpanded] = useState(initiallyExpanded);
+
+  return (
+    <li id={`handoff-${handoff.id}`} className="border-primary/40 border-l-2 pl-4 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <strong>
+            {handoff.kind === 'INITIAL' ? '최초 전달' : '추가 전달'} #{handoff.sequenceNumber}
+          </strong>
+          <p className="text-muted-foreground mt-1">
+            {handoff.sourceTeamWork.identifier} →{' '}
+            {handoff.targets.map((target) => target.teamWork.identifier).join(', ')}
+          </p>
+        </div>
+        <Button size="sm" variant="ghost" onClick={() => setExpanded((current) => !current)}>
+          {expanded ? '내용 접기' : '내용 펼치기'}
+        </Button>
+      </div>
+      {expanded ? (
+        <>
+          <MarkdownRenderer
+            className="mt-3"
+            imageUnavailableLabel="이미지를 표시할 수 없습니다"
+            markdown={handoff.bodyMarkdown}
+          />
+          <Button
+            className="mt-2"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams.toString());
+              next.set('tab', 'work');
+              router.replace(`${pathname}?${next.toString()}#comments`, { scroll: false });
+            }}
+          >
+            댓글로 질문
+          </Button>
+        </>
+      ) : null}
+    </li>
+  );
+}
+
+export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
+  const markdown = useTranslations('Markdown');
+  const editorLabels = markdownEditorLabels(
+    (key) => markdown(key as never),
+    (key) => String(markdown.raw(key as never)),
+  );
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const requestedWork = searchParams.get('work');
+  const requestedHandoff = searchParams.get('handoff');
+  const tab =
+    searchParams.get('tab') === 'handoffs'
+      ? 'handoffs'
+      : searchParams.get('tab') === 'activity'
+        ? 'activity'
+        : 'work';
+  const issueQuery = useIssuesControllerGet(issueRef, { query: { retry: false } });
+  const legacyWork = useTeamWorksControllerGet(requestedWork ?? issueRef, {
+    query: { enabled: Boolean(requestedWork) || issueQuery.isError, retry: false },
+  });
+  const issue = issueQuery.data;
+  const selectedWork =
+    issue?.teamWorks.find((work) => matchesRequestedTeamWork(work.identifier, requestedWork)) ??
+    issue?.teamWorks[0];
+  const session = useAuthControllerGetSession({ query: { retry: false } });
+  const members = useMembersControllerList(
+    { limit: 100, status: 'ACTIVE' },
+    { query: { retry: false } },
+  );
+  const start = useIssuesControllerStart();
+  const updateIssue = useIssuesControllerUpdate();
+  const project = useProjectsControllerGet(issue?.project.id ?? '', {
+    query: { enabled: Boolean(issue), retry: false },
+  });
+  const [startRoles, setStartRoles] = useState<ProjectRole[]>([]);
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState<{
+    issueId: string;
+    value: string;
+  } | null>(null);
+  const issueMutationError = start.error ?? updateIssue.error;
+
+  useEffect(() => {
+    if (!issueQuery.isError || !legacyWork.data) return;
+    router.replace(
+      `${issueWorkHref(legacyWork.data.issue.identifier, legacyWork.data.identifier)}${window.location.hash}`,
+      { scroll: false },
+    );
+  }, [issueQuery.isError, legacyWork.data, router]);
+  useEffect(() => {
+    if (!issue || requestedWork || !selectedWork) return;
+    const next = new URLSearchParams(searchParams.toString());
+    next.set('tab', 'work');
+    next.set('work', selectedWork.identifier);
+    router.replace(`${pathname}?${next.toString()}${window.location.hash}`, { scroll: false });
+  }, [issue, pathname, requestedWork, router, searchParams, selectedWork]);
+  useEffect(() => {
+    if (!issue) return;
+    const anchor = requestedHandoff ? `handoff-${requestedHandoff}` : window.location.hash.slice(1);
+    if (!anchor) return;
+    requestAnimationFrame(() =>
+      document.getElementById(anchor)?.scrollIntoView({ block: 'center' }),
+    );
+  }, [issue, requestedHandoff, selectedWork?.id]);
+
+  const mentionOptions = useMemo(
+    () =>
+      (members.data?.items ?? []).map((member) => ({
+        displayName: member.user.displayName,
+        membershipId: member.id,
+      })),
+    [members.data?.items],
+  );
+
+  if (issueQuery.isPending || (issueQuery.isError && legacyWork.isPending))
+    return <ContentLoading label="통합 상세를 불러오는 중입니다" />;
+  if (!issue && issueQuery.isError && legacyWork.isError)
+    return (
+      <ContentError
+        title="이슈를 찾을 수 없습니다"
+        description="주소를 확인하거나 목록으로 돌아가 주세요."
+        retryLabel="다시 시도"
+        onRetry={() => {
+          void issueQuery.refetch();
+          void legacyWork.refetch();
+        }}
+      />
+    );
+  if (!issue) return <ContentLoading label="정본 주소로 이동 중입니다" />;
+
+  const currentIssue = issue;
+  const description =
+    descriptionDraft?.issueId === currentIssue.id
+      ? descriptionDraft.value
+      : (currentIssue.descriptionMarkdown ?? '');
+  const availableRoles = (project.data?.roleTeams ?? [])
+    .map(({ role }) => role)
+    .filter((role) => !currentIssue.teamWorks.some((work) => work.projectRole === role));
+  async function startWorks() {
+    if (!startRoles.length) return;
+    try {
+      const result = await start.mutateAsync({
+        issueId: currentIssue.id,
+        data: { roleAssignments: startRoles.map((projectRole) => ({ projectRole })) },
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: getIssuesControllerGetQueryKey(currentIssue.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: getIssuesControllerGetQueryKey(currentIssue.identifier),
+        }),
+      ]);
+      const first = result.teamWorks[0];
+      if (first)
+        router.push(issueWorkHref(currentIssue.identifier, first.identifier), { scroll: false });
+      setStartRoles([]);
+    } catch {
+      // React Query mutation 상태가 인라인 오류를 표시한다.
+    }
+  }
+  async function saveDescription() {
+    try {
+      const updated = await updateIssue.mutateAsync({
+        issueId: currentIssue.id,
+        data: { descriptionMarkdown: description.trim() || null, version: currentIssue.version },
+      });
+      queryClient.setQueryData(getIssuesControllerGetQueryKey(currentIssue.id), updated);
+      queryClient.setQueryData(getIssuesControllerGetQueryKey(currentIssue.identifier), updated);
+      setDescriptionDraft(null);
+      setEditingDescription(false);
+    } catch {
+      // React Query mutation 상태가 인라인 오류를 표시한다.
+    }
+  }
+  async function statusAction(action: 'COMPLETE' | 'PAUSE' | 'RESUME' | 'REOPEN') {
+    try {
+      const updated = await updateIssue.mutateAsync({
+        issueId: currentIssue.id,
+        data: { statusAction: action, version: currentIssue.version },
+      });
+      queryClient.setQueryData(getIssuesControllerGetQueryKey(currentIssue.id), updated);
+      queryClient.setQueryData(getIssuesControllerGetQueryKey(currentIssue.identifier), updated);
+    } catch {
+      // React Query mutation 상태가 인라인 오류를 표시한다.
+    }
+  }
+
+  return (
+    <article className="mx-auto max-w-7xl space-y-6">
+      <header className="space-y-4">
+        <Link
+          href="/issues"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+        >
+          <ArrowLeft className="size-4" />
+          이슈 목록
+        </Link>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-muted-foreground font-mono text-sm">{issue.identifier}</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+              {issue.title}
+            </h1>
+            <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <span>{issue.project.name}</span>
+              <PriorityDisplay priority={issue.priority} />
+              <span className="tabular-nums">
+                {issue.progress.percentage}% ({issue.progress.completed}/{issue.progress.total})
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <IssueStatusDisplay status={issue.status} />
+            {issue.status === 'REVIEW' ? (
+              <Button size="sm" onClick={() => void statusAction('COMPLETE')}>
+                <Check className="size-4" />
+                이슈 완료
+              </Button>
+            ) : null}
+            {issue.status === 'PAUSED' ? (
+              <Button size="sm" variant="outline" onClick={() => void statusAction('RESUME')}>
+                재개
+              </Button>
+            ) : issue.status === 'DONE' || issue.status === 'CANCELED' ? (
+              <Button size="sm" variant="outline" onClick={() => void statusAction('REOPEN')}>
+                다시 열기
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" onClick={() => void statusAction('PAUSE')}>
+                일시 중지
+              </Button>
+            )}
+          </div>
+        </div>
+        <nav className="flex gap-4 border-b text-sm" aria-label="이슈 상세 탭">
+          {(
+            [
+              { key: 'work', label: '업무' },
+              { key: 'handoffs', label: '전달' },
+              { key: 'activity', label: '활동' },
+            ] as const
+          ).map((item) => {
+            const next = new URLSearchParams(searchParams.toString());
+            next.set('tab', item.key);
+            return (
+              <Link
+                key={item.key}
+                href={`${pathname}?${next.toString()}`}
+                scroll={false}
+                aria-current={tab === item.key ? 'page' : undefined}
+                className={`border-b-2 px-1 py-2 ${tab === item.key ? 'border-primary text-foreground' : 'text-muted-foreground hover:text-foreground border-transparent'}`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+        {issueMutationError ? (
+          <Alert variant="destructive">
+            <CircleAlert />
+            <AlertTitle>이슈 변경을 저장하지 못했습니다</AlertTitle>
+            <AlertDescription>{mutationErrorMessage(issueMutationError)}</AlertDescription>
+          </Alert>
+        ) : null}
+      </header>
+      <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <aside className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">팀 작업</h2>
+            <Badge variant="secondary">{issue.teamWorks.length}</Badge>
+          </div>
+          {issue.teamWorks.length ? (
+            <>
+              <select
+                aria-label="팀 작업 전환"
+                className="bg-background h-10 w-full rounded-md border px-3 text-sm lg:hidden"
+                value={selectedWork?.identifier ?? ''}
+                onChange={(event) => {
+                  const next = new URLSearchParams(searchParams.toString());
+                  next.set('tab', 'work');
+                  next.set('work', event.target.value);
+                  router.push(`${pathname}?${next.toString()}`, { scroll: false });
+                }}
+              >
+                {issue.teamWorks.map((work) => (
+                  <option key={work.id} value={work.identifier}>
+                    {work.identifier} · {ROLE_LABELS[work.projectRole]} · {work.team.name}
+                  </option>
+                ))}
+              </select>
+              <nav className="hidden space-y-1 lg:block" aria-label="팀 작업 선택">
+                {issue.teamWorks.map((work) => {
+                  const active = work.id === selectedWork?.id;
+                  const next = new URLSearchParams(searchParams.toString());
+                  next.set('tab', 'work');
+                  next.set('work', work.identifier);
+                  return (
+                    <Link
+                      key={work.id}
+                      href={`${pathname}?${next.toString()}`}
+                      scroll={false}
+                      aria-current={active ? 'page' : undefined}
+                      className={`block border-l-2 px-2 py-2 ${active ? 'border-primary bg-muted/40' : 'hover:bg-muted/40 border-transparent'}`}
+                    >
+                      <span className="font-mono text-xs">{work.identifier}</span>
+                      <span className="mt-1 flex items-center gap-1.5 text-sm font-medium">
+                        <TeamWorkStatusDisplay category={work.stateCategory} />
+                        {ROLE_LABELS[work.projectRole]}
+                      </span>
+                      <span className="text-muted-foreground mt-1 block truncate text-xs">
+                        {work.assignee?.user.displayName ?? '담당자 없음'}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">아직 시작한 팀 작업이 없습니다.</p>
+          )}
+          {availableRoles.length ? (
+            <div className="bg-surface-2 rounded-lg border p-3">
+              <h3 className="flex items-center gap-2 text-sm font-medium">
+                <Play className="size-4" />팀 작업 시작
+              </h3>
+              <div className="mt-3 space-y-2">
+                {availableRoles.map((role) => (
+                  <label key={role} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={startRoles.includes(role)}
+                      onCheckedChange={(checked) =>
+                        setStartRoles((current) =>
+                          checked ? [...current, role] : current.filter((item) => item !== role),
+                        )
+                      }
+                    />
+                    {ROLE_LABELS[role]}
+                  </label>
+                ))}
+              </div>
+              <Button
+                className="mt-3 w-full"
+                size="sm"
+                disabled={!startRoles.length || start.isPending}
+                onClick={() => void startWorks()}
+              >
+                {start.isPending ? <Spinner /> : <Play className="size-3.5" />}선택한 작업 시작
+              </Button>
+            </div>
+          ) : null}
+        </aside>
+        <main className="min-w-0 space-y-6">
+          {tab === 'handoffs' ? (
+            <section id="handoffs" aria-labelledby="handoffs-title">
+              <h2 id="handoffs-title" className="text-lg font-semibold">
+                작업 전달
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                최초 전달과 이후 API 변경을 원문 그대로 확인합니다.
+              </p>
+              <ol className="mt-5 space-y-6">
+                {issue.handoffFlows.map((handoff, index) => (
+                  <HandoffHistoryItem
+                    key={handoff.id}
+                    handoff={handoff}
+                    initiallyExpanded={handoff.id === requestedHandoff || index === 0}
+                    pathname={pathname}
+                    searchParams={searchParams}
+                  />
+                ))}
+              </ol>
+              {!issue.handoffFlows.length ? (
+                <p className="text-muted-foreground mt-4 text-sm">아직 전달 이력이 없습니다.</p>
+              ) : null}
+            </section>
+          ) : null}
+          {tab === 'activity' ? (
+            <IssueTimeline
+              currentMembershipId={
+                session.data?.authenticated ? (session.data.membership?.id ?? null) : null
+              }
+              issueId={issue.id}
+              issueIdentifier={issue.identifier}
+              mentionOptions={mentionOptions}
+              mode="activity"
+            />
+          ) : null}
+          {tab === 'work' ? (
+            <>
+              {selectedWork ? (
+                <TeamWorkPanel
+                  key={selectedWork.id}
+                  highlightedHandoffId={requestedHandoff}
+                  issue={issue}
+                  work={selectedWork}
+                />
+              ) : (
+                <section className="bg-surface-1 rounded-xl border p-6 text-center">
+                  <UserRound className="text-muted-foreground mx-auto size-8" />
+                  <h2 className="mt-3 font-semibold">이슈에서 팀 작업을 시작하세요</h2>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    본문과 댓글은 이미 사용할 수 있으며 실행 역할은 나중에 추가할 수 있습니다.
+                  </p>
+                </section>
+              )}
+              <section
+                className="bg-surface-1 rounded-xl border p-4 sm:p-5"
+                aria-labelledby="issue-content-title"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <h2 id="issue-content-title" className="text-lg font-semibold">
+                    이슈 설명
+                  </h2>
+                  {!editingDescription ? (
+                    <Button size="sm" variant="outline" onClick={() => setEditingDescription(true)}>
+                      편집
+                    </Button>
+                  ) : null}
+                </div>
+                {editingDescription ? (
+                  <div className="mt-3">
+                    <IssueDescriptionEditor
+                      charLimit={100_000}
+                      labels={editorLabels}
+                      mentionOptions={mentionOptions}
+                      onChange={(value) => setDescriptionDraft({ issueId: currentIssue.id, value })}
+                      status={updateIssue.isPending ? '저장 중…' : null}
+                      value={description}
+                    />
+                    <div className="mt-2 flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setDescriptionDraft(null);
+                          setEditingDescription(false);
+                        }}
+                      >
+                        취소
+                      </Button>
+                      <Button
+                        disabled={updateIssue.isPending}
+                        onClick={() => void saveDescription()}
+                      >
+                        {updateIssue.isPending ? <Spinner /> : <Save className="size-4" />}설명 저장
+                      </Button>
+                    </div>
+                  </div>
+                ) : issue.descriptionMarkdown ? (
+                  <div className="prose prose-sm mt-4 max-w-none">
+                    <MarkdownRenderer
+                      imageUnavailableLabel="이미지를 표시할 수 없습니다"
+                      markdown={issue.descriptionMarkdown}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground mt-4 text-sm">등록된 설명이 없습니다.</p>
+                )}
+                <IssueAttachments issue={issue} />
+                <div id="comments">
+                  <IssueTimeline
+                    currentMembershipId={
+                      session.data?.authenticated ? (session.data.membership?.id ?? null) : null
+                    }
+                    issueId={issue.id}
+                    issueIdentifier={issue.identifier}
+                    mentionOptions={mentionOptions}
+                    mode="comments"
+                  />
+                </div>
+              </section>
+            </>
+          ) : null}
+        </main>
+      </div>
+    </article>
   );
 }

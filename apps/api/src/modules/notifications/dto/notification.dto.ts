@@ -31,7 +31,7 @@ export class NotificationListQueryDto {
   @IsInt({ message: '조회 개수가 올바르지 않습니다.' })
   @Min(1, { message: '조회 개수는 1 이상이어야 합니다.' })
   @Max(100, { message: '조회 개수는 100 이하여야 합니다.' })
-  limit = 50;
+  limit: number = 50;
 
   @ApiPropertyOptional({ description: '이전 응답에서 받은 불투명 커서' })
   @IsOptional()
@@ -68,6 +68,14 @@ export class NotificationIssueResponseDto {
   title!: string;
 }
 
+export class NotificationTeamWorkResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ example: 'WEB-42' })
+  identifier!: string;
+}
+
 export class NotificationResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -80,6 +88,9 @@ export class NotificationResponseDto {
 
   @ApiProperty({ type: NotificationIssueResponseDto })
   issue!: NotificationIssueResponseDto;
+
+  @ApiProperty({ nullable: true, type: NotificationTeamWorkResponseDto })
+  teamWork!: NotificationTeamWorkResponseDto | null;
 
   @ApiProperty({ format: 'uuid', nullable: true, type: String })
   commentId!: string | null;

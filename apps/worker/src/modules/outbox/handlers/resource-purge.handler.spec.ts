@@ -45,7 +45,6 @@ describe('ResourcePurgeHandler', () => {
     comment: { deleteMany: jest.fn() },
     file: { updateMany: jest.fn() },
     issue: { deleteMany: jest.fn(), findFirst: jest.fn() },
-    issueBlockRelation: { deleteMany: jest.fn() },
     issueFileAttachment: { deleteMany: jest.fn(), findMany: jest.fn() },
     issueLabel: { deleteMany: jest.fn() },
     issueSubscription: { deleteMany: jest.fn() },
@@ -93,7 +92,6 @@ describe('ResourcePurgeHandler', () => {
       },
     });
     expect(transaction.notification.deleteMany).toHaveBeenCalled();
-    expect(transaction.issueBlockRelation.deleteMany).toHaveBeenCalled();
     expect(transaction.activityEvent.deleteMany).toHaveBeenCalled();
     expect(transaction.issue.deleteMany).toHaveBeenCalled();
     expect(transaction.$executeRaw).toHaveBeenCalledTimes(1);

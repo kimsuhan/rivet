@@ -426,22 +426,26 @@ export class TeamsService {
       const openAssignments = await transaction.$queryRaw<
         Array<{ id: string; identifier: string; title: string }>
       >`
-        SELECT issue."id", issue."identifier", issue."title"
-        FROM "issues" issue
+        SELECT work."id", work."identifier", issue."title"
+        FROM "team_works" work
+        INNER JOIN "issues" issue
+          ON issue."workspace_id" = work."workspace_id"
+         AND issue."id" = work."issue_id"
         INNER JOIN "workflow_states" state
-          ON state."workspace_id" = issue."workspace_id"
-         AND state."team_id" = issue."team_id"
-         AND state."id" = issue."workflow_state_id"
-        WHERE issue."workspace_id" = ${workspaceId}::uuid
-          AND issue."team_id" = ${teamId}::uuid
-          AND issue."assignee_membership_id" = ${membershipId}::uuid
+          ON state."workspace_id" = work."workspace_id"
+         AND state."team_id" = work."team_id"
+         AND state."id" = work."workflow_state_id"
+        WHERE work."workspace_id" = ${workspaceId}::uuid
+          AND work."team_id" = ${teamId}::uuid
+          AND work."assignee_membership_id" = ${membershipId}::uuid
+          AND work."deleted_at" IS NULL
           AND issue."deleted_at" IS NULL
           AND state."category" NOT IN (
             ${StateCategory.COMPLETED}::"StateCategory",
             ${StateCategory.CANCELED}::"StateCategory"
           )
-        ORDER BY issue."id"
-        FOR UPDATE OF issue
+        ORDER BY work."id"
+        FOR UPDATE OF work
       `;
       if (openAssignments.length > 0) {
         throw openIssueConflict(
@@ -493,21 +497,25 @@ export class TeamsService {
       const openIssues = await transaction.$queryRaw<
         Array<{ id: string; identifier: string; title: string }>
       >`
-        SELECT issue."id", issue."identifier", issue."title"
-        FROM "issues" issue
+        SELECT work."id", work."identifier", issue."title"
+        FROM "team_works" work
+        INNER JOIN "issues" issue
+          ON issue."workspace_id" = work."workspace_id"
+         AND issue."id" = work."issue_id"
         INNER JOIN "workflow_states" state
-          ON state."workspace_id" = issue."workspace_id"
-         AND state."team_id" = issue."team_id"
-         AND state."id" = issue."workflow_state_id"
-        WHERE issue."workspace_id" = ${workspaceId}::uuid
-          AND issue."team_id" = ${teamId}::uuid
+          ON state."workspace_id" = work."workspace_id"
+         AND state."team_id" = work."team_id"
+         AND state."id" = work."workflow_state_id"
+        WHERE work."workspace_id" = ${workspaceId}::uuid
+          AND work."team_id" = ${teamId}::uuid
+          AND work."deleted_at" IS NULL
           AND issue."deleted_at" IS NULL
           AND state."category" NOT IN (
             ${StateCategory.COMPLETED}::"StateCategory",
             ${StateCategory.CANCELED}::"StateCategory"
           )
-        ORDER BY issue."id"
-        FOR UPDATE OF issue
+        ORDER BY work."id"
+        FOR UPDATE OF work
       `;
       if (openIssues.length > 0) {
         throw openIssueConflict(
@@ -839,15 +847,20 @@ export class TeamsService {
       }
 
       const affectedIssues = await transaction.$queryRaw<
-        Array<{ id: string; identifier: string; title: string }>
+        Array<{ id: string; identifier: string; issueId: string; title: string }>
       >`
-        SELECT "id", "identifier", "title"
-        FROM "issues"
-        WHERE "workspace_id" = ${context.workspaceId}::uuid
-          AND "team_id" = ${target.teamId}::uuid
-          AND "workflow_state_id" = ${target.id}::uuid
-        ORDER BY "id"
-        FOR UPDATE
+        SELECT work."id", work."identifier", work."issue_id" AS "issueId", issue."title"
+        FROM "team_works" work
+        INNER JOIN "issues" issue
+          ON issue."workspace_id" = work."workspace_id"
+         AND issue."id" = work."issue_id"
+        WHERE work."workspace_id" = ${context.workspaceId}::uuid
+          AND work."team_id" = ${target.teamId}::uuid
+          AND work."workflow_state_id" = ${target.id}::uuid
+          AND work."deleted_at" IS NULL
+          AND issue."deleted_at" IS NULL
+        ORDER BY work."id"
+        FOR UPDATE OF work
       `;
       if ((target.isDefault || affectedIssues.length > 0) && !query.replacementStateId) {
         throw new ApiError({
@@ -863,7 +876,7 @@ export class TeamsService {
         if (!replacement) {
           throw resourceNotFound('대체할 워크플로 상태를 찾을 수 없습니다.');
         }
-        const reassignedIssues = await transaction.issue.updateManyAndReturn({
+        const reassignedIssues = await transaction.teamWork.updateManyAndReturn({
           data: { version: { increment: 1 }, workflowStateId: replacement.id },
           select: { id: true, version: true },
           where: {
@@ -876,9 +889,10 @@ export class TeamsService {
             actorMembershipId: context.membershipId,
             afterData: { id: replacement.id, name: replacement.name },
             beforeData: { id: target.id, name: target.name },
-            eventType: 'ISSUE_UPDATED',
+            eventType: 'TEAM_WORK_CHANGED',
             fieldName: 'workflowStateId',
-            issueId: issue.id,
+            issueId: issue.issueId,
+            teamWorkId: issue.id,
             workspaceId: context.workspaceId,
           })),
         });
@@ -886,7 +900,7 @@ export class TeamsService {
           await notifyResourceChanged(transaction, {
             changeType: 'UPDATED',
             resourceId: issue.id,
-            resourceType: 'ISSUE',
+            resourceType: 'TEAM_WORK',
             version: issue.version,
             workspaceId: context.workspaceId,
           });

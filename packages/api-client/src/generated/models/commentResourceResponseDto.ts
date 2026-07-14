@@ -10,6 +10,8 @@ import type { CollaborationMemberSummaryResponseDto } from './collaborationMembe
 export interface CommentResourceResponseDto {
   id: string;
   /** @nullable */
+  teamWorkId: string | null;
+  /** @nullable */
   bodyMarkdown: string | null;
   author: CollaborationMemberSummaryResponseDto;
   /** @minimum 1 */

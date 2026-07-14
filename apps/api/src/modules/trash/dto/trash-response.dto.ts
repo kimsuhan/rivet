@@ -64,12 +64,6 @@ export class TrashItemResponseDto {
   @ApiPropertyOptional({ nullable: true, type: TrashConnectionResponseDto })
   project!: TrashConnectionResponseDto | null;
 
-  @ApiPropertyOptional({ nullable: true, type: TrashConnectionResponseDto })
-  team!: TrashConnectionResponseDto | null;
-
-  @ApiPropertyOptional({ nullable: true, type: TrashConnectionResponseDto })
-  parentIssue!: TrashConnectionResponseDto | null;
-
   @ApiProperty({ isArray: true, type: TrashProjectRoleTeamResponseDto })
   roleTeams!: TrashProjectRoleTeamResponseDto[];
 }

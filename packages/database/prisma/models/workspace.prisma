@@ -17,36 +17,37 @@ enum StateCategory {
 }
 
 model Workspace {
-  id                     String   @id @default(uuid()) @db.Uuid
-  name                   String   @db.VarChar(100)
-  slug                   String   @db.VarChar(50)
-  normalizedSlug         String   @unique @map("normalized_slug") @db.VarChar(50)
-  nextFeatureIssueNumber Int      @default(1) @map("next_feature_issue_number")
-  createdByUserId        String   @map("created_by_user_id") @db.Uuid
-  version                Int      @default(1)
-  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String   @db.VarChar(100)
+  slug            String   @db.VarChar(50)
+  normalizedSlug  String   @unique @map("normalized_slug") @db.VarChar(50)
+  nextIssueNumber Int      @default(1) @map("next_issue_number")
+  createdByUserId String   @map("created_by_user_id") @db.Uuid
+  version         Int      @default(1)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  createdByUser   User                  @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  memberships     WorkspaceMembership[]
-  invitations     WorkspaceInvitation[]
-  teams           Team[]
-  labels          Label[]
-  outboxEvents    OutboxEvent[]
-  projects        Project[]
-  projectRoles    ProjectRoleTeam[]
-  issues          Issue[]
-  issueLabels     IssueLabel[]
-  subscriptions   IssueSubscription[]
-  blockRelations  IssueBlockRelation[]
-  apiHandoffs     ApiHandoff[]
-  activityEvents  ActivityEvent[]
-  notifications   Notification[]
-  comments        Comment[]
-  mentions        Mention[]
-  files           File[]
-  fileAttachments IssueFileAttachment[]
-  exportAudits    ExportAudit[]
+  createdByUser     User                  @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  memberships       WorkspaceMembership[]
+  invitations       WorkspaceInvitation[]
+  teams             Team[]
+  labels            Label[]
+  outboxEvents      OutboxEvent[]
+  projects          Project[]
+  projectRoles      ProjectRoleTeam[]
+  issues            Issue[]
+  teamWorks         TeamWork[]
+  issueLabels       IssueLabel[]
+  subscriptions     IssueSubscription[]
+  apiHandoffs       ApiHandoff[]
+  apiHandoffTargets ApiHandoffTarget[]
+  activityEvents    ActivityEvent[]
+  notifications     Notification[]
+  comments          Comment[]
+  mentions          Mention[]
+  files             File[]
+  fileAttachments   IssueFileAttachment[]
+  exportAudits      ExportAudit[]
 
   @@map("workspaces")
 }
@@ -73,8 +74,8 @@ model WorkspaceMembership {
   deletedProjects        Project[]             @relation("ProjectDeletedByMembership")
   createdIssues          Issue[]               @relation("IssueCreatorMembership")
   deletedIssues          Issue[]               @relation("IssueDeletedByMembership")
+  createdTeamWorks       TeamWork[]            @relation("TeamWorkCreatorMembership")
   issueSubscriptions     IssueSubscription[]
-  createdBlockRelations  IssueBlockRelation[]  @relation("IssueBlockCreatorMembership")
   authoredHandoffs       ApiHandoff[]          @relation("ApiHandoffAuthorMembership")
   actorActivityEvents    ActivityEvent[]       @relation("ActivityActorMembership")
   receivedNotifications  Notification[]        @relation("NotificationRecipientMembership")
@@ -129,7 +130,7 @@ model Team {
   teamMembers    TeamMember[]
   workflowStates WorkflowState[]
   projectRoles   ProjectRoleTeam[]
-  issues         Issue[]
+  teamWorks      TeamWork[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, key])
@@ -144,9 +145,9 @@ model TeamMember {
   joinedAt     DateTime  @default(now()) @map("joined_at") @db.Timestamptz(3)
   removedAt    DateTime? @map("removed_at") @db.Timestamptz(3)
 
-  team           Team                @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
-  membership     WorkspaceMembership @relation(fields: [workspaceId, membershipId], references: [workspaceId, id], onDelete: Restrict)
-  assignedIssues Issue[]             @relation("IssueAssigneeTeamMember")
+  team              Team                @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
+  membership        WorkspaceMembership @relation(fields: [workspaceId, membershipId], references: [workspaceId, id], onDelete: Restrict)
+  assignedTeamWorks TeamWork[]          @relation("TeamWorkAssigneeTeamMember")
 
   @@id([teamId, membershipId])
   @@unique([workspaceId, teamId, membershipId])
@@ -167,8 +168,8 @@ model WorkflowState {
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  team   Team    @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
-  issues Issue[]
+  team      Team       @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
+  teamWorks TeamWork[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, teamId, id])

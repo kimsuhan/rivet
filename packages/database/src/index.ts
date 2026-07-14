@@ -3,12 +3,11 @@ export { Prisma, PrismaClient } from './generated/prisma/client';
 export {
   EmailTemplateType,
   ExportType,
-  FeatureIssueStatus,
   FileScope,
   HandoffKind,
   IssueFileKind,
   IssuePriority,
-  IssueType,
+  IssueStatus,
   MembershipRole,
   MembershipStatus,
   NotificationType,

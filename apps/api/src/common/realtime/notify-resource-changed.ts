@@ -10,6 +10,7 @@ export async function notifyResourceChanged(
     resourceId: string;
     resourceType:
       | 'ISSUE'
+      | 'TEAM_WORK'
       | 'PROJECT'
       | 'COMMENT'
       | 'HANDOFF'

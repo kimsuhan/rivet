@@ -8,7 +8,7 @@
 
 export type SearchControllerIssuesParams = {
 /**
- * 표시 ID 또는 제목 검색어
+ * 이슈 또는 팀 작업 표시 ID, 이슈 제목 검색어
  * @maxLength 500
  */
 query?: string;
@@ -18,7 +18,7 @@ query?: string;
  */
 limit?: number;
 /**
- * 이전 응답에서 받은 불투명 커서
+ * 이전 응답의 불투명 커서
  * @maxLength 1024
  */
 cursor?: string;

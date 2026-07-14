@@ -34,13 +34,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserAvatar } from '@/components/user-avatar';
 import { useRouter } from '@/i18n/navigation';
 
+import { issueWorkHref } from '../issues/issue-work-routing';
 import { getNotificationPagesQueryKey, useNotificationPages } from './notification-queries';
 
 const NOTIFICATION_ICONS: Record<NotificationResponseDto['type'], LucideIcon> = {
   API_HANDOFF_CREATED: Send,
   API_HANDOFF_FOLLOW_UP_CREATED: Send,
   COMMENT_ADDED: MessageSquare,
-  ISSUE_ASSIGNED: UserRoundCheck,
+  TEAM_WORK_ASSIGNED: UserRoundCheck,
   ISSUE_CANCELED: CircleX,
   ISSUE_COMPLETED: CircleCheck,
   MENTIONED: AtSign,
@@ -84,9 +85,13 @@ function updateUnreadNotifications(
 }
 
 function notificationHref(notification: NotificationResponseDto): string {
-  const issueHref = `/issues/${encodeURIComponent(notification.issue.identifier)}`;
+  const issueHref = issueWorkHref(notification.issue.identifier, notification.teamWork?.identifier);
   if (notification.commentId) return `${issueHref}#comment-${notification.commentId}`;
-  if (notification.handoffId) return `${issueHref}#handoff-${notification.handoffId}`;
+  if (notification.handoffId) {
+    const params = new URLSearchParams({ handoff: notification.handoffId, tab: 'work' });
+    if (notification.teamWork?.identifier) params.set('work', notification.teamWork.identifier);
+    return `${issueHref}?${params.toString()}#handoff-${notification.handoffId}`;
+  }
   return issueHref;
 }
 

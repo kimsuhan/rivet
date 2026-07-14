@@ -36,11 +36,9 @@ import type { AuthenticatedRequestContext } from '../auth/authenticated-request'
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import {
   CreateCommentDto,
-  CreateIssueBlockRelationDto,
   CreateIssueHandoffDto,
   DeleteCommentQueryDto,
   IssueTimelineQueryDto,
-  RemoveIssueBlockRelationDto,
   UpdateCommentDto,
 } from './dto/issue-collaboration-request.dto';
 import {
@@ -49,7 +47,6 @@ import {
   CommentTimelineItemResponseDto,
   HandoffResourceResponseDto,
   HandoffTimelineItemResponseDto,
-  IssueBlockRelationMutationResponseDto,
   TimelineResponseDto,
 } from './dto/issue-collaboration-response.dto';
 import { IssueCollaborationService } from './issue-collaboration.service';
@@ -79,63 +76,6 @@ function workspaceContext(authentication: AuthenticatedRequestContext): {
   };
 }
 
-@ApiTags('issue block relations')
-@ApiCookieAuth('sessionCookie')
-@Controller('issue-block-relations')
-export class IssueBlockRelationsController {
-  constructor(private readonly collaboration: IssueCollaborationService) {}
-
-  @Post()
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: '두 팀 작업 사이 차단 관계 생성' })
-  @ApiCreatedResponse({ type: IssueBlockRelationMutationResponseDto })
-  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
-  @ApiForbiddenResponse({
-    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
-    type: ApiErrorResponseDto,
-  })
-  @ApiConflictResponse({
-    description: 'VERSION_CONFLICT, BLOCK_RELATION_DUPLICATE 또는 BLOCK_RELATION_CYCLE',
-    type: ApiErrorResponseDto,
-  })
-  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
-  @ApiUnprocessableEntityResponse({
-    description: 'VALIDATION_ERROR 또는 BLOCK_RELATION_SELF',
-    type: ApiErrorResponseDto,
-  })
-  create(
-    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
-    @Body() dto: CreateIssueBlockRelationDto,
-  ): Promise<IssueBlockRelationMutationResponseDto> {
-    return this.collaboration.createBlockRelation(workspaceContext(authentication), dto);
-  }
-
-  @Post(':relationId/remove')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '차단 관계 제거' })
-  @ApiParam({ format: 'uuid', name: 'relationId' })
-  @ApiOkResponse({ type: IssueBlockRelationMutationResponseDto })
-  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
-  @ApiForbiddenResponse({
-    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
-    type: ApiErrorResponseDto,
-  })
-  @ApiConflictResponse({ description: 'VERSION_CONFLICT', type: ApiErrorResponseDto })
-  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
-  @ApiUnprocessableEntityResponse({ description: 'VALIDATION_ERROR', type: ApiErrorResponseDto })
-  remove(
-    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
-    @Param('relationId', new ParseUUIDPipe({ version: '4' })) relationId: string,
-    @Body() dto: RemoveIssueBlockRelationDto,
-  ): Promise<IssueBlockRelationMutationResponseDto> {
-    return this.collaboration.removeBlockRelation(
-      workspaceContext(authentication),
-      relationId,
-      dto,
-    );
-  }
-}
-
 @ApiTags('issue collaboration')
 @ApiCookieAuth('sessionCookie')
 @ApiExtraModels(
@@ -143,14 +83,14 @@ export class IssueBlockRelationsController {
   CommentTimelineItemResponseDto,
   HandoffTimelineItemResponseDto,
 )
-@Controller('issues')
+@Controller()
 export class IssueCollaborationController {
   constructor(private readonly collaboration: IssueCollaborationService) {}
 
-  @Post(':issueId/handoffs')
+  @Post('team-works/:teamWorkId/handoffs')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: '최초 또는 추가 작업 전달 작성' })
-  @ApiParam({ format: 'uuid', name: 'issueId' })
+  @ApiParam({ format: 'uuid', name: 'teamWorkId' })
   @ApiCreatedResponse({ type: HandoffResourceResponseDto })
   @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
   @ApiForbiddenResponse({
@@ -174,13 +114,13 @@ export class IssueCollaborationController {
   @ApiServiceUnavailableResponse({ description: 'FILE_UNAVAILABLE', type: ApiErrorResponseDto })
   createHandoff(
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
-    @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
+    @Param('teamWorkId', new ParseUUIDPipe({ version: '4' })) teamWorkId: string,
     @Body() dto: CreateIssueHandoffDto,
   ): Promise<HandoffResourceResponseDto> {
-    return this.collaboration.createHandoff(workspaceContext(authentication), issueId, dto);
+    return this.collaboration.createHandoff(workspaceContext(authentication), teamWorkId, dto);
   }
 
-  @Post(':issueId/comments')
+  @Post('issues/:issueId/comments')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: '이슈 댓글 작성' })
   @ApiParam({ format: 'uuid', name: 'issueId' })
@@ -209,7 +149,7 @@ export class IssueCollaborationController {
     return this.collaboration.createComment(workspaceContext(authentication), issueId, dto);
   }
 
-  @Get(':issueId/timeline')
+  @Get('issues/:issueId/timeline')
   @ApiOperation({ summary: '댓글·활동·작업 전달 통합 타임라인 조회' })
   @ApiParam({ format: 'uuid', name: 'issueId' })
   @ApiOkResponse({ type: TimelineResponseDto })

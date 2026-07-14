@@ -6,9 +6,9 @@
  * OpenAPI spec version: 1.0
  */
 import type { IssueDetailResponseDto } from './issueDetailResponseDto';
-import type { IssueSummaryResponseDto } from './issueSummaryResponseDto';
+import type { TeamWorkSummaryResponseDto } from './teamWorkSummaryResponseDto';
 
 export interface CreateIssueResponseDto {
   issue: IssueDetailResponseDto;
-  createdTeamTasks: IssueSummaryResponseDto[];
+  createdTeamWorks: TeamWorkSummaryResponseDto[];
 }

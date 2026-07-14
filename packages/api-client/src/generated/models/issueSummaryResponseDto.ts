@@ -5,42 +5,25 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { FeatureWorkflowSummaryResponseDto } from './featureWorkflowSummaryResponseDto';
 import type { IssueLabelSummaryResponseDto } from './issueLabelSummaryResponseDto';
 import type { IssueMemberSummaryResponseDto } from './issueMemberSummaryResponseDto';
-import type { IssueParentSummaryResponseDto } from './issueParentSummaryResponseDto';
 import type { IssueProgressResponseDto } from './issueProgressResponseDto';
 import type { IssueProjectSummaryResponseDto } from './issueProjectSummaryResponseDto';
-import type { IssueStatusResponseDto } from './issueStatusResponseDto';
 import type { IssueSummaryResponseDtoPriority } from './issueSummaryResponseDtoPriority';
-import type { IssueSummaryResponseDtoProjectRole } from './issueSummaryResponseDtoProjectRole';
-import type { IssueSummaryResponseDtoType } from './issueSummaryResponseDtoType';
-import type { IssueTeamSummaryResponseDto } from './issueTeamSummaryResponseDto';
+import type { IssueSummaryResponseDtoStatus } from './issueSummaryResponseDtoStatus';
+import type { IssueWorkflowSummaryResponseDto } from './issueWorkflowSummaryResponseDto';
 
 export interface IssueSummaryResponseDto {
   id: string;
   identifier: string;
-  type: IssueSummaryResponseDtoType;
   title: string;
-  status: IssueStatusResponseDto;
+  status: IssueSummaryResponseDtoStatus;
   priority: IssueSummaryResponseDtoPriority;
-  /** @nullable */
-  team: IssueTeamSummaryResponseDto | null;
-  /** @nullable */
-  assignee: IssueMemberSummaryResponseDto | null;
-  /** @nullable */
-  project: IssueProjectSummaryResponseDto | null;
-  /** @nullable */
-  projectRole: IssueSummaryResponseDtoProjectRole;
-  /** @nullable */
-  parentIssue: IssueParentSummaryResponseDto | null;
+  project: IssueProjectSummaryResponseDto;
   labels: IssueLabelSummaryResponseDto[];
-  blocked: boolean;
-  /** @nullable */
-  progress: IssueProgressResponseDto | null;
+  progress: IssueProgressResponseDto;
   createdBy: IssueMemberSummaryResponseDto;
-  /** @nullable */
-  workflowSummary: FeatureWorkflowSummaryResponseDto | null;
+  workflowSummary: IssueWorkflowSummaryResponseDto;
   /** @minimum 1 */
   version: number;
   createdAt: string;

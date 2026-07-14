@@ -1,36 +1,20 @@
 import { Injectable } from '@nestjs/common';
 
-import { ExportType, FeatureIssueStatus, Prisma, StateCategory } from '@rivet/database';
+import { ExportType, Prisma } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 
 const EXPORT_BATCH_SIZE = 100;
 
-const FEATURE_STATUS_CATEGORY: Record<FeatureIssueStatus, StateCategory> = {
-  [FeatureIssueStatus.UNSORTED]: StateCategory.BACKLOG,
-  [FeatureIssueStatus.PAUSED]: StateCategory.BACKLOG,
-  [FeatureIssueStatus.TODO]: StateCategory.UNSTARTED,
-  [FeatureIssueStatus.IN_PROGRESS]: StateCategory.STARTED,
-  [FeatureIssueStatus.REVIEW]: StateCategory.STARTED,
-  [FeatureIssueStatus.DONE]: StateCategory.COMPLETED,
-  [FeatureIssueStatus.CANCELED]: StateCategory.CANCELED,
-};
-
 const ISSUE_EXPORT_HEADERS = [
-  '유형',
-  '상위 이슈',
   '표시 ID',
-  '팀',
-  '프로젝트 역할',
   '프로젝트',
   '제목',
   '설명 Markdown',
   '상태',
-  '시스템 범주',
-  '담당자',
   '우선순위',
   '라벨',
-  '차단 관계',
+  '팀 작업',
   '작업 전달',
   '첨부파일',
   '생성 시각',
@@ -50,35 +34,8 @@ const PROJECT_EXPORT_HEADERS = [
 ] as const;
 
 const ISSUE_EXPORT_SELECT = {
-  assigneeTeamMember: {
-    select: {
-      membership: {
-        select: {
-          id: true,
-          user: { select: { displayName: true } },
-        },
-      },
-    },
-  },
-  blockedRelations: {
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    select: {
-      blockingIssue: { select: { id: true, identifier: true, title: true } },
-      createdAt: true,
-    },
-    where: { blockingIssue: { deletedAt: null } },
-  },
-  blockingRelations: {
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    select: {
-      blockedIssue: { select: { id: true, identifier: true, title: true } },
-      createdAt: true,
-    },
-    where: { blockedIssue: { deletedAt: null } },
-  },
   createdAt: true,
   descriptionMarkdown: true,
-  featureStatus: true,
   fileAttachments: {
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
@@ -110,6 +67,8 @@ const ISSUE_EXPORT_SELECT = {
       createdAt: true,
       id: true,
       kind: true,
+      sourceTeamWorkId: true,
+      targets: { orderBy: { teamWorkId: 'asc' }, select: { teamWorkId: true } },
       sequenceNumber: true,
     },
   },
@@ -121,17 +80,23 @@ const ISSUE_EXPORT_SELECT = {
       label: { select: { archivedAt: true, color: true, id: true, name: true } },
     },
   },
-  parentIssue: {
-    select: { deletedAt: true, id: true, identifier: true, title: true },
-  },
   priority: true,
-  project: { select: { archivedAt: true, deletedAt: true, id: true, name: true } },
-  projectRole: true,
-  team: { select: { archivedAt: true, id: true, key: true, name: true } },
+  project: { select: { archivedAt: true, id: true, name: true } },
+  status: true,
+  teamWorks: {
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      assigneeTeamMember: { select: { membership: { select: { id: true, user: { select: { displayName: true } } } } } },
+      identifier: true,
+      projectRole: true,
+      workNoteMarkdown: true,
+      team: { select: { archivedAt: true, id: true, key: true, name: true } },
+      workflowState: { select: { category: true, id: true, name: true } },
+    },
+    where: { deletedAt: null },
+  },
   title: true,
-  type: true,
   updatedAt: true,
-  workflowState: { select: { category: true, id: true, name: true } },
 } satisfies Prisma.IssueSelect;
 
 const PROJECT_EXPORT_SELECT = {
@@ -196,65 +161,13 @@ function dateOnly(value: Date | null): string | null {
   return value?.toISOString().slice(0, 10) ?? null;
 }
 
-function issueCategory(issue: IssueExportRow): StateCategory {
-  if (issue.featureStatus !== null) return FEATURE_STATUS_CATEGORY[issue.featureStatus];
-  if (issue.workflowState !== null) return issue.workflowState.category;
-  throw new Error('ISSUE_STATUS_INVARIANT_VIOLATION');
-}
-
 function issueCsvRow(issue: IssueExportRow): string {
-  const parentIssue =
-    issue.parentIssue?.deletedAt === null
-      ? {
-          id: issue.parentIssue.id,
-          identifier: issue.parentIssue.identifier,
-          title: issue.parentIssue.title,
-        }
-      : null;
-  const project =
-    issue.project?.deletedAt === null
-      ? {
-          archived: issue.project.archivedAt !== null,
-          id: issue.project.id,
-          name: issue.project.name,
-        }
-      : null;
-  const assignee = issue.assigneeTeamMember
-    ? {
-        displayName: issue.assigneeTeamMember.membership.user.displayName,
-        membershipId: issue.assigneeTeamMember.membership.id,
-      }
-    : null;
-  const blockedBy = issue.blockedRelations.map(({ blockingIssue, createdAt }) => ({
-    createdAt: createdAt.toISOString(),
-    direction: 'BLOCKED_BY',
-    issue: blockingIssue,
-  }));
-  const blocks = issue.blockingRelations.map(({ blockedIssue, createdAt }) => ({
-    createdAt: createdAt.toISOString(),
-    direction: 'BLOCKS',
-    issue: blockedIssue,
-  }));
-
   return csvRow([
-    issue.type,
-    parentIssue ? jsonCell(parentIssue) : null,
     issue.identifier,
-    issue.team
-      ? jsonCell({
-          archived: issue.team.archivedAt !== null,
-          id: issue.team.id,
-          key: issue.team.key,
-          name: issue.team.name,
-        })
-      : null,
-    issue.projectRole,
-    project ? jsonCell(project) : null,
+    jsonCell({ archived: issue.project.archivedAt !== null, id: issue.project.id, name: issue.project.name }),
     issue.title,
     issue.descriptionMarkdown,
-    issue.featureStatus ?? issue.workflowState?.name ?? null,
-    issueCategory(issue),
-    assignee ? jsonCell(assignee) : null,
+    issue.status,
     issue.priority,
     jsonCell(
       issue.labels.map(({ label }) => ({
@@ -264,7 +177,17 @@ function issueCsvRow(issue: IssueExportRow): string {
         name: label.name,
       })),
     ),
-    jsonCell([...blockedBy, ...blocks]),
+    jsonCell(issue.teamWorks.map((teamWork) => ({
+      assignee: teamWork.assigneeTeamMember ? {
+        displayName: teamWork.assigneeTeamMember.membership.user.displayName,
+        membershipId: teamWork.assigneeTeamMember.membership.id,
+      } : null,
+      identifier: teamWork.identifier,
+      projectRole: teamWork.projectRole,
+      workNoteMarkdown: teamWork.workNoteMarkdown,
+      team: { archived: teamWork.team.archivedAt !== null, id: teamWork.team.id, key: teamWork.team.key, name: teamWork.team.name },
+      workflowState: teamWork.workflowState,
+    }))),
     jsonCell(
       issue.handoffs.map((handoff) => ({
         author: {
@@ -276,6 +199,8 @@ function issueCsvRow(issue: IssueExportRow): string {
         id: handoff.id,
         kind: handoff.kind,
         sequenceNumber: handoff.sequenceNumber,
+        sourceTeamWorkId: handoff.sourceTeamWorkId,
+        targetTeamWorkIds: handoff.targets.map(({ teamWorkId }) => teamWorkId),
       })),
     ),
     jsonCell(

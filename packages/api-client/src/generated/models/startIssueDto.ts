@@ -6,21 +6,13 @@
  * OpenAPI spec version: 1.0
  */
 import type { InitialRoleAssignmentDto } from './initialRoleAssignmentDto';
-import type { StartIssueDtoInitialRolesItem } from './startIssueDtoInitialRolesItem';
 
 export interface StartIssueDto {
   /**
-     * `roleAssignments`와 동시에 사용할 수 없습니다.
      * @minItems 1
      * @maxItems 3
      */
-  initialRoles?: StartIssueDtoInitialRolesItem[];
-  /**
-     * `initialRoles`와 동시에 사용할 수 없습니다.
-     * @minItems 1
-     * @maxItems 3
-     */
-  roleAssignments?: InitialRoleAssignmentDto[];
-  /** 선택 역할 팀에 현재 사용자가 활성 멤버인지 서버에서 확인합니다. */
+  roleAssignments: InitialRoleAssignmentDto[];
+  /** 선택 역할 팀에 현재 사용자가 활성 멤버인지 확인 */
   requireCurrentUserTeamMembership?: boolean;
 }

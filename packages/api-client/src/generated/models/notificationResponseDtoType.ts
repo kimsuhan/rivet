@@ -10,7 +10,7 @@ export type NotificationResponseDtoType = typeof NotificationResponseDtoType[key
 
 
 export const NotificationResponseDtoType = {
-  ISSUE_ASSIGNED: 'ISSUE_ASSIGNED',
+  TEAM_WORK_ASSIGNED: 'TEAM_WORK_ASSIGNED',
   MENTIONED: 'MENTIONED',
   COMMENT_ADDED: 'COMMENT_ADDED',
   ISSUE_COMPLETED: 'ISSUE_COMPLETED',

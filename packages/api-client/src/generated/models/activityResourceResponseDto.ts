@@ -20,4 +20,8 @@ export interface ActivityResourceResponseDto {
   after: ActivityResourceResponseDtoAfter;
   /** @nullable */
   actor: CollaborationMemberSummaryResponseDto | null;
+  /** @nullable */
+  teamWorkId: string | null;
+  /** @nullable */
+  teamWorkIdentifier: string | null;
 }

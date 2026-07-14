@@ -6,7 +6,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
-import { IssueFileKind, MembershipRole, ProjectStatus, StateCategory } from '@rivet/database';
+import { IssueFileKind, MembershipRole, ProjectRole, ProjectStatus, StateCategory } from '@rivet/database';
 
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
@@ -140,19 +140,6 @@ describe('M5 files and profile', () => {
         },
         select: { id: true },
       });
-      const issue = await transaction.issue.create({
-        data: {
-          assigneeMembershipId: memberMembership.id,
-          createdByMembershipId: ownerMembership.id,
-          identifier: 'FIL-1',
-          sequenceNumber: 1,
-          teamId: team.id,
-          title: '파일 접근 테스트',
-          workflowStateId: state.id,
-          workspaceId: workspace.id,
-        },
-        select: { id: true },
-      });
       const project = await transaction.project.create({
         data: {
           leadMembershipId: memberMembership.id,
@@ -161,6 +148,30 @@ describe('M5 files and profile', () => {
           workspaceId: workspace.id,
         },
         select: { id: true },
+      });
+      const issue = await transaction.issue.create({
+        data: {
+          createdByMembershipId: ownerMembership.id,
+          identifier: 'F-1',
+          projectId: project.id,
+          sequenceNumber: 1,
+          title: '파일 접근 테스트',
+          workspaceId: workspace.id,
+        },
+        select: { id: true },
+      });
+      await transaction.teamWork.create({
+        data: {
+          assigneeMembershipId: memberMembership.id,
+          createdByMembershipId: ownerMembership.id,
+          identifier: 'FIL-1',
+          issueId: issue.id,
+          projectRole: ProjectRole.BACKEND,
+          sequenceNumber: 1,
+          teamId: team.id,
+          workflowStateId: state.id,
+          workspaceId: workspace.id,
+        },
       });
       await transaction.activityEvent.create({
         data: {
@@ -224,6 +235,7 @@ describe('M5 files and profile', () => {
       await database.client.activityEvent.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
       });
+      await database.client.teamWork.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.issue.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.workflowState.deleteMany({
@@ -481,7 +493,12 @@ describe('M5 files and profile', () => {
       .get(`/api/v1/issues/${issueId}`)
       .set('Cookie', ownerCookie)
       .expect(200);
-    expect(issue.body.assignee.user.avatarFileId).toBe(avatarFileId);
+    expect(
+      issue.body.teamWorks.find(
+        ({ assignee }: { assignee: { id: string } | null }) =>
+          assignee?.id === memberMembershipId,
+      ).assignee.user.avatarFileId,
+    ).toBe(avatarFileId);
     const project = await request(app.getHttpServer())
       .get(`/api/v1/projects/${projectId}`)
       .set('Cookie', ownerCookie)

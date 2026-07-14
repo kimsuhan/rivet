@@ -13,6 +13,9 @@ export interface HandoffResourceResponseDto {
   kind: HandoffResourceResponseDtoKind;
   /** @minimum 1 */
   sequenceNumber: number;
+  issueId: string;
+  sourceTeamWorkId: string;
+  targetTeamWorkIds: string[];
   bodyMarkdown: string;
   author: CollaborationMemberSummaryResponseDto;
   createdAt: string;

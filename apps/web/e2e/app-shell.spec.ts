@@ -34,10 +34,10 @@ test.beforeEach(async ({ page }) => {
       status: 200,
     });
   });
-  await page.route(/\/api\/v1\/(?:issues|labels|teams)(?:\?.*)?$/u, async (route) => {
+  await page.route(/\/api\/v1\/(?:issues|labels|projects|team-works|teams)(?:\?.*)?$/u, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
-      json: { items: [], nextCursor: null },
+      json: { items: [], nextCursor: null, totalCount: 0 },
       status: 200,
     });
   });
@@ -103,7 +103,7 @@ test('검색을 열고 닫을 때 입력 포커스를 관리한다', async ({ pa
   const searchTrigger = page.getByRole('button', { name: '검색 열기' });
   await searchTrigger.click();
 
-  const searchInput = page.getByRole('combobox', { name: '검색어' });
+  const searchInput = page.getByRole('textbox', { name: '검색어' });
   await expect(searchInput).toBeVisible();
   await expect(searchInput).toBeFocused();
 

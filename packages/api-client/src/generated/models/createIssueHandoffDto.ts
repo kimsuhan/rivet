@@ -5,13 +5,19 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
+import type { CreateIssueHandoffDtoDestinationRolesItem } from './createIssueHandoffDtoDestinationRolesItem';
 import type { CreateIssueHandoffDtoKind } from './createIssueHandoffDtoKind';
 
 export interface CreateIssueHandoffDto {
   kind: CreateIssueHandoffDtoKind;
   /**
-     * 고정 순서의 H2 섹션 7개(변경 요약, API 명세 링크, 사용 가능 환경, 추가·변경 API, 요청·응답 변경, 오류·권한, 프론트 주의사항)를 모두 작성해야 합니다. 각 섹션에는 내용 또는 `해당 없음`을 입력하고, API 명세 링크 섹션은 `해당 없음`이 아니면 사용자 정보가 없는 유효한 HTTP(S) URL을 하나 이상 포함해야 합니다.
+     * 최초 전달은 변경·구현 요약, API 명세 링크, 사용 가능 환경, 추가·변경 API, 요청·응답 변경, 오류·권한, 프론트 주의사항을 필요할 때만 Markdown으로 기록합니다. 추가 전달은 변경 사항과 프론트 조치만 기록합니다. 제목만 있는 빈 섹션은 저장하지 않습니다.
      * @maxLength 50000
      */
   bodyMarkdown: string;
+  /**
+     * 최초 전달에서 생성하거나 재사용할 프론트엔드 역할
+     * @maxItems 2
+     */
+  destinationRoles?: CreateIssueHandoffDtoDestinationRolesItem[];
 }

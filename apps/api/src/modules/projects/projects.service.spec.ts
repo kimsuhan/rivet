@@ -64,6 +64,7 @@ describe('ProjectsService', () => {
       deleteMany: jest.fn(),
       findMany: jest.fn(),
     },
+    teamWork: { findMany: jest.fn() },
   };
   const database = {
     client: {
@@ -89,6 +90,7 @@ describe('ProjectsService', () => {
     transaction.activityEvent.create.mockResolvedValue({ id: 'activity-1' });
     transaction.activityEvent.createMany.mockResolvedValue({ count: 1 });
     transaction.issue.findMany.mockResolvedValue([]);
+    transaction.teamWork.findMany.mockResolvedValue([]);
     transaction.outboxEvent.create.mockResolvedValue({ id: 'outbox-id' });
 
     moduleRef = await Test.createTestingModule({
@@ -293,13 +295,13 @@ describe('ProjectsService', () => {
       .mockResolvedValueOnce([{ id: context.workspaceId }])
       .mockResolvedValueOnce([lockedProject])
       .mockResolvedValueOnce([{ archivedAt: null, id: otherTeamId }]);
-    transaction.issue.findMany.mockResolvedValue([
+    transaction.teamWork.findMany.mockResolvedValue([
       {
         id: '33490c3c-433a-47eb-81b7-d6d7d85294cf',
         identifier: 'API-42',
+        issue: { title: '결제 API' },
         projectRole: ProjectRole.BACKEND,
         teamId,
-        title: '결제 API',
       },
     ]);
 

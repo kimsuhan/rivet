@@ -1,34 +1,18 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Param,
-  ParseUUIDPipe,
-  Patch,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
-  ApiBody,
   ApiConflictResponse,
   ApiCookieAuth,
   ApiCreatedResponse,
-  ApiExtraModels,
   ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
-  ApiServiceUnavailableResponse,
   ApiTags,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
-  ApiUnsupportedMediaTypeResponse,
-  getSchemaPath,
 } from '@nestjs/swagger';
 
 import { ApiError } from '../../common/errors/api-error';
@@ -36,249 +20,125 @@ import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto'
 import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import {
-  AssignTeamTasksDto,
-  ClaimIssueDto,
-  CreateFeatureIssueDto,
+  AssignTeamWorksDto,
+  ClaimTeamWorkDto,
   CreateIssueDto,
-  CreateTeamTaskIssueDto,
   IssueListQueryDto,
   StartIssueDto,
   TrashIssueDto,
   UpdateIssueDto,
 } from './dto/issue-request.dto';
 import {
-  AssignTeamTasksResponseDto,
-  ClaimIssueResponseDto,
+  AssignTeamWorksResponseDto,
+  ClaimTeamWorkResponseDto,
   CreateIssueResponseDto,
   IssueDetailResponseDto,
   IssueListResponseDto,
+  StartIssueResponseDto,
+  TeamWorkListResponseDto,
   UpdateIssueResponseDto,
 } from './dto/issue-response.dto';
-import { IssuesService } from './issues.service';
+import { type IssueMutationContext,IssuesService } from './issues.service';
 
-function workspaceContext(authentication: AuthenticatedRequestContext): {
-  membershipId: string;
-  userId: string;
-  workspaceId: string;
-} {
+export function workspaceContext(authentication: AuthenticatedRequestContext): IssueMutationContext {
   const { membership, workspace } = authentication.session;
-
-  if (
-    !membership ||
-    !workspace ||
-    membership.status !== 'ACTIVE' ||
-    membership.workspaceId !== workspace.id
-  ) {
-    throw new ApiError({
-      code: 'FORBIDDEN',
-      message: '활성 워크스페이스가 필요합니다.',
-      status: HttpStatus.FORBIDDEN,
-    });
+  if (!membership || !workspace || membership.status !== 'ACTIVE' || membership.workspaceId !== workspace.id) {
+    throw new ApiError({ code: 'FORBIDDEN', message: '활성 워크스페이스가 필요합니다.', status: HttpStatus.FORBIDDEN });
   }
-
-  return {
-    membershipId: membership.id,
-    userId: authentication.session.user.id,
-    workspaceId: workspace.id,
-  };
+  return { membershipId: membership.id, userId: authentication.session.user.id, workspaceId: workspace.id };
 }
 
 @ApiTags('issues')
 @ApiCookieAuth('sessionCookie')
-@ApiExtraModels(CreateFeatureIssueDto, CreateTeamTaskIssueDto)
 @Controller('issues')
 export class IssuesController {
   constructor(private readonly issues: IssuesService) {}
 
   @Get()
-  @ApiOperation({
-    description:
-      '기본 `updatedAt desc`와 불변 `id` 동률 해소를 사용합니다. 응답 cursor는 같은 정렬·필터 조건의 다음 페이지 조회에만 사용하는 불투명 값입니다.',
-    summary: '현재 워크스페이스 이슈 목록 조회',
-  })
+  @ApiOperation({ summary: '이슈 콘텐츠 목록 조회' })
   @ApiOkResponse({ type: IssueListResponseDto })
-  @ApiBadRequestResponse({ description: 'INVALID_QUERY', type: ApiErrorResponseDto })
-  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
-  @ApiForbiddenResponse({
-    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE 또는 FORBIDDEN',
-    type: ApiErrorResponseDto,
-  })
-  @ApiUnprocessableEntityResponse({ description: 'VALIDATION_ERROR', type: ApiErrorResponseDto })
-  list(
-    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
-    @Query() query: IssueListQueryDto,
-  ): Promise<IssueListResponseDto> {
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({ type: ApiErrorResponseDto })
+  list(@CurrentAuthentication() authentication: AuthenticatedRequestContext, @Query() query: IssueListQueryDto): Promise<IssueListResponseDto> {
     return this.issues.list(workspaceContext(authentication), query);
+  }
+
+  @Get(':issueId/team-works')
+  @ApiOperation({ summary: '이슈에 속한 팀 작업 조회' })
+  @ApiParam({ format: 'uuid', name: 'issueId' })
+  @ApiOkResponse({ type: TeamWorkListResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  listTeamWorks(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
+  ): Promise<TeamWorkListResponseDto> {
+    return this.issues.listTeamWorks(workspaceContext(authentication).workspaceId, issueId);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: '기능 이슈 또는 팀 작업 생성' })
-  @ApiBody({
-    schema: {
-      discriminator: {
-        mapping: {
-          FEATURE: getSchemaPath(CreateFeatureIssueDto),
-          TEAM_TASK: getSchemaPath(CreateTeamTaskIssueDto),
-        },
-        propertyName: 'type',
-      },
-      oneOf: [
-        { $ref: getSchemaPath(CreateFeatureIssueDto) },
-        { $ref: getSchemaPath(CreateTeamTaskIssueDto) },
-      ],
-    },
-  })
+  @ApiOperation({ summary: '이슈 생성 및 선택적인 최초 팀 작업 시작' })
   @ApiCreatedResponse({ type: CreateIssueResponseDto })
-  @ApiConflictResponse({ description: 'FILE_ALREADY_LINKED', type: ApiErrorResponseDto })
-  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
-  @ApiForbiddenResponse({
-    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
-    type: ApiErrorResponseDto,
-  })
-  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
-  @ApiUnprocessableEntityResponse({
-    description:
-      'VALIDATION_ERROR, ISSUE_TYPE_FIELD_INVALID, INITIAL_ROLE_NOT_AVAILABLE, ASSIGNEE_NOT_TEAM_MEMBER, PROJECT_ROLE_TEAM_MISMATCH, PARENT_ISSUE_PROJECT_MISMATCH, MARKDOWN_INVALID, MENTION_INVALID 또는 FILE_REFERENCE_INVALID',
-    type: ApiErrorResponseDto,
-  })
-  @ApiUnsupportedMediaTypeResponse({
-    description: 'FILE_TYPE_NOT_INLINE_DISPLAYABLE',
-    type: ApiErrorResponseDto,
-  })
-  @ApiServiceUnavailableResponse({ description: 'FILE_UNAVAILABLE', type: ApiErrorResponseDto })
-  create(
-    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
-    @Body() dto: CreateIssueDto,
-  ): Promise<CreateIssueResponseDto> {
+  @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  @ApiUnprocessableEntityResponse({ type: ApiErrorResponseDto })
+  create(@CurrentAuthentication() authentication: AuthenticatedRequestContext, @Body() dto: CreateIssueDto): Promise<CreateIssueResponseDto> {
     return this.issues.create(workspaceContext(authentication), dto);
   }
 
-  @Post(':issueId/start')
+  @Post(':issueId/team-works')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '기존 기능 이슈의 최초 팀 작업 시작' })
+  @ApiOperation({ summary: '이슈에서 팀 작업 시작' })
   @ApiParam({ format: 'uuid', name: 'issueId' })
-  @ApiBody({ type: StartIssueDto })
-  @ApiOkResponse({ type: CreateIssueResponseDto })
-  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
-  @ApiForbiddenResponse({
-    description:
-      'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID, TEAM_MEMBERSHIP_REQUIRED 또는 FORBIDDEN',
-    type: ApiErrorResponseDto,
-  })
-  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
-  @ApiUnprocessableEntityResponse({
-    description:
-      'VALIDATION_ERROR, INITIAL_ROLE_REQUIRED, INITIAL_ROLE_INPUT_CONFLICT, INITIAL_ROLE_NOT_AVAILABLE 또는 ASSIGNEE_NOT_TEAM_MEMBER',
-    type: ApiErrorResponseDto,
-  })
+  @ApiOkResponse({ type: StartIssueResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  @ApiUnprocessableEntityResponse({ type: ApiErrorResponseDto })
   start(
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
     @Body() dto: StartIssueDto,
-  ): Promise<CreateIssueResponseDto> {
+  ): Promise<StartIssueResponseDto> {
     return this.issues.start(workspaceContext(authentication), issueId, dto);
   }
 
   @Post(':issueId/claim')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '현재 사용자가 프로젝트 역할의 팀 작업 맡기' })
-  @ApiParam({ format: 'uuid', name: 'issueId' })
-  @ApiBody({ type: ClaimIssueDto })
-  @ApiOkResponse({ type: ClaimIssueResponseDto })
-  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
-  @ApiForbiddenResponse({
-    description:
-      'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID, TEAM_MEMBERSHIP_REQUIRED 또는 FORBIDDEN',
-    type: ApiErrorResponseDto,
-  })
-  @ApiConflictResponse({
-    description: 'CLAIM_TARGET_REQUIRED 또는 ISSUE_ASSIGNMENT_CONFLICT',
-    type: ApiErrorResponseDto,
-  })
-  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
-  @ApiUnprocessableEntityResponse({
-    description: 'VALIDATION_ERROR 또는 INITIAL_ROLE_NOT_AVAILABLE',
-    type: ApiErrorResponseDto,
-  })
+  @ApiOperation({ summary: '현재 사용자가 이슈의 팀 작업 맡기' })
+  @ApiOkResponse({ type: ClaimTeamWorkResponseDto })
   claim(
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
-    @Body() dto: ClaimIssueDto,
-  ): Promise<ClaimIssueResponseDto> {
+    @Body() dto: ClaimTeamWorkDto,
+  ): Promise<ClaimTeamWorkResponseDto> {
     return this.issues.claim(workspaceContext(authentication), issueId, dto);
   }
 
-  @Post(':issueId/assign-team-tasks')
+  @Post(':issueId/assign-team-works')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '기능 이슈의 미할당 팀 작업 담당자 일괄 지정' })
-  @ApiParam({ format: 'uuid', name: 'issueId' })
-  @ApiBody({ type: AssignTeamTasksDto })
-  @ApiOkResponse({ type: AssignTeamTasksResponseDto })
-  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
-  @ApiForbiddenResponse({
-    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
-    type: ApiErrorResponseDto,
-  })
-  @ApiConflictResponse({
-    description: 'ISSUE_VERSION_CONFLICT 또는 ISSUE_ASSIGNMENT_CONFLICT',
-    type: ApiErrorResponseDto,
-  })
-  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
-  @ApiUnprocessableEntityResponse({
-    description: 'VALIDATION_ERROR 또는 ASSIGNEE_NOT_TEAM_MEMBER',
-    type: ApiErrorResponseDto,
-  })
-  assignTeamTasks(
+  @ApiOperation({ summary: '이슈의 미할당 팀 작업 담당자 일괄 지정' })
+  @ApiOkResponse({ type: AssignTeamWorksResponseDto })
+  assignTeamWorks(
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
-    @Body() dto: AssignTeamTasksDto,
-  ): Promise<AssignTeamTasksResponseDto> {
-    return this.issues.assignTeamTasks(workspaceContext(authentication), issueId, dto);
+    @Body() dto: AssignTeamWorksDto,
+  ): Promise<AssignTeamWorksResponseDto> {
+    return this.issues.assignTeamWorks(workspaceContext(authentication), issueId, dto);
   }
 
   @Get(':issueRef')
-  @ApiOperation({ summary: 'UUID 또는 표시 ID로 이슈 상세 조회' })
-  @ApiParam({ name: 'issueRef' })
+  @ApiOperation({ summary: 'UUID 또는 F-* 표시 ID로 이슈 통합 상세 조회' })
   @ApiOkResponse({ type: IssueDetailResponseDto })
-  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
-  @ApiForbiddenResponse({
-    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE 또는 FORBIDDEN',
-    type: ApiErrorResponseDto,
-  })
-  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
-  get(
-    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
-    @Param('issueRef') issueRef: string,
-  ): Promise<IssueDetailResponseDto> {
+  get(@CurrentAuthentication() authentication: AuthenticatedRequestContext, @Param('issueRef') issueRef: string): Promise<IssueDetailResponseDto> {
     return this.issues.get(workspaceContext(authentication).workspaceId, issueRef);
   }
 
   @Patch(':issueId')
-  @ApiOperation({ summary: '이슈 제목과 유형별 속성 수정' })
-  @ApiParam({ format: 'uuid', name: 'issueId' })
+  @ApiOperation({ summary: '이슈 콘텐츠와 상태 행동 수정' })
   @ApiOkResponse({ type: UpdateIssueResponseDto })
-  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
-  @ApiForbiddenResponse({
-    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
-    type: ApiErrorResponseDto,
-  })
-  @ApiConflictResponse({
-    description:
-      'VERSION_CONFLICT, ISSUE_VERSION_CONFLICT, ISSUE_COMPLETION_NOT_READY, ISSUE_TEAM_IMMUTABLE, ISSUE_PROJECT_IMMUTABLE, HANDOFF_REQUIRED, INITIAL_HANDOFF_EXISTS, DOWNSTREAM_TASK_SCOPE_CONFLICT, DOWNSTREAM_TASK_ALREADY_CLOSED 또는 FILE_ALREADY_LINKED',
-    type: ApiErrorResponseDto,
-  })
-  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
-  @ApiUnprocessableEntityResponse({
-    description:
-      'VALIDATION_ERROR, ISSUE_TYPE_FIELD_INVALID, ASSIGNEE_NOT_TEAM_MEMBER, PROJECT_ROLE_TEAM_MISMATCH, PARENT_ISSUE_PROJECT_MISMATCH, HANDOFF_NOT_ALLOWED, HANDOFF_REQUIRES_COMPLETION, HANDOFF_DESTINATION_REQUIRED, PROJECT_FRONTEND_ROLE_REQUIRED, MARKDOWN_INVALID, MENTION_INVALID 또는 FILE_REFERENCE_INVALID',
-    type: ApiErrorResponseDto,
-  })
-  @ApiUnsupportedMediaTypeResponse({
-    description: 'FILE_TYPE_NOT_INLINE_DISPLAYABLE',
-    type: ApiErrorResponseDto,
-  })
-  @ApiServiceUnavailableResponse({ description: 'FILE_UNAVAILABLE', type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
   update(
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
@@ -289,20 +149,8 @@ export class IssuesController {
 
   @Post(':issueId/trash')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: '조건 확인 후 이슈를 휴지통으로 이동' })
-  @ApiParam({ format: 'uuid', name: 'issueId' })
-  @ApiNoContentResponse({ description: '휴지통 이동 완료' })
-  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
-  @ApiForbiddenResponse({
-    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
-    type: ApiErrorResponseDto,
-  })
-  @ApiConflictResponse({
-    description: 'VERSION_CONFLICT, ISSUE_HAS_CHILDREN 또는 ISSUE_BLOCKS_OTHERS',
-    type: ApiErrorResponseDto,
-  })
-  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
-  @ApiUnprocessableEntityResponse({ description: 'VALIDATION_ERROR', type: ApiErrorResponseDto })
+  @ApiOperation({ summary: '이슈와 소속 팀 작업을 휴지통으로 이동' })
+  @ApiNoContentResponse()
   trash(
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,

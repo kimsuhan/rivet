@@ -365,15 +365,15 @@
     "loadingMore": "결과를 더 불러오는 중",
     "loadMoreError": "결과를 더 불러오지 못했습니다.",
     "exactMatch": "ID 일치",
-    "feature": "이슈",
-    "teamTask": "팀 작업",
+    "issue": "이슈",
+    "teamWork": "팀 작업",
     "noProject": "프로젝트 없음",
     "roles": {
       "APP_FRONTEND": "앱 프론트",
       "BACKEND": "백엔드",
       "WEB_FRONTEND": "웹 프론트"
     },
-    "featureStatuses": {
+    "issueStatuses": {
       "UNSORTED": "접수됨",
       "TODO": "할 일",
       "IN_PROGRESS": "진행 중",
@@ -429,7 +429,7 @@
     "markUnreadShort": "읽지 않음 처리",
     "updateError": "읽음 상태를 변경하지 못했습니다. 다시 시도해 주세요.",
     "types": {
-      "ISSUE_ASSIGNED": "팀 작업 할당",
+      "TEAM_WORK_ASSIGNED": "팀 작업 할당",
       "MENTIONED": "멘션",
       "COMMENT_ADDED": "새 댓글",
       "ISSUE_COMPLETED": "이슈 완료",
@@ -438,7 +438,7 @@
       "API_HANDOFF_FOLLOW_UP_CREATED": "추가 전달"
     },
     "summaries": {
-      "ISSUE_ASSIGNED": "이 팀 작업의 담당자가 되었습니다.",
+      "TEAM_WORK_ASSIGNED": "이 팀 작업의 담당자가 되었습니다.",
       "MENTIONED": "설명 또는 댓글에서 나를 멘션했습니다.",
       "COMMENT_ADDED": "구독 중인 이슈에 댓글이 추가되었습니다.",
       "ISSUE_COMPLETED": "구독 중인 이슈가 완료되었습니다.",
@@ -452,65 +452,18 @@
     "description": "제목, 프로젝트와 필요한 공통 속성을 입력합니다.",
     "initialRolesLabel": "처음 작업할 팀 (선택)",
     "initialRolesDescription": "아직 작업 범위가 정해지지 않았다면 선택하지 않아도 됩니다.",
-    "initialRoleSelected": "선택됨",
-    "initialRolesInvalid": "선택한 팀이 현재 프로젝트 역할에 없습니다. 선택을 확인해 주세요.",
-    "descriptionLabel": "설명",
-    "attachmentsLabel": "첨부파일",
     "close": "이슈 만들기 닫기",
-    "discardTitle": "작성 중인 이슈를 닫을까요?",
-    "discardDescription": "입력한 제목, 설명, 첨부파일과 속성이 저장되지 않습니다.",
-    "discardChanges": "입력 내용 버리기",
-    "keepEditing": "계속 작성",
     "titleLabel": "제목",
     "titlePlaceholder": "할 일을 간단히 적어 주세요",
     "titleRequired": "이슈 제목을 입력해 주세요.",
-    "titleTooLong": "이슈 제목은 500자 이하여야 합니다.",
-    "descriptionInvalid": "설명에서 사용할 수 없는 Markdown 또는 링크를 확인해 주세요.",
-    "mentionInvalid": "현재 워크스페이스의 활성 멤버만 멘션할 수 있습니다.",
-    "fileInvalid": "본문 이미지 또는 첨부파일이 아직 준비되지 않았거나 사용할 수 없습니다.",
-    "typeLabel": "이슈 유형",
-    "teamTaskTitle": "팀 작업 만들기",
-    "teamTaskDescription": "팀, 상태와 필요한 작업 속성을 입력합니다.",
-    "teamTaskClose": "팀 작업 만들기 닫기",
-    "teamTaskSubmit": "팀 작업 만들기",
-    "teamTaskSubmitting": "팀 작업을 만드는 중입니다.",
-    "teamTaskType": "팀 작업",
-    "featureType": "이슈",
     "projectLabel": "프로젝트",
     "projectPlaceholder": "프로젝트 선택",
     "projectRequired": "프로젝트를 선택해 주세요.",
-    "noProject": "프로젝트 없음",
-    "projectRoleLabel": "프로젝트 역할",
-    "projectRolePlaceholder": "역할 선택",
-    "projectRoleRequired": "프로젝트 역할을 선택해 주세요.",
     "projectRoles": {
       "BACKEND": "백엔드",
       "WEB_FRONTEND": "웹 프론트",
       "APP_FRONTEND": "앱 프론트"
     },
-    "parentLabel": "상위 이슈",
-    "parentPlaceholder": "상위 이슈 선택",
-    "parentProjectMismatch": "선택한 프로젝트와 같은 프로젝트의 상위 이슈를 다시 선택하거나 연결을 해제해 주세요.",
-    "noParent": "상위 이슈 없음",
-    "teamLabel": "팀",
-    "teamPlaceholder": "팀 선택",
-    "teamRequired": "팀을 선택해 주세요.",
-    "teamLockedByRole": "프로젝트 역할에서 팀을 선택합니다",
-    "stateLabel": "상태",
-    "statePlaceholder": "상태 선택",
-    "stateRequired": "상태를 선택해 주세요.",
-    "featureStatuses": {
-      "UNSORTED": "접수됨",
-      "TODO": "할 일",
-      "IN_PROGRESS": "진행 중",
-      "REVIEW": "완료 확인",
-      "DONE": "완료",
-      "PAUSED": "일시 중지",
-      "CANCELED": "취소"
-    },
-    "assigneeLabel": "담당자",
-    "assigneePlaceholder": "담당자 선택",
-    "unassigned": "담당자 없음",
     "priorityLabel": "우선순위",
     "priorities": {
       "NONE": "없음",
@@ -521,19 +474,14 @@
     },
     "labelsLabel": "라벨",
     "noLabels": "사용할 수 있는 라벨이 없습니다.",
-    "labelsUnavailable": "라벨을 불러오지 못했습니다.",
     "optionsLoading": "선택 항목을 불러오는 중입니다.",
     "optionsErrorTitle": "선택 항목을 모두 불러오지 못했습니다",
     "optionsErrorDescription": "입력한 내용은 유지됩니다. 불러오기를 다시 시도해 주세요.",
-    "retry": "다시 시도",
     "errorTitle": "이슈를 만들지 못했습니다",
     "errorDescription": "입력한 내용은 유지했습니다. 잠시 후 다시 시도해 주세요.",
     "submit": "이슈 만들기",
     "submitting": "이슈를 만드는 중입니다.",
-    "cancel": "취소",
-    "shortcutHint": "⌘/Ctrl + Enter로 만들기",
-    "mobileTitle": "이슈 만들기는 데스크톱에서 사용할 수 있습니다",
-    "mobileDescription": "넓은 화면에서 프로젝트와 작업 맥락을 확인하며 이슈를 만들어 주세요."
+    "cancel": "취소"
   },
   "TeamSelector": {
     "title": "팀",
@@ -921,11 +869,9 @@
       "deletedAt": "삭제일",
       "purgeAt": "영구 삭제 예정일",
       "originalConnections": "원래 연결",
-      "noConnections": "연결된 팀, 프로젝트 또는 상위 이슈 없음",
+      "noConnections": "연결된 프로젝트 없음",
       "noRoleTeams": "역할별 담당 팀 없음",
-      "teamConnection": "팀 {name}",
       "projectConnection": "프로젝트 {name}",
-      "parentConnection": "상위 이슈 {name}",
       "archived": "보관됨",
       "roles": {
         "BACKEND": "백엔드",
@@ -954,7 +900,6 @@
         "projectArchived": "프로젝트의 보관 상태가 유지되어 기본 프로젝트 목록에는 나타나지 않을 수 있습니다.",
         "projectInTrash": "연결된 프로젝트가 아직 휴지통에 있어 이슈가 일반 프로젝트 화면에는 나타나지 않을 수 있습니다.",
         "teamArchived": "연결된 팀의 보관 상태가 유지되어 새 작업 선택 항목에는 나타나지 않습니다.",
-        "parentInTrash": "상위 이슈가 아직 휴지통에 있어 계층 화면에는 바로 나타나지 않을 수 있습니다.",
         "unknown": "원래 연결 중 일부가 현재 보관 상태입니다. 복구된 항목의 연결을 확인해 주세요."
       }
     }
@@ -968,11 +913,7 @@
     "backToMyIssues": "내 작업으로 이동",
     "retry": "다시 시도",
     "cancel": "취소",
-    "teamTask": "팀 작업",
-    "feature": "이슈",
     "blocked": "선행 작업 완료 대기",
-    "invalidContractTitle": "이슈 정보를 표시할 수 없습니다",
-    "invalidContractDescription": "이슈 유형과 속성이 일치하지 않습니다. 새로고침한 뒤 다시 시도해 주세요.",
     "saving": "저장 중",
     "titleLabel": "이슈 제목",
     "titleRequired": "제목을 입력해 주세요.",
@@ -1040,12 +981,6 @@
       "removeErrorDescription": "파일 연결 상태를 다시 확인한 뒤 시도해 주세요."
     },
     "properties": "속성",
-    "tabs": {
-      "label": "상세 화면",
-      "work": "업무",
-      "relations": "연결",
-      "activity": "활동"
-    },
     "optionsErrorTitle": "선택 항목을 불러오지 못했습니다",
     "optionsErrorDescription": "현재 값은 그대로 유지됩니다. 다시 불러와 주세요.",
     "team": "팀",
@@ -1056,7 +991,6 @@
       "WEB_FRONTEND": "웹 프론트",
       "APP_FRONTEND": "앱 프론트"
     },
-    "parentFeature": "상위 이슈",
     "state": "상태",
     "assignee": "담당자",
     "priority": "우선순위",
@@ -1072,15 +1006,6 @@
       "COMPLETED": "완료",
       "CANCELED": "취소"
     },
-    "featureStatuses": {
-      "UNSORTED": "접수됨",
-      "TODO": "할 일",
-      "IN_PROGRESS": "진행 중",
-      "REVIEW": "완료 확인",
-      "DONE": "완료",
-      "PAUSED": "일시 중지",
-      "CANCELED": "취소"
-    },
     "children": {
       "title": "하위 팀 작업",
       "progress": "{completed}/{total} 완료 · {percentage}%",
@@ -1091,7 +1016,6 @@
       "title": "작업 흐름",
       "progress": "{completed}/{total} 완료 · {percentage}%",
       "loading": "작업 흐름을 불러오는 중입니다.",
-      "teamTask": "팀 작업",
       "current": "현재 작업",
       "completed": "완료 작업",
       "canceled": "취소 단계",
@@ -1165,7 +1089,6 @@
       "receivedDescription": "이 작업에 전달된 최초 내용과 추가 전달을 확인합니다.",
       "sourceTask": "전달한 백엔드 작업",
       "downstreamTasks": "전달받은 작업",
-      "parentIssue": "상위 이슈",
       "initial": "최초 전달",
       "followUp": "추가 전달",
       "initialTitle": "최초 작업 전달 작성",
@@ -1223,22 +1146,19 @@
         "trashed": "이슈를 휴지통으로 이동했습니다",
         "restored": "이슈를 휴지통에서 복구했습니다",
         "updated": "이슈를 변경했습니다",
-        "blockAdded": "작업 순서를 추가했습니다",
-        "blockRemoved": "작업 순서를 삭제했습니다",
-        "backendDelivered": "백엔드 작업을 전달했습니다",
-        "handoffInitial": "최초 작업 전달을 작성했습니다",
-        "handoffFollowUp": "추가 작업 전달을 작성했습니다",
-        "openHandoff": "전달 내용 보기",
+        "teamWorkCreated": "팀 작업을 시작했습니다",
+        "teamWorkRemoved": "팀 작업을 제거했습니다",
         "fields": {
           "title": "제목을 변경했습니다",
           "description": "설명을 변경했습니다",
           "state": "상태를 변경했습니다",
-          "assignee": "담당자를 변경했습니다",
           "priority": "우선순위를 변경했습니다",
           "project": "프로젝트를 변경했습니다",
-          "projectRole": "프로젝트 역할을 변경했습니다",
-          "parent": "상위 이슈를 변경했습니다",
           "labels": "라벨을 변경했습니다",
+          "teamWorkState": "팀 작업 상태를 변경했습니다",
+          "teamWorkAssignee": "팀 작업 담당자를 변경했습니다",
+          "teamWorkWorkNote": "작업 노트를 변경했습니다",
+          "teamWorkDefault": "팀 작업을 변경했습니다",
           "default": "이슈 속성을 변경했습니다"
         }
       },
@@ -1414,7 +1334,6 @@
     },
     "actions": {
       "START_WORK": "작업 시작",
-      "ASSIGN_TEAM_TASKS": "담당자 지정",
       "START_FROM_MY_TEAM": "우리 팀에서 시작",
       "START_ROLE_WORK": "{role} 작업 시작",
       "OPEN_MY_WORK": "내 작업 열기",
@@ -1497,7 +1416,6 @@
         "START_WORK": "작업 시작",
         "START_FROM_MY_TEAM": "우리 팀에서 시작",
         "CLAIM": "내가 맡기",
-        "ASSIGN_TEAM_TASKS": "담당자 지정",
         "COMPLETE_ISSUE": "이슈 완료"
       }
     }
@@ -1731,15 +1649,6 @@
       "UNSTARTED": "미착수",
       "STARTED": "진행 중",
       "COMPLETED": "완료",
-      "CANCELED": "취소"
-    },
-    "featureStatus": {
-      "UNSORTED": "접수됨",
-      "TODO": "할 일",
-      "IN_PROGRESS": "진행 중",
-      "REVIEW": "완료 확인",
-      "DONE": "완료",
-      "PAUSED": "일시 중지",
       "CANCELED": "취소"
     },
     "progress": {

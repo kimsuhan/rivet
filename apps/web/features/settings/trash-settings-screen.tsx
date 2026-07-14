@@ -64,13 +64,9 @@ function ConnectionSummary({ item }: { item: TrashItemResponseDto }) {
     );
   }
 
-  const connections = [
-    item.team ? t('teamConnection', { name: item.team.name }) : null,
-    item.project ? t('projectConnection', { name: item.project.name }) : null,
-    item.parentIssue ? t('parentConnection', { name: item.parentIssue.name }) : null,
-  ].filter((connection): connection is string => connection !== null);
-
-  return <>{connections.length > 0 ? connections.join(' · ') : t('noConnections')}</>;
+  return (
+    <>{item.project ? t('projectConnection', { name: item.project.name }) : t('noConnections')}</>
+  );
 }
 
 function TrashRows({
@@ -292,8 +288,6 @@ function RestoreNotice({ notice }: { notice: { name: string; warnings: string[] 
         return t('warnings.projectInTrash');
       case 'TEAM_ARCHIVED':
         return t('warnings.teamArchived');
-      case 'PARENT_ISSUE_IN_TRASH':
-        return t('warnings.parentInTrash');
       default:
         return t('warnings.unknown');
     }

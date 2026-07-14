@@ -2,6 +2,7 @@ model Comment {
   id                 String    @id @default(uuid()) @db.Uuid
   workspaceId        String    @map("workspace_id") @db.Uuid
   issueId            String    @map("issue_id") @db.Uuid
+  teamWorkId         String?   @map("team_work_id") @db.Uuid
   authorMembershipId String    @map("author_membership_id") @db.Uuid
   bodyMarkdown       String?   @map("body_markdown") @db.Text
   version            Int       @default(1)
@@ -12,6 +13,7 @@ model Comment {
 
   workspace        Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   issue            Issue                 @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
+  teamWork         TeamWork?             @relation(fields: [workspaceId, teamWorkId], references: [workspaceId, id], onDelete: Cascade)
   authorMembership WorkspaceMembership   @relation("CommentAuthorMembership", fields: [workspaceId, authorMembershipId], references: [workspaceId, id], onDelete: Restrict)
   mentions         Mention[]
   fileAttachments  IssueFileAttachment[]
@@ -20,6 +22,7 @@ model Comment {
   @@unique([workspaceId, id])
   @@unique([workspaceId, issueId, id])
   @@index([workspaceId, issueId, createdAt, id])
+  @@index([workspaceId, teamWorkId, createdAt, id])
   @@map("comments")
 }
 

@@ -1,9 +1,10 @@
+import { randomUUID } from 'node:crypto';
+
 import { HttpStatus, Injectable } from '@nestjs/common';
 
 import {
   HandoffKind,
   IssueFileKind,
-  IssueType,
   MembershipRole,
   MembershipStatus,
   Prisma,
@@ -19,6 +20,9 @@ import {
   COMMENT_MENTIONS_ADDED_SCHEMA_VERSION,
   type CommentCreatedOutboxPayload,
   type CommentMentionsAddedOutboxPayload,
+  TEAM_WORK_CREATED,
+  TEAM_WORK_CREATED_SCHEMA_VERSION,
+  type TeamWorkCreatedOutboxPayload,
 } from '@rivet/event-contracts';
 
 import { DatabaseService } from '../../common/database/database.service';
@@ -32,18 +36,14 @@ import {
 import { FilesService } from '../files/files.service';
 import type {
   CreateCommentDto,
-  CreateIssueBlockRelationDto,
   CreateIssueHandoffDto,
   IssueTimelineQueryDto,
-  RemoveIssueBlockRelationDto,
   UpdateCommentDto,
 } from './dto/issue-collaboration-request.dto';
 import type {
-  AffectedIssueResponseDto,
   CollaborationMemberSummaryResponseDto,
   CommentResourceResponseDto,
   HandoffResourceResponseDto,
-  IssueBlockRelationMutationResponseDto,
   TimelineItemResponseDto,
   TimelineResponseDto,
 } from './dto/issue-collaboration-response.dto';
@@ -66,31 +66,19 @@ const COMMENT_SELECT = {
   deletedAt: true,
   editedAt: true,
   id: true,
+  teamWorkId: true,
   version: true,
 } satisfies Prisma.CommentSelect;
 
 type CommentRow = Prisma.CommentGetPayload<{ select: typeof COMMENT_SELECT }>;
 
-interface IssueLockRow {
+interface HandoffTeamWorkLockRow {
+  id: string;
+  issueId: string;
+  projectId: string;
+  projectRole: ProjectRole;
+  teamId: string;
   category: StateCategory;
-  id: string;
-  identifier: string;
-  projectRole: ProjectRole | null;
-  title: string;
-  type: IssueType;
-  version: number;
-}
-
-interface AffectedIssueRow extends IssueLockRow {
-  blocked: boolean;
-}
-
-interface HandoffIssueLockRow {
-  id: string;
-  parentIssueId: string | null;
-  projectId: string | null;
-  projectRole: ProjectRole | null;
-  type: IssueType;
 }
 
 interface TimelineCursor {
@@ -107,20 +95,12 @@ interface CommentLockRow {
   deletedAt: Date | null;
   id: string;
   issueId: string;
+  teamWorkId: string | null;
   version: number;
 }
 
 const TERMINAL_CATEGORIES = [StateCategory.COMPLETED, StateCategory.CANCELED] as const;
 const FRONTEND_ROLES = [ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND] as const;
-const HANDOFF_SECTION_TITLES = [
-  '변경 요약',
-  'API 명세 링크',
-  '사용 가능 환경',
-  '추가·변경 API',
-  '요청·응답 변경',
-  '오류·권한',
-  '프론트 주의사항',
-] as const;
 
 function resourceNotFound(message = '리소스를 찾을 수 없습니다.'): never {
   throw new ApiError({ code: 'RESOURCE_NOT_FOUND', message, status: HttpStatus.NOT_FOUND });
@@ -168,52 +148,9 @@ function toCommentResponse(comment: CommentRow): CommentResourceResponseDto {
     deletedAt: comment.deletedAt?.toISOString() ?? null,
     editedAt: comment.editedAt?.toISOString() ?? null,
     id: comment.id,
+    teamWorkId: comment.teamWorkId,
     version: comment.version,
   };
-}
-
-function isTerminal(category: StateCategory): boolean {
-  return TERMINAL_CATEGORIES.includes(category as (typeof TERMINAL_CATEGORIES)[number]);
-}
-
-function assertVersions(
-  rows: Map<string, IssueLockRow>,
-  dto: {
-    blockedIssueId: string;
-    blockedIssueVersion: number;
-    blockingIssueId: string;
-    blockingIssueVersion: number;
-  },
-): void {
-  const blockingIssue = rows.get(dto.blockingIssueId);
-  const blockedIssue = rows.get(dto.blockedIssueId);
-  if (!blockingIssue || !blockedIssue) {
-    resourceNotFound('팀 작업을 찾을 수 없습니다.');
-  }
-  if (
-    blockingIssue.version !== dto.blockingIssueVersion ||
-    blockedIssue.version !== dto.blockedIssueVersion
-  ) {
-    const currentVersion =
-      blockingIssue.version !== dto.blockingIssueVersion
-        ? blockingIssue.version
-        : blockedIssue.version;
-    conflict('VERSION_CONFLICT', '이슈가 다른 요청에서 변경되었습니다.', {
-      currentVersion,
-      details: {
-        blockedIssueVersion: blockedIssue.version,
-        blockingIssueVersion: blockingIssue.version,
-      },
-    });
-  }
-}
-
-function meaningfulSectionContent(content: string): boolean {
-  if (content === '해당 없음') {
-    return true;
-  }
-
-  return content.replace(/[`*_>#\-[\](){}]/g, '').trim().length > 0;
 }
 
 function parseHandoffMarkdown(value: string): ParsedMarkdown {
@@ -234,47 +171,10 @@ function parseHandoffMarkdown(value: string): ParsedMarkdown {
     unprocessable('MARKDOWN_INVALID', '안전하지 않은 Markdown은 저장할 수 없습니다.');
   }
 
-  const headings = [...bodyMarkdown.matchAll(/^##[ \t]+(.+?)[ \t]*$/gmu)];
-  if (
-    headings.length !== HANDOFF_SECTION_TITLES.length ||
-    headings.some((heading, index) => heading[1] !== HANDOFF_SECTION_TITLES[index])
-  ) {
-    unprocessable('HANDOFF_CONTENT_REQUIRED', '작업 전달 템플릿의 일곱 항목을 작성해 주세요.');
-  }
-
-  const sections = headings.map((heading, index) => {
-    const contentStart = (heading.index ?? 0) + heading[0].length;
-    const contentEnd = headings[index + 1]?.index ?? bodyMarkdown.length;
-    return bodyMarkdown.slice(contentStart, contentEnd).trim();
-  });
-  if (sections.some((section) => !meaningfulSectionContent(section))) {
-    unprocessable(
-      'HANDOFF_CONTENT_REQUIRED',
-      '각 작업 전달 항목에 내용 또는 해당 없음을 입력해 주세요.',
-    );
-  }
-
-  const apiSpecification = sections[1];
-  if (apiSpecification !== '해당 없음') {
-    const candidates = apiSpecification?.match(/https?:\/\/[^\s<>\])]+/giu) ?? [];
-    const hasValidUrl = candidates.some((candidate) => {
-      try {
-        const url = new URL(candidate);
-        return (
-          (url.protocol === 'http:' || url.protocol === 'https:') &&
-          url.hostname.length > 0 &&
-          url.username.length === 0 &&
-          url.password.length === 0
-        );
-      } catch {
-        return false;
-      }
-    });
-    if (!hasValidUrl) {
-      unprocessable('MARKDOWN_INVALID', 'API 명세 링크는 HTTP(S) URL이어야 합니다.');
-    }
-  }
   const parsed = parseMarkdown(bodyMarkdown, 50_000);
+  if (parsed.bodyMarkdown.replace(/^#{1,6}[ \t].*$/gmu, '').trim().length === 0) {
+    unprocessable('HANDOFF_CONTENT_REQUIRED', '작업 전달의 실제 변경 내용을 입력해 주세요.');
+  }
   if (parsed.mentionedMembershipIds.length > 0) {
     unprocessable('MARKDOWN_INVALID', '작업 전달에는 멘션을 사용할 수 없습니다.');
   }
@@ -394,121 +294,6 @@ export class IssueCollaborationService {
     private readonly files: FilesService,
   ) {}
 
-  async createBlockRelation(
-    context: Context,
-    dto: CreateIssueBlockRelationDto,
-  ): Promise<IssueBlockRelationMutationResponseDto> {
-    if (dto.blockingIssueId === dto.blockedIssueId) {
-      unprocessable('BLOCK_RELATION_SELF', '작업이 자기 자신을 차단할 수 없습니다.');
-    }
-
-    return this.database.client.$transaction(async (transaction) => {
-      await this.lockWorkspace(transaction, context.workspaceId);
-      await this.lockActiveActor(transaction, context);
-      const issues = await this.lockIssues(transaction, context.workspaceId, [
-        dto.blockingIssueId,
-        dto.blockedIssueId,
-      ]);
-      assertVersions(issues, dto);
-
-      const duplicate = await transaction.issueBlockRelation.findUnique({
-        select: { id: true },
-        where: {
-          blockingIssueId_blockedIssueId: {
-            blockedIssueId: dto.blockedIssueId,
-            blockingIssueId: dto.blockingIssueId,
-          },
-        },
-      });
-      if (duplicate) {
-        conflict('BLOCK_RELATION_DUPLICATE', '이미 등록된 차단 관계입니다.');
-      }
-
-      const cycle = await transaction.$queryRaw<Array<{ found: number }>>`
-        WITH RECURSIVE "reachable"("issueId") AS (
-          SELECT "blocked_issue_id"
-          FROM "issue_block_relations"
-          WHERE "workspace_id" = ${context.workspaceId}::uuid
-            AND "blocking_issue_id" = ${dto.blockedIssueId}::uuid
-          UNION
-          SELECT "relation"."blocked_issue_id"
-          FROM "issue_block_relations" AS "relation"
-          INNER JOIN "reachable"
-            ON "reachable"."issueId" = "relation"."blocking_issue_id"
-          WHERE "relation"."workspace_id" = ${context.workspaceId}::uuid
-        )
-        SELECT 1 AS "found"
-        FROM "reachable"
-        WHERE "issueId" = ${dto.blockingIssueId}::uuid
-        LIMIT 1
-      `;
-      if (cycle.length > 0) {
-        conflict('BLOCK_RELATION_CYCLE', '순환 차단 관계는 등록할 수 없습니다.');
-      }
-
-      const relation = await transaction.issueBlockRelation.create({
-        data: {
-          blockedIssueId: dto.blockedIssueId,
-          blockingIssueId: dto.blockingIssueId,
-          createdByMembershipId: context.membershipId,
-          workspaceId: context.workspaceId,
-        },
-      });
-      await this.bumpIssueVersions(transaction, context.workspaceId, [
-        dto.blockingIssueId,
-        dto.blockedIssueId,
-      ]);
-      await this.recordRelationActivities(transaction, context, relation, 'ADDED');
-
-      return this.relationMutationResponse(
-        transaction,
-        context.workspaceId,
-        relation,
-        isTerminal(issues.get(dto.blockingIssueId)!.category),
-      );
-    });
-  }
-
-  async removeBlockRelation(
-    context: Context,
-    relationId: string,
-    dto: RemoveIssueBlockRelationDto,
-  ): Promise<IssueBlockRelationMutationResponseDto> {
-    return this.database.client.$transaction(async (transaction) => {
-      await this.lockWorkspace(transaction, context.workspaceId);
-      await this.lockActiveActor(transaction, context);
-      const relation = await transaction.issueBlockRelation.findFirst({
-        where: { id: relationId, workspaceId: context.workspaceId },
-      });
-      if (!relation) {
-        resourceNotFound('차단 관계를 찾을 수 없습니다.');
-      }
-
-      const issues = await this.lockIssues(transaction, context.workspaceId, [
-        relation.blockingIssueId,
-        relation.blockedIssueId,
-      ]);
-      assertVersions(issues, {
-        ...dto,
-        blockedIssueId: relation.blockedIssueId,
-        blockingIssueId: relation.blockingIssueId,
-      });
-      await transaction.issueBlockRelation.delete({ where: { id: relation.id } });
-      await this.bumpIssueVersions(transaction, context.workspaceId, [
-        relation.blockingIssueId,
-        relation.blockedIssueId,
-      ]);
-      await this.recordRelationActivities(transaction, context, relation, 'REMOVED');
-
-      return this.relationMutationResponse(
-        transaction,
-        context.workspaceId,
-        relation,
-        isTerminal(issues.get(relation.blockingIssueId)!.category),
-      );
-    });
-  }
-
   async createComment(
     context: Context,
     issueId: string,
@@ -524,13 +309,21 @@ export class IssueCollaborationService {
         context.workspaceId,
         markdown.mentionedMembershipIds,
       );
-      await this.lockHandoffIssue(transaction, context.workspaceId, issueId);
+      await this.lockIssue(transaction, context.workspaceId, issueId);
+      if (dto.teamWorkId) {
+        const teamWork = await transaction.teamWork.findFirst({
+          select: { id: true },
+          where: { deletedAt: null, id: dto.teamWorkId, issueId, workspaceId: context.workspaceId },
+        });
+        if (!teamWork) resourceNotFound('이슈에 속한 팀 작업을 찾을 수 없습니다.');
+      }
 
       const comment = await transaction.comment.create({
         data: {
           authorMembershipId: context.membershipId,
           bodyMarkdown: markdown.bodyMarkdown,
           issueId,
+          teamWorkId: dto.teamWorkId ?? null,
           workspaceId: context.workspaceId,
         },
         select: COMMENT_SELECT,
@@ -555,6 +348,7 @@ export class IssueCollaborationService {
           eventType: COMMENT_CREATED,
           fieldName: 'comment',
           issueId,
+          teamWorkId: dto.teamWorkId ?? null,
           workspaceId: context.workspaceId,
         },
       });
@@ -568,6 +362,7 @@ export class IssueCollaborationService {
             commentId: comment.id,
             hasMention: markdown.mentionedMembershipIds.length > 0,
             issueId,
+            teamWorkId: dto.teamWorkId ?? null,
             mentionedMembershipIds: markdown.mentionedMembershipIds,
             schemaVersion: COMMENT_CREATED_SCHEMA_VERSION,
             subscriberMembershipIds,
@@ -603,7 +398,7 @@ export class IssueCollaborationService {
         context.workspaceId,
         markdown.mentionedMembershipIds,
       );
-      await this.lockHandoffIssue(transaction, context.workspaceId, issueId);
+      await this.lockIssue(transaction, context.workspaceId, issueId);
       const current = await this.lockComment(transaction, context.workspaceId, issueId, commentId);
       this.assertCommentMutationAllowed(current, context.membershipId, dto.version);
       if (current.bodyMarkdown === markdown.bodyMarkdown) {
@@ -649,6 +444,7 @@ export class IssueCollaborationService {
           eventType: 'COMMENT_UPDATED',
           fieldName: 'comment',
           issueId,
+          teamWorkId: current.teamWorkId,
           workspaceId: context.workspaceId,
         },
       });
@@ -662,6 +458,7 @@ export class IssueCollaborationService {
             payload: {
               commentId,
               issueId,
+              teamWorkId: current.teamWorkId,
               mentionedMembershipIds: newlyMentionedMembershipIds,
               schemaVersion: COMMENT_MENTIONS_ADDED_SCHEMA_VERSION,
             } satisfies CommentMentionsAddedOutboxPayload,
@@ -688,7 +485,7 @@ export class IssueCollaborationService {
     await this.database.client.$transaction(async (transaction) => {
       await this.lockWorkspace(transaction, context.workspaceId);
       await this.lockActiveActor(transaction, context);
-      await this.lockHandoffIssue(transaction, context.workspaceId, issueId);
+      await this.lockIssue(transaction, context.workspaceId, issueId);
       const current = await this.lockComment(transaction, context.workspaceId, issueId, commentId);
       this.assertCommentMutationAllowed(current, context.membershipId, version);
 
@@ -709,6 +506,7 @@ export class IssueCollaborationService {
           eventType: 'COMMENT_DELETED',
           fieldName: 'comment',
           issueId,
+          teamWorkId: current.teamWorkId,
           workspaceId: context.workspaceId,
         },
       });
@@ -724,42 +522,60 @@ export class IssueCollaborationService {
 
   async createHandoff(
     context: Context,
-    issueId: string,
+    teamWorkId: string,
     dto: CreateIssueHandoffDto,
   ): Promise<HandoffResourceResponseDto> {
     return this.database.client.$transaction(async (transaction) => {
       await this.lockWorkspace(transaction, context.workspaceId);
       await this.lockActiveActor(transaction, context);
-      return this.createHandoffInTransaction(transaction, context, issueId, dto);
+      return this.createHandoffInTransaction(transaction, context, teamWorkId, dto);
     });
   }
 
   async createHandoffInTransaction(
     transaction: Transaction,
     context: Context,
-    issueId: string,
-    dto: { bodyMarkdown: string; kind: HandoffKind },
-    options?: {
-      allowManagedInitial?: boolean;
-      notificationSnapshot?: {
-        candidateRecipientMembershipIds: string[];
-        downstreamIssueIds: string[];
-      };
+    teamWorkId: string,
+    dto: {
+      bodyMarkdown: string;
+      destinationRoles?: (typeof ProjectRole.WEB_FRONTEND | typeof ProjectRole.APP_FRONTEND)[];
+      kind: HandoffKind;
     },
   ): Promise<HandoffResourceResponseDto> {
     const markdown = parseHandoffMarkdown(dto.bodyMarkdown);
-    const issue = await this.lockHandoffIssue(transaction, context.workspaceId, issueId);
-    if (issue.type !== IssueType.TEAM_TASK || issue.projectRole !== ProjectRole.BACKEND) {
+    const source = await this.lockHandoffTeamWork(transaction, context.workspaceId, teamWorkId);
+    if (source.projectRole !== ProjectRole.BACKEND) {
       unprocessable(
         'HANDOFF_NOT_ALLOWED',
         '백엔드 역할의 팀 작업에만 작업 전달을 작성할 수 있습니다.',
       );
     }
+    const sourceTeamMember = await transaction.teamMember.findFirst({
+      select: { membershipId: true },
+      where: {
+        membership: { status: MembershipStatus.ACTIVE },
+        membershipId: context.membershipId,
+        teamId: source.teamId,
+        workspaceId: context.workspaceId,
+      },
+    });
+    if (!sourceTeamMember) {
+      throw new ApiError({
+        code: 'TEAM_WORK_TEAM_MEMBER_REQUIRED',
+        message: '원본 백엔드 팀의 활성 멤버만 작업 전달을 작성할 수 있습니다.',
+        status: HttpStatus.FORBIDDEN,
+      });
+    }
 
     const handoffs = await transaction.apiHandoff.findMany({
       orderBy: { sequenceNumber: 'desc' },
-      select: { kind: true, sequenceNumber: true },
-      where: { issueId, workspaceId: context.workspaceId },
+      select: {
+        id: true,
+        kind: true,
+        sequenceNumber: true,
+        targets: { select: { teamWorkId: true } },
+      },
+      where: { sourceTeamWorkId: teamWorkId, workspaceId: context.workspaceId },
     });
     const hasInitial = handoffs.some(({ kind }) => kind === HandoffKind.INITIAL);
     if (dto.kind === HandoffKind.INITIAL && hasInitial) {
@@ -768,35 +584,45 @@ export class IssueCollaborationService {
     if (dto.kind === HandoffKind.FOLLOW_UP && !hasInitial) {
       conflict('INITIAL_HANDOFF_REQUIRED', '최초 작업 전달을 먼저 작성해 주세요.');
     }
-    if (
-      dto.kind === HandoffKind.INITIAL &&
-      !options?.allowManagedInitial &&
-      issue.parentIssueId &&
-      issue.projectId
-    ) {
-      const frontendRole = await transaction.projectRoleTeam.findFirst({
-        select: { role: true },
-        where: {
-          projectId: issue.projectId,
-          role: { in: [...FRONTEND_ROLES] },
-          workspaceId: context.workspaceId,
-        },
-      });
-      if (frontendRole) {
-        unprocessable(
-          'HANDOFF_REQUIRES_COMPLETION',
-          '상위 이슈의 백엔드 작업은 전달하고 완료 동작을 사용해 주세요.',
-        );
-      }
+    if (dto.kind === HandoffKind.INITIAL && source.category !== StateCategory.COMPLETED) {
+      unprocessable(
+        'HANDOFF_REQUIRES_COMPLETION',
+        '최초 작업 전달은 백엔드 팀 작업 완료와 함께 작성해야 합니다.',
+      );
+    }
+
+    const targetTeamWorkIds =
+      dto.kind === HandoffKind.INITIAL
+        ? await this.ensureHandoffTargets(
+            transaction,
+            context,
+            teamWorkId,
+            source.issueId,
+            source.projectId,
+            dto.destinationRoles,
+          )
+        : [
+            ...new Set(
+              handoffs
+                .find(({ kind }) => kind === HandoffKind.INITIAL)
+                ?.targets.map(({ teamWorkId: targetId }) => targetId) ?? [],
+            ),
+          ].sort();
+    if (dto.kind === HandoffKind.INITIAL && targetTeamWorkIds.length === 0) {
+      unprocessable(
+        'HANDOFF_DESTINATION_REQUIRED',
+        '최초 작업 전달 대상 역할을 하나 이상 선택해 주세요.',
+      );
     }
 
     const created = await transaction.apiHandoff.create({
       data: {
         authorMembershipId: context.membershipId,
         bodyMarkdown: markdown.bodyMarkdown,
-        issueId,
+        issueId: source.issueId,
         kind: dto.kind,
         sequenceNumber: (handoffs[0]?.sequenceNumber ?? 0) + 1,
+        sourceTeamWorkId: teamWorkId,
         workspaceId: context.workspaceId,
       },
       select: {
@@ -815,67 +641,51 @@ export class IssueCollaborationService {
         sequenceNumber: true,
       },
     });
+    if (targetTeamWorkIds.length > 0) {
+      await transaction.apiHandoffTarget.createMany({
+        data: targetTeamWorkIds.map((targetTeamWorkId) => ({
+          handoffId: created.id,
+          teamWorkId: targetTeamWorkId,
+          workspaceId: context.workspaceId,
+        })),
+      });
+    }
     await this.files.syncBodyImages(
       transaction,
       context,
-      issueId,
+      source.issueId,
       IssueFileKind.HANDOFF_IMAGE,
       markdown.fileIds,
       { apiHandoffId: created.id },
     );
-    const notificationSnapshot = options?.notificationSnapshot;
-    const relationDownstream = notificationSnapshot
-      ? []
-      : await this.downstreamTargets(transaction, context.workspaceId, issueId);
-    const managedFollowUpSiblings =
-      !notificationSnapshot &&
-      dto.kind === HandoffKind.FOLLOW_UP &&
-      issue.parentIssueId &&
-      issue.projectId
-        ? await transaction.issue.findMany({
-            orderBy: { id: 'asc' },
-            select: {
-              assigneeMembershipId: true,
-              id: true,
-              subscriptions: {
-                orderBy: { membershipId: 'asc' },
-                select: { membershipId: true },
-              },
+    const targets = await transaction.teamWork.findMany({
+      orderBy: [{ projectRole: 'asc' }, { identifier: 'asc' }, { id: 'asc' }],
+      select: {
+        assigneeMembershipId: true,
+        team: {
+          select: {
+            teamMembers: {
+              select: { membershipId: true },
+              where: { membership: { status: MembershipStatus.ACTIVE } },
             },
-            where: {
-              deletedAt: null,
-              parentIssueId: issue.parentIssueId,
-              projectId: issue.projectId,
-              projectRole: { in: [...FRONTEND_ROLES] },
-              type: IssueType.TEAM_TASK,
-              workflowState: { category: { notIn: [...TERMINAL_CATEGORIES] } },
-              workspaceId: context.workspaceId,
-            },
-          })
-        : [];
-    const downstream = [
-      ...new Map(
-        [
-          ...relationDownstream.map(({ blockedIssue }) => blockedIssue),
-          ...managedFollowUpSiblings,
-        ].map((item) => [item.id, item]),
-      ).values(),
-    ].sort((left, right) => left.id.localeCompare(right.id));
-    const downstreamIssueIds = notificationSnapshot
-      ? [...new Set(notificationSnapshot.downstreamIssueIds)].sort()
-      : downstream.map(({ id }) => id);
-    const candidateRecipientMembershipIds = (
-      notificationSnapshot
-        ? [...new Set(notificationSnapshot.candidateRecipientMembershipIds)]
-        : [
-            ...new Set(
-              downstream.flatMap(({ assigneeMembershipId, subscriptions }) => [
-                ...(assigneeMembershipId ? [assigneeMembershipId] : []),
-                ...subscriptions.map(({ membershipId }) => membershipId),
-              ]),
-            ),
-          ]
-    )
+          },
+        },
+      },
+      where: { id: { in: targetTeamWorkIds }, workspaceId: context.workspaceId },
+    });
+    const subscriptions = await transaction.issueSubscription.findMany({
+      select: { membershipId: true },
+      where: { issueId: source.issueId, workspaceId: context.workspaceId },
+    });
+    const candidateRecipientMembershipIds = [
+      ...new Set([
+        ...targets.flatMap(({ assigneeMembershipId, team }) => [
+          ...(assigneeMembershipId ? [assigneeMembershipId] : []),
+          ...team.teamMembers.map(({ membershipId }) => membershipId),
+        ]),
+        ...subscriptions.map(({ membershipId }) => membershipId),
+      ]),
+    ]
       .filter((membershipId) => membershipId !== context.membershipId)
       .sort();
 
@@ -883,7 +693,7 @@ export class IssueCollaborationService {
       data: {
         actorMembershipId: context.membershipId,
         afterData: {
-          downstreamIssueIds,
+          targetTeamWorkIds,
           handoffId: created.id,
           kind: created.kind,
           sequenceNumber: created.sequenceNumber,
@@ -891,7 +701,8 @@ export class IssueCollaborationService {
         beforeData: Prisma.JsonNull,
         eventType: API_HANDOFF_CREATED,
         fieldName: 'handoff',
-        issueId,
+        issueId: source.issueId,
+        teamWorkId,
         workspaceId: context.workspaceId,
       },
     });
@@ -903,11 +714,12 @@ export class IssueCollaborationService {
         eventType: API_HANDOFF_CREATED,
         payload: {
           candidateRecipientMembershipIds,
-          downstreamIssueIds,
+          targetTeamWorkIds,
           handoffId: created.id,
-          issueId,
+          issueId: source.issueId,
           kind: created.kind,
           schemaVersion: API_HANDOFF_CREATED_SCHEMA_VERSION,
+          sourceTeamWorkId: teamWorkId,
         },
         workspaceId: context.workspaceId,
       },
@@ -925,49 +737,12 @@ export class IssueCollaborationService {
       bodyMarkdown: created.bodyMarkdown,
       createdAt: created.createdAt.toISOString(),
       id: created.id,
+      issueId: source.issueId,
       kind: created.kind,
       sequenceNumber: created.sequenceNumber,
+      sourceTeamWorkId: teamWorkId,
+      targetTeamWorkIds,
     };
-  }
-
-  async ensureInitialHandoffForCompletion(
-    transaction: Transaction,
-    context: Context,
-    issueId: string,
-    handoff?: { bodyMarkdown: string },
-  ): Promise<HandoffResourceResponseDto | null> {
-    const issue = await this.lockHandoffIssue(transaction, context.workspaceId, issueId);
-    if (issue.type !== IssueType.TEAM_TASK || issue.projectRole !== ProjectRole.BACKEND) {
-      if (handoff) {
-        unprocessable(
-          'HANDOFF_NOT_ALLOWED',
-          '백엔드 역할의 팀 작업에만 작업 전달을 작성할 수 있습니다.',
-        );
-      }
-      return null;
-    }
-
-    const initial = await transaction.apiHandoff.findFirst({
-      select: { id: true },
-      where: { issueId, kind: HandoffKind.INITIAL, workspaceId: context.workspaceId },
-    });
-    if (initial) {
-      if (handoff) {
-        conflict('INITIAL_HANDOFF_EXISTS', '최초 작업 전달이 이미 존재합니다.');
-      }
-      return null;
-    }
-    if (handoff) {
-      return this.createHandoffInTransaction(transaction, context, issueId, {
-        bodyMarkdown: handoff.bodyMarkdown,
-        kind: HandoffKind.INITIAL,
-      });
-    }
-
-    if ((await this.downstreamTargets(transaction, context.workspaceId, issueId)).length > 0) {
-      conflict('HANDOFF_REQUIRED', '후행 프론트 작업을 위해 최초 작업 전달이 필요합니다.');
-    }
-    return null;
   }
 
   async timeline(
@@ -1006,6 +781,8 @@ export class IssueCollaborationService {
           eventType: true,
           fieldName: true,
           id: true,
+          teamWork: { select: { identifier: true } },
+          teamWorkId: true,
         },
         take: dto.limit + 1,
         where: {
@@ -1039,6 +816,8 @@ export class IssueCollaborationService {
           id: true,
           kind: true,
           sequenceNumber: true,
+          sourceTeamWorkId: true,
+          targets: { orderBy: { teamWorkId: 'asc' }, select: { teamWorkId: true } },
         },
         take: dto.limit + 1,
         where: { issueId, workspaceId, ...cursorForHandoff },
@@ -1054,6 +833,8 @@ export class IssueCollaborationService {
           eventType: activity.eventType,
           fieldName: activity.fieldName,
           id: activity.id,
+          teamWorkId: activity.teamWorkId,
+          teamWorkIdentifier: activity.teamWork?.identifier ?? null,
         },
         createdAt: activity.createdAt.toISOString(),
         type: 'ACTIVITY',
@@ -1070,8 +851,11 @@ export class IssueCollaborationService {
           bodyMarkdown: handoff.bodyMarkdown,
           createdAt: handoff.createdAt.toISOString(),
           id: handoff.id,
+          issueId,
           kind: handoff.kind,
           sequenceNumber: handoff.sequenceNumber,
+          sourceTeamWorkId: handoff.sourceTeamWorkId,
+          targetTeamWorkIds: handoff.targets.map(({ teamWorkId }) => teamWorkId),
         },
         type: 'HANDOFF',
       })),
@@ -1106,6 +890,7 @@ export class IssueCollaborationService {
     const [comment] = await transaction.$queryRaw<CommentLockRow[]>`
       SELECT "id",
              "issue_id" AS "issueId",
+             "team_work_id" AS "teamWorkId",
              "author_membership_id" AS "authorMembershipId",
              "body_markdown" AS "bodyMarkdown",
              "version",
@@ -1228,229 +1013,165 @@ export class IssueCollaborationService {
     }
   }
 
-  private async lockIssues(
-    transaction: Transaction,
-    workspaceId: string,
-    issueIds: string[],
-  ): Promise<Map<string, IssueLockRow>> {
-    const stableIds = [...new Set(issueIds)].sort();
-    const rows = await transaction.$queryRaw<IssueLockRow[]>(Prisma.sql`
-      SELECT
-        "issue"."id",
-        "issue"."identifier",
-        "issue"."title",
-        "issue"."type",
-        "issue"."project_role" AS "projectRole",
-        "issue"."version",
-        "state"."category"
-      FROM "issues" AS "issue"
-      INNER JOIN "workflow_states" AS "state"
-        ON "state"."id" = "issue"."workflow_state_id"
-        AND "state"."workspace_id" = "issue"."workspace_id"
-      WHERE "issue"."workspace_id" = ${workspaceId}::uuid
-        AND "issue"."type" = 'TEAM_TASK'::"IssueType"
-        AND "issue"."deleted_at" IS NULL
-        AND "issue"."id" IN (${Prisma.join(
-          stableIds.map((issueId) => Prisma.sql`${issueId}::uuid`),
-        )})
-      ORDER BY "issue"."id"
-      FOR UPDATE OF "issue"
-    `);
-    if (rows.length !== stableIds.length) {
-      resourceNotFound('팀 작업을 찾을 수 없습니다.');
-    }
-    return new Map(rows.map((issue) => [issue.id, issue]));
-  }
-
-  private async lockHandoffIssue(
+  private async lockIssue(
     transaction: Transaction,
     workspaceId: string,
     issueId: string,
-  ): Promise<HandoffIssueLockRow> {
-    const [issue] = await transaction.$queryRaw<HandoffIssueLockRow[]>`
-      SELECT
-        "id",
-        "type",
-        "project_id" AS "projectId",
-        "project_role" AS "projectRole",
-        "parent_issue_id" AS "parentIssueId"
-      FROM "issues"
-      WHERE "workspace_id" = ${workspaceId}::uuid
-        AND "id" = ${issueId}::uuid
-        AND "deleted_at" IS NULL
+  ): Promise<void> {
+    const rows = await transaction.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "issues"
+      WHERE "workspace_id" = ${workspaceId}::uuid AND "id" = ${issueId}::uuid AND "deleted_at" IS NULL
       FOR UPDATE
     `;
-    if (!issue) {
-      resourceNotFound('이슈를 찾을 수 없습니다.');
-    }
-    return issue;
+    if (rows.length === 0) resourceNotFound('이슈를 찾을 수 없습니다.');
   }
 
-  private async bumpIssueVersions(
+  private async lockHandoffTeamWork(
     transaction: Transaction,
     workspaceId: string,
-    issueIds: string[],
+    teamWorkId: string,
+  ): Promise<HandoffTeamWorkLockRow> {
+    const [row] = await transaction.$queryRaw<HandoffTeamWorkLockRow[]>`
+      SELECT "work"."id", "work"."issue_id" AS "issueId", "work"."project_role" AS "projectRole", "work"."team_id" AS "teamId",
+             "issue"."project_id" AS "projectId", "state"."category"
+      FROM "team_works" AS "work"
+      INNER JOIN "issues" AS "issue"
+        ON "issue"."workspace_id" = "work"."workspace_id" AND "issue"."id" = "work"."issue_id" AND "issue"."deleted_at" IS NULL
+      INNER JOIN "workflow_states" AS "state"
+        ON "state"."workspace_id" = "work"."workspace_id" AND "state"."id" = "work"."workflow_state_id"
+      WHERE "work"."workspace_id" = ${workspaceId}::uuid AND "work"."id" = ${teamWorkId}::uuid AND "work"."deleted_at" IS NULL
+      FOR UPDATE OF "work"
+    `;
+    if (!row) resourceNotFound('팀 작업을 찾을 수 없습니다.');
+    return row;
+  }
+
+  private async bumpTeamWorkVersions(
+    transaction: Transaction,
+    workspaceId: string,
+    teamWorkIds: string[],
   ): Promise<void> {
-    for (const issueId of [...issueIds].sort()) {
-      const updated = await transaction.issue.update({
+    for (const teamWorkId of [...teamWorkIds].sort()) {
+      const updated = await transaction.teamWork.update({
         data: { version: { increment: 1 } },
         select: { id: true, version: true },
-        where: { id: issueId },
+        where: { id: teamWorkId },
       });
       await notifyResourceChanged(transaction, {
         changeType: 'UPDATED',
         resourceId: updated.id,
-        resourceType: 'ISSUE',
+        resourceType: 'TEAM_WORK',
         version: updated.version,
         workspaceId,
       });
     }
   }
 
-  private async recordRelationActivities(
+  private async ensureHandoffTargets(
     transaction: Transaction,
     context: Context,
-    relation: {
-      blockedIssueId: string;
-      blockingIssueId: string;
-      id: string;
-    },
-    action: 'ADDED' | 'REMOVED',
-  ): Promise<void> {
-    const snapshots = [
-      {
-        direction: 'BLOCKING',
-        issueId: relation.blockingIssueId,
-        targetIssueId: relation.blockedIssueId,
-      },
-      {
-        direction: 'BLOCKED_BY',
-        issueId: relation.blockedIssueId,
-        targetIssueId: relation.blockingIssueId,
-      },
-    ];
-    await transaction.activityEvent.createMany({
-      data: snapshots.map(({ direction, issueId, targetIssueId }) => ({
-        actorMembershipId: context.membershipId,
-        afterData:
-          action === 'ADDED'
-            ? { direction, issueId: targetIssueId, relationId: relation.id }
-            : Prisma.JsonNull,
-        beforeData:
-          action === 'REMOVED'
-            ? { direction, issueId: targetIssueId, relationId: relation.id }
-            : Prisma.JsonNull,
-        eventType: `ISSUE_BLOCK_RELATION_${action}`,
-        fieldName: 'blockRelations',
-        issueId,
-        workspaceId: context.workspaceId,
-      })),
-    });
-  }
-
-  private async relationMutationResponse(
-    transaction: Transaction,
-    workspaceId: string,
-    relation: {
-      blockedIssueId: string;
-      blockingIssueId: string;
-      createdAt: Date;
-      id: string;
-    },
-    resolved: boolean,
-  ): Promise<IssueBlockRelationMutationResponseDto> {
-    const rows = await transaction.$queryRaw<AffectedIssueRow[]>(Prisma.sql`
-      SELECT
-        "issue"."id",
-        "issue"."identifier",
-        "issue"."title",
-        "issue"."type",
-        "issue"."project_role" AS "projectRole",
-        "issue"."version",
-        "state"."category",
-        EXISTS (
-          SELECT 1
-          FROM "issue_block_relations" AS "incoming"
-          INNER JOIN "issues" AS "blocker"
-            ON "blocker"."id" = "incoming"."blocking_issue_id"
-            AND "blocker"."workspace_id" = "incoming"."workspace_id"
-          INNER JOIN "workflow_states" AS "blocker_state"
-            ON "blocker_state"."id" = "blocker"."workflow_state_id"
-            AND "blocker_state"."workspace_id" = "blocker"."workspace_id"
-          WHERE "incoming"."workspace_id" = "issue"."workspace_id"
-            AND "incoming"."blocked_issue_id" = "issue"."id"
-            AND "blocker"."deleted_at" IS NULL
-            AND "blocker_state"."category" NOT IN (
-              'COMPLETED'::"StateCategory",
-              'CANCELED'::"StateCategory"
-            )
-        ) AS "blocked"
-      FROM "issues" AS "issue"
-      INNER JOIN "workflow_states" AS "state"
-        ON "state"."id" = "issue"."workflow_state_id"
-        AND "state"."workspace_id" = "issue"."workspace_id"
-      WHERE "issue"."workspace_id" = ${workspaceId}::uuid
-        AND "issue"."deleted_at" IS NULL
-        AND "issue"."id" IN (
-          ${relation.blockingIssueId}::uuid,
-          ${relation.blockedIssueId}::uuid
-        )
-    `);
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const response = (issueId: string): AffectedIssueResponseDto => {
-      const issue = byId.get(issueId);
-      if (!issue) {
-        return resourceNotFound('팀 작업을 찾을 수 없습니다.');
-      }
-      return {
-        blocked: issue.blocked,
-        category: issue.category,
-        id: issue.id,
-        identifier: issue.identifier,
-        projectRole: issue.projectRole,
-        title: issue.title,
-        version: issue.version,
-      };
-    };
-
-    return {
-      blockedIssue: response(relation.blockedIssueId),
-      blockingIssue: response(relation.blockingIssueId),
-      relation: {
-        blockedIssueId: relation.blockedIssueId,
-        blockingIssueId: relation.blockingIssueId,
-        createdAt: relation.createdAt.toISOString(),
-        id: relation.id,
-        resolved,
-      },
-    };
-  }
-
-  private downstreamTargets(transaction: Transaction, workspaceId: string, issueId: string) {
-    return transaction.issueBlockRelation.findMany({
-      orderBy: { blockedIssueId: 'asc' },
-      select: {
-        blockedIssue: {
-          select: {
-            assigneeMembershipId: true,
-            id: true,
-            subscriptions: {
-              orderBy: { membershipId: 'asc' },
-              select: { membershipId: true },
-            },
-          },
-        },
-      },
+    sourceTeamWorkId: string,
+    issueId: string,
+    projectId: string,
+    requestedRoles?: (typeof ProjectRole.WEB_FRONTEND | typeof ProjectRole.APP_FRONTEND)[],
+  ): Promise<string[]> {
+    const roleTeams = await transaction.projectRoleTeam.findMany({
+      orderBy: { role: 'asc' },
+      select: { role: true, teamId: true },
       where: {
-        blockedIssue: {
-          deletedAt: null,
-          projectRole: { in: [...FRONTEND_ROLES] },
-          type: IssueType.TEAM_TASK,
-          workflowState: { category: { notIn: [...TERMINAL_CATEGORIES] } },
-        },
-        blockingIssueId: issueId,
-        workspaceId,
+        projectId,
+        role: { in: requestedRoles?.length ? requestedRoles : [...FRONTEND_ROLES] },
+        workspaceId: context.workspaceId,
       },
     });
+    const targets: string[] = [];
+    for (const roleTeam of roleTeams) {
+      const existing = await transaction.teamWork.findFirst({
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: { id: true },
+        where: {
+          deletedAt: null,
+          issueId,
+          projectRole: roleTeam.role,
+          workflowState: { category: { notIn: [...TERMINAL_CATEGORIES] } },
+          workspaceId: context.workspaceId,
+        },
+      });
+      if (existing) {
+        targets.push(existing.id);
+        continue;
+      }
+      const team = await transaction.team.findFirst({
+        select: { id: true, key: true, nextIssueNumber: true },
+        where: { archivedAt: null, id: roleTeam.teamId, workspaceId: context.workspaceId },
+      });
+      const state = await transaction.workflowState.findFirst({
+        orderBy: [{ isDefault: 'desc' }, { position: 'asc' }],
+        select: { id: true },
+        where: {
+          category: { notIn: [...TERMINAL_CATEGORIES] },
+          teamId: roleTeam.teamId,
+          workspaceId: context.workspaceId,
+        },
+      });
+      if (!team || !state) resourceNotFound('전달 대상 팀 또는 워크플로 상태를 찾을 수 없습니다.');
+      await transaction.team.update({
+        data: { nextIssueNumber: { increment: 1 } },
+        where: { id: team.id },
+      });
+      const created = await transaction.teamWork.create({
+        data: {
+          createdByMembershipId: context.membershipId,
+          identifier: `${team.key}-${team.nextIssueNumber}`,
+          issueId,
+          projectRole: roleTeam.role,
+          sequenceNumber: team.nextIssueNumber,
+          teamId: team.id,
+          workflowStateId: state.id,
+          workspaceId: context.workspaceId,
+        },
+        select: { id: true, version: true },
+      });
+      await transaction.activityEvent.create({
+        data: {
+          actorMembershipId: context.membershipId,
+          afterData: {
+            identifier: `${team.key}-${team.nextIssueNumber}`,
+            projectRole: roleTeam.role,
+          },
+          eventType: 'TEAM_WORK_CREATED',
+          issueId,
+          teamWorkId: created.id,
+          workspaceId: context.workspaceId,
+        },
+      });
+      const eventId = randomUUID();
+      await transaction.outboxEvent.create({
+        data: {
+          actorMembershipId: context.membershipId,
+          aggregateId: created.id,
+          aggregateType: 'TEAM_WORK',
+          eventType: TEAM_WORK_CREATED,
+          id: eventId,
+          payload: {
+            assigneeMembershipId: null,
+            issueId,
+            schemaVersion: TEAM_WORK_CREATED_SCHEMA_VERSION,
+            teamWorkId: created.id,
+          } satisfies TeamWorkCreatedOutboxPayload,
+          workspaceId: context.workspaceId,
+        },
+      });
+      await notifyResourceChanged(transaction, {
+        changeType: 'CREATED',
+        eventId,
+        resourceId: created.id,
+        resourceType: 'TEAM_WORK',
+        version: created.version,
+        workspaceId: context.workspaceId,
+      });
+      targets.push(created.id);
+    }
+    return targets.sort();
   }
 }

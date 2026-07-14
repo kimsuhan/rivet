@@ -4,10 +4,13 @@ import { IssueCollaborationModule } from '../collaboration/issue-collaboration.m
 import { FilesModule } from '../files/files.module';
 import { IssuesController } from './issues.controller';
 import { IssuesService } from './issues.service';
+import { TeamWorksController } from './team-works.controller';
+import { TeamWorksService } from './team-works.service';
 
 @Module({
-  controllers: [IssuesController],
+  controllers: [IssuesController, TeamWorksController],
   imports: [FilesModule, IssueCollaborationModule],
-  providers: [IssuesService],
+  providers: [IssuesService, TeamWorksService],
+  exports: [IssuesService],
 })
 export class IssuesModule {}

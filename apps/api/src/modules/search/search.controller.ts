@@ -49,8 +49,8 @@ export class SearchController {
     private readonly observability: ObservabilityService,
   ) {}
 
-  @Get('issues')
-  @ApiOperation({ summary: '현재 워크스페이스 이슈 검색' })
+  @Get()
+  @ApiOperation({ summary: '이슈 콘텐츠와 팀 작업 표시 ID 검색' })
   @ApiOkResponse({ type: SearchIssueListResponseDto })
   @ApiBadRequestResponse({ description: 'INVALID_QUERY', type: ApiErrorResponseDto })
   @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })

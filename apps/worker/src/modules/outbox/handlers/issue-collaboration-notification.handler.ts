@@ -8,6 +8,8 @@ import type {
   CommentMentionsAddedOutboxPayload,
   IssueChangedOutboxPayload,
   IssueCreatedOutboxPayload,
+  TeamWorkChangedOutboxPayload,
+  TeamWorkCreatedOutboxPayload,
 } from '@rivet/event-contracts';
 
 import { DatabaseService } from '../../../common/database/database.service';
@@ -24,9 +26,6 @@ export class IssueCollaborationNotificationHandler {
   ): Promise<void> {
     const candidates = new Map<string, NotificationType>();
 
-    if (payload.assigneeMembershipId !== null) {
-      candidates.set(payload.assigneeMembershipId, NotificationType.ISSUE_ASSIGNED);
-    }
     for (const membershipId of payload.mentionedMembershipIds) {
       candidates.set(membershipId, NotificationType.MENTIONED);
     }
@@ -53,9 +52,6 @@ export class IssueCollaborationNotificationHandler {
         candidates.set(membershipId, type);
       }
     }
-    if (payload.assigneeMembershipId !== null) {
-      candidates.set(payload.assigneeMembershipId, NotificationType.ISSUE_ASSIGNED);
-    }
     for (const membershipId of payload.mentionedMembershipIds) {
       candidates.set(membershipId, NotificationType.MENTIONED);
     }
@@ -63,6 +59,36 @@ export class IssueCollaborationNotificationHandler {
     await this.createNotifications(
       event,
       { issueId: payload.issueId, kind: 'ISSUE_CHANGED' },
+      candidates,
+    );
+  }
+
+  async handleTeamWorkChanged(
+    event: ClaimedOutboxEvent,
+    payload: TeamWorkChangedOutboxPayload,
+  ): Promise<void> {
+    const candidates = new Map<string, NotificationType>();
+    if (payload.assigneeMembershipId !== undefined && payload.assigneeMembershipId !== null) {
+      candidates.set(payload.assigneeMembershipId, NotificationType.TEAM_WORK_ASSIGNED);
+    }
+    await this.createNotifications(
+      event,
+      { issueId: payload.issueId, kind: 'TEAM_WORK_CHANGED', teamWorkId: payload.teamWorkId },
+      candidates,
+    );
+  }
+
+  async handleTeamWorkCreated(
+    event: ClaimedOutboxEvent,
+    payload: TeamWorkCreatedOutboxPayload,
+  ): Promise<void> {
+    const candidates = new Map<string, NotificationType>();
+    if (payload.assigneeMembershipId !== null) {
+      candidates.set(payload.assigneeMembershipId, NotificationType.TEAM_WORK_ASSIGNED);
+    }
+    await this.createNotifications(
+      event,
+      { issueId: payload.issueId, kind: 'TEAM_WORK_CHANGED', teamWorkId: payload.teamWorkId },
       candidates,
     );
   }
@@ -82,7 +108,7 @@ export class IssueCollaborationNotificationHandler {
 
     await this.createNotifications(
       event,
-      { commentId: payload.commentId, issueId: payload.issueId, kind: 'COMMENT' },
+      { commentId: payload.commentId, issueId: payload.issueId, kind: 'COMMENT', teamWorkId: payload.teamWorkId },
       candidates,
     );
   }
@@ -93,7 +119,7 @@ export class IssueCollaborationNotificationHandler {
   ): Promise<void> {
     await this.createNotifications(
       event,
-      { commentId: payload.commentId, issueId: payload.issueId, kind: 'COMMENT' },
+      { commentId: payload.commentId, issueId: payload.issueId, kind: 'COMMENT', teamWorkId: payload.teamWorkId },
       new Map(
         payload.mentionedMembershipIds.map((membershipId) => [
           membershipId,
@@ -107,7 +133,8 @@ export class IssueCollaborationNotificationHandler {
     event: ClaimedOutboxEvent,
     source:
       | { issueId: string; kind: 'ISSUE_CREATED' | 'ISSUE_CHANGED' }
-      | { commentId: string; issueId: string; kind: 'COMMENT' },
+      | { issueId: string; kind: 'TEAM_WORK_CHANGED'; teamWorkId: string }
+      | { commentId: string; issueId: string; kind: 'COMMENT'; teamWorkId: string | null },
     candidates: Map<string, NotificationType>,
   ): Promise<void> {
     if (event.workspaceId === null || event.actorMembershipId === null) {
@@ -132,6 +159,13 @@ export class IssueCollaborationNotificationHandler {
           throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
         }
         if (comment.issue.deletedAt !== null) return;
+      } else if (source.kind === 'TEAM_WORK_CHANGED') {
+        const teamWork = await transaction.teamWork.findFirst({
+          select: { deletedAt: true, issue: { select: { deletedAt: true } } },
+          where: { id: source.teamWorkId, issueId: source.issueId, workspaceId },
+        });
+        if (!teamWork) throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+        if (teamWork.deletedAt !== null || teamWork.issue.deletedAt !== null) return;
       } else {
         const issue = await transaction.issue.findFirst({
           select: { createdByMembershipId: true, deletedAt: true },
@@ -175,6 +209,7 @@ export class IssueCollaborationNotificationHandler {
             commentId: source.kind === 'COMMENT' ? source.commentId : null,
             eventId: event.id,
             issueId: source.issueId,
+            teamWorkId: source.kind === 'TEAM_WORK_CHANGED' || source.kind === 'COMMENT' ? source.teamWorkId : null,
             recipientMembershipId,
             type,
             workspaceId,

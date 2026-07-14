@@ -8,6 +8,11 @@
 
 export interface CreateCommentDto {
   /**
+     * 댓글의 선택적인 팀 작업 문맥
+     * @nullable
+     */
+  teamWorkId?: string | null;
+  /**
      * @minLength 1
      * @maxLength 50000
      */

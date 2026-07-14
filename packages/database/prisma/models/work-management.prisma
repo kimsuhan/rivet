@@ -1,8 +1,3 @@
-enum IssueType {
-  FEATURE
-  TEAM_TASK
-}
-
 enum IssuePriority {
   NONE
   LOW
@@ -11,7 +6,7 @@ enum IssuePriority {
   URGENT
 }
 
-enum FeatureIssueStatus {
+enum IssueStatus {
   UNSORTED
   TODO
   IN_PROGRESS
@@ -40,7 +35,7 @@ enum HandoffKind {
 }
 
 enum NotificationType {
-  ISSUE_ASSIGNED
+  TEAM_WORK_ASSIGNED
   MENTIONED
   COMMENT_ADDED
   ISSUE_COMPLETED
@@ -93,7 +88,6 @@ model ProjectRoleTeam {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   project   Project   @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
   team      Team      @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
-  issues    Issue[]   @relation("IssueProjectRoleTeam")
 
   @@id([projectId, role])
   @@unique([workspaceId, projectId, role])
@@ -103,44 +97,31 @@ model ProjectRoleTeam {
 }
 
 model Issue {
-  id                    String              @id @default(uuid()) @db.Uuid
-  workspaceId           String              @map("workspace_id") @db.Uuid
-  type                  IssueType           @default(TEAM_TASK)
-  identifier            String              @db.VarChar(32)
-  sequenceNumber        Int                 @map("sequence_number")
-  title                 String              @db.VarChar(500)
-  descriptionMarkdown   String?             @map("description_markdown") @db.Text
-  featureStatus         FeatureIssueStatus? @map("feature_status")
-  workflowStateId       String?             @map("workflow_state_id") @db.Uuid
-  priority              IssuePriority       @default(NONE)
-  projectId             String?             @map("project_id") @db.Uuid
-  projectRole           ProjectRole?        @map("project_role")
-  parentIssueId         String?             @map("parent_issue_id") @db.Uuid
-  teamId                String?             @map("team_id") @db.Uuid
-  assigneeMembershipId  String?             @map("assignee_membership_id") @db.Uuid
-  createdByMembershipId String              @map("created_by_membership_id") @db.Uuid
-  deletedAt             DateTime?           @map("deleted_at") @db.Timestamptz(3)
-  purgeAt               DateTime?           @map("purge_at") @db.Timestamptz(3)
-  deletedByMembershipId String?             @map("deleted_by_membership_id") @db.Uuid
-  version               Int                 @default(1)
-  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                    String        @id @default(uuid()) @db.Uuid
+  workspaceId           String        @map("workspace_id") @db.Uuid
+  identifier            String        @db.VarChar(32)
+  sequenceNumber        Int           @map("sequence_number")
+  title                 String        @db.VarChar(500)
+  descriptionMarkdown   String?       @map("description_markdown") @db.Text
+  status                IssueStatus   @default(UNSORTED)
+  priority              IssuePriority @default(NONE)
+  projectId             String        @map("project_id") @db.Uuid
+  createdByMembershipId String        @map("created_by_membership_id") @db.Uuid
+  deletedAt             DateTime?     @map("deleted_at") @db.Timestamptz(3)
+  purgeAt               DateTime?     @map("purge_at") @db.Timestamptz(3)
+  deletedByMembershipId String?       @map("deleted_by_membership_id") @db.Uuid
+  version               Int           @default(1)
+  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   workspace           Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  project             Project?              @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
-  projectRoleTeam     ProjectRoleTeam?      @relation("IssueProjectRoleTeam", fields: [workspaceId, projectId, projectRole, teamId], references: [workspaceId, projectId, role, teamId], onDelete: Restrict)
-  parentIssue         Issue?                @relation("IssueHierarchy", fields: [workspaceId, projectId, parentIssueId], references: [workspaceId, projectId, id], onDelete: Restrict)
-  childIssues         Issue[]               @relation("IssueHierarchy")
-  team                Team?                 @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
-  workflowState       WorkflowState?        @relation(fields: [workspaceId, teamId, workflowStateId], references: [workspaceId, teamId, id], onDelete: Restrict)
-  assigneeTeamMember  TeamMember?           @relation("IssueAssigneeTeamMember", fields: [workspaceId, teamId, assigneeMembershipId], references: [workspaceId, teamId, membershipId], onDelete: Restrict)
+  project             Project               @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
   createdByMembership WorkspaceMembership   @relation("IssueCreatorMembership", fields: [workspaceId, createdByMembershipId], references: [workspaceId, id], onDelete: Restrict)
   deletedByMembership WorkspaceMembership?  @relation("IssueDeletedByMembership", fields: [workspaceId, deletedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  teamWorks           TeamWork[]
   labels              IssueLabel[]
   subscriptions       IssueSubscription[]
   activityEvents      ActivityEvent[]
-  blockingRelations   IssueBlockRelation[]  @relation("BlockingIssue")
-  blockedRelations    IssueBlockRelation[]  @relation("BlockedIssue")
   handoffs            ApiHandoff[]
   notifications       Notification[]
   comments            Comment[]
@@ -150,41 +131,57 @@ model Issue {
   @@unique([workspaceId, id])
   @@unique([workspaceId, identifier])
   @@unique([workspaceId, projectId, id])
-  @@unique([teamId, sequenceNumber])
-  @@index([workspaceId, teamId, updatedAt, id])
-  @@index([workspaceId, assigneeMembershipId, updatedAt, id])
-  @@index([workspaceId, workflowStateId, id])
-  @@index([workspaceId, featureStatus, id])
-  @@index([workspaceId, projectId, parentIssueId, id])
-  @@index([workspaceId, projectRole, id])
+  @@index([workspaceId, status, updatedAt, id])
+  @@index([workspaceId, projectId, updatedAt, id])
   @@index([workspaceId, deletedAt, createdAt, id])
   @@map("issues")
 }
 
-model IssueBlockRelation {
-  id                    String   @id @default(uuid()) @db.Uuid
-  workspaceId           String   @map("workspace_id") @db.Uuid
-  blockingIssueId       String   @map("blocking_issue_id") @db.Uuid
-  blockedIssueId        String   @map("blocked_issue_id") @db.Uuid
-  createdByMembershipId String   @map("created_by_membership_id") @db.Uuid
-  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+model TeamWork {
+  id                    String      @id @default(uuid()) @db.Uuid
+  workspaceId           String      @map("workspace_id") @db.Uuid
+  issueId               String      @map("issue_id") @db.Uuid
+  identifier            String      @db.VarChar(32)
+  sequenceNumber        Int         @map("sequence_number")
+  projectRole           ProjectRole @map("project_role")
+  teamId                String      @map("team_id") @db.Uuid
+  workflowStateId       String      @map("workflow_state_id") @db.Uuid
+  assigneeMembershipId  String?     @map("assignee_membership_id") @db.Uuid
+  workNoteMarkdown      String?     @map("work_note_markdown") @db.VarChar(10000)
+  createdByMembershipId String      @map("created_by_membership_id") @db.Uuid
+  deletedAt             DateTime?   @map("deleted_at") @db.Timestamptz(3)
+  version               Int         @default(1)
+  createdAt             DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  blockingIssue       Issue               @relation("BlockingIssue", fields: [workspaceId, blockingIssueId], references: [workspaceId, id], onDelete: Restrict)
-  blockedIssue        Issue               @relation("BlockedIssue", fields: [workspaceId, blockedIssueId], references: [workspaceId, id], onDelete: Restrict)
-  createdByMembership WorkspaceMembership @relation("IssueBlockCreatorMembership", fields: [workspaceId, createdByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  issue               Issue               @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
+  team                Team                @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
+  workflowState       WorkflowState       @relation(fields: [workspaceId, teamId, workflowStateId], references: [workspaceId, teamId, id], onDelete: Restrict)
+  assigneeTeamMember  TeamMember?         @relation("TeamWorkAssigneeTeamMember", fields: [workspaceId, teamId, assigneeMembershipId], references: [workspaceId, teamId, membershipId], onDelete: Restrict)
+  createdByMembership WorkspaceMembership @relation("TeamWorkCreatorMembership", fields: [workspaceId, createdByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  sourceHandoffs      ApiHandoff[]        @relation("ApiHandoffSourceTeamWork")
+  handoffTargets      ApiHandoffTarget[]
+  comments            Comment[]
+  activityEvents      ActivityEvent[]
+  notifications       Notification[]
 
   @@unique([workspaceId, id])
-  @@unique([blockingIssueId, blockedIssueId])
-  @@index([workspaceId, blockedIssueId, createdAt, id])
-  @@index([workspaceId, blockingIssueId, createdAt, id])
-  @@map("issue_block_relations")
+  @@unique([workspaceId, issueId, id])
+  @@unique([teamId, sequenceNumber])
+  @@index([workspaceId, issueId, deletedAt, updatedAt, id])
+  @@index([workspaceId, teamId, deletedAt, updatedAt, id])
+  @@index([workspaceId, assigneeMembershipId, deletedAt, updatedAt, id])
+  @@index([workspaceId, workflowStateId, id])
+  @@index([workspaceId, projectRole, id])
+  @@map("team_works")
 }
 
 model ApiHandoff {
   id                 String      @id @default(uuid()) @db.Uuid
   workspaceId        String      @map("workspace_id") @db.Uuid
   issueId            String      @map("issue_id") @db.Uuid
+  sourceTeamWorkId   String      @map("source_team_work_id") @db.Uuid
   kind               HandoffKind
   sequenceNumber     Int         @map("sequence_number")
   bodyMarkdown       String      @map("body_markdown") @db.Text
@@ -193,15 +190,31 @@ model ApiHandoff {
 
   workspace        Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   issue            Issue                 @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
+  sourceTeamWork   TeamWork              @relation("ApiHandoffSourceTeamWork", fields: [workspaceId, issueId, sourceTeamWorkId], references: [workspaceId, issueId, id], onDelete: Cascade)
   authorMembership WorkspaceMembership   @relation("ApiHandoffAuthorMembership", fields: [workspaceId, authorMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  targets          ApiHandoffTarget[]
   notifications    Notification[]
   fileAttachments  IssueFileAttachment[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, issueId, id])
-  @@unique([issueId, sequenceNumber])
+  @@unique([sourceTeamWorkId, sequenceNumber])
   @@index([workspaceId, issueId, createdAt, id])
   @@map("api_handoffs")
+}
+
+model ApiHandoffTarget {
+  workspaceId String @map("workspace_id") @db.Uuid
+  handoffId   String @map("handoff_id") @db.Uuid
+  teamWorkId  String @map("team_work_id") @db.Uuid
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  handoff   ApiHandoff @relation(fields: [workspaceId, handoffId], references: [workspaceId, id], onDelete: Cascade)
+  teamWork  TeamWork   @relation(fields: [workspaceId, teamWorkId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@id([handoffId, teamWorkId])
+  @@index([workspaceId, teamWorkId, handoffId])
+  @@map("api_handoff_targets")
 }
 
 model IssueLabel {
@@ -237,6 +250,7 @@ model ActivityEvent {
   id                String   @id @default(uuid()) @db.Uuid
   workspaceId       String   @map("workspace_id") @db.Uuid
   issueId           String?  @map("issue_id") @db.Uuid
+  teamWorkId        String?  @map("team_work_id") @db.Uuid
   projectId         String?  @map("project_id") @db.Uuid
   actorMembershipId String?  @map("actor_membership_id") @db.Uuid
   eventType         String   @map("event_type") @db.VarChar(100)
@@ -247,10 +261,12 @@ model ActivityEvent {
 
   workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   issue           Issue?               @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
+  teamWork        TeamWork?            @relation(fields: [workspaceId, teamWorkId], references: [workspaceId, id], onDelete: Cascade)
   project         Project?             @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Cascade)
   actorMembership WorkspaceMembership? @relation("ActivityActorMembership", fields: [workspaceId, actorMembershipId], references: [workspaceId, id], onDelete: Restrict)
 
   @@index([workspaceId, issueId, createdAt, id])
+  @@index([workspaceId, teamWorkId, createdAt, id])
   @@index([workspaceId, projectId, createdAt, id])
   @@map("activity_events")
 }
@@ -263,6 +279,7 @@ model Notification {
   type                  NotificationType
   actorMembershipId     String?          @map("actor_membership_id") @db.Uuid
   issueId               String           @map("issue_id") @db.Uuid
+  teamWorkId            String?          @map("team_work_id") @db.Uuid
   commentId             String?          @map("comment_id") @db.Uuid
   handoffId             String?          @map("handoff_id") @db.Uuid
   readAt                DateTime?        @map("read_at") @db.Timestamptz(3)
@@ -272,6 +289,7 @@ model Notification {
   recipientMembership WorkspaceMembership  @relation("NotificationRecipientMembership", fields: [workspaceId, recipientMembershipId], references: [workspaceId, id], onDelete: Restrict)
   actorMembership     WorkspaceMembership? @relation("NotificationActorMembership", fields: [workspaceId, actorMembershipId], references: [workspaceId, id], onDelete: Restrict)
   issue               Issue                @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
+  teamWork            TeamWork?            @relation(fields: [workspaceId, teamWorkId], references: [workspaceId, id], onDelete: Cascade)
   comment             Comment?             @relation(fields: [workspaceId, issueId, commentId], references: [workspaceId, issueId, id], onDelete: Cascade, map: "notifications_workspace_issue_comment_fkey")
   handoff             ApiHandoff?          @relation(fields: [workspaceId, handoffId], references: [workspaceId, id], onDelete: Cascade)
 
@@ -279,5 +297,6 @@ model Notification {
   @@unique([eventId, recipientMembershipId])
   @@index([workspaceId, recipientMembershipId, readAt, createdAt, id])
   @@index([workspaceId, issueId, createdAt, id])
+  @@index([workspaceId, teamWorkId, createdAt, id])
   @@map("notifications")
 }

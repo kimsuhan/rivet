@@ -453,11 +453,13 @@ const INSERT_MARKDOWN_IMAGE_COMMAND = createCommand<File>('INSERT_MARKDOWN_IMAGE
 
 function Toolbar({
   disabled,
+  imagesEnabled,
   labels,
   mentionOptions,
   mentionsEnabled,
 }: {
   disabled: boolean;
+  imagesEnabled: boolean;
   labels: MarkdownEditorLabels;
   mentionOptions: MentionOption[];
   mentionsEnabled: boolean;
@@ -617,23 +619,25 @@ function Toolbar({
           </select>
         ) : null}
 
-        <label className="ml-auto">
-          <input
-            type="file"
-            accept="image/gif,image/jpeg,image/png,image/webp"
-            className="sr-only"
-            disabled={disabled}
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0];
-              if (file) editor.dispatchCommand(INSERT_MARKDOWN_IMAGE_COMMAND, file);
-              event.currentTarget.value = '';
-            }}
-          />
-          <span className="hover:bg-muted focus-within:ring-ring inline-flex size-7 cursor-pointer items-center justify-center rounded-md focus-within:ring-2">
-            <ImageIcon aria-hidden="true" className="size-4" />
-            <span className="sr-only">{labels.image.choose}</span>
-          </span>
-        </label>
+        {imagesEnabled ? (
+          <label className="ml-auto">
+            <input
+              type="file"
+              accept="image/gif,image/jpeg,image/png,image/webp"
+              className="sr-only"
+              disabled={disabled}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                if (file) editor.dispatchCommand(INSERT_MARKDOWN_IMAGE_COMMAND, file);
+                event.currentTarget.value = '';
+              }}
+            />
+            <span className="hover:bg-muted focus-within:ring-ring inline-flex size-7 cursor-pointer items-center justify-center rounded-md focus-within:ring-2">
+              <ImageIcon aria-hidden="true" className="size-4" />
+              <span className="sr-only">{labels.image.choose}</span>
+            </span>
+          </label>
+        ) : null}
       </div>
       {linkError ? (
         <p className="text-destructive border-b px-3 py-2 text-xs" role="alert">
@@ -644,26 +648,12 @@ function Toolbar({
   );
 }
 
-export function MarkdownEditor({
-  charLimit,
-  className,
-  disabled = false,
-  error = null,
-  labels,
-  mentionOptions = [],
-  mentionsEnabled = true,
-  onCanSubmitChange,
-  onChange,
-  readOnly = false,
-  removeFile = deleteUploadedFile,
-  sendFile = uploadFile,
-  status = null,
-  value,
-}: {
+export type MarkdownEditorProps = {
   charLimit: number;
   className?: string;
   disabled?: boolean;
   error?: string | null;
+  imagesEnabled?: boolean;
   labels: MarkdownEditorLabels;
   mentionOptions?: MentionOption[];
   mentionsEnabled?: boolean;
@@ -674,7 +664,25 @@ export function MarkdownEditor({
   sendFile?: UploadFile;
   status?: string | null;
   value: string;
-}) {
+};
+
+export function MarkdownEditor({
+  charLimit,
+  className,
+  disabled = false,
+  error = null,
+  imagesEnabled = true,
+  labels,
+  mentionOptions = [],
+  mentionsEnabled = true,
+  onCanSubmitChange,
+  onChange,
+  readOnly = false,
+  removeFile = deleteUploadedFile,
+  sendFile = uploadFile,
+  status = null,
+  value,
+}: MarkdownEditorProps) {
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
   const [pendingImages, setPendingImages] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -752,6 +760,7 @@ export function MarkdownEditor({
               <div className="bg-background overflow-hidden rounded-lg border">
                 <Toolbar
                   disabled={disabled}
+                  imagesEnabled={imagesEnabled}
                   labels={labels}
                   mentionOptions={mentionOptions}
                   mentionsEnabled={mentionsEnabled}
@@ -783,13 +792,15 @@ export function MarkdownEditor({
                 value={value}
                 onChange={onChange}
               />
-              <ImageUploadPlugin
-                labels={labels.image}
-                onPendingChange={setPendingImages}
-                onUploadError={setUploadError}
-                removeFile={removeFile}
-                sendFile={sendFile}
-              />
+              {imagesEnabled ? (
+                <ImageUploadPlugin
+                  labels={labels.image}
+                  onPendingChange={setPendingImages}
+                  onUploadError={setUploadError}
+                  removeFile={removeFile}
+                  sendFile={sendFile}
+                />
+              ) : null}
             </LexicalComposer>
           </MarkdownImageLabelsContext.Provider>
         </TabsContent>
@@ -830,4 +841,20 @@ export function MarkdownEditor({
       ) : null}
     </div>
   );
+}
+
+export function IssueDescriptionEditor(props: MarkdownEditorProps) {
+  return <MarkdownEditor {...props} imagesEnabled mentionsEnabled />;
+}
+
+export function WorkNoteEditor(props: Omit<MarkdownEditorProps, 'imagesEnabled' | 'mentionsEnabled'>) {
+  return <MarkdownEditor {...props} imagesEnabled={false} mentionsEnabled={false} />;
+}
+
+export function HandoffEditor(props: Omit<MarkdownEditorProps, 'mentionsEnabled'>) {
+  return <MarkdownEditor {...props} mentionsEnabled={false} />;
+}
+
+export function CommentEditor(props: MarkdownEditorProps) {
+  return <MarkdownEditor {...props} />;
 }

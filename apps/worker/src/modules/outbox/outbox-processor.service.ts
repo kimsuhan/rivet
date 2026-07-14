@@ -9,11 +9,11 @@ import {
   ISSUE_CHANGED,
   ISSUE_CREATED,
   ISSUE_PURGE_SCHEDULED,
-  ISSUE_UNBLOCKED,
-  type IssueUnblockedOutboxPayload,
   PROJECT_CREATED,
   PROJECT_PURGE_SCHEDULED,
   PROJECT_STATUS_CHANGED,
+  TEAM_WORK_CHANGED,
+  TEAM_WORK_CREATED,
   validateAccountEmailOutboxPayload,
   validateApiHandoffCreatedOutboxPayload,
   validateCommentCreatedOutboxPayload,
@@ -21,10 +21,11 @@ import {
   validateIssueChangedOutboxPayload,
   validateIssueCreatedOutboxPayload,
   validateIssuePurgeScheduledOutboxPayload,
-  validateIssueUnblockedOutboxPayload,
   validateProjectCreatedOutboxPayload,
   validateProjectPurgeScheduledOutboxPayload,
   validateProjectStatusChangedOutboxPayload,
+  validateTeamWorkChangedOutboxPayload,
+  validateTeamWorkCreatedOutboxPayload,
   validateWorkspaceCreatedOutboxPayload,
   validateWorkspaceInvitationEmailOutboxPayload,
   WORKSPACE_CREATED,
@@ -280,27 +281,6 @@ export class OutboxProcessorService {
       return;
     }
 
-    if (event.eventType === ISSUE_UNBLOCKED) {
-      const validation = validateIssueUnblockedOutboxPayload(event.payload);
-      if (!validation.success) {
-        throw new PermanentOutboxError(
-          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
-            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
-            : 'OUTBOX_PAYLOAD_INVALID',
-        );
-      }
-      if (
-        event.workspaceId === null ||
-        event.actorMembershipId === null ||
-        event.aggregateType !== 'ISSUE' ||
-        event.aggregateId !== validation.payload.issueId
-      ) {
-        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
-      }
-      await this.assertAnalyticsEventReferences(event, validation.payload);
-      return;
-    }
-
     if (event.eventType === ISSUE_PURGE_SCHEDULED) {
       const validation = validateIssuePurgeScheduledOutboxPayload(event.payload);
       if (!validation.success) {
@@ -391,6 +371,54 @@ export class OutboxProcessorService {
       }
 
       await this.issueCollaborationNotificationHandler.handleIssueChanged(
+        event,
+        validation.payload,
+      );
+      return;
+    }
+
+    if (event.eventType === TEAM_WORK_CREATED) {
+      const validation = validateTeamWorkCreatedOutboxPayload(event.payload);
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'TEAM_WORK' ||
+        event.aggregateId !== validation.payload.teamWorkId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+      await this.issueCollaborationNotificationHandler.handleTeamWorkCreated(
+        event,
+        validation.payload,
+      );
+      return;
+    }
+
+    if (event.eventType === TEAM_WORK_CHANGED) {
+      const validation = validateTeamWorkChangedOutboxPayload(event.payload);
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'TEAM_WORK' ||
+        event.aggregateId !== validation.payload.teamWorkId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+      await this.issueCollaborationNotificationHandler.handleTeamWorkChanged(
         event,
         validation.payload,
       );
@@ -528,7 +556,6 @@ export class OutboxProcessorService {
 
   private async assertAnalyticsEventReferences(
     event: ClaimedOutboxEvent,
-    issueUnblockedPayload?: IssueUnblockedOutboxPayload,
   ): Promise<void> {
     if (event.workspaceId === null) {
       throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
@@ -550,19 +577,6 @@ export class OutboxProcessorService {
       });
       if (!project) throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
       return;
-    }
-
-    if (event.eventType === ISSUE_UNBLOCKED) {
-      if (!issueUnblockedPayload) {
-        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
-      }
-      const issueCount = await this.database.client.issue.count({
-        where: {
-          id: { in: [issueUnblockedPayload.issueId, issueUnblockedPayload.blockerIssueId] },
-          workspaceId: event.workspaceId,
-        },
-      });
-      if (issueCount !== 2) throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
     }
   }
 
@@ -623,16 +637,14 @@ export class OutboxProcessorService {
       return;
     }
 
-    if (event.eventType === ISSUE_UNBLOCKED) {
-      const validation = validateIssueUnblockedOutboxPayload(event.payload);
+    if (event.eventType === TEAM_WORK_CREATED) {
+      const validation = validateTeamWorkCreatedOutboxPayload(event.payload);
       if (!validation.success) return;
       this.observability.capture({
         distinctId: event.actorMembershipId,
-        name: 'issue_unblocked',
+        name: 'team_work_created',
         properties: {
-          blockedProjectRole: validation.payload.blockedProjectRole,
-          blockingDurationBucket: validation.payload.blockingDurationBucket,
-          blockingProjectRole: validation.payload.blockingProjectRole,
+          hasAssignee: validation.payload.assigneeMembershipId !== null,
           workspaceId: event.workspaceId,
         },
       });
@@ -660,7 +672,6 @@ export class OutboxProcessorService {
         distinctId: event.actorMembershipId,
         name: 'issue_created',
         properties: {
-          hasAssignee: validation.payload.assigneeMembershipId !== null,
           hasMention: validation.payload.mentionedMembershipIds.length > 0,
           workspaceId: event.workspaceId,
         },
@@ -689,6 +700,20 @@ export class OutboxProcessorService {
       return;
     }
 
+    if (event.eventType === TEAM_WORK_CHANGED) {
+      const validation = validateTeamWorkChangedOutboxPayload(event.payload);
+      if (!validation.success) return;
+      this.observability.capture({
+        distinctId: event.actorMembershipId,
+        name: 'team_work_property_changed',
+        properties: {
+          propertyTypes: [...validation.payload.changedFields],
+          workspaceId: event.workspaceId,
+        },
+      });
+      return;
+    }
+
     if (event.eventType === COMMENT_CREATED) {
       const validation = validateCommentCreatedOutboxPayload(event.payload);
       if (!validation.success) return;
@@ -710,7 +735,7 @@ export class OutboxProcessorService {
         distinctId: event.actorMembershipId,
         name: 'api_handoff_created',
         properties: {
-          downstreamIssueCount: validation.payload.downstreamIssueIds.length,
+          targetTeamWorkCount: validation.payload.targetTeamWorkIds.length,
           isFollowUp: validation.payload.kind === 'FOLLOW_UP',
           workspaceId: event.workspaceId,
         },

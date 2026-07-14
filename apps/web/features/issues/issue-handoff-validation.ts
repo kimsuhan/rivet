@@ -9,12 +9,14 @@ export const HANDOFF_SECTION_TITLES = [
 ] as const;
 
 export const HANDOFF_TEMPLATE = HANDOFF_SECTION_TITLES.map(
-  (heading) => `## ${heading}\n\n해당 없음`,
+  (heading) => `## ${heading}`,
 ).join('\n\n');
 
-function hasMeaningfulContent(content: string): boolean {
-  return content === '해당 없음' || content.replace(/[`*_>#\-[\](){}]/g, '').trim().length > 0;
-}
+export const FOLLOW_UP_HANDOFF_TEMPLATE = [
+  '## 변경 요약',
+  '## 변경된 API 또는 요청·응답',
+  '## 프론트에서 필요한 조치',
+].join('\n\n');
 
 function safeHttpUrl(candidate: string): string | null {
   try {
@@ -65,25 +67,7 @@ export function handoffBodyError(body: string): 'content' | 'link' | null {
     return 'content';
   }
 
-  const headings = [...bodyMarkdown.matchAll(/^##[ \t]+(.+?)[ \t]*$/gmu)];
-  if (
-    headings.length !== HANDOFF_SECTION_TITLES.length ||
-    headings.some((heading, index) => heading[1] !== HANDOFF_SECTION_TITLES[index])
-  ) {
-    return 'content';
-  }
-
-  const sections = headings.map((heading, index) => {
-    const contentStart = (heading.index ?? 0) + heading[0].length;
-    const contentEnd = headings[index + 1]?.index ?? bodyMarkdown.length;
-    return bodyMarkdown.slice(contentStart, contentEnd).trim();
-  });
-  if (sections.some((section) => !hasMeaningfulContent(section))) return 'content';
-
-  const apiSpecification = sections[1];
-  if (apiSpecification !== '해당 없음') {
-    if (!extractHandoffApiSpecificationUrl(bodyMarkdown)) return 'link';
-  }
+  if (bodyMarkdown.replace(/^#{1,6}[ \t].*$/gmu, '').trim().length === 0) return 'content';
 
   return null;
 }

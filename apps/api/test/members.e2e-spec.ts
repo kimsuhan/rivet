@@ -5,7 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
-import { MembershipRole, MembershipStatus, StateCategory } from '@rivet/database';
+import { MembershipRole, MembershipStatus, ProjectRole, StateCategory } from '@rivet/database';
 
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
@@ -386,14 +386,29 @@ describe('M2 member management API', () => {
   });
 
   it('keeps a member active while an unfinished issue is assigned', async () => {
+    const project = await database.client.project.create({
+      data: { name: '멤버 검증 프로젝트', workspaceId: fixture.workspaceId },
+    });
     const issue = await database.client.issue.create({
+      data: {
+        createdByMembershipId: fixture.adminMembershipId,
+        identifier: 'F-9001',
+        projectId: project.id,
+        sequenceNumber: 1,
+        title: '멤버 비활성화 차단 검증',
+        workspaceId: fixture.workspaceId,
+      },
+      select: { id: true },
+    });
+    const teamWork = await database.client.teamWork.create({
       data: {
         assigneeMembershipId: fixture.memberMembershipId,
         createdByMembershipId: fixture.adminMembershipId,
         identifier: 'MEM-1',
+        issueId: issue.id,
+        projectRole: ProjectRole.BACKEND,
         sequenceNumber: 1,
         teamId: fixture.teamId,
-        title: '멤버 비활성화 차단 검증',
         workflowStateId: fixture.stateId,
         workspaceId: fixture.workspaceId,
       },
@@ -412,7 +427,7 @@ describe('M2 member management API', () => {
       details: {
         issues: [
           {
-            id: issue.id,
+            id: teamWork.id,
             identifier: 'MEM-1',
             title: '멤버 비활성화 차단 검증',
           },
@@ -426,7 +441,9 @@ describe('M2 member management API', () => {
       }),
     ).resolves.toEqual({ status: MembershipStatus.ACTIVE });
 
+    await database.client.teamWork.deleteMany({ where: { issueId: issue.id } });
     await database.client.issue.delete({ where: { id: issue.id } });
+    await database.client.project.delete({ where: { id: project.id } });
   });
 
   it('deactivates a member and revokes all sessions atomically', async () => {

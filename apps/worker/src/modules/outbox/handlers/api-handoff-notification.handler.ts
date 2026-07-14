@@ -31,8 +31,9 @@ export class ApiHandoffNotificationHandler {
         select: {
           authorMembershipId: true,
           issueId: true,
-          issue: { select: { deletedAt: true, parentIssueId: true } },
+          issue: { select: { deletedAt: true } },
           kind: true,
+          sourceTeamWorkId: true,
           workspaceId: true,
         },
       });
@@ -41,6 +42,7 @@ export class ApiHandoffNotificationHandler {
         !handoff ||
         handoff.authorMembershipId !== actorMembershipId ||
         handoff.issueId !== payload.issueId ||
+        handoff.sourceTeamWorkId !== payload.sourceTeamWorkId ||
         handoff.workspaceId !== workspaceId ||
         handoff.kind !== payload.kind
       ) {
@@ -51,17 +53,14 @@ export class ApiHandoffNotificationHandler {
       const candidateRecipientMembershipIds = payload.candidateRecipientMembershipIds.filter(
         (membershipId) => membershipId !== actorMembershipId,
       );
-      const downstreamIssues = await transaction.issue.findMany({
+      const targetTeamWorks = await transaction.teamWork.findMany({
         select: {
           assigneeMembershipId: true,
           deletedAt: true,
           id: true,
           identifier: true,
           projectRole: true,
-          subscriptions: {
-            select: { membershipId: true },
-            where: { membershipId: { in: candidateRecipientMembershipIds } },
-          },
+          issue: { select: { subscriptions: { select: { membershipId: true }, where: { membershipId: { in: candidateRecipientMembershipIds } } } } },
           team: {
             select: {
               teamMembers: {
@@ -74,9 +73,9 @@ export class ApiHandoffNotificationHandler {
             },
           },
         },
-        where: { id: { in: payload.downstreamIssueIds }, workspaceId },
+        where: { id: { in: payload.targetTeamWorkIds }, issueId: payload.issueId, workspaceId },
       });
-      if (downstreamIssues.length !== payload.downstreamIssueIds.length) {
+      if (targetTeamWorks.length !== payload.targetTeamWorkIds.length) {
         throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
       }
 
@@ -85,17 +84,11 @@ export class ApiHandoffNotificationHandler {
         [ProjectRole.WEB_FRONTEND, 1],
         [ProjectRole.APP_FRONTEND, 2],
       ]);
-      const orderedDownstreamIssues = downstreamIssues
+      const orderedTargetTeamWorks = targetTeamWorks
         .filter(({ deletedAt }) => deletedAt === null)
         .sort((left, right) => {
-          const roleOrder =
-            (left.projectRole === null
-              ? projectRoleOrder.size
-              : projectRoleOrder.get(left.projectRole)) ?? projectRoleOrder.size;
-          const otherRoleOrder =
-            (right.projectRole === null
-              ? projectRoleOrder.size
-              : projectRoleOrder.get(right.projectRole)) ?? projectRoleOrder.size;
+          const roleOrder = projectRoleOrder.get(left.projectRole) ?? projectRoleOrder.size;
+          const otherRoleOrder = projectRoleOrder.get(right.projectRole) ?? projectRoleOrder.size;
           return (
             roleOrder - otherRoleOrder ||
             left.identifier.localeCompare(right.identifier) ||
@@ -105,21 +98,21 @@ export class ApiHandoffNotificationHandler {
       const assignedTargetByMembershipId = new Map<string, string>();
       const subscribedTargetByMembershipId = new Map<string, string>();
       const teamTargetByMembershipId = new Map<string, string>();
-      for (const issue of orderedDownstreamIssues) {
+      for (const teamWork of orderedTargetTeamWorks) {
         if (
-          issue.assigneeMembershipId &&
-          !assignedTargetByMembershipId.has(issue.assigneeMembershipId)
+          teamWork.assigneeMembershipId &&
+          !assignedTargetByMembershipId.has(teamWork.assigneeMembershipId)
         ) {
-          assignedTargetByMembershipId.set(issue.assigneeMembershipId, issue.id);
+          assignedTargetByMembershipId.set(teamWork.assigneeMembershipId, teamWork.id);
         }
-        for (const { membershipId } of issue.subscriptions) {
+        for (const { membershipId } of teamWork.issue.subscriptions) {
           if (!subscribedTargetByMembershipId.has(membershipId)) {
-            subscribedTargetByMembershipId.set(membershipId, issue.id);
+            subscribedTargetByMembershipId.set(membershipId, teamWork.id);
           }
         }
-        for (const { membershipId } of issue.team?.teamMembers ?? []) {
+        for (const { membershipId } of teamWork.team.teamMembers) {
           if (!teamTargetByMembershipId.has(membershipId)) {
-            teamTargetByMembershipId.set(membershipId, issue.id);
+            teamTargetByMembershipId.set(membershipId, teamWork.id);
           }
         }
       }
@@ -142,12 +135,12 @@ export class ApiHandoffNotificationHandler {
           actorMembershipId,
           eventId: event.id,
           handoffId: payload.handoffId,
-          issueId:
+          issueId: payload.issueId,
+          teamWorkId:
             assignedTargetByMembershipId.get(recipientMembershipId) ??
             subscribedTargetByMembershipId.get(recipientMembershipId) ??
             teamTargetByMembershipId.get(recipientMembershipId) ??
-            handoff.issue.parentIssueId ??
-            payload.issueId,
+            null,
           recipientMembershipId,
           type:
             payload.kind === 'INITIAL'

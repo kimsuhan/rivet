@@ -5,7 +5,6 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { FeatureWorkQueueCountsResponseDto } from './featureWorkQueueCountsResponseDto';
 import type { IssueSummaryResponseDto } from './issueSummaryResponseDto';
 
 export interface IssueListResponseDto {
@@ -14,5 +13,4 @@ export interface IssueListResponseDto {
   nextCursor: string | null;
   /** @minimum 0 */
   totalCount: number;
-  workQueueCounts?: FeatureWorkQueueCountsResponseDto;
 }

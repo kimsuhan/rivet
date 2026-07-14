@@ -6,15 +6,18 @@
  * OpenAPI spec version: 1.0
  */
 import type { IssueHandoffFlowHandoffResponseDtoKind } from './issueHandoffFlowHandoffResponseDtoKind';
+import type { IssueHandoffTargetResponseDto } from './issueHandoffTargetResponseDto';
 import type { IssueMemberSummaryResponseDto } from './issueMemberSummaryResponseDto';
+import type { TeamWorkReferenceResponseDto } from './teamWorkReferenceResponseDto';
 
 export interface IssueHandoffFlowHandoffResponseDto {
   id: string;
   kind: IssueHandoffFlowHandoffResponseDtoKind;
   /** @minimum 1 */
   sequenceNumber: number;
-  changeSummary: string;
   bodyMarkdown: string;
   author: IssueMemberSummaryResponseDto;
+  sourceTeamWork: TeamWorkReferenceResponseDto;
+  targets: IssueHandoffTargetResponseDto[];
   createdAt: string;
 }
