@@ -191,6 +191,62 @@ describe('MarkdownEditor image lifecycle', () => {
   });
 });
 
+describe('MarkdownEditor density and character count', () => {
+  afterEach(() => cleanup());
+
+  it('빈 편집기의 본문 높이는 120~160px 범위(min-h-36)를 사용한다', () => {
+    render(
+      <Harness>
+        {(value, onChange) => (
+          <MarkdownEditor charLimit={100} labels={labels} onChange={onChange} value={value} />
+        )}
+      </Harness>,
+    );
+
+    expect(screen.getByRole('textbox', { name: labels.editorLabel })).toHaveClass('min-h-36');
+  });
+
+  it('제한에 가까워지면 글자 수 표시를 강조하고 초과하면 오류 색으로 바꾼다', () => {
+    const { rerender } = render(
+      <Harness>
+        {(value, onChange) => (
+          <MarkdownEditor charLimit={10} labels={labels} onChange={onChange} value={value} />
+        )}
+      </Harness>,
+    );
+    expect(screen.getByText('0/10자')).not.toHaveClass('text-warning');
+    expect(screen.getByText('0/10자')).not.toHaveClass('text-destructive');
+
+    rerender(
+      <Harness>
+        {() => (
+          <MarkdownEditor
+            charLimit={10}
+            labels={labels}
+            onChange={() => undefined}
+            value="123456789"
+          />
+        )}
+      </Harness>,
+    );
+    expect(screen.getByText('9/10자')).toHaveClass('text-warning');
+
+    rerender(
+      <Harness>
+        {() => (
+          <MarkdownEditor
+            charLimit={10}
+            labels={labels}
+            onChange={() => undefined}
+            value="12345678901"
+          />
+        )}
+      </Harness>,
+    );
+    expect(screen.getByText('11/10자')).toHaveClass('text-destructive');
+  });
+});
+
 function uploaded(file: File) {
   return {
     createdAt: new Date(0).toISOString(),

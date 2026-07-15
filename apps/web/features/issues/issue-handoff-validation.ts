@@ -8,9 +8,9 @@ export const HANDOFF_SECTION_TITLES = [
   '프론트 주의사항',
 ] as const;
 
-export const HANDOFF_TEMPLATE = HANDOFF_SECTION_TITLES.map(
-  (heading) => `## ${heading}`,
-).join('\n\n');
+export const HANDOFF_TEMPLATE = HANDOFF_SECTION_TITLES.map((heading) => `## ${heading}`).join(
+  '\n\n',
+);
 
 export const FOLLOW_UP_HANDOFF_TEMPLATE = [
   '## 변경 요약',
@@ -49,6 +49,28 @@ export function extractHandoffApiSpecificationUrl(body: string): string | null {
     if (url) return url;
   }
   return null;
+}
+
+export function stripEmptyHandoffSections(body: string): string {
+  const bodyMarkdown = body.normalize('NFC').trim();
+  const headings = [...bodyMarkdown.matchAll(/^##[ \t]+(.+?)[ \t]*$/gmu)];
+  // 고정 섹션 템플릿을 쓰지 않은 자유 서식 본문은 헤딩이 없으므로 그대로 보존한다.
+  if (headings.length === 0) return bodyMarkdown;
+
+  const leading = bodyMarkdown.slice(0, headings[0]?.index ?? 0).trim();
+  const nonEmptySections = headings
+    .map((heading, index) => {
+      const contentStart = (heading.index ?? 0) + heading[0].length;
+      const contentEnd = headings[index + 1]?.index ?? bodyMarkdown.length;
+      const content = bodyMarkdown.slice(contentStart, contentEnd).trim();
+      return { content, heading: heading[0] };
+    })
+    .filter(({ content }) => content.length > 0);
+  const rendered = nonEmptySections
+    .map(({ content, heading }) => `${heading}\n\n${content}`)
+    .join('\n\n');
+  if (leading && rendered) return `${leading}\n\n${rendered}`;
+  return leading || rendered;
 }
 
 export function handoffBodyError(body: string): 'content' | 'link' | null {

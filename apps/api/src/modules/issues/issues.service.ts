@@ -934,10 +934,39 @@ export class IssuesService {
       if (dto.statusAction === 'RESUME' || dto.statusAction === 'REOPEN') {
         status = await this.recalculateIssueStatus(transaction, context.workspaceId, issueId);
       }
+      const valueChanges: Array<{
+        after: Prisma.InputJsonValue;
+        before: Prisma.InputJsonValue;
+        field: string;
+      } | null> = [
+        dto.title !== undefined && dto.title !== current.title
+          ? { after: dto.title, before: current.title, field: 'title' }
+          : null,
+        dto.priority !== undefined && dto.priority !== current.priority
+          ? { after: dto.priority, before: current.priority, field: 'priority' }
+          : null,
+        status !== undefined && status !== current.status
+          ? { after: status, before: current.status, field: 'status' }
+          : null,
+      ];
+      const otherFieldsChanged = Boolean(description) || Boolean(dto.labelIds);
+      const nonNullValueChanges = valueChanges.filter(
+        (change): change is NonNullable<(typeof valueChanges)[number]> => change !== null,
+      );
+      // 변경 필드가 하나뿐일 때만 활동에 전후 값을 기록한다. 여러 필드가 함께 바뀌면
+      // 어느 값이 대표인지 추측하지 않고 일반 라벨로 남긴다.
+      const singleChange =
+        !otherFieldsChanged && nonNullValueChanges.length === 1 ? nonNullValueChanges[0] : null;
       await transaction.activityEvent.create({
         data: {
           actorMembershipId: context.membershipId,
-          afterData: { priority: dto.priority, status, title: dto.title },
+          ...(singleChange
+            ? {
+                afterData: singleChange.after,
+                beforeData: singleChange.before,
+                fieldName: singleChange.field,
+              }
+            : {}),
           eventType: 'ISSUE_CHANGED',
           issueId,
           workspaceId: context.workspaceId,
@@ -1058,11 +1087,7 @@ export class IssuesService {
       where: { deletedAt: null, id: issueId, workspaceId },
     });
     if (!issue) resourceNotFound();
-    if (
-      issue.status === IssueStatus.PAUSED ||
-      issue.status === IssueStatus.CANCELED ||
-      issue.status === IssueStatus.DONE
-    )
+    if (issue.status === IssueStatus.PAUSED || issue.status === IssueStatus.CANCELED)
       return issue.status;
     const teamWorks = await transaction.teamWork.findMany({
       select: { workflowState: { select: { category: true } } },
@@ -1071,10 +1096,16 @@ export class IssuesService {
     const valid = teamWorks.filter(
       ({ workflowState }) => workflowState.category !== StateCategory.CANCELED,
     );
+    const allValidCompleted =
+      valid.length > 0 &&
+      valid.every(({ workflowState }) => workflowState.category === StateCategory.COMPLETED);
+    // DONE은 "유효 팀 작업 전체 완료"를 전제로만 도달하는 수동 완료 상태다. 완료 후
+    // 팀 작업이 추가·삭제되어 이 불변식이 깨지면 진행률과의 모순을 막기 위해 재계산으로 폴백한다.
+    if (issue.status === IssueStatus.DONE && allValidCompleted) return issue.status;
     const next =
       valid.length === 0
         ? IssueStatus.UNSORTED
-        : valid.every(({ workflowState }) => workflowState.category === StateCategory.COMPLETED)
+        : allValidCompleted
           ? IssueStatus.REVIEW
           : valid.some(
                 ({ workflowState }) =>

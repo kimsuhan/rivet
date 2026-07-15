@@ -22,6 +22,9 @@ import { TeamWorkCompletionModal } from './team-work-completion-modal';
 import { TeamWorkPrimaryAction } from './team-work-primary-action';
 import { useTeamWorkInlineMutation } from './use-team-work-inline-mutation';
 
+export const TEAM_WORK_GRID_COLUMNS =
+  'grid-cols-[7.5rem_minmax(16rem,26rem)_11rem_8.5rem_9.5rem_7.5rem_9rem_5rem] max-xl:grid-cols-[7.5rem_minmax(16rem,22rem)_11rem_8.5rem_9.5rem_7.5rem_6rem] max-lg:grid-cols-[7.5rem_minmax(16rem,20rem)_8.5rem_9.5rem_7.5rem] max-md:grid-cols-1 max-md:gap-1';
+
 function relativeUpdatedAt(value: string) {
   const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60_000);
   return minutes < 60
@@ -42,7 +45,9 @@ export function TeamWorkListRow({ work }: { work: TeamWorkSummaryResponseDto }) 
   const [completionModalOpen, setCompletionModalOpen] = useState(false);
   return (
     <li className="group border-b last:border-b-0">
-      <div className="grid min-h-16 grid-cols-[7.5rem_minmax(16rem,1fr)_11rem_8.5rem_9.5rem_7.5rem_9rem_5rem] items-center gap-3 px-3 py-2.5 text-sm max-xl:grid-cols-[7.5rem_minmax(16rem,1fr)_11rem_8.5rem_9.5rem_7.5rem_6rem] max-lg:grid-cols-[7.5rem_minmax(16rem,1fr)_8.5rem_9.5rem_7.5rem] max-md:grid-cols-1 max-md:gap-1">
+      <div
+        className={`grid min-h-16 ${TEAM_WORK_GRID_COLUMNS} items-center gap-3 px-3 py-2.5 text-sm`}
+      >
         <Link
           href={issueWorkHref(work.issue.identifier, work.identifier)}
           className="text-muted-foreground hover:text-foreground font-mono text-xs"

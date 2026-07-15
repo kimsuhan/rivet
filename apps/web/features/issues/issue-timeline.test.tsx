@@ -390,6 +390,53 @@ describe('IssueTimeline', () => {
     expect(screen.getByText('timeline.activity.restored')).toBeVisible();
   });
 
+  it('전후 값이 있는 활동은 사람이 읽을 수 있는 값 변경을 함께 표시한다', async () => {
+    mocks.timeline.mockResolvedValueOnce({
+      items: [
+        {
+          activity: {
+            actor: ownComment.author,
+            after: 'URGENT',
+            before: 'MEDIUM',
+            eventType: 'ISSUE_CHANGED',
+            fieldName: 'priority',
+            id: 'priority-activity-id',
+          },
+          createdAt: '2026-07-01T00:00:00.000Z',
+          type: 'ACTIVITY',
+        },
+        {
+          activity: {
+            actor: ownComment.author,
+            after: null,
+            before: null,
+            eventType: 'TEAM_WORK_CHANGED',
+            fieldName: 'workNoteMarkdown',
+            id: 'note-activity-id',
+          },
+          createdAt: '2026-07-01T01:00:00.000Z',
+          type: 'ACTIVITY',
+        },
+      ],
+      nextCursor: null,
+    });
+
+    render(
+      <IssueTimeline
+        currentMembershipId="membership-me"
+        issueId="issue-id"
+        mentionOptions={[]}
+        mode="activity"
+      />,
+      { wrapper: Wrapper },
+    );
+
+    expect(
+      await screen.findByText((_, element) => element?.textContent === '나 · 보통 → 긴급'),
+    ).toBeVisible();
+    expect(screen.getByText('timeline.activity.fields.teamWorkWorkNote')).toBeVisible();
+  });
+
   it('댓글 모드와 활동 모드는 같은 응답에서 서로의 항목을 섞어 표시하지 않는다', async () => {
     mocks.timeline.mockResolvedValue({
       items: [

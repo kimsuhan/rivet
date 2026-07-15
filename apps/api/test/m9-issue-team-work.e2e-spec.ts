@@ -697,4 +697,92 @@ describe('M9 issue content and team execution API', () => {
       .expect(422)
       .expect(({ body }) => expect(body.code).toBe('TEAM_WORK_HANDOFF_NO_FRONTEND_ROLE'));
   });
+
+  it('removing the last completed team work of a DONE issue reopens status instead of leaving a 0% DONE issue', async () => {
+    const soloIssue = await mutate('post', '/api/v1/issues')
+      .send({
+        initialRoles: [{ assigneeMembershipId: membershipId, projectRole: 'BACKEND' }],
+        projectId: soloProjectId,
+        title: 'DONE 이후 팀 작업 삭제 정합성',
+      })
+      .expect(201);
+    const issueId = soloIssue.body.issue.id as string;
+    const teamWork = soloIssue.body.createdTeamWorks[0] as { id: string; version: number };
+
+    const completed = await mutate('patch', `/api/v1/team-works/${teamWork.id}`)
+      .send({
+        completionMode: 'COMPLETE_ONLY',
+        version: teamWork.version,
+        workflowStateId: backendDoneId,
+      })
+      .expect(200);
+    expect(completed.body.issue.status).toBe('REVIEW');
+    expect(completed.body.issue.progress).toEqual({ completed: 1, percentage: 100, total: 1 });
+
+    const done = await mutate('patch', `/api/v1/issues/${issueId}`)
+      .send({ statusAction: 'COMPLETE', version: completed.body.issue.version })
+      .expect(200);
+    expect(done.body.status).toBe('DONE');
+    expect(done.body.progress).toEqual({ completed: 1, percentage: 100, total: 1 });
+
+    const removed = await mutate('post', `/api/v1/team-works/${teamWork.id}/remove`)
+      .send({ version: completed.body.teamWork.version })
+      .expect(200);
+    // DONE은 "유효 팀 작업 전체 완료"를 전제로 하므로, 마지막 완료 작업이 삭제되면
+    // 상태와 진행률이 함께 재계산되어야 하고 DONE·0%가 동시에 남지 않아야 한다.
+    expect(removed.body.status).not.toBe('DONE');
+    expect(removed.body.progress).toEqual({ completed: 0, percentage: 0, total: 0 });
+
+    const reopenBlocked = await mutate('post', `/api/v1/issues/${issueId}/team-works`)
+      .send({ roleAssignments: [{ projectRole: 'BACKEND' }] })
+      .expect(200);
+    expect(reopenBlocked.body.issue.status).not.toBe('DONE');
+  });
+
+  it('records readable before/after values on activity when exactly one field changes', async () => {
+    const created = await mutate('post', '/api/v1/issues')
+      .send({
+        priority: 'MEDIUM',
+        projectId,
+        title: '활동 전후 값 기록',
+      })
+      .expect(201);
+    const issueId = created.body.issue.id as string;
+
+    await mutate('patch', `/api/v1/issues/${issueId}`)
+      .send({ priority: 'URGENT', version: created.body.issue.version })
+      .expect(200);
+
+    const started = await mutate('post', `/api/v1/issues/${issueId}/team-works`)
+      .send({ roleAssignments: [{ projectRole: 'WEB_FRONTEND' }] })
+      .expect(200);
+    const web = started.body.teamWorks[0] as { id: string; version: number };
+    await mutate('patch', `/api/v1/team-works/${web.id}`)
+      .send({ version: web.version, workflowStateId: webStartedId })
+      .expect(200);
+
+    const timeline = await request(app.getHttpServer())
+      .get(`/api/v1/issues/${issueId}/timeline`)
+      .set('Cookie', cookie)
+      .expect(200);
+    const priorityActivity = timeline.body.items.find(
+      (item: { activity?: { fieldName?: string } }) => item.activity?.fieldName === 'priority',
+    );
+    expect(priorityActivity.activity).toMatchObject({
+      after: 'URGENT',
+      before: 'MEDIUM',
+      eventType: 'ISSUE_CHANGED',
+      fieldName: 'priority',
+    });
+    const stateActivity = timeline.body.items.find(
+      (item: { activity?: { fieldName?: string } }) =>
+        item.activity?.fieldName === 'workflowStateId',
+    );
+    expect(stateActivity.activity).toMatchObject({
+      after: { id: webStartedId, name: '진행 중' },
+      before: { name: '할 일' },
+      eventType: 'TEAM_WORK_CHANGED',
+      fieldName: 'workflowStateId',
+    });
+  });
 });

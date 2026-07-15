@@ -66,7 +66,10 @@ function compareTextDescending(left: string, right: string): number {
 function decodeCursor(cursor: string): string {
   try {
     const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-    return typeof parsed === 'object' && parsed !== null && 'id' in parsed && typeof parsed.id === 'string'
+    return typeof parsed === 'object' &&
+      parsed !== null &&
+      'id' in parsed &&
+      typeof parsed.id === 'string'
       ? parsed.id
       : cursor;
   } catch {
@@ -188,17 +191,21 @@ export class TeamWorksService {
             ? left.workflowState.position - right.workflowState.position
             : left[sort].getTime() - right[sort].getTime();
       if (value) return direction === 'asc' ? value : -value;
-      return direction === 'asc' ? left.id.localeCompare(right.id) : compareTextDescending(left.id, right.id);
+      return direction === 'asc'
+        ? left.id.localeCompare(right.id)
+        : compareTextDescending(left.id, right.id);
     });
     const cursorId = query.cursor ? decodeCursor(query.cursor) : null;
-    const start = cursorId === null ? 0 : Math.max(0, rows.findIndex(({ id }) => id === cursorId) + 1);
+    const start =
+      cursorId === null ? 0 : Math.max(0, rows.findIndex(({ id }) => id === cursorId) + 1);
     const page = rows.slice(start, start + query.limit);
     const detailed = await Promise.all(
       page.map(({ id }) => this.issues.findTeamWork(this.database.client, context.workspaceId, id)),
     );
     return {
       items: detailed.map(toTeamWorkSummary),
-      nextCursor: start + page.length < rows.length && page.length ? encodeCursor(page.at(-1)!.id) : null,
+      nextCursor:
+        start + page.length < rows.length && page.length ? encodeCursor(page.at(-1)!.id) : null,
       totalCount: await this.database.client.teamWork.count({ where }),
     };
   }
@@ -277,9 +284,10 @@ export class TeamWorksService {
         }
       }
       let nextCategory = current.workflowState.category;
+      let nextState: { category: StateCategory; id: string; name: string } | undefined;
       if (dto.workflowStateId) {
         const state = await transaction.workflowState.findFirst({
-          select: { category: true, id: true },
+          select: { category: true, id: true, name: true },
           where: {
             id: dto.workflowStateId,
             teamId: current.team.id,
@@ -288,10 +296,15 @@ export class TeamWorksService {
         });
         if (!state) notFound();
         nextCategory = state.category;
+        nextState = state;
       }
+      let nextAssignee: { displayName: string; membershipId: string } | undefined;
       if (dto.assigneeMembershipId) {
         const member = await transaction.teamMember.findFirst({
-          select: { membershipId: true },
+          select: {
+            membership: { select: { user: { select: { displayName: true } } } },
+            membershipId: true,
+          },
           where: {
             membership: { status: MembershipStatus.ACTIVE },
             membershipId: dto.assigneeMembershipId,
@@ -305,6 +318,10 @@ export class TeamWorksService {
             message: '담당자는 해당 팀의 활성 멤버여야 합니다.',
             status: HttpStatus.UNPROCESSABLE_ENTITY,
           });
+        nextAssignee = {
+          displayName: member.membership.user.displayName,
+          membershipId: member.membershipId,
+        };
       }
       let autoStartStateId: string | undefined;
       if (
@@ -401,14 +418,63 @@ export class TeamWorksService {
           ],
           skipDuplicates: true,
         });
+      const appliedStateId = dto.workflowStateId ?? autoStartStateId;
+      type ActivityFieldChange = {
+        after: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+        before: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+        field: string;
+        hasValues: boolean;
+      };
+      const stateChange: ActivityFieldChange | null =
+        appliedStateId !== undefined && appliedStateId !== current.workflowState.id
+          ? {
+              after: { id: nextState?.id ?? null, name: nextState?.name ?? null },
+              before: { id: current.workflowState.id, name: current.workflowState.name },
+              field: 'workflowStateId',
+              hasValues: true,
+            }
+          : null;
+      const assigneeChange: ActivityFieldChange | null =
+        dto.assigneeMembershipId !== undefined &&
+        dto.assigneeMembershipId !== (current.assigneeTeamMember?.membership.id ?? null)
+          ? {
+              after: nextAssignee ? { ...nextAssignee } : Prisma.JsonNull,
+              before: current.assigneeTeamMember
+                ? {
+                    displayName: current.assigneeTeamMember.membership.user.displayName,
+                    membershipId: current.assigneeTeamMember.membership.id,
+                  }
+                : Prisma.JsonNull,
+              field: 'assigneeMembershipId',
+              hasValues: true,
+            }
+          : null;
+      const noteChange: ActivityFieldChange | null =
+        dto.workNoteMarkdown !== undefined
+          ? {
+              after: Prisma.JsonNull,
+              before: Prisma.JsonNull,
+              field: 'workNoteMarkdown',
+              hasValues: false,
+            }
+          : null;
+      const activityChangedFields = [stateChange, assigneeChange, noteChange].filter(
+        (change): change is ActivityFieldChange => change !== null,
+      );
+      // 바뀐 필드가 하나뿐일 때만 fieldName을 기록하고, 이름이 있는 상태·담당자 변경에는
+      // 전후 값도 함께 담는다. 여러 필드가 함께 바뀌면 대표 필드를 추측하지 않는다.
+      const singleChange = activityChangedFields.length === 1 ? activityChangedFields[0] : null;
       await transaction.activityEvent.create({
         data: {
           actorMembershipId: context.membershipId,
-          afterData: {
-            assigneeMembershipId: dto.assigneeMembershipId,
-            workNoteMarkdown: dto.workNoteMarkdown,
-            workflowStateId: dto.workflowStateId ?? autoStartStateId,
-          },
+          ...(singleChange
+            ? {
+                fieldName: singleChange.field,
+                ...(singleChange.hasValues
+                  ? { afterData: singleChange.after, beforeData: singleChange.before }
+                  : {}),
+              }
+            : {}),
           eventType: 'TEAM_WORK_CHANGED',
           issueId: current.issue.id,
           teamWorkId,

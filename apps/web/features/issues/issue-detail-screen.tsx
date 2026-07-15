@@ -67,7 +67,11 @@ import {
   TeamWorkStatusDisplay,
 } from './issue-attribute-presentation';
 import { markdownEditorLabels } from './issue-collaboration-labels';
-import { FOLLOW_UP_HANDOFF_TEMPLATE, handoffBodyError } from './issue-handoff-validation';
+import {
+  FOLLOW_UP_HANDOFF_TEMPLATE,
+  handoffBodyError,
+  stripEmptyHandoffSections,
+} from './issue-handoff-validation';
 import { IssueLabelChips } from './issue-label-chips';
 import { IssueTimeline } from './issue-timeline';
 import {
@@ -80,6 +84,17 @@ import { TeamWorkCompletionModal } from './team-work-completion-modal';
 import { TeamWorkPrimaryAction } from './team-work-primary-action';
 
 type ProjectRole = 'BACKEND' | 'WEB_FRONTEND' | 'APP_FRONTEND';
+
+function formatHandoffDateTime(value: string): string {
+  return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }).format(
+    new Date(value),
+  );
+}
+
+function askAboutHandoffInComments(issueId: string, label: string) {
+  window.sessionStorage.setItem('rivet.comment.quote-context', JSON.stringify({ issueId, label }));
+  document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
 function mutationErrorMessage(error: unknown): string {
   if (error instanceof ApiError && typeof error.body === 'object' && error.body !== null) {
@@ -393,69 +408,7 @@ function TeamWorkPanel({
         submitting={stateMutation.isPending}
         work={work}
       />
-      <section className="mt-5 border-t pt-4" aria-labelledby="work-note-title">
-        <div className="flex items-center justify-between gap-3">
-          <h3 id="work-note-title" className="text-sm font-medium">
-            작업 노트
-          </h3>
-          {!editingWorkNote ? (
-            <Button
-              aria-label="작업 노트 편집"
-              size="sm"
-              variant="ghost"
-              onClick={() => setEditingWorkNote(true)}
-            >
-              {work.workNoteMarkdown ? '편집' : '작업 노트 추가'}
-            </Button>
-          ) : null}
-        </div>
-        {editingWorkNote ? (
-          <>
-            <div className="mt-3">
-              <WorkNoteEditor
-                charLimit={10_000}
-                labels={editorLabels}
-                onChange={setWorkNoteMarkdown}
-                status={noteMutation.isPending ? '저장 중…' : null}
-                value={workNoteMarkdown}
-              />
-            </div>
-            <div className="mt-2 flex justify-end gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setWorkNoteMarkdown(work.workNoteMarkdown ?? '');
-                  setEditingWorkNote(false);
-                }}
-              >
-                취소
-              </Button>
-              <Button
-                size="sm"
-                disabled={
-                  noteMutation.isPending || workNoteMarkdown === (work.workNoteMarkdown ?? '')
-                }
-                onClick={() =>
-                  noteMutation.mutate(
-                    { workNoteMarkdown: workNoteMarkdown.trim() || null },
-                    { onSuccess: () => setEditingWorkNote(false) },
-                  )
-                }
-              >
-                {noteMutation.isPending ? <Spinner /> : <Save className="size-3.5" />}노트 저장
-              </Button>
-            </div>
-          </>
-        ) : work.workNoteMarkdown ? (
-          <MarkdownRenderer
-            className="mt-3"
-            imageUnavailableLabel="이미지를 표시할 수 없습니다"
-            markdown={work.workNoteMarkdown}
-          />
-        ) : null}
-      </section>
-      <section className="mt-6 border-t pt-4" aria-labelledby="handoff-context-title">
+      <section className="mt-5 border-t pt-4" aria-labelledby="handoff-context-title">
         <div className="flex items-center justify-between gap-3">
           <h3 id="handoff-context-title" className="text-sm font-semibold">
             {work.projectRole === 'BACKEND' ? '보낸 전달' : '받은 전달'}
@@ -474,6 +427,7 @@ function TeamWorkPanel({
               <LatestHandoff
                 key={`${latestRelatedHandoff.id}-${highlightedHandoffId ?? ''}`}
                 handoff={latestRelatedHandoff}
+                issueId={issue.id}
                 initiallyExpanded={Boolean(highlightedHandoffId)}
               />
             ) : null}
@@ -601,6 +555,68 @@ function TeamWorkPanel({
           </>
         ) : null}
       </section>
+      <section className="mt-6 border-t pt-4" aria-labelledby="work-note-title">
+        <div className="flex items-center justify-between gap-3">
+          <h3 id="work-note-title" className="text-sm font-medium">
+            작업 노트
+          </h3>
+          {!editingWorkNote ? (
+            <Button
+              aria-label="작업 노트 편집"
+              size="sm"
+              variant="ghost"
+              onClick={() => setEditingWorkNote(true)}
+            >
+              {work.workNoteMarkdown ? '편집' : '작업 노트 추가'}
+            </Button>
+          ) : null}
+        </div>
+        {editingWorkNote ? (
+          <>
+            <div className="mt-3">
+              <WorkNoteEditor
+                charLimit={10_000}
+                labels={editorLabels}
+                onChange={setWorkNoteMarkdown}
+                status={noteMutation.isPending ? '저장 중…' : null}
+                value={workNoteMarkdown}
+              />
+            </div>
+            <div className="mt-2 flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setWorkNoteMarkdown(work.workNoteMarkdown ?? '');
+                  setEditingWorkNote(false);
+                }}
+              >
+                취소
+              </Button>
+              <Button
+                size="sm"
+                disabled={
+                  noteMutation.isPending || workNoteMarkdown === (work.workNoteMarkdown ?? '')
+                }
+                onClick={() =>
+                  noteMutation.mutate(
+                    { workNoteMarkdown: workNoteMarkdown.trim() || null },
+                    { onSuccess: () => setEditingWorkNote(false) },
+                  )
+                }
+              >
+                {noteMutation.isPending ? <Spinner /> : <Save className="size-3.5" />}노트 저장
+              </Button>
+            </div>
+          </>
+        ) : work.workNoteMarkdown ? (
+          <MarkdownRenderer
+            className="mt-3"
+            imageUnavailableLabel="이미지를 표시할 수 없습니다"
+            markdown={work.workNoteMarkdown}
+          />
+        ) : null}
+      </section>
     </section>
   );
 }
@@ -608,18 +624,26 @@ function TeamWorkPanel({
 function LatestHandoff({
   handoff,
   initiallyExpanded,
+  issueId,
 }: {
   handoff: IssueDetailResponseDto['handoffFlows'][number];
   initiallyExpanded: boolean;
+  issueId: string;
 }) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
+  const contentId = `handoff-content-${handoff.id}`;
+  const label = `${handoff.kind === 'INITIAL' ? '최초 전달' : '추가 전달'} #${handoff.sequenceNumber}`;
+  const bodyMarkdown = stripEmptyHandoffSections(handoff.bodyMarkdown);
 
   return (
     <li id={`handoff-${handoff.id}`} className="border-primary/50 border-l-2 pl-4 text-sm">
-      <p className="font-medium">
-        {handoff.kind === 'INITIAL' ? '최초 전달' : '추가 전달'} #{handoff.sequenceNumber}
+      <p className="font-medium">{label}</p>
+      <p className="text-muted-foreground mt-0.5 text-xs">
+        {handoff.author.user.displayName} · {formatHandoffDateTime(handoff.createdAt)}
       </p>
       <Button
+        aria-controls={contentId}
+        aria-expanded={expanded}
         className="mt-1"
         size="sm"
         variant="ghost"
@@ -628,25 +652,25 @@ function LatestHandoff({
         {expanded ? '내용 접기' : '내용 펼치기'}
       </Button>
       {expanded ? (
-        <>
-          <MarkdownRenderer
-            className="mt-2"
-            imageUnavailableLabel="이미지를 표시할 수 없습니다"
-            markdown={handoff.bodyMarkdown}
-          />
+        <div id={contentId}>
+          {bodyMarkdown ? (
+            <MarkdownRenderer
+              className="mt-2"
+              imageUnavailableLabel="이미지를 표시할 수 없습니다"
+              markdown={bodyMarkdown}
+            />
+          ) : (
+            <p className="text-muted-foreground mt-2">입력된 변경사항이 없습니다.</p>
+          )}
           <Button
             className="mt-2"
             size="sm"
             variant="ghost"
-            onClick={() =>
-              document
-                .getElementById('comments')
-                ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }
+            onClick={() => askAboutHandoffInComments(issueId, label)}
           >
             댓글로 질문
           </Button>
-        </>
+        </div>
       ) : null}
     </li>
   );
@@ -655,40 +679,56 @@ function LatestHandoff({
 function HandoffHistoryItem({
   handoff,
   initiallyExpanded,
+  issueId,
   pathname,
   searchParams,
 }: {
   handoff: IssueDetailResponseDto['handoffFlows'][number];
   initiallyExpanded: boolean;
+  issueId: string;
   pathname: string;
   searchParams: ReturnType<typeof useSearchParams>;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(initiallyExpanded);
+  const contentId = `handoff-history-content-${handoff.id}`;
+  const label = `${handoff.kind === 'INITIAL' ? '최초 전달' : '추가 전달'} #${handoff.sequenceNumber}`;
+  const bodyMarkdown = stripEmptyHandoffSections(handoff.bodyMarkdown);
 
   return (
     <li id={`handoff-${handoff.id}`} className="border-primary/40 border-l-2 pl-4 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <strong>
-            {handoff.kind === 'INITIAL' ? '최초 전달' : '추가 전달'} #{handoff.sequenceNumber}
-          </strong>
+          <strong>{label}</strong>
           <p className="text-muted-foreground mt-1">
             {handoff.sourceTeamWork.identifier} →{' '}
             {handoff.targets.map((target) => target.teamWork.identifier).join(', ')}
           </p>
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            {handoff.author.user.displayName} · {formatHandoffDateTime(handoff.createdAt)}
+          </p>
         </div>
-        <Button size="sm" variant="ghost" onClick={() => setExpanded((current) => !current)}>
+        <Button
+          aria-controls={contentId}
+          aria-expanded={expanded}
+          size="sm"
+          variant="ghost"
+          onClick={() => setExpanded((current) => !current)}
+        >
           {expanded ? '내용 접기' : '내용 펼치기'}
         </Button>
       </div>
       {expanded ? (
-        <>
-          <MarkdownRenderer
-            className="mt-3"
-            imageUnavailableLabel="이미지를 표시할 수 없습니다"
-            markdown={handoff.bodyMarkdown}
-          />
+        <div id={contentId}>
+          {bodyMarkdown ? (
+            <MarkdownRenderer
+              className="mt-3"
+              imageUnavailableLabel="이미지를 표시할 수 없습니다"
+              markdown={bodyMarkdown}
+            />
+          ) : (
+            <p className="text-muted-foreground mt-3">입력된 변경사항이 없습니다.</p>
+          )}
           <Button
             className="mt-2"
             size="sm"
@@ -697,11 +737,12 @@ function HandoffHistoryItem({
               const next = new URLSearchParams(searchParams.toString());
               next.set('tab', 'work');
               router.replace(`${pathname}?${next.toString()}#comments`, { scroll: false });
+              askAboutHandoffInComments(issueId, label);
             }}
           >
             댓글로 질문
           </Button>
-        </>
+        </div>
       ) : null}
     </li>
   );
@@ -805,7 +846,10 @@ export function IssueDetailScreen({
     (issueQuery.isError && legacyWork.isPending)
   )
     return <ContentLoading label="통합 상세를 불러오는 중입니다" />;
-  if (!issue && (isMyWorkEntry ? selectedWorkQuery.isError : issueQuery.isError && legacyWork.isError))
+  if (
+    !issue &&
+    (isMyWorkEntry ? selectedWorkQuery.isError : issueQuery.isError && legacyWork.isError)
+  )
     return (
       <ContentError
         title={isMyWorkEntry ? '내 작업을 찾을 수 없습니다' : '이슈를 찾을 수 없습니다'}
@@ -824,7 +868,10 @@ export function IssueDetailScreen({
   const detailHref = (teamWorkIdentifier: string, nextTab = 'work') =>
     isMyWorkEntry
       ? myWorkHref(teamWorkIdentifier, nextTab)
-      : issueWorkHref(currentIssue.identifier, teamWorkIdentifier).replace('tab=work', `tab=${nextTab}`);
+      : issueWorkHref(currentIssue.identifier, teamWorkIdentifier).replace(
+          'tab=work',
+          `tab=${nextTab}`,
+        );
   const myWorkIsExcluded =
     isMyWorkEntry && selectedWork
       ? isExcludedFromMyWork(
@@ -856,8 +903,7 @@ export function IssueDetailScreen({
         }),
       ]);
       const first = result.teamWorks[0];
-      if (first)
-        router.push(detailHref(first.identifier), { scroll: false });
+      if (first) router.push(detailHref(first.identifier), { scroll: false });
       setStartRoles([]);
     } catch {
       // React Query mutation 상태가 인라인 오류를 표시한다.
@@ -891,7 +937,7 @@ export function IssueDetailScreen({
   }
 
   return (
-    <article className="mx-auto max-w-7xl space-y-6">
+    <article className="mx-auto max-w-[1440px] space-y-6">
       <header className="space-y-4">
         <Link
           href={isMyWorkEntry ? '/my-issues' : '/issues'}
@@ -932,9 +978,15 @@ export function IssueDetailScreen({
               ) : (
                 <>
                   <span>{issue.project.name}</span>
-                  <PriorityDisplay priority={issue.priority} />
+                  {issue.priority === 'NONE' ? (
+                    <span>우선순위 없음</span>
+                  ) : (
+                    <PriorityDisplay priority={issue.priority} />
+                  )}
                   <span className="tabular-nums">
-                    {issue.progress.percentage}% ({issue.progress.completed}/{issue.progress.total})
+                    {issue.progress.total === 0
+                      ? '아직 시작된 팀 작업이 없습니다'
+                      : `작업 ${issue.progress.completed}/${issue.progress.total} 완료 · ${issue.progress.percentage}%`}
                   </span>
                 </>
               )}
@@ -972,7 +1024,10 @@ export function IssueDetailScreen({
             <CircleAlert />
             <AlertTitle>내 작업에서 제외된 작업입니다</AlertTitle>
             <AlertDescription>
-              현재 상태는 계속 확인할 수 있습니다. <Link className="underline underline-offset-4" href="/my-issues">내 작업으로 돌아가기</Link>
+              현재 상태는 계속 확인할 수 있습니다.{' '}
+              <Link className="underline underline-offset-4" href="/my-issues">
+                내 작업으로 돌아가기
+              </Link>
             </AlertDescription>
           </Alert>
         ) : null}
@@ -1056,7 +1111,11 @@ export function IssueDetailScreen({
                   return (
                     <Link
                       key={work.id}
-                      href={isMyWorkEntry ? detailHref(work.identifier) : `${pathname}?${next.toString()}`}
+                      href={
+                        isMyWorkEntry
+                          ? detailHref(work.identifier)
+                          : `${pathname}?${next.toString()}`
+                      }
                       scroll={false}
                       aria-current={active ? 'page' : undefined}
                       className={`block border-l-2 px-2 py-2 ${active ? 'border-primary bg-muted/40' : 'hover:bg-muted/40 border-transparent'}`}
@@ -1136,6 +1195,7 @@ export function IssueDetailScreen({
                     key={handoff.id}
                     handoff={handoff}
                     initiallyExpanded={handoff.id === requestedHandoff || index === 0}
+                    issueId={issue.id}
                     pathname={pathname}
                     searchParams={searchParams}
                   />
@@ -1176,10 +1236,7 @@ export function IssueDetailScreen({
                   </p>
                 </section>
               )}
-              <section
-                className="bg-surface-1 rounded-xl border p-4 sm:p-5"
-                aria-labelledby="issue-content-title"
-              >
+              <section className="border-t pt-5" aria-labelledby="issue-content-title">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <FileText aria-hidden="true" className="text-muted-foreground size-4" />
@@ -1222,7 +1279,7 @@ export function IssueDetailScreen({
                     </div>
                   </div>
                 ) : issue.descriptionMarkdown ? (
-                  <div className="prose prose-sm mt-4 max-w-none border-l pl-4">
+                  <div className="prose prose-sm mt-4 max-w-[76ch] border-l pl-4">
                     <MarkdownRenderer
                       imageUnavailableLabel="이미지를 표시할 수 없습니다"
                       markdown={issue.descriptionMarkdown}
@@ -1233,19 +1290,19 @@ export function IssueDetailScreen({
                     등록된 설명이 없습니다.
                   </p>
                 )}
-                <IssueAttachments issue={issue} />
-                <div id="comments">
-                  <IssueTimeline
-                    currentMembershipId={
-                      session.data?.authenticated ? (session.data.membership?.id ?? null) : null
-                    }
-                    issueId={issue.id}
-                    issueIdentifier={issue.identifier}
-                    mentionOptions={mentionOptions}
-                    mode="comments"
-                  />
-                </div>
               </section>
+              <IssueAttachments issue={issue} />
+              <div id="comments" className="border-t pt-5">
+                <IssueTimeline
+                  currentMembershipId={
+                    session.data?.authenticated ? (session.data.membership?.id ?? null) : null
+                  }
+                  issueId={issue.id}
+                  issueIdentifier={issue.identifier}
+                  mentionOptions={mentionOptions}
+                  mode="comments"
+                />
+              </div>
             </>
           ) : null}
         </main>

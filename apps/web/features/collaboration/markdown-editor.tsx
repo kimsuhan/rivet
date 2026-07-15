@@ -459,6 +459,10 @@ function ImageUploadPlugin({
 
 const INSERT_MARKDOWN_IMAGE_COMMAND = createCommand<File>('INSERT_MARKDOWN_IMAGE');
 
+// 시각 표면은 28px(icon-sm)로 유지하되 실제 hit area는 데스크톱 40px, 모바일 44px을 보장한다.
+const TOOLBAR_HIT_AREA =
+  'relative after:absolute after:-inset-1.5 after:content-[""] max-md:after:-inset-2';
+
 function Toolbar({
   disabled,
   imagesEnabled,
@@ -535,6 +539,7 @@ function Toolbar({
             aria-pressed={formats[format]}
             title={label}
             disabled={disabled}
+            className={TOOLBAR_HIT_AREA}
             onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, format)}
           >
             <Icon data-icon="inline-start" />
@@ -547,6 +552,7 @@ function Toolbar({
           aria-label={labels.heading}
           title={labels.heading}
           disabled={disabled}
+          className={TOOLBAR_HIT_AREA}
           onClick={() => setBlock('heading')}
         >
           <Heading2Icon data-icon="inline-start" />
@@ -558,6 +564,7 @@ function Toolbar({
           aria-label={labels.bulletList}
           title={labels.bulletList}
           disabled={disabled}
+          className={TOOLBAR_HIT_AREA}
           onClick={() => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)}
         >
           <ListIcon data-icon="inline-start" />
@@ -569,6 +576,7 @@ function Toolbar({
           aria-label={labels.numberedList}
           title={labels.numberedList}
           disabled={disabled}
+          className={TOOLBAR_HIT_AREA}
           onClick={() => editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined)}
         >
           <ListOrderedIcon data-icon="inline-start" />
@@ -580,6 +588,7 @@ function Toolbar({
           aria-label={labels.quote}
           title={labels.quote}
           disabled={disabled}
+          className={TOOLBAR_HIT_AREA}
           onClick={() => setBlock('quote')}
         >
           <MessageSquareQuoteIcon data-icon="inline-start" />
@@ -591,6 +600,7 @@ function Toolbar({
           aria-label={labels.link}
           title={labels.link}
           disabled={disabled}
+          className={TOOLBAR_HIT_AREA}
           onClick={addLink}
         >
           <LinkIcon data-icon="inline-start" />
@@ -633,7 +643,7 @@ function Toolbar({
         ) : null}
 
         {imagesEnabled ? (
-          <label className="ml-auto">
+          <label className="ml-auto" title={labels.image.choose}>
             <input
               type="file"
               accept="image/gif,image/jpeg,image/png,image/webp"
@@ -645,7 +655,12 @@ function Toolbar({
                 event.currentTarget.value = '';
               }}
             />
-            <span className="hover:bg-muted focus-within:ring-ring inline-flex size-7 cursor-pointer items-center justify-center rounded-md focus-within:ring-2">
+            <span
+              className={cn(
+                'hover:bg-muted focus-within:ring-ring inline-flex size-7 cursor-pointer items-center justify-center rounded-md focus-within:ring-2',
+                TOOLBAR_HIT_AREA,
+              )}
+            >
               <ImageIcon aria-hidden="true" className="size-4" />
               <span className="sr-only">{labels.image.choose}</span>
             </span>
@@ -665,6 +680,7 @@ export type MarkdownEditorProps = {
   charLimit: number;
   className?: string;
   disabled?: boolean;
+  editorId?: string;
   error?: string | null;
   imagesEnabled?: boolean;
   labels: MarkdownEditorLabels;
@@ -683,6 +699,7 @@ export function MarkdownEditor({
   charLimit,
   className,
   disabled = false,
+  editorId,
   error = null,
   imagesEnabled = true,
   labels,
@@ -702,6 +719,7 @@ export function MarkdownEditor({
   const characterCount = markdownCharacterCount(value);
   const mentionsInvalid = !mentionsEnabled && hasSerializedMention(value);
   const tooLong = characterCount > charLimit;
+  const nearLimit = !tooLong && characterCount >= charLimit * 0.9;
   const canSubmit = !disabled && !pendingImages && !tooLong && !mentionsInvalid;
   const transformers = markdownTransformers(mentionsEnabled);
 
@@ -783,7 +801,8 @@ export function MarkdownEditor({
                     contentEditable={
                       <ContentEditable
                         aria-label={labels.editorLabel}
-                        className="focus-visible:ring-ring min-h-44 resize-y overflow-auto px-3 py-3 text-[15px] leading-6 outline-none focus-visible:ring-2 focus-visible:ring-inset [&>*:first-child]:mt-0"
+                        id={editorId}
+                        className="focus-visible:ring-ring min-h-36 resize-y overflow-auto px-3 py-3 text-[15px] leading-6 outline-none focus-visible:ring-2 focus-visible:ring-inset [&>*:first-child]:mt-0"
                       />
                     }
                     placeholder={
@@ -818,7 +837,7 @@ export function MarkdownEditor({
           </MarkdownImageLabelsContext.Provider>
         </TabsContent>
         <TabsContent value="preview">
-          <div className="bg-background min-h-44 rounded-lg border p-3">
+          <div className="bg-background min-h-36 rounded-lg border p-3">
             <MarkdownRenderer imageUnavailableLabel={labels.imageUnavailable} markdown={value} />
           </div>
         </TabsContent>
@@ -826,7 +845,7 @@ export function MarkdownEditor({
 
       <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-xs">
         <span aria-live="polite">{status}</span>
-        <span className={tooLong ? 'text-destructive' : undefined}>
+        <span className={tooLong ? 'text-destructive' : nearLimit ? 'text-warning' : undefined}>
           {labels.characterCount
             .replace('{current}', String(characterCount))
             .replace('{max}', String(charLimit))}
@@ -860,7 +879,9 @@ export function IssueDescriptionEditor(props: MarkdownEditorProps) {
   return <MarkdownEditor {...props} imagesEnabled mentionsEnabled />;
 }
 
-export function WorkNoteEditor(props: Omit<MarkdownEditorProps, 'imagesEnabled' | 'mentionsEnabled'>) {
+export function WorkNoteEditor(
+  props: Omit<MarkdownEditorProps, 'imagesEnabled' | 'mentionsEnabled'>,
+) {
   return <MarkdownEditor {...props} imagesEnabled={false} mentionsEnabled={false} />;
 }
 

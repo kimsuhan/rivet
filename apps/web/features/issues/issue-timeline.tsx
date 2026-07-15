@@ -35,6 +35,7 @@ import { CommentEditor, type MentionOption } from '@/features/collaboration/mark
 import { MarkdownRenderer } from '@/features/collaboration/markdown-renderer';
 import { Link } from '@/i18n/navigation';
 
+import { ISSUE_STATUS_PRESENTATION, PRIORITY_PRESENTATION } from './issue-attribute-presentation';
 import { markdownEditorLabels } from './issue-collaboration-labels';
 import { issueWorkHref } from './issue-work-routing';
 
@@ -79,6 +80,37 @@ function activityLabel(
     title: 'title',
   };
   return t(`timeline.activity.fields.${fields[fieldName ?? ''] ?? 'default'}` as never);
+}
+
+function activityValueLabel(fieldName: string, value: unknown): string | null {
+  if (value === null) return fieldName === 'assigneeMembershipId' ? '미할당' : null;
+  if (value === undefined) return null;
+  if (fieldName === 'priority' && typeof value === 'string') {
+    return (PRIORITY_PRESENTATION as Record<string, { label: string }>)[value]?.label ?? null;
+  }
+  if (fieldName === 'status' && typeof value === 'string') {
+    return (ISSUE_STATUS_PRESENTATION as Record<string, { label: string }>)[value]?.label ?? null;
+  }
+  if (fieldName === 'title' && typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.name === 'string') return record.name;
+    if (typeof record.displayName === 'string') return record.displayName;
+  }
+  return null;
+}
+
+function activityValueChange(
+  fieldName: string | null,
+  before: unknown,
+  after: unknown,
+): string | null {
+  if (!fieldName) return null;
+  const beforeLabel = activityValueLabel(fieldName, before);
+  const afterLabel = activityValueLabel(fieldName, after);
+  // 전후 값을 모두 사람이 읽을 수 있는 라벨로 만들 수 있을 때만 표시하고 추측하지 않는다.
+  if (beforeLabel === null || afterLabel === null || beforeLabel === afterLabel) return null;
+  return `${beforeLabel} → ${afterLabel}`;
 }
 
 function commentError(error: unknown, t: (key: string) => string): string {
@@ -350,6 +382,18 @@ function timelineItemId(item: TimelineResponseDto['items'][number]): string {
   return `activity-${item.activity.id}`;
 }
 
+function readCommentQuoteLabel(issueId: string): string | null {
+  if (typeof window === 'undefined') return null;
+  const raw = window.sessionStorage.getItem('rivet.comment.quote-context');
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { issueId: string; label: string };
+    return parsed.issueId === issueId ? parsed.label : null;
+  } catch {
+    return null;
+  }
+}
+
 export function IssueTimeline({
   currentMembershipId,
   issueId,
@@ -366,9 +410,20 @@ export function IssueTimeline({
   const t = useTranslations('IssueDetail');
   const markdownT = useTranslations('Markdown');
   const queryClient = useQueryClient();
-  const [commentDraft, setCommentDraft] = useState('');
+  const [commentDraft, setCommentDraft] = useState(() => {
+    if (mode !== 'comments') return '';
+    const label = readCommentQuoteLabel(issueId);
+    return label ? `> ${label}\n\n` : '';
+  });
   const [canSubmitComment, setCanSubmitComment] = useState(true);
   const createComment = useIssueCollaborationControllerCreateComment();
+
+  useEffect(() => {
+    if (mode !== 'comments') return;
+    if (!readCommentQuoteLabel(issueId)) return;
+    window.sessionStorage.removeItem('rivet.comment.quote-context');
+    window.requestAnimationFrame(() => document.getElementById('comment-editor')?.focus());
+  }, [issueId, mode]);
   const timeline = useInfiniteQuery({
     initialPageParam: null as string | null,
     queryKey: getIssueCollaborationControllerTimelineQueryKey(issueId, {
@@ -522,6 +577,11 @@ export function IssueTimeline({
             }
 
             if (item.type !== 'ACTIVITY') return null;
+            const valueChange = activityValueChange(
+              item.activity.fieldName,
+              item.activity.before,
+              item.activity.after,
+            );
             return (
               <li key={item.activity.id} className="relative pb-4 last:pb-0">
                 <span className="bg-border absolute top-2 -left-[1.31rem] size-2 rounded-full" />
@@ -549,9 +609,11 @@ export function IssueTimeline({
                       {formatDate(item.createdAt)}
                     </time>
                   </div>
-                  {item.activity.actor ? (
+                  {item.activity.actor || valueChange ? (
                     <p className="text-muted-foreground mt-0.5 pl-8 text-xs">
-                      {item.activity.actor.user.displayName}
+                      {item.activity.actor?.user.displayName}
+                      {item.activity.actor && valueChange ? ' · ' : null}
+                      {valueChange}
                     </p>
                   ) : null}
                 </div>
@@ -587,6 +649,7 @@ export function IssueTimeline({
           <CommentEditor
             charLimit={50_000}
             disabled={createComment.isPending}
+            editorId="comment-editor"
             error={
               createComment.isError
                 ? commentError(createComment.error, (key) => t(key as never))
@@ -603,8 +666,14 @@ export function IssueTimeline({
             onChange={setCommentDraft}
           />
           <div className="flex justify-end">
+            {!commentBody ? (
+              <p id="comment-submit-hint" className="sr-only">
+                댓글 내용을 입력해야 댓글을 남길 수 있습니다.
+              </p>
+            ) : null}
             <Button
               type="button"
+              aria-describedby={!commentBody ? 'comment-submit-hint' : undefined}
               disabled={!commentBody || !canSubmitComment || createComment.isPending}
               onClick={() => {
                 if (!commentBody) return;

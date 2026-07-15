@@ -22,7 +22,7 @@ import { TeamWorkPrimaryAction } from './team-work-primary-action';
 import { useTeamWorkInlineMutation } from './use-team-work-inline-mutation';
 
 export const MY_WORK_GRID_COLUMNS =
-  'grid-cols-[6.5rem_minmax(18rem,1.4fr)_minmax(15rem,1fr)_8.5rem_8rem] max-xl:grid-cols-[6rem_minmax(15rem,1.3fr)_minmax(12rem,1fr)_7.5rem_7rem] max-md:grid-cols-1';
+  'grid-cols-[6.5rem_minmax(18rem,30rem)_minmax(15rem,20rem)_8.5rem_8rem] max-xl:grid-cols-[6rem_minmax(15rem,24rem)_minmax(12rem,16rem)_7.5rem_7rem] max-md:grid-cols-1';
 
 export function MyWorkListRow({ work }: { work: TeamWorkSummaryResponseDto }) {
   const states = useTeamsControllerListWorkflowStates(work.team.id, { query: { retry: false } });
