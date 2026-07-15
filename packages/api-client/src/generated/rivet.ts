@@ -46,6 +46,7 @@ import type {
   CreateIssueResponseDto,
   CreateLabelDto,
   CreateProjectDto,
+  CreateSavedViewDto,
   CreateTeamDto,
   CreateWorkspaceDto,
   CsvImportControllerExecuteBody,
@@ -94,9 +95,14 @@ import type {
   ReorderWorkflowStatesDto,
   ResetPasswordDto,
   RestoreTrashResourceDto,
+  SavedViewListResponseDto,
+  SavedViewResponseDto,
+  SavedViewsControllerListParams,
+  SavedViewsControllerRemoveParams,
   SearchControllerIssuesParams,
   SearchIssueListResponseDto,
   SessionUserDto,
+  SetSavedViewDefaultDto,
   SignUpDto,
   StartIssueDto,
   StartIssueResponseDto,
@@ -120,6 +126,7 @@ import type {
   UpdateLabelDto,
   UpdateNotificationReadDto,
   UpdateProjectDto,
+  UpdateSavedViewDto,
   UpdateTeamDto,
   UpdateTeamWorkDto,
   UpdateTeamWorkResponseDto,
@@ -6274,6 +6281,510 @@ export function useSearchControllerIssues<TData = Awaited<ReturnType<typeof sear
 
 
 
+
+export const getSavedViewsControllerListUrl = (params: SavedViewsControllerListParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/saved-views?${stringifiedParams}` : `/api/v1/saved-views`
+}
+
+/**
+ * @summary 개인 저장된 보기 목록 조회
+ */
+export const savedViewsControllerList = async (params: SavedViewsControllerListParams, options?: RequestInit): Promise<SavedViewListResponseDto> => {
+
+  return rivetFetch<SavedViewListResponseDto>(getSavedViewsControllerListUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSavedViewsControllerListQueryKey = (params?: SavedViewsControllerListParams,) => {
+    return [
+    `/api/v1/saved-views`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSavedViewsControllerListQueryOptions = <TData = Awaited<ReturnType<typeof savedViewsControllerList>>, TError = ErrorType<unknown>>(params: SavedViewsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSavedViewsControllerListQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof savedViewsControllerList>>> = ({ signal }) => savedViewsControllerList(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerList>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type SavedViewsControllerListQueryResult = NonNullable<Awaited<ReturnType<typeof savedViewsControllerList>>>
+export type SavedViewsControllerListQueryError = ErrorType<unknown>
+
+
+export function useSavedViewsControllerList<TData = Awaited<ReturnType<typeof savedViewsControllerList>>, TError = ErrorType<unknown>>(
+ params: SavedViewsControllerListParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerList>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof savedViewsControllerList>>,
+          TError,
+          Awaited<ReturnType<typeof savedViewsControllerList>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSavedViewsControllerList<TData = Awaited<ReturnType<typeof savedViewsControllerList>>, TError = ErrorType<unknown>>(
+ params: SavedViewsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerList>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof savedViewsControllerList>>,
+          TError,
+          Awaited<ReturnType<typeof savedViewsControllerList>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSavedViewsControllerList<TData = Awaited<ReturnType<typeof savedViewsControllerList>>, TError = ErrorType<unknown>>(
+ params: SavedViewsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 개인 저장된 보기 목록 조회
+ */
+
+export function useSavedViewsControllerList<TData = Awaited<ReturnType<typeof savedViewsControllerList>>, TError = ErrorType<unknown>>(
+ params: SavedViewsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getSavedViewsControllerListQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSavedViewsControllerCreateUrl = () => {
+
+
+
+
+  return `/api/v1/saved-views`
+}
+
+/**
+ * @summary 개인 저장된 보기 생성
+ */
+export const savedViewsControllerCreate = async (createSavedViewDto: CreateSavedViewDto, options?: RequestInit): Promise<SavedViewResponseDto> => {
+
+  return rivetFetch<SavedViewResponseDto>(getSavedViewsControllerCreateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createSavedViewDto)
+  }
+);}
+
+
+
+
+
+export const getSavedViewsControllerCreateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerCreate>>, TError,{data: BodyType<CreateSavedViewDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerCreate>>, TError,{data: BodyType<CreateSavedViewDto>}, TContext> => {
+
+const mutationKey = ['savedViewsControllerCreate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof savedViewsControllerCreate>>, {data: BodyType<CreateSavedViewDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  savedViewsControllerCreate(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SavedViewsControllerCreateMutationResult = NonNullable<Awaited<ReturnType<typeof savedViewsControllerCreate>>>
+    export type SavedViewsControllerCreateMutationBody = BodyType<CreateSavedViewDto>
+    export type SavedViewsControllerCreateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 개인 저장된 보기 생성
+ */
+export const useSavedViewsControllerCreate = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerCreate>>, TError,{data: BodyType<CreateSavedViewDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof savedViewsControllerCreate>>,
+        TError,
+        {data: BodyType<CreateSavedViewDto>},
+        TContext
+      > => {
+      return useMutation(getSavedViewsControllerCreateMutationOptions(options), queryClient);
+    }
+
+export const getSavedViewsControllerGetUrl = (savedViewId: string,) => {
+
+
+
+
+  return `/api/v1/saved-views/${savedViewId}`
+}
+
+/**
+ * @summary 개인 저장된 보기 조회
+ */
+export const savedViewsControllerGet = async (savedViewId: string, options?: RequestInit): Promise<SavedViewResponseDto> => {
+
+  return rivetFetch<SavedViewResponseDto>(getSavedViewsControllerGetUrl(savedViewId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSavedViewsControllerGetQueryKey = (savedViewId: string,) => {
+    return [
+    `/api/v1/saved-views/${savedViewId}`
+    ] as const;
+    }
+
+
+export const getSavedViewsControllerGetQueryOptions = <TData = Awaited<ReturnType<typeof savedViewsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(savedViewId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerGet>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSavedViewsControllerGetQueryKey(savedViewId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof savedViewsControllerGet>>> = ({ signal }) => savedViewsControllerGet(savedViewId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: savedViewId !== null && savedViewId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type SavedViewsControllerGetQueryResult = NonNullable<Awaited<ReturnType<typeof savedViewsControllerGet>>>
+export type SavedViewsControllerGetQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useSavedViewsControllerGet<TData = Awaited<ReturnType<typeof savedViewsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
+ savedViewId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof savedViewsControllerGet>>,
+          TError,
+          Awaited<ReturnType<typeof savedViewsControllerGet>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSavedViewsControllerGet<TData = Awaited<ReturnType<typeof savedViewsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
+ savedViewId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof savedViewsControllerGet>>,
+          TError,
+          Awaited<ReturnType<typeof savedViewsControllerGet>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSavedViewsControllerGet<TData = Awaited<ReturnType<typeof savedViewsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
+ savedViewId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerGet>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 개인 저장된 보기 조회
+ */
+
+export function useSavedViewsControllerGet<TData = Awaited<ReturnType<typeof savedViewsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
+ savedViewId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof savedViewsControllerGet>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getSavedViewsControllerGetQueryOptions(savedViewId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSavedViewsControllerUpdateUrl = (savedViewId: string,) => {
+
+
+
+
+  return `/api/v1/saved-views/${savedViewId}`
+}
+
+/**
+ * @summary 개인 저장된 보기 이름 또는 구성 수정
+ */
+export const savedViewsControllerUpdate = async (savedViewId: string,
+    updateSavedViewDto: UpdateSavedViewDto, options?: RequestInit): Promise<SavedViewResponseDto> => {
+
+  return rivetFetch<SavedViewResponseDto>(getSavedViewsControllerUpdateUrl(savedViewId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateSavedViewDto)
+  }
+);}
+
+
+
+
+
+export const getSavedViewsControllerUpdateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerUpdate>>, TError,{savedViewId: string;data: BodyType<UpdateSavedViewDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerUpdate>>, TError,{savedViewId: string;data: BodyType<UpdateSavedViewDto>}, TContext> => {
+
+const mutationKey = ['savedViewsControllerUpdate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof savedViewsControllerUpdate>>, {savedViewId: string;data: BodyType<UpdateSavedViewDto>}> = (props) => {
+          const {savedViewId,data} = props ?? {};
+
+          return  savedViewsControllerUpdate(savedViewId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SavedViewsControllerUpdateMutationResult = NonNullable<Awaited<ReturnType<typeof savedViewsControllerUpdate>>>
+    export type SavedViewsControllerUpdateMutationBody = BodyType<UpdateSavedViewDto>
+    export type SavedViewsControllerUpdateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 개인 저장된 보기 이름 또는 구성 수정
+ */
+export const useSavedViewsControllerUpdate = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerUpdate>>, TError,{savedViewId: string;data: BodyType<UpdateSavedViewDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof savedViewsControllerUpdate>>,
+        TError,
+        {savedViewId: string;data: BodyType<UpdateSavedViewDto>},
+        TContext
+      > => {
+      return useMutation(getSavedViewsControllerUpdateMutationOptions(options), queryClient);
+    }
+
+export const getSavedViewsControllerRemoveUrl = (savedViewId: string,
+    params: SavedViewsControllerRemoveParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/saved-views/${savedViewId}?${stringifiedParams}` : `/api/v1/saved-views/${savedViewId}`
+}
+
+/**
+ * @summary 개인 저장된 보기 삭제
+ */
+export const savedViewsControllerRemove = async (savedViewId: string,
+    params: SavedViewsControllerRemoveParams, options?: RequestInit): Promise<void> => {
+
+  return rivetFetch<void>(getSavedViewsControllerRemoveUrl(savedViewId,params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getSavedViewsControllerRemoveMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerRemove>>, TError,{savedViewId: string;params: SavedViewsControllerRemoveParams}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerRemove>>, TError,{savedViewId: string;params: SavedViewsControllerRemoveParams}, TContext> => {
+
+const mutationKey = ['savedViewsControllerRemove'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof savedViewsControllerRemove>>, {savedViewId: string;params: SavedViewsControllerRemoveParams}> = (props) => {
+          const {savedViewId,params} = props ?? {};
+
+          return  savedViewsControllerRemove(savedViewId,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SavedViewsControllerRemoveMutationResult = NonNullable<Awaited<ReturnType<typeof savedViewsControllerRemove>>>
+
+    export type SavedViewsControllerRemoveMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 개인 저장된 보기 삭제
+ */
+export const useSavedViewsControllerRemove = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerRemove>>, TError,{savedViewId: string;params: SavedViewsControllerRemoveParams}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof savedViewsControllerRemove>>,
+        TError,
+        {savedViewId: string;params: SavedViewsControllerRemoveParams},
+        TContext
+      > => {
+      return useMutation(getSavedViewsControllerRemoveMutationOptions(options), queryClient);
+    }
+
+export const getSavedViewsControllerSetDefaultUrl = (savedViewId: string,) => {
+
+
+
+
+  return `/api/v1/saved-views/${savedViewId}/default`
+}
+
+/**
+ * @summary 개인 기본 보기 지정
+ */
+export const savedViewsControllerSetDefault = async (savedViewId: string,
+    setSavedViewDefaultDto: SetSavedViewDefaultDto, options?: RequestInit): Promise<SavedViewResponseDto> => {
+
+  return rivetFetch<SavedViewResponseDto>(getSavedViewsControllerSetDefaultUrl(savedViewId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setSavedViewDefaultDto)
+  }
+);}
+
+
+
+
+
+export const getSavedViewsControllerSetDefaultMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerSetDefault>>, TError,{savedViewId: string;data: BodyType<SetSavedViewDefaultDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerSetDefault>>, TError,{savedViewId: string;data: BodyType<SetSavedViewDefaultDto>}, TContext> => {
+
+const mutationKey = ['savedViewsControllerSetDefault'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof savedViewsControllerSetDefault>>, {savedViewId: string;data: BodyType<SetSavedViewDefaultDto>}> = (props) => {
+          const {savedViewId,data} = props ?? {};
+
+          return  savedViewsControllerSetDefault(savedViewId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SavedViewsControllerSetDefaultMutationResult = NonNullable<Awaited<ReturnType<typeof savedViewsControllerSetDefault>>>
+    export type SavedViewsControllerSetDefaultMutationBody = BodyType<SetSavedViewDefaultDto>
+    export type SavedViewsControllerSetDefaultMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 개인 기본 보기 지정
+ */
+export const useSavedViewsControllerSetDefault = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savedViewsControllerSetDefault>>, TError,{savedViewId: string;data: BodyType<SetSavedViewDefaultDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof savedViewsControllerSetDefault>>,
+        TError,
+        {savedViewId: string;data: BodyType<SetSavedViewDefaultDto>},
+        TContext
+      > => {
+      return useMutation(getSavedViewsControllerSetDefaultMutationOptions(options), queryClient);
+    }
 
 export const getWorkspacesControllerCreateUrl = () => {
 

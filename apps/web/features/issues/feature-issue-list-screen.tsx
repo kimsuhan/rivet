@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleDot, Filter, Plus, Search } from 'lucide-react';
+import { ArrowDownUp, CircleDot, Filter, Plus, Search } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
@@ -9,7 +9,7 @@ import { useIssuesControllerList, useProjectsControllerList } from '@rivet/api-c
 import { ContentEmpty } from '@/components/states/content-empty';
 import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -23,6 +23,7 @@ import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
 import { ISSUE_LIST_GRID_COLUMNS, IssueListRow } from './issue-list-row';
+import { SavedViewControls } from './saved-view-controls';
 
 const STATUS_LABELS = {
   UNSORTED: '접수됨',
@@ -41,14 +42,16 @@ export function FeatureIssueListScreen() {
   const query = searchParams.get('query') ?? '';
   const projectId = searchParams.get('projectId') ?? '';
   const status = searchParams.get('status') ?? '';
-  const [draft, setDraft] = useState(query);
+  const sort = searchParams.get('sort') ?? 'updatedAt';
+  const sortDirection = searchParams.get('sortDirection') ?? 'desc';
+  const density = searchParams.get('density') ?? 'comfortable';
   const issues = useIssuesControllerList(
     {
       ...(projectId ? { projectId } : {}),
       ...(query ? { query } : {}),
       ...(status ? { status: status as never } : {}),
-      sort: 'updatedAt',
-      sortDirection: 'desc',
+      sort: sort as 'updatedAt' | 'createdAt' | 'priority',
+      sortDirection: sortDirection as 'asc' | 'desc',
     },
     { query: { retry: false } },
   );
@@ -59,6 +62,7 @@ export function FeatureIssueListScreen() {
 
   function replace(key: string, value: string) {
     const next = new URLSearchParams(searchParams.toString());
+    next.delete('view');
     if (value) next.set(key, value);
     else next.delete(key);
     router.push(`${pathname}${next.size ? `?${next.toString()}` : ''}`, { scroll: false });
@@ -85,22 +89,26 @@ export function FeatureIssueListScreen() {
       </header>
       <div className="border-b pb-3">
         <div className="flex flex-wrap items-center gap-2">
-          <form
-            className="relative min-w-56 flex-1 sm:max-w-sm"
-            onSubmit={(event) => {
-              event.preventDefault();
-              replace('query', draft.trim());
+          <SavedViewControls
+            resourceType="ISSUES"
+            configuration={{
+              ...(query ? { query } : {}),
+              ...(projectId ? { projectId } : {}),
+              ...(status ? { status } : {}),
+              sort,
+              sortDirection,
+              density,
             }}
-          >
-            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-            <Input
-              aria-label="이슈 검색"
-              className="hover:bg-muted/50 focus-visible:bg-background h-8 border-transparent bg-transparent pl-8 shadow-none"
-              placeholder="표시 ID 또는 제목 검색"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-            />
-          </form>
+            {...(projectId &&
+            projects.data &&
+            !projects.data.items.some((project) => project.id === projectId)
+              ? {
+                  staleValueMessage:
+                    '저장된 보기의 프로젝트가 보관되었거나 접근 권한이 없습니다. 필터를 수정한 뒤 보기를 다시 저장하세요.',
+                }
+              : {})}
+          />
+          <IssueSearchInput key={query} initialQuery={query} onSubmit={(value) => replace('query', value)} />
           <Filter className="text-muted-foreground size-4" aria-hidden="true" />
           <Select
             items={[
@@ -127,6 +135,44 @@ export function FeatureIssueListScreen() {
               </SelectGroup>
             </SelectContent>
           </Select>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => replace('density', density === 'compact' ? 'comfortable' : 'compact')}
+          >
+            {density === 'compact' ? '여유 보기' : '촘촘히 보기'}
+          </Button>
+          <Select
+            items={['updatedAt', 'createdAt', 'priority'].map((value) => ({
+              value,
+              label:
+                { updatedAt: '최근 수정일', createdAt: '생성일', priority: '우선순위' }[value] ??
+                value,
+            }))}
+            value={sort}
+            onValueChange={(value) => replace('sort', value ?? '')}
+          >
+            <SelectTrigger size="sm" aria-label="이슈 정렬 기준">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {['updatedAt', 'createdAt', 'priority'].map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {{ updatedAt: '최근 수정일', createdAt: '생성일', priority: '우선순위' }[value]}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Button
+            aria-label={sortDirection === 'desc' ? '내림차순 정렬' : '오름차순 정렬'}
+            onClick={() => replace('sortDirection', sortDirection === 'desc' ? 'asc' : 'desc')}
+            size="sm"
+            variant="ghost"
+          >
+            <ArrowDownUp className="size-4" />
+          </Button>
           <Select
             items={[
               { label: '모든 상태', value: '' },
@@ -168,7 +214,7 @@ export function FeatureIssueListScreen() {
         />
       ) : null}
       {issues.data?.items.length ? (
-        <div>
+        <div className={density === 'compact' ? 'text-sm' : undefined}>
           <div
             className={cn(
               'text-muted-foreground grid gap-3 border-b px-3 py-2 text-xs font-medium max-md:hidden',
@@ -196,5 +242,34 @@ export function FeatureIssueListScreen() {
         </p>
       ) : null}
     </section>
+  );
+}
+
+function IssueSearchInput({
+  initialQuery,
+  onSubmit,
+}: {
+  initialQuery: string;
+  onSubmit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(initialQuery);
+
+  return (
+    <form
+      className="relative min-w-56 flex-1 sm:max-w-sm"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit(draft.trim());
+      }}
+    >
+      <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+      <Input
+        aria-label="이슈 검색"
+        className="hover:bg-muted/50 focus-visible:bg-background h-8 border-transparent bg-transparent pl-8 shadow-none"
+        placeholder="표시 ID 또는 제목 검색"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+    </form>
   );
 }

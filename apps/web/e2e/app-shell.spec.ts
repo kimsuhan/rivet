@@ -34,7 +34,9 @@ test.beforeEach(async ({ page }) => {
       status: 200,
     });
   });
-  await page.route(/\/api\/v1\/(?:issues|labels|projects|team-works|teams)(?:\?.*)?$/u, async (route) => {
+  await page.route(
+    /\/api\/v1\/(?:issues|labels|projects|saved-views|team-works|teams)(?:\?.*)?$/u,
+    async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       json: { items: [], nextCursor: null, totalCount: 0 },

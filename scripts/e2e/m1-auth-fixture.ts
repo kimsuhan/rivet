@@ -230,6 +230,11 @@ export async function cleanupM2Users(emails: string[]): Promise<void> {
         invitationIds,
       ]);
       await database.query(
+        `DELETE FROM saved_views
+         WHERE workspace_id = ANY($1::uuid[]) OR membership_id = ANY($2::uuid[])`,
+        [workspaceIds, membershipIds],
+      );
+      await database.query(
         `UPDATE workspace_memberships
          SET invited_by_membership_id = NULL
          WHERE invited_by_membership_id = ANY($1::uuid[])`,
@@ -286,7 +291,7 @@ export async function cleanupM1User(email: string): Promise<void> {
          WHERE aggregate_id = $1 OR workspace_id IN (${workspaceSubquery})`,
         [userId],
       );
-      for (const table of ['workflow_states', 'team_members', 'teams', 'workspace_memberships']) {
+      for (const table of ['saved_views', 'workflow_states', 'team_members', 'teams', 'workspace_memberships']) {
         await database.query(`DELETE FROM ${table} WHERE workspace_id IN (${workspaceSubquery})`, [
           userId,
         ]);

@@ -50,6 +50,7 @@ model Workspace {
   exportAudits      ExportAudit[]
   importRuns        ImportRun[]
   importSourceRows  ImportSourceRow[]
+  savedViews        SavedView[]
 
   @@map("workspaces")
 }
@@ -87,10 +88,38 @@ model WorkspaceMembership {
   createdFileAttachments IssueFileAttachment[] @relation("IssueFileAttachmentCreator")
   requestedExports       ExportAudit[]         @relation("ExportRequesterMembership")
   requestedImportRuns    ImportRun[]           @relation("ImportRequesterMembership")
+  savedViews             SavedView[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, status])
   @@map("workspace_memberships")
+}
+
+enum SavedViewResourceType {
+  ISSUES
+  MY_WORK
+}
+
+model SavedView {
+  id             String                @id @default(uuid()) @db.Uuid
+  workspaceId    String                @map("workspace_id") @db.Uuid
+  membershipId   String                @map("membership_id") @db.Uuid
+  resourceType   SavedViewResourceType @map("resource_type")
+  name           String                @db.VarChar(100)
+  normalizedName String                @map("normalized_name") @db.VarChar(100)
+  configuration  Json                  @db.JsonB
+  isDefault      Boolean               @default(false) @map("is_default")
+  version        Int                   @default(1)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  membership WorkspaceMembership @relation(fields: [workspaceId, membershipId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([membershipId, resourceType, normalizedName])
+  @@index([workspaceId, membershipId, resourceType, updatedAt, id])
+  @@map("saved_views")
 }
 
 model WorkspaceInvitation {

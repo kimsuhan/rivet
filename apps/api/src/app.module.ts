@@ -24,6 +24,7 @@ import { LabelsModule } from './modules/labels/labels.module';
 import { MembersModule } from './modules/members/members.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ProjectsModule } from './modules/projects/projects.module';
+import { SavedViewsModule } from './modules/saved-views/saved-views.module';
 import { SearchModule } from './modules/search/search.module';
 import { TeamsModule } from './modules/teams/teams.module';
 import { TrashModule } from './modules/trash/trash.module';
@@ -61,6 +62,7 @@ const environmentFiles =
     NotificationsModule,
     ProjectsModule,
     SearchModule,
+    SavedViewsModule,
     WorkspacesModule,
     TeamsModule,
     TrashModule,

@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 
 import { useTeamWorkPages } from './issue-list-queries';
 import { MY_WORK_GRID_COLUMNS, MyWorkListRow } from './my-work-list-row';
+import { SavedViewControls } from './saved-view-controls';
 import { TEAM_WORK_GRID_COLUMNS, TeamWorkListRow } from './team-work-list-row';
 
 const CATEGORY_LABELS = {
@@ -59,7 +60,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
   const query = searchParams.get('query') ?? '';
   const sort = searchParams.get('sort') ?? (mode === 'my' ? 'executionOrder' : 'updatedAt');
   const sortDirection = searchParams.get('sortDirection') ?? 'desc';
-  const [draft, setDraft] = useState(query);
+  const density = searchParams.get('density') ?? 'comfortable';
   const params: TeamWorksControllerListParams = {
     ...(mode === 'my'
       ? { assigneeMembershipId: 'me', stateCategory: category as never }
@@ -85,12 +86,12 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
 
   function replace(key: string, value: string) {
     const next = new URLSearchParams(searchParams.toString());
+    next.delete('view');
     if (value) next.set(key, value);
     else next.delete(key);
     router.push(`${pathname}${next.size ? `?${next.toString()}` : ''}`, { scroll: false });
   }
   function reset() {
-    setDraft('');
     router.push(pathname, { scroll: false });
   }
 
@@ -124,24 +125,42 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
       </header>
       <div className="border-b pb-3">
         <div className="flex flex-wrap items-center gap-2">
-          <form
-            className="relative min-w-56 flex-1 sm:max-w-sm"
-            onSubmit={(event) => {
-              event.preventDefault();
-              replace('query', draft.trim());
-            }}
-          >
-            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-            <Input
-              aria-label={mode === 'my' ? '내 작업 검색' : '팀 작업 검색'}
-              className="hover:bg-muted/50 focus-visible:bg-background h-10 border-transparent bg-transparent pl-8 shadow-none"
-              placeholder={
-                mode === 'my' ? '작업 코드, 이슈 또는 프로젝트 검색' : '작업 ID 또는 이슈 제목 검색'
-              }
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+          {mode === 'my' ? (
+            <SavedViewControls
+              resourceType="MY_WORK"
+              configuration={{
+                ...(query ? { query } : {}),
+                ...(projectId ? { projectId } : {}),
+                ...(category && category !== MY_WORK_CATEGORIES ? { stateCategory: category } : {}),
+                sort,
+                sortDirection,
+                density,
+              }}
+              {...(projectId &&
+              projects.data &&
+              !projects.data.items.some((project) => project.id === projectId)
+                ? {
+                    staleValueMessage:
+                      '저장된 보기의 프로젝트가 보관되었거나 접근 권한이 없습니다. 필터를 수정한 뒤 보기를 다시 저장하세요.',
+                  }
+                : {})}
             />
-          </form>
+          ) : null}
+          {mode === 'my' ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => replace('density', density === 'compact' ? 'comfortable' : 'compact')}
+            >
+              {density === 'compact' ? '여유 보기' : '촘촘히 보기'}
+            </Button>
+          ) : null}
+          <WorkSearchInput
+            key={query}
+            initialQuery={query}
+            mode={mode}
+            onSubmit={(value) => replace('query', value)}
+          />
           <Filter className="text-muted-foreground size-4" aria-hidden="true" />
           <Select
             items={[
@@ -305,7 +324,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
         </ContentEmpty>
       ) : null}
       {works?.length ? (
-        <div>
+        <div className={density === 'compact' ? 'text-sm' : undefined}>
           <div
             className={cn(
               'text-muted-foreground grid gap-3 border-b px-3 py-2 text-xs font-medium max-md:hidden',
@@ -354,5 +373,38 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
         </Button>
       ) : null}
     </section>
+  );
+}
+
+function WorkSearchInput({
+  initialQuery,
+  mode,
+  onSubmit,
+}: {
+  initialQuery: string;
+  mode: IssueListMode;
+  onSubmit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(initialQuery);
+
+  return (
+    <form
+      className="relative min-w-56 flex-1 sm:max-w-sm"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit(draft.trim());
+      }}
+    >
+      <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+      <Input
+        aria-label={mode === 'my' ? '내 작업 검색' : '팀 작업 검색'}
+        className="hover:bg-muted/50 focus-visible:bg-background h-10 border-transparent bg-transparent pl-8 shadow-none"
+        placeholder={
+          mode === 'my' ? '작업 코드, 이슈 또는 프로젝트 검색' : '작업 ID 또는 이슈 제목 검색'
+        }
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+    </form>
   );
 }

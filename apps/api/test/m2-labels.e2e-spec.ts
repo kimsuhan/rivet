@@ -104,6 +104,7 @@ describe('M2 workspace labels', () => {
   afterAll(async () => {
     if (database) {
       await database.client.session.deleteMany({ where: { userId: { in: userIds } } });
+      await database.client.savedView.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.label.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.workspaceMembership.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
@@ -257,4 +258,5 @@ describe('M2 workspace labels', () => {
       .expect(400);
     expect(invalidCursor.body.code).toBe('INVALID_QUERY');
   });
+
 });
