@@ -4,6 +4,12 @@ import createNextIntlPlugin from 'next-intl/plugin';
 import { webEnvironment } from './lib/environment';
 
 const nextConfig: NextConfig = {
+  images: {
+    localPatterns: [
+      { pathname: '/brand/logo.png', search: '?v=20260715' },
+      { pathname: '/brand/symbol.png', search: '?v=20260715' },
+    ],
+  },
   transpilePackages: ['@rivet/api-client'],
   async headers() {
     const logMetadataHeaders = [

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+  <mask id="rivet-symbol-knockout">
+    <rect width="100" height="100" fill="white"/>
+    <circle cx="50" cy="24" r="17.2" fill="black"/>
+  </mask>
+  <g mask="url(#rivet-symbol-knockout)" fill="none" stroke="#111111" stroke-width="18" stroke-linecap="round">
+    <path d="M43 32 L20 78"/>
+    <path d="M57 32 L80 78"/>
+  </g>
+  <circle cx="50" cy="24" r="12.9" fill="#111111"/>
+</svg>
