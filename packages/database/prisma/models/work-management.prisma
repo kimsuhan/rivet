@@ -67,6 +67,7 @@ model Project {
   roleTeams           ProjectRoleTeam[]
   issues              Issue[]
   activityEvents      ActivityEvent[]
+  importSourceRows    ImportSourceRow[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, archivedAt, updatedAt, id])
@@ -127,6 +128,7 @@ model Issue {
   comments            Comment[]
   mentions            Mention[]
   fileAttachments     IssueFileAttachment[]
+  importSourceRows    ImportSourceRow[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, identifier])

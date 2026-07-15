@@ -71,3 +71,70 @@ model ExportAudit {
   @@index([workspaceId, requestedByMembershipId, requestedAt, id], map: "export_audits_requester_requested_at_id_idx")
   @@map("export_audits")
 }
+
+enum ImportRunStatus {
+  PREVIEWED
+  VALIDATION_FAILED
+  VALIDATED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+model ImportRun {
+  id                         String          @id @default(uuid()) @db.Uuid
+  workspaceId                String          @map("workspace_id") @db.Uuid
+  requestedByMembershipId    String          @map("requested_by_membership_id") @db.Uuid
+  executionId                String          @map("execution_id") @db.Uuid
+  sourceFingerprint          String          @map("source_fingerprint") @db.Char(64)
+  status                     ImportRunStatus
+  inputRowCount              Int             @default(0) @map("input_row_count")
+  projectCreatedCount        Int             @default(0) @map("project_created_count")
+  issueCreatedCount          Int             @default(0) @map("issue_created_count")
+  connectionCreatedCount     Int             @default(0) @map("connection_created_count")
+  excludedRowCount           Int             @default(0) @map("excluded_row_count")
+  errorCount                 Int             @default(0) @map("error_count")
+  lastErrorCode              String?         @map("last_error_code") @db.VarChar(100)
+  errorDetails               Json?           @map("error_details") @db.JsonB
+  validatedTargetFingerprint String?         @map("validated_target_fingerprint") @db.Char(64)
+  validationSignature        String?         @map("validation_signature") @db.Char(64)
+  startedAt                  DateTime?       @map("started_at") @db.Timestamptz(3)
+  completedAt                DateTime?       @map("completed_at") @db.Timestamptz(3)
+  failedAt                   DateTime?       @map("failed_at") @db.Timestamptz(3)
+  createdAt                  DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace             Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  requestedByMembership WorkspaceMembership @relation("ImportRequesterMembership", fields: [workspaceId, requestedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  sourceRows            ImportSourceRow[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, executionId])
+  @@index([workspaceId, sourceFingerprint, status, createdAt, id])
+  @@index([workspaceId, createdAt, id])
+  @@map("import_runs")
+}
+
+model ImportSourceRow {
+  id              String   @id @default(uuid()) @db.Uuid
+  workspaceId     String   @map("workspace_id") @db.Uuid
+  importRunId     String   @map("import_run_id") @db.Uuid
+  sourceKeyHash   String   @map("source_key_hash") @db.Char(64)
+  sourceReference String   @map("source_reference") @db.VarChar(255)
+  projectId       String   @map("project_id") @db.Uuid
+  projectCreated  Boolean  @default(false) @map("project_created")
+  issueId         String   @map("issue_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  importRun ImportRun @relation(fields: [workspaceId, importRunId], references: [workspaceId, id], onDelete: Restrict)
+  project   Project   @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
+  issue     Issue     @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, sourceKeyHash])
+  @@unique([workspaceId, issueId])
+  @@index([workspaceId, importRunId, createdAt, id])
+  @@index([workspaceId, projectId, createdAt, id])
+  @@map("import_source_rows")
+}

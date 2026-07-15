@@ -2612,6 +2612,512 @@
         ]
       }
     },
+    "/api/v1/imports/csv/mapping-options": {
+      "get": {
+        "operationId": "CsvImportController_mappingOptions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvImportMappingOptionsResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "현재 워크스페이스 CSV 매핑 대상 조회",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports/csv/inspect": {
+      "post": {
+        "operationId": "CsvImportController_inspect",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "allowDuplicateFile": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "executionId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "mapping": {
+                    "description": "컬럼·값 매핑 JSON",
+                    "type": "string"
+                  },
+                  "validationSignature": {
+                    "maxLength": 64,
+                    "minLength": 64,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "executionId",
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvImportInspectionResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "IMPORT_FILE_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "IMPORT_*",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "CSV 컬럼과 원본 값 확인",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports/csv/validate": {
+      "post": {
+        "operationId": "CsvImportController_validate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "allowDuplicateFile": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "executionId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "mapping": {
+                    "description": "컬럼·값 매핑 JSON",
+                    "type": "string"
+                  },
+                  "validationSignature": {
+                    "maxLength": 64,
+                    "minLength": 64,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "executionId",
+                  "file",
+                  "mapping"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvImportValidationResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "IMPORT_EXECUTION_CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "IMPORT_FILE_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "IMPORT_*",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "CSV 매핑과 저장 예정 결과 검증",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports/csv/execute": {
+      "post": {
+        "operationId": "CsvImportController_execute",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "allowDuplicateFile": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "executionId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "mapping": {
+                    "description": "컬럼·값 매핑 JSON",
+                    "type": "string"
+                  },
+                  "validationSignature": {
+                    "maxLength": 64,
+                    "minLength": 64,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "executionId",
+                  "file",
+                  "mapping",
+                  "validationSignature"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvImportRunResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "IMPORT_*",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "IMPORT_FILE_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "IMPORT_*",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "검증된 CSV 원자적 저장",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports/csv/runs": {
+      "get": {
+        "operationId": "CsvImportController_listRuns",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvImportRunListResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "현재 워크스페이스 CSV 가져오기 실행 목록",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
+    "/api/v1/imports/csv/runs/{executionId}": {
+      "get": {
+        "operationId": "CsvImportController_getRun",
+        "parameters": [
+          {
+            "name": "executionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvImportRunResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "현재 워크스페이스 CSV 가져오기 실행 결과",
+        "tags": [
+          "imports"
+        ]
+      }
+    },
     "/api/v1/issues": {
       "get": {
         "operationId": "IssuesController_list",
@@ -7721,6 +8227,562 @@
         },
         "required": [
           "items"
+        ]
+      },
+      "CsvImportTeamOptionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "version"
+        ]
+      },
+      "CsvImportStateOptionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "teamId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "BACKLOG",
+              "UNSTARTED",
+              "STARTED",
+              "COMPLETED",
+              "CANCELED"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "teamId",
+          "name",
+          "category",
+          "version"
+        ]
+      },
+      "CsvImportMemberOptionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "ADMIN",
+              "MEMBER"
+            ],
+            "type": "string"
+          },
+          "teamIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "email",
+          "role",
+          "teamIds"
+        ]
+      },
+      "CsvImportProjectRoleTeamOptionDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "enum": [
+              "BACKEND",
+              "WEB_FRONTEND",
+              "APP_FRONTEND"
+            ],
+            "type": "string"
+          },
+          "teamId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "role",
+          "teamId"
+        ]
+      },
+      "CsvImportProjectOptionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          },
+          "roleTeams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportProjectRoleTeamOptionDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "roleTeams"
+        ]
+      },
+      "CsvImportLabelOptionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color",
+          "version"
+        ]
+      },
+      "CsvImportMappingOptionsResponseDto": {
+        "type": "object",
+        "properties": {
+          "targetFingerprint": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportTeamOptionDto"
+            }
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportStateOptionDto"
+            }
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportMemberOptionDto"
+            }
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportProjectOptionDto"
+            }
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportLabelOptionDto"
+            }
+          },
+          "priorities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "NONE",
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "URGENT"
+              ]
+            }
+          }
+        },
+        "required": [
+          "targetFingerprint",
+          "teams",
+          "states",
+          "members",
+          "projects",
+          "labels",
+          "priorities"
+        ]
+      },
+      "CsvImportColumnValuesDto": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "totalDistinctCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "column",
+          "values",
+          "totalDistinctCount",
+          "truncated"
+        ]
+      },
+      "CsvImportPreviewErrorDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "rowNumber": {
+            "type": "number",
+            "minimum": 1
+          },
+          "field": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "ERROR",
+              "WARNING"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "rowNumber"
+        ]
+      },
+      "CsvImportInspectionResponseDto": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceFingerprint": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "columnValues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportColumnValuesDto"
+            }
+          },
+          "unsupportedColumns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rowCount": {
+            "type": "number",
+            "minimum": 1
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportPreviewErrorDto"
+            }
+          }
+        },
+        "required": [
+          "executionId",
+          "sourceFingerprint",
+          "columns",
+          "columnValues",
+          "unsupportedColumns",
+          "rowCount",
+          "errors"
+        ]
+      },
+      "CsvImportValidationSummaryDto": {
+        "type": "object",
+        "properties": {
+          "projectCreateCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "issueCreateCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "connectionCreateCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "excludedRowCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "errorCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "warningCount": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "projectCreateCount",
+          "issueCreateCount",
+          "connectionCreateCount",
+          "excludedRowCount",
+          "errorCount",
+          "warningCount"
+        ]
+      },
+      "CsvImportValidationResponseDto": {
+        "type": "object",
+        "properties": {
+          "executionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "canExecute": {
+            "type": "boolean"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CsvImportValidationSummaryDto"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportPreviewErrorDto"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportPreviewErrorDto"
+            }
+          },
+          "validationSignature": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64
+          },
+          "duplicateCompletedRun": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "executionId",
+          "canExecute",
+          "summary",
+          "errors",
+          "warnings"
+        ]
+      },
+      "CsvImportCreatedResourceDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ]
+      },
+      "CsvImportRunResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "executionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "enum": [
+              "PREVIEWED",
+              "VALIDATION_FAILED",
+              "VALIDATED",
+              "PROCESSING",
+              "SUCCEEDED",
+              "FAILED"
+            ],
+            "type": "string"
+          },
+          "inputRowCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "projectCreatedCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "issueCreatedCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "connectionCreatedCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "excludedRowCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "errorCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "lastErrorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "failedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportPreviewErrorDto"
+            }
+          },
+          "createdProjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportCreatedResourceDto"
+            }
+          },
+          "createdIssues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportCreatedResourceDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "executionId",
+          "status",
+          "inputRowCount",
+          "projectCreatedCount",
+          "issueCreatedCount",
+          "connectionCreatedCount",
+          "excludedRowCount",
+          "errorCount",
+          "lastErrorCode",
+          "createdAt",
+          "completedAt",
+          "failedAt",
+          "errors",
+          "createdProjects",
+          "createdIssues"
+        ]
+      },
+      "CsvImportRunListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CsvImportRunResponseDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
         ]
       },
       "IssueProjectSummaryResponseDto": {

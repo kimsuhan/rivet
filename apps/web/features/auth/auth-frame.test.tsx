@@ -22,7 +22,7 @@ describe('AuthFrame', () => {
       </AuthFrame>,
     );
 
-    expect(screen.getByText('Rivet')).toBeVisible();
+    expect(screen.getByRole('img', { name: 'Rivet' })).toBeVisible();
     expect(screen.getByRole('heading', { name: '화면 제목' })).toBeVisible();
     expect(screen.getByText('화면 설명')).toBeVisible();
     expect(screen.getByRole('link', { name: '로그인' })).toHaveAttribute('href', '/login');

@@ -17,6 +17,7 @@ import { EventsModule } from './modules/events/events.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { FilesModule } from './modules/files/files.module';
 import { HealthModule } from './modules/health/health.module';
+import { CsvImportModule } from './modules/imports/csv-import.module';
 import { InvitationsModule } from './modules/invitations/invitations.module';
 import { IssuesModule } from './modules/issues/issues.module';
 import { LabelsModule } from './modules/labels/labels.module';
@@ -53,6 +54,7 @@ const environmentFiles =
     FilesModule,
     HealthModule,
     InvitationsModule,
+    CsvImportModule,
     IssuesModule,
     LabelsModule,
     MembersModule,

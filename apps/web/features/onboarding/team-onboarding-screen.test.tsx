@@ -135,6 +135,8 @@ describe('TeamOnboardingScreen', () => {
     vi.clearAllMocks();
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     vi.stubGlobal('location', {
+      href: 'http://localhost/ko/onboarding/team',
+      origin: 'http://localhost',
       pathname: '/ko/onboarding/team',
       replace: mocks.hardReplace,
     });

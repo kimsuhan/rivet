@@ -166,6 +166,12 @@ export async function cleanupM2Users(emails: string[]): Promise<void> {
       await database.query('DELETE FROM activity_events WHERE workspace_id = ANY($1::uuid[])', [
         workspaceIds,
       ]);
+      await database.query('DELETE FROM import_source_rows WHERE workspace_id = ANY($1::uuid[])', [
+        workspaceIds,
+      ]);
+      await database.query('DELETE FROM import_runs WHERE workspace_id = ANY($1::uuid[])', [
+        workspaceIds,
+      ]);
       await database.query(
         `DELETE FROM export_audits
          WHERE workspace_id = ANY($1::uuid[])

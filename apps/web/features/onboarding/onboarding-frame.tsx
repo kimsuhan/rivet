@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { RivetWordmark } from '@/components/layout/brand';
 import { cn } from '@/lib/utils';
 
 export type OnboardingFrameLabels = {
@@ -26,7 +27,9 @@ export function OnboardingFrame({
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-10 sm:px-6">
       <div className="flex w-full max-w-md flex-col gap-5">
-        <p className="text-foreground text-center text-sm font-medium">{labels.productName}</p>
+        <div className="flex justify-center">
+          <RivetWordmark alt={labels.productName} className="h-6" />
+        </div>
         <nav aria-label={labels.stepsLabel}>
           <ol className="flex flex-wrap items-center justify-center gap-2 text-sm">
             {steps.map((step, index) => {

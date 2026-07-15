@@ -1,6 +1,6 @@
 'use client';
 
-import { FileDown, GitBranch, Tags, Trash2, UsersRound } from 'lucide-react';
+import { FileDown, FileUp, GitBranch, Tags, Trash2, UsersRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { Link, usePathname } from '@/i18n/navigation';
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 
 type SettingsShellLabels = {
   export: string;
+  import: string;
   labels: string;
   members: string;
   navigation: string;
@@ -21,6 +22,7 @@ const links = [
   { href: '/settings/teams' as const, icon: GitBranch, label: 'teams' as const },
   { href: '/settings/labels' as const, icon: Tags, label: 'labels' as const },
   { href: '/settings/export' as const, icon: FileDown, label: 'export' as const },
+  { href: '/settings/import' as const, icon: FileUp, label: 'import' as const },
   { href: '/settings/trash' as const, icon: Trash2, label: 'trash' as const },
 ];
 

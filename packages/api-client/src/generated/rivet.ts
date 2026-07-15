@@ -48,6 +48,15 @@ import type {
   CreateProjectDto,
   CreateTeamDto,
   CreateWorkspaceDto,
+  CsvImportControllerExecuteBody,
+  CsvImportControllerInspectBody,
+  CsvImportControllerListRunsParams,
+  CsvImportControllerValidateBody,
+  CsvImportInspectionResponseDto,
+  CsvImportMappingOptionsResponseDto,
+  CsvImportRunListResponseDto,
+  CsvImportRunResponseDto,
+  CsvImportValidationResponseDto,
   EmailDto,
   FileIdDto,
   FileResourceResponseDto,
@@ -3059,6 +3068,559 @@ export const useInvitationsControllerCancel = <TError = ErrorType<ApiErrorRespon
       > => {
       return useMutation(getInvitationsControllerCancelMutationOptions(options), queryClient);
     }
+
+export const getCsvImportControllerMappingOptionsUrl = () => {
+
+
+
+
+  return `/api/v1/imports/csv/mapping-options`
+}
+
+/**
+ * @summary 현재 워크스페이스 CSV 매핑 대상 조회
+ */
+export const csvImportControllerMappingOptions = async ( options?: RequestInit): Promise<CsvImportMappingOptionsResponseDto> => {
+
+  return rivetFetch<CsvImportMappingOptionsResponseDto>(getCsvImportControllerMappingOptionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCsvImportControllerMappingOptionsQueryKey = () => {
+    return [
+    `/api/v1/imports/csv/mapping-options`
+    ] as const;
+    }
+
+
+export const getCsvImportControllerMappingOptionsQueryOptions = <TData = Awaited<ReturnType<typeof csvImportControllerMappingOptions>>, TError = ErrorType<ApiErrorResponseDto>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerMappingOptions>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCsvImportControllerMappingOptionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof csvImportControllerMappingOptions>>> = ({ signal }) => csvImportControllerMappingOptions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerMappingOptions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CsvImportControllerMappingOptionsQueryResult = NonNullable<Awaited<ReturnType<typeof csvImportControllerMappingOptions>>>
+export type CsvImportControllerMappingOptionsQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useCsvImportControllerMappingOptions<TData = Awaited<ReturnType<typeof csvImportControllerMappingOptions>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerMappingOptions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof csvImportControllerMappingOptions>>,
+          TError,
+          Awaited<ReturnType<typeof csvImportControllerMappingOptions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCsvImportControllerMappingOptions<TData = Awaited<ReturnType<typeof csvImportControllerMappingOptions>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerMappingOptions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof csvImportControllerMappingOptions>>,
+          TError,
+          Awaited<ReturnType<typeof csvImportControllerMappingOptions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCsvImportControllerMappingOptions<TData = Awaited<ReturnType<typeof csvImportControllerMappingOptions>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerMappingOptions>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 현재 워크스페이스 CSV 매핑 대상 조회
+ */
+
+export function useCsvImportControllerMappingOptions<TData = Awaited<ReturnType<typeof csvImportControllerMappingOptions>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerMappingOptions>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCsvImportControllerMappingOptionsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCsvImportControllerInspectUrl = () => {
+
+
+
+
+  return `/api/v1/imports/csv/inspect`
+}
+
+/**
+ * @summary CSV 컬럼과 원본 값 확인
+ */
+export const csvImportControllerInspect = async (csvImportControllerInspectBody: CsvImportControllerInspectBody, options?: RequestInit): Promise<CsvImportInspectionResponseDto> => {
+    const formData = new FormData();
+if(csvImportControllerInspectBody.allowDuplicateFile !== undefined) {
+ formData.append(`allowDuplicateFile`, csvImportControllerInspectBody.allowDuplicateFile.toString())
+ }
+formData.append(`executionId`, csvImportControllerInspectBody.executionId);
+formData.append(`file`, csvImportControllerInspectBody.file);
+if(csvImportControllerInspectBody.mapping !== undefined) {
+ formData.append(`mapping`, csvImportControllerInspectBody.mapping);
+ }
+if(csvImportControllerInspectBody.validationSignature !== undefined) {
+ formData.append(`validationSignature`, csvImportControllerInspectBody.validationSignature);
+ }
+
+  return rivetFetch<CsvImportInspectionResponseDto>(getCsvImportControllerInspectUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getCsvImportControllerInspectMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof csvImportControllerInspect>>, TError,{data: BodyType<CsvImportControllerInspectBody>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof csvImportControllerInspect>>, TError,{data: BodyType<CsvImportControllerInspectBody>}, TContext> => {
+
+const mutationKey = ['csvImportControllerInspect'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof csvImportControllerInspect>>, {data: BodyType<CsvImportControllerInspectBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  csvImportControllerInspect(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CsvImportControllerInspectMutationResult = NonNullable<Awaited<ReturnType<typeof csvImportControllerInspect>>>
+    export type CsvImportControllerInspectMutationBody = BodyType<CsvImportControllerInspectBody>
+    export type CsvImportControllerInspectMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary CSV 컬럼과 원본 값 확인
+ */
+export const useCsvImportControllerInspect = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof csvImportControllerInspect>>, TError,{data: BodyType<CsvImportControllerInspectBody>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof csvImportControllerInspect>>,
+        TError,
+        {data: BodyType<CsvImportControllerInspectBody>},
+        TContext
+      > => {
+      return useMutation(getCsvImportControllerInspectMutationOptions(options), queryClient);
+    }
+
+export const getCsvImportControllerValidateUrl = () => {
+
+
+
+
+  return `/api/v1/imports/csv/validate`
+}
+
+/**
+ * @summary CSV 매핑과 저장 예정 결과 검증
+ */
+export const csvImportControllerValidate = async (csvImportControllerValidateBody: CsvImportControllerValidateBody, options?: RequestInit): Promise<CsvImportValidationResponseDto> => {
+    const formData = new FormData();
+if(csvImportControllerValidateBody.allowDuplicateFile !== undefined) {
+ formData.append(`allowDuplicateFile`, csvImportControllerValidateBody.allowDuplicateFile.toString())
+ }
+formData.append(`executionId`, csvImportControllerValidateBody.executionId);
+formData.append(`file`, csvImportControllerValidateBody.file);
+formData.append(`mapping`, csvImportControllerValidateBody.mapping);
+if(csvImportControllerValidateBody.validationSignature !== undefined) {
+ formData.append(`validationSignature`, csvImportControllerValidateBody.validationSignature);
+ }
+
+  return rivetFetch<CsvImportValidationResponseDto>(getCsvImportControllerValidateUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getCsvImportControllerValidateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof csvImportControllerValidate>>, TError,{data: BodyType<CsvImportControllerValidateBody>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof csvImportControllerValidate>>, TError,{data: BodyType<CsvImportControllerValidateBody>}, TContext> => {
+
+const mutationKey = ['csvImportControllerValidate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof csvImportControllerValidate>>, {data: BodyType<CsvImportControllerValidateBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  csvImportControllerValidate(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CsvImportControllerValidateMutationResult = NonNullable<Awaited<ReturnType<typeof csvImportControllerValidate>>>
+    export type CsvImportControllerValidateMutationBody = BodyType<CsvImportControllerValidateBody>
+    export type CsvImportControllerValidateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary CSV 매핑과 저장 예정 결과 검증
+ */
+export const useCsvImportControllerValidate = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof csvImportControllerValidate>>, TError,{data: BodyType<CsvImportControllerValidateBody>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof csvImportControllerValidate>>,
+        TError,
+        {data: BodyType<CsvImportControllerValidateBody>},
+        TContext
+      > => {
+      return useMutation(getCsvImportControllerValidateMutationOptions(options), queryClient);
+    }
+
+export const getCsvImportControllerExecuteUrl = () => {
+
+
+
+
+  return `/api/v1/imports/csv/execute`
+}
+
+/**
+ * @summary 검증된 CSV 원자적 저장
+ */
+export const csvImportControllerExecute = async (csvImportControllerExecuteBody: CsvImportControllerExecuteBody, options?: RequestInit): Promise<CsvImportRunResponseDto> => {
+    const formData = new FormData();
+if(csvImportControllerExecuteBody.allowDuplicateFile !== undefined) {
+ formData.append(`allowDuplicateFile`, csvImportControllerExecuteBody.allowDuplicateFile.toString())
+ }
+formData.append(`executionId`, csvImportControllerExecuteBody.executionId);
+formData.append(`file`, csvImportControllerExecuteBody.file);
+formData.append(`mapping`, csvImportControllerExecuteBody.mapping);
+formData.append(`validationSignature`, csvImportControllerExecuteBody.validationSignature);
+
+  return rivetFetch<CsvImportRunResponseDto>(getCsvImportControllerExecuteUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getCsvImportControllerExecuteMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof csvImportControllerExecute>>, TError,{data: BodyType<CsvImportControllerExecuteBody>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof csvImportControllerExecute>>, TError,{data: BodyType<CsvImportControllerExecuteBody>}, TContext> => {
+
+const mutationKey = ['csvImportControllerExecute'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof csvImportControllerExecute>>, {data: BodyType<CsvImportControllerExecuteBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  csvImportControllerExecute(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CsvImportControllerExecuteMutationResult = NonNullable<Awaited<ReturnType<typeof csvImportControllerExecute>>>
+    export type CsvImportControllerExecuteMutationBody = BodyType<CsvImportControllerExecuteBody>
+    export type CsvImportControllerExecuteMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 검증된 CSV 원자적 저장
+ */
+export const useCsvImportControllerExecute = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof csvImportControllerExecute>>, TError,{data: BodyType<CsvImportControllerExecuteBody>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof csvImportControllerExecute>>,
+        TError,
+        {data: BodyType<CsvImportControllerExecuteBody>},
+        TContext
+      > => {
+      return useMutation(getCsvImportControllerExecuteMutationOptions(options), queryClient);
+    }
+
+export const getCsvImportControllerListRunsUrl = (params?: CsvImportControllerListRunsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/imports/csv/runs?${stringifiedParams}` : `/api/v1/imports/csv/runs`
+}
+
+/**
+ * @summary 현재 워크스페이스 CSV 가져오기 실행 목록
+ */
+export const csvImportControllerListRuns = async (params?: CsvImportControllerListRunsParams, options?: RequestInit): Promise<CsvImportRunListResponseDto> => {
+
+  return rivetFetch<CsvImportRunListResponseDto>(getCsvImportControllerListRunsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCsvImportControllerListRunsQueryKey = (params?: CsvImportControllerListRunsParams,) => {
+    return [
+    `/api/v1/imports/csv/runs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getCsvImportControllerListRunsQueryOptions = <TData = Awaited<ReturnType<typeof csvImportControllerListRuns>>, TError = ErrorType<ApiErrorResponseDto>>(params?: CsvImportControllerListRunsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerListRuns>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCsvImportControllerListRunsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof csvImportControllerListRuns>>> = ({ signal }) => csvImportControllerListRuns(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerListRuns>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CsvImportControllerListRunsQueryResult = NonNullable<Awaited<ReturnType<typeof csvImportControllerListRuns>>>
+export type CsvImportControllerListRunsQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useCsvImportControllerListRuns<TData = Awaited<ReturnType<typeof csvImportControllerListRuns>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: undefined |  CsvImportControllerListRunsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerListRuns>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof csvImportControllerListRuns>>,
+          TError,
+          Awaited<ReturnType<typeof csvImportControllerListRuns>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCsvImportControllerListRuns<TData = Awaited<ReturnType<typeof csvImportControllerListRuns>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: CsvImportControllerListRunsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerListRuns>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof csvImportControllerListRuns>>,
+          TError,
+          Awaited<ReturnType<typeof csvImportControllerListRuns>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCsvImportControllerListRuns<TData = Awaited<ReturnType<typeof csvImportControllerListRuns>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: CsvImportControllerListRunsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerListRuns>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 현재 워크스페이스 CSV 가져오기 실행 목록
+ */
+
+export function useCsvImportControllerListRuns<TData = Awaited<ReturnType<typeof csvImportControllerListRuns>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: CsvImportControllerListRunsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerListRuns>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCsvImportControllerListRunsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCsvImportControllerGetRunUrl = (executionId: string,) => {
+
+
+
+
+  return `/api/v1/imports/csv/runs/${executionId}`
+}
+
+/**
+ * @summary 현재 워크스페이스 CSV 가져오기 실행 결과
+ */
+export const csvImportControllerGetRun = async (executionId: string, options?: RequestInit): Promise<CsvImportRunResponseDto> => {
+
+  return rivetFetch<CsvImportRunResponseDto>(getCsvImportControllerGetRunUrl(executionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCsvImportControllerGetRunQueryKey = (executionId: string,) => {
+    return [
+    `/api/v1/imports/csv/runs/${executionId}`
+    ] as const;
+    }
+
+
+export const getCsvImportControllerGetRunQueryOptions = <TData = Awaited<ReturnType<typeof csvImportControllerGetRun>>, TError = ErrorType<ApiErrorResponseDto>>(executionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerGetRun>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCsvImportControllerGetRunQueryKey(executionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof csvImportControllerGetRun>>> = ({ signal }) => csvImportControllerGetRun(executionId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: executionId !== null && executionId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerGetRun>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CsvImportControllerGetRunQueryResult = NonNullable<Awaited<ReturnType<typeof csvImportControllerGetRun>>>
+export type CsvImportControllerGetRunQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useCsvImportControllerGetRun<TData = Awaited<ReturnType<typeof csvImportControllerGetRun>>, TError = ErrorType<ApiErrorResponseDto>>(
+ executionId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerGetRun>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof csvImportControllerGetRun>>,
+          TError,
+          Awaited<ReturnType<typeof csvImportControllerGetRun>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCsvImportControllerGetRun<TData = Awaited<ReturnType<typeof csvImportControllerGetRun>>, TError = ErrorType<ApiErrorResponseDto>>(
+ executionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerGetRun>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof csvImportControllerGetRun>>,
+          TError,
+          Awaited<ReturnType<typeof csvImportControllerGetRun>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCsvImportControllerGetRun<TData = Awaited<ReturnType<typeof csvImportControllerGetRun>>, TError = ErrorType<ApiErrorResponseDto>>(
+ executionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerGetRun>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 현재 워크스페이스 CSV 가져오기 실행 결과
+ */
+
+export function useCsvImportControllerGetRun<TData = Awaited<ReturnType<typeof csvImportControllerGetRun>>, TError = ErrorType<ApiErrorResponseDto>>(
+ executionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof csvImportControllerGetRun>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCsvImportControllerGetRunQueryOptions(executionId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getIssuesControllerListUrl = (params?: IssuesControllerListParams,) => {
   const normalizedParams = new URLSearchParams();

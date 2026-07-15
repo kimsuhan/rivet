@@ -5,6 +5,7 @@ export {
   ExportType,
   FileScope,
   HandoffKind,
+  ImportRunStatus,
   IssueFileKind,
   IssuePriority,
   IssueStatus,

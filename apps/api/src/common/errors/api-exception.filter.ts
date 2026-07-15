@@ -63,10 +63,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
       exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     const exceptionResponse = exception instanceof HttpException ? exception.getResponse() : null;
     const fallback =
-      status === HttpStatus.PAYLOAD_TOO_LARGE &&
-      request.method === 'POST' &&
-      request.path === '/api/v1/files'
-        ? { code: 'FILE_TOO_LARGE', message: '파일은 25MB 이하여야 합니다.' }
+      status === HttpStatus.PAYLOAD_TOO_LARGE && request.method === 'POST'
+        ? request.path === '/api/v1/files'
+          ? { code: 'FILE_TOO_LARGE', message: '파일은 25MB 이하여야 합니다.' }
+          : request.path.startsWith('/api/v1/imports/csv/')
+            ? { code: 'IMPORT_FILE_TOO_LARGE', message: 'CSV 파일은 5MB 이하여야 합니다.' }
+            : defaultError(status)
         : defaultError(status);
     const payload = isRecord(exceptionResponse) ? exceptionResponse : {};
     const hasApiCode = typeof payload.code === 'string';

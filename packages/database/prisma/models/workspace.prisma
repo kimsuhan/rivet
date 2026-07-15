@@ -48,6 +48,8 @@ model Workspace {
   files             File[]
   fileAttachments   IssueFileAttachment[]
   exportAudits      ExportAudit[]
+  importRuns        ImportRun[]
+  importSourceRows  ImportSourceRow[]
 
   @@map("workspaces")
 }
@@ -84,6 +86,7 @@ model WorkspaceMembership {
   receivedMentions       Mention[]             @relation("MentionedMembership")
   createdFileAttachments IssueFileAttachment[] @relation("IssueFileAttachmentCreator")
   requestedExports       ExportAudit[]         @relation("ExportRequesterMembership")
+  requestedImportRuns    ImportRun[]           @relation("ImportRequesterMembership")
 
   @@unique([workspaceId, id])
   @@index([workspaceId, status])

@@ -27,6 +27,7 @@ import {
   useNotificationsControllerUnreadCount,
 } from '@rivet/api-client';
 
+import { RivetSymbol, RivetWordmark } from '@/components/layout/brand';
 import { UserAvatar } from '@/components/user-avatar';
 import {
   GlobalIssueCreate,
@@ -325,13 +326,8 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
             aria-label={labels.brandLabel}
             className="focus-visible:ring-ring flex items-center gap-2 rounded-md outline-none focus-visible:ring-2"
           >
-            <span
-              aria-hidden="true"
-              className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-md text-sm font-semibold"
-            >
-              R
-            </span>
-            <span className="hidden text-sm font-semibold tracking-[-0.01em] xl:inline">Rivet</span>
+            <RivetSymbol className="xl:hidden" />
+            <RivetWordmark className="hidden xl:block" />
           </Link>
         </div>
 
@@ -454,9 +450,9 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
         <Link
           href="/my-issues"
           aria-label={labels.brandLabel}
-          className="focus-visible:ring-ring rounded-md text-sm font-semibold tracking-[-0.01em] outline-none focus-visible:ring-2"
+          className="focus-visible:ring-ring flex items-center rounded-md outline-none focus-visible:ring-2"
         >
-          Rivet
+          <RivetWordmark />
         </Link>
         <div className="flex items-center gap-1">
           <button

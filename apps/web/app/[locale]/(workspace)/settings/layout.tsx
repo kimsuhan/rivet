@@ -47,6 +47,7 @@ export default async function SettingsLayout({
         <SettingsShell
           labels={{
             export: t('export'),
+            import: t('import'),
             labels: t('labels'),
             members: t('members'),
             navigation: t('navigation'),

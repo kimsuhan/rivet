@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { RivetWordmark } from '@/components/layout/brand';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Link } from '@/i18n/navigation';
 
@@ -13,8 +14,8 @@ export function AuthFrame({ labels, children }: { labels: AuthFrameLabels; child
   return (
     <main className="grid min-h-dvh place-items-center px-4 py-8">
       <div className="w-full max-w-md">
-        <div className="text-muted-foreground mb-6 text-center text-sm font-medium tracking-wide">
-          {labels.productName}
+        <div className="mb-6 flex justify-center">
+          <RivetWordmark alt={labels.productName} className="h-6" />
         </div>
         <Card className="bg-surface-1 gap-6 py-8">
           <CardHeader className="gap-2 px-6">
