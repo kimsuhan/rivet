@@ -83,8 +83,12 @@ const TEAM_WORK_SELECT = {
     select: {
       id: true,
       identifier: true,
+      labels: {
+        orderBy: { labelId: 'asc' },
+        select: { label: { select: { archivedAt: true, color: true, id: true, name: true } } },
+      },
       priority: true,
-      projectId: true,
+      project: { select: { archivedAt: true, id: true, name: true, status: true } },
       status: true,
       teamWorks: {
         select: { projectRole: true },
@@ -263,8 +267,19 @@ export function toTeamWorkSummary(row: TeamWorkRow): TeamWorkSummaryResponseDto 
     issue: {
       id: row.issue.id,
       identifier: row.issue.identifier,
+      labels: row.issue.labels.map(({ label }) => ({
+        archived: label.archivedAt !== null,
+        color: label.color,
+        id: label.id,
+        name: label.name,
+      })),
       priority: row.issue.priority,
-      projectId: row.issue.projectId,
+      project: {
+        archived: row.issue.project.archivedAt !== null,
+        id: row.issue.project.id,
+        name: row.issue.project.name,
+        status: row.issue.project.status,
+      },
       status: row.issue.status,
       title: row.issue.title,
     },

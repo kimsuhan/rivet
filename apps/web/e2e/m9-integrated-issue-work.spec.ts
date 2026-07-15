@@ -285,8 +285,13 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     await expect(page.getByRole('heading', { name: '내 작업' })).toBeVisible();
     await page.getByText(backendIdentifier, { exact: true }).click();
     await expect(page).toHaveURL(
-      new RegExp(`/issues/${issueIdentifier}\\?tab=work&work=${backendIdentifier}$`, 'u'),
+      new RegExp(`/my-issues/${backendIdentifier}\\?tab=work$`, 'u'),
     );
+    await expect(page.getByRole('link', { name: '내 작업', exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page).toHaveURL(new RegExp(`/my-issues/${backendIdentifier}\\?tab=work$`, 'u'));
+    await page.getByRole('link', { name: '전달', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/my-issues/${backendIdentifier}\\?tab=handoffs$`, 'u'));
     await page.goto(`/teams/${encodeURIComponent(apiTeam.key)}/issues`);
     await page.getByText(backendIdentifier, { exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`work=${backendIdentifier}$`, 'u'));

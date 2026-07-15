@@ -49,6 +49,35 @@ function values(value: string | undefined): string[] {
     : [];
 }
 
+const EXECUTION_CATEGORY_ORDER: Record<StateCategory, number> = {
+  STARTED: 0,
+  UNSTARTED: 1,
+  BACKLOG: 2,
+  COMPLETED: 3,
+  CANCELED: 4,
+};
+
+const PRIORITY_ORDER = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 } as const;
+
+function compareTextDescending(left: string, right: string): number {
+  return right.localeCompare(left);
+}
+
+function decodeCursor(cursor: string): string {
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    return typeof parsed === 'object' && parsed !== null && 'id' in parsed && typeof parsed.id === 'string'
+      ? parsed.id
+      : cursor;
+  } catch {
+    return cursor;
+  }
+}
+
+function encodeCursor(id: string): string {
+  return Buffer.from(JSON.stringify({ id }), 'utf8').toString('base64url');
+}
+
 function notFound(): never {
   throw new ApiError({
     code: 'RESOURCE_NOT_FOUND',
@@ -103,16 +132,18 @@ export class TeamWorksService {
       issue: {
         deletedAt: null,
         ...(projectIds.length ? { projectId: { in: projectIds } } : {}),
-        ...(query.query
-          ? {
-              OR: [
-                { title: { contains: query.query, mode: 'insensitive' } },
-                { identifier: { contains: query.query, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
       },
       workspaceId: context.workspaceId,
+      ...(query.query
+        ? {
+            OR: [
+              { identifier: { contains: query.query, mode: 'insensitive' } },
+              { issue: { identifier: { contains: query.query, mode: 'insensitive' } } },
+              { issue: { title: { contains: query.query, mode: 'insensitive' } } },
+              { issue: { project: { name: { contains: query.query, mode: 'insensitive' } } } },
+            ],
+          }
+        : {}),
       ...(query.unassigned === 'true'
         ? { assigneeMembershipId: null }
         : assignees.length
@@ -125,28 +156,49 @@ export class TeamWorksService {
         : {}),
       ...(workflowStateIds.length ? { workflowStateId: { in: workflowStateIds } } : {}),
     };
-    let rows = await this.database.client.teamWork.findMany({
-      orderBy: [
-        { [query.sort ?? 'updatedAt']: query.sortDirection ?? 'desc' },
-        { id: query.sortDirection ?? 'desc' },
-      ],
+    const rows = await this.database.client.teamWork.findMany({
       select: {
+        createdAt: true,
         id: true,
+        issue: { select: { priority: true } },
+        updatedAt: true,
+        workflowState: { select: { category: true, position: true } },
       },
       where,
     });
-    if (query.cursor) {
-      const index = rows.findIndex(({ id }) => id === query.cursor);
-      rows = index >= 0 ? rows.slice(index + 1) : [];
-    }
-    const ids = rows.slice(0, query.limit).map(({ id }) => id);
+    const sort = query.sort ?? 'updatedAt';
+    const direction = query.sortDirection ?? 'desc';
+    rows.sort((left, right) => {
+      if (sort === 'executionOrder') {
+        const category =
+          EXECUTION_CATEGORY_ORDER[left.workflowState.category] -
+          EXECUTION_CATEGORY_ORDER[right.workflowState.category];
+        if (category) return category;
+        const priority = PRIORITY_ORDER[left.issue.priority] - PRIORITY_ORDER[right.issue.priority];
+        if (priority) return priority;
+        const position = left.workflowState.position - right.workflowState.position;
+        if (position) return position;
+        const updatedAt = right.updatedAt.getTime() - left.updatedAt.getTime();
+        return updatedAt || compareTextDescending(left.id, right.id);
+      }
+      const value =
+        sort === 'priority'
+          ? PRIORITY_ORDER[left.issue.priority] - PRIORITY_ORDER[right.issue.priority]
+          : sort === 'status'
+            ? left.workflowState.position - right.workflowState.position
+            : left[sort].getTime() - right[sort].getTime();
+      if (value) return direction === 'asc' ? value : -value;
+      return direction === 'asc' ? left.id.localeCompare(right.id) : compareTextDescending(left.id, right.id);
+    });
+    const cursorId = query.cursor ? decodeCursor(query.cursor) : null;
+    const start = cursorId === null ? 0 : Math.max(0, rows.findIndex(({ id }) => id === cursorId) + 1);
+    const page = rows.slice(start, start + query.limit);
     const detailed = await Promise.all(
-      ids.map((id) => this.issues.findTeamWork(this.database.client, context.workspaceId, id)),
+      page.map(({ id }) => this.issues.findTeamWork(this.database.client, context.workspaceId, id)),
     );
-    const filtered = detailed;
     return {
-      items: filtered.map(toTeamWorkSummary),
-      nextCursor: rows.length > query.limit ? (ids.at(-1) ?? null) : null,
+      items: detailed.map(toTeamWorkSummary),
+      nextCursor: start + page.length < rows.length && page.length ? encodeCursor(page.at(-1)!.id) : null,
       totalCount: await this.database.client.teamWork.count({ where }),
     };
   }
@@ -294,7 +346,7 @@ export class TeamWorksService {
           }
           const frontendRoleCount = await transaction.projectRoleTeam.count({
             where: {
-              projectId: current.issue.projectId,
+              projectId: current.issue.project.id,
               role: { in: [ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND] },
               workspaceId: context.workspaceId,
             },

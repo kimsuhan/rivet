@@ -10,6 +10,8 @@ export type TeamWorksControllerListSort = typeof TeamWorksControllerListSort[key
 
 
 export const TeamWorksControllerListSort = {
+  executionOrder: 'executionOrder',
+  priority: 'priority',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
   status: 'status',

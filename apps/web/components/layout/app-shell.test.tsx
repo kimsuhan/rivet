@@ -299,6 +299,23 @@ describe('AppShell', () => {
     expect(screen.getAllByRole('button', { name: labels.openSearch })).toHaveLength(2);
   });
 
+  it('내 작업 상세 경로에서는 내 작업 탐색을 활성화한다', () => {
+    pathname = '/my-issues/WEB-12';
+    window.history.replaceState({}, '', '/ko/my-issues/WEB-12?tab=work');
+
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    expect(
+      within(screen.getByRole('navigation', { name: labels.desktopNavigation })).getByRole('link', {
+        name: labels.navigation.myIssues,
+      }),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+
   it('데스크톱과 모바일 알림함에 같은 읽지 않은 개수와 접근 가능한 이름을 표시한다', () => {
     render(
       <AppShell labels={labels}>

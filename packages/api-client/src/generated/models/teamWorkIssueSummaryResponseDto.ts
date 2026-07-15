@@ -5,6 +5,8 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
+import type { IssueLabelSummaryResponseDto } from './issueLabelSummaryResponseDto';
+import type { IssueProjectSummaryResponseDto } from './issueProjectSummaryResponseDto';
 import type { TeamWorkIssueSummaryResponseDtoPriority } from './teamWorkIssueSummaryResponseDtoPriority';
 import type { TeamWorkIssueSummaryResponseDtoStatus } from './teamWorkIssueSummaryResponseDtoStatus';
 
@@ -14,5 +16,6 @@ export interface TeamWorkIssueSummaryResponseDto {
   title: string;
   status: TeamWorkIssueSummaryResponseDtoStatus;
   priority: TeamWorkIssueSummaryResponseDtoPriority;
-  projectId: string;
+  project: IssueProjectSummaryResponseDto;
+  labels: IssueLabelSummaryResponseDto[];
 }

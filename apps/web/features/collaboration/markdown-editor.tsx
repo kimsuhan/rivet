@@ -783,11 +783,11 @@ export function MarkdownEditor({
                     contentEditable={
                       <ContentEditable
                         aria-label={labels.editorLabel}
-                        className="focus-visible:ring-ring min-h-44 resize-y overflow-auto px-3 py-3 text-[15px] leading-6 outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                        className="focus-visible:ring-ring min-h-44 resize-y overflow-auto px-3 py-3 text-[15px] leading-6 outline-none focus-visible:ring-2 focus-visible:ring-inset [&>*:first-child]:mt-0"
                       />
                     }
                     placeholder={
-                      <p className="text-muted-foreground pointer-events-none absolute top-3 left-3 text-[15px]">
+                      <p className="text-muted-foreground pointer-events-none absolute top-3 left-3 text-[15px] leading-6">
                         {labels.placeholder}
                       </p>
                     }

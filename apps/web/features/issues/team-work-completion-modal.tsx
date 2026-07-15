@@ -69,7 +69,7 @@ export function TeamWorkCompletionModal({
   const states = useTeamsControllerListWorkflowStates(work.team.id, {
     query: { enabled: open, retry: false },
   });
-  const project = useProjectsControllerGet(work.issue.projectId, {
+  const project = useProjectsControllerGet(work.issue.project.id, {
     query: { enabled: open && work.projectRole === 'BACKEND', retry: false },
   });
   const [completionMode, setCompletionMode] =

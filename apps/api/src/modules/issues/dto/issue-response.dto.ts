@@ -85,7 +85,9 @@ export class TeamWorkIssueSummaryResponseDto {
   @ApiProperty() title!: string;
   @ApiProperty({ enum: IssueStatus }) status!: IssueStatus;
   @ApiProperty({ enum: IssuePriority }) priority!: IssuePriority;
-  @ApiProperty({ format: 'uuid' }) projectId!: string;
+  @ApiProperty({ type: IssueProjectSummaryResponseDto }) project!: IssueProjectSummaryResponseDto;
+  @ApiProperty({ isArray: true, type: IssueLabelSummaryResponseDto })
+  labels!: IssueLabelSummaryResponseDto[];
 }
 
 export class TeamWorkReferenceResponseDto {

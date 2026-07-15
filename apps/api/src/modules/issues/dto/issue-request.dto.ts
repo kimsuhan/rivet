@@ -299,7 +299,7 @@ export class TrashIssueDto {
 }
 
 export class TeamWorkListQueryDto {
-  @ApiPropertyOptional({ description: '표시 ID 또는 상위 이슈 제목 검색', maxLength: 500 })
+  @ApiPropertyOptional({ description: '팀 작업 표시 ID, 상위 이슈 표시 ID·제목 또는 프로젝트 이름 검색', maxLength: 500 })
   @Transform(({ value }) => normalizeString(value))
   @IsOptional()
   @IsString()
@@ -347,10 +347,13 @@ export class TeamWorkListQueryDto {
   @IsBooleanString()
   unassigned?: string;
 
-  @ApiPropertyOptional({ default: 'updatedAt', enum: ['createdAt', 'updatedAt', 'status'] })
+  @ApiPropertyOptional({
+    default: 'updatedAt',
+    enum: ['executionOrder', 'priority', 'createdAt', 'updatedAt', 'status'],
+  })
   @IsOptional()
-  @IsIn(['createdAt', 'updatedAt', 'status'])
-  sort?: 'createdAt' | 'updatedAt' | 'status';
+  @IsIn(['executionOrder', 'priority', 'createdAt', 'updatedAt', 'status'])
+  sort?: 'executionOrder' | 'priority' | 'createdAt' | 'updatedAt' | 'status';
 
   @ApiPropertyOptional({ default: 'desc', enum: ['asc', 'desc'] })
   @IsOptional()

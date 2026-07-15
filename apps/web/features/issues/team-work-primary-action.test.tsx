@@ -58,8 +58,9 @@ function work(overrides: Partial<TeamWorkSummaryResponseDto> = {}): TeamWorkSumm
     issue: {
       id: 'issue-1',
       identifier: 'F-1',
+      labels: [],
       priority: 'NONE',
-      projectId: 'project-1',
+      project: { archived: false, id: 'project-1', name: '프로젝트', status: 'PLANNED' },
       status: 'TODO',
       title: '이슈 제목',
     },
@@ -77,7 +78,7 @@ function work(overrides: Partial<TeamWorkSummaryResponseDto> = {}): TeamWorkSumm
 describe('TeamWorkPrimaryAction', () => {
   afterEach(cleanup);
 
-  it('담당자 없는 기본 BACKLOG 작업은 비활성 안내 버튼을 보여준다', () => {
+  it('실행 가능한 행동이 없는 BACKLOG 작업에는 대체 버튼을 표시하지 않는다', () => {
     render(
       <TeamWorkPrimaryAction
         onOpenCompletion={vi.fn()}
@@ -86,8 +87,7 @@ describe('TeamWorkPrimaryAction', () => {
         work={work()}
       />,
     );
-    const button = screen.getByRole('button', { name: 'API-1: 담당자를 선택해 주세요' });
-    expect(button).toBeDisabled();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('UNSTARTED에서 작업 시작을 누르면 해당 팀의 첫 STARTED 상태 id로 전이한다', async () => {
@@ -120,7 +120,7 @@ describe('TeamWorkPrimaryAction', () => {
     expect(onOpenCompletion).toHaveBeenCalledTimes(1);
   });
 
-  it('COMPLETED에서는 같은 위치에 비활성 완료됨을 표시한다', () => {
+  it('COMPLETED에는 비활성 완료 버튼을 남기지 않는다', () => {
     render(
       <TeamWorkPrimaryAction
         onOpenCompletion={vi.fn()}
@@ -129,8 +129,7 @@ describe('TeamWorkPrimaryAction', () => {
         work={work({ stateCategory: 'COMPLETED', workflowState: STATES[4]! })}
       />,
     );
-    const button = screen.getByRole('button', { name: 'API-1: 완료됨' });
-    expect(button).toBeDisabled();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('담당자가 지정된 BACKLOG(수동)이나 CANCELED에는 주요 행동을 표시하지 않는다', () => {

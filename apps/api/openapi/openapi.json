@@ -3253,7 +3253,7 @@
             "name": "query",
             "required": false,
             "in": "query",
-            "description": "표시 ID 또는 상위 이슈 제목 검색",
+            "description": "팀 작업 표시 ID, 상위 이슈 표시 ID·제목 또는 프로젝트 이름 검색",
             "schema": {
               "maxLength": 500,
               "type": "string"
@@ -3346,6 +3346,8 @@
               "default": "updatedAt",
               "type": "string",
               "enum": [
+                "executionOrder",
+                "priority",
                 "createdAt",
                 "updatedAt",
                 "status"
@@ -8038,9 +8040,14 @@
             ],
             "type": "string"
           },
-          "projectId": {
-            "type": "string",
-            "format": "uuid"
+          "project": {
+            "$ref": "#/components/schemas/IssueProjectSummaryResponseDto"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueLabelSummaryResponseDto"
+            }
           }
         },
         "required": [
@@ -8049,7 +8056,8 @@
           "title",
           "status",
           "priority",
-          "projectId"
+          "project",
+          "labels"
         ]
       },
       "IssueTeamSummaryResponseDto": {

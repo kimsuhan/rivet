@@ -68,8 +68,14 @@ import {
 } from './issue-attribute-presentation';
 import { markdownEditorLabels } from './issue-collaboration-labels';
 import { FOLLOW_UP_HANDOFF_TEMPLATE, handoffBodyError } from './issue-handoff-validation';
+import { IssueLabelChips } from './issue-label-chips';
 import { IssueTimeline } from './issue-timeline';
-import { issueWorkHref, matchesRequestedTeamWork } from './issue-work-routing';
+import {
+  isExcludedFromMyWork,
+  issueWorkHref,
+  matchesRequestedTeamWork,
+  myWorkHref,
+} from './issue-work-routing';
 import { TeamWorkCompletionModal } from './team-work-completion-modal';
 import { TeamWorkPrimaryAction } from './team-work-primary-action';
 
@@ -206,10 +212,12 @@ function useTeamWorkCellMutation(
 }
 
 function TeamWorkPanel({
+  handoffHref,
   highlightedHandoffId,
   issue,
   work,
 }: {
+  handoffHref: string;
   highlightedHandoffId: string | null;
   issue: IssueDetailResponseDto;
   work: TeamWorkSummaryResponseDto;
@@ -454,7 +462,7 @@ function TeamWorkPanel({
           </h3>
           <Link
             className="text-primary text-sm underline underline-offset-4"
-            href={`/issues/${encodeURIComponent(issue.identifier)}?tab=handoffs&work=${encodeURIComponent(work.identifier)}${highlightedHandoffId ? `&handoff=${encodeURIComponent(highlightedHandoffId)}` : ''}`}
+            href={handoffHref}
             scroll={false}
           >
             전체 전달 보기
@@ -699,7 +707,13 @@ function HandoffHistoryItem({
   );
 }
 
-export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
+export function IssueDetailScreen({
+  entry = 'issue',
+  issueRef,
+}: {
+  entry?: 'issue' | 'my-work';
+  issueRef: string;
+}) {
   const markdown = useTranslations('Markdown');
   const editorLabels = markdownEditorLabels(
     (key) => markdown(key as never),
@@ -709,7 +723,8 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const requestedWork = searchParams.get('work');
+  const isMyWorkEntry = entry === 'my-work';
+  const requestedWork = isMyWorkEntry ? issueRef : searchParams.get('work');
   const requestedHandoff = searchParams.get('handoff');
   const tab =
     searchParams.get('tab') === 'handoffs'
@@ -717,9 +732,18 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
       : searchParams.get('tab') === 'activity'
         ? 'activity'
         : 'work';
-  const issueQuery = useIssuesControllerGet(issueRef, { query: { retry: false } });
-  const legacyWork = useTeamWorksControllerGet(requestedWork ?? issueRef, {
-    query: { enabled: Boolean(requestedWork) || issueQuery.isError, retry: false },
+  const selectedWorkQuery = useTeamWorksControllerGet(requestedWork ?? issueRef, {
+    query: { enabled: isMyWorkEntry || Boolean(requestedWork), retry: false },
+  });
+  const issueQuery = useIssuesControllerGet(
+    isMyWorkEntry ? (selectedWorkQuery.data?.issue.identifier ?? '') : issueRef,
+    { query: { enabled: !isMyWorkEntry || Boolean(selectedWorkQuery.data), retry: false } },
+  );
+  const legacyWork = useTeamWorksControllerGet(issueRef, {
+    query: {
+      enabled: !isMyWorkEntry && !requestedWork && issueQuery.isError,
+      retry: false,
+    },
   });
   const issue = issueQuery.data;
   const selectedWork =
@@ -744,19 +768,19 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
   const issueMutationError = start.error ?? updateIssue.error;
 
   useEffect(() => {
-    if (!issueQuery.isError || !legacyWork.data) return;
+    if (isMyWorkEntry || !issueQuery.isError || !legacyWork.data) return;
     router.replace(
       `${issueWorkHref(legacyWork.data.issue.identifier, legacyWork.data.identifier)}${window.location.hash}`,
       { scroll: false },
     );
-  }, [issueQuery.isError, legacyWork.data, router]);
+  }, [isMyWorkEntry, issueQuery.isError, legacyWork.data, router]);
   useEffect(() => {
-    if (!issue || requestedWork || !selectedWork) return;
+    if (isMyWorkEntry || !issue || requestedWork || !selectedWork) return;
     const next = new URLSearchParams(searchParams.toString());
     next.set('tab', 'work');
     next.set('work', selectedWork.identifier);
     router.replace(`${pathname}?${next.toString()}${window.location.hash}`, { scroll: false });
-  }, [issue, pathname, requestedWork, router, searchParams, selectedWork]);
+  }, [isMyWorkEntry, issue, pathname, requestedWork, router, searchParams, selectedWork]);
   useEffect(() => {
     if (!issue) return;
     const anchor = requestedHandoff ? `handoff-${requestedHandoff}` : window.location.hash.slice(1);
@@ -775,16 +799,21 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
     [members.data?.items],
   );
 
-  if (issueQuery.isPending || (issueQuery.isError && legacyWork.isPending))
+  if (
+    (isMyWorkEntry && selectedWorkQuery.isPending) ||
+    issueQuery.isPending ||
+    (issueQuery.isError && legacyWork.isPending)
+  )
     return <ContentLoading label="통합 상세를 불러오는 중입니다" />;
-  if (!issue && issueQuery.isError && legacyWork.isError)
+  if (!issue && (isMyWorkEntry ? selectedWorkQuery.isError : issueQuery.isError && legacyWork.isError))
     return (
       <ContentError
-        title="이슈를 찾을 수 없습니다"
+        title={isMyWorkEntry ? '내 작업을 찾을 수 없습니다' : '이슈를 찾을 수 없습니다'}
         description="주소를 확인하거나 목록으로 돌아가 주세요."
         retryLabel="다시 시도"
         onRetry={() => {
           void issueQuery.refetch();
+          void selectedWorkQuery.refetch();
           void legacyWork.refetch();
         }}
       />
@@ -792,6 +821,18 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
   if (!issue) return <ContentLoading label="정본 주소로 이동 중입니다" />;
 
   const currentIssue = issue;
+  const detailHref = (teamWorkIdentifier: string, nextTab = 'work') =>
+    isMyWorkEntry
+      ? myWorkHref(teamWorkIdentifier, nextTab)
+      : issueWorkHref(currentIssue.identifier, teamWorkIdentifier).replace('tab=work', `tab=${nextTab}`);
+  const myWorkIsExcluded =
+    isMyWorkEntry && selectedWork
+      ? isExcludedFromMyWork(
+          selectedWork.stateCategory,
+          selectedWork.assignee?.id ?? null,
+          session.data?.authenticated ? (session.data.membership?.id ?? null) : null,
+        )
+      : false;
   const description =
     descriptionDraft?.issueId === currentIssue.id
       ? descriptionDraft.value
@@ -816,7 +857,7 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
       ]);
       const first = result.teamWorks[0];
       if (first)
-        router.push(issueWorkHref(currentIssue.identifier, first.identifier), { scroll: false });
+        router.push(detailHref(first.identifier), { scroll: false });
       setStartRoles([]);
     } catch {
       // React Query mutation 상태가 인라인 오류를 표시한다.
@@ -853,49 +894,88 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
     <article className="mx-auto max-w-7xl space-y-6">
       <header className="space-y-4">
         <Link
-          href="/issues"
+          href={isMyWorkEntry ? '/my-issues' : '/issues'}
           className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
+          onClick={(event) => {
+            if (!isMyWorkEntry) return;
+            const stored = window.sessionStorage.getItem('rivet.my-work.return');
+            if (!stored) return;
+            try {
+              const value = JSON.parse(stored) as { teamWorkIdentifier?: unknown };
+              if (value.teamWorkIdentifier !== issueRef) return;
+              event.preventDefault();
+              router.back();
+            } catch {
+              window.sessionStorage.removeItem('rivet.my-work.return');
+            }
+          }}
         >
           <ArrowLeft className="size-4" />
-          이슈 목록
+          {isMyWorkEntry ? '내 작업' : '이슈 목록'}
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-muted-foreground font-mono text-sm">{issue.identifier}</p>
+            <p className="text-muted-foreground font-mono text-sm">
+              {isMyWorkEntry && selectedWork ? selectedWork.identifier : issue.identifier}
+            </p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
               {issue.title}
             </h1>
             <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-              <span>{issue.project.name}</span>
-              <PriorityDisplay priority={issue.priority} />
-              <span className="tabular-nums">
-                {issue.progress.percentage}% ({issue.progress.completed}/{issue.progress.total})
-              </span>
+              {isMyWorkEntry ? (
+                <>
+                  <span className="font-mono">{issue.identifier}</span>
+                  <span>{issue.project.name}</span>
+                  {selectedWork ? <span>{ROLE_LABELS[selectedWork.projectRole]}</span> : null}
+                  <IssueLabelChips emptyLabel="" labels={issue.labels} />
+                </>
+              ) : (
+                <>
+                  <span>{issue.project.name}</span>
+                  <PriorityDisplay priority={issue.priority} />
+                  <span className="tabular-nums">
+                    {issue.progress.percentage}% ({issue.progress.completed}/{issue.progress.total})
+                  </span>
+                </>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <IssueStatusDisplay status={issue.status} />
-            {issue.status === 'REVIEW' ? (
+            {isMyWorkEntry && selectedWork ? (
+              <TeamWorkStatusDisplay category={selectedWork.stateCategory} />
+            ) : (
+              <IssueStatusDisplay status={issue.status} />
+            )}
+            {!isMyWorkEntry && issue.status === 'REVIEW' ? (
               <Button size="sm" onClick={() => void statusAction('COMPLETE')}>
                 <Check className="size-4" />
                 이슈 완료
               </Button>
             ) : null}
-            {issue.status === 'PAUSED' ? (
+            {!isMyWorkEntry && issue.status === 'PAUSED' ? (
               <Button size="sm" variant="outline" onClick={() => void statusAction('RESUME')}>
                 재개
               </Button>
-            ) : issue.status === 'DONE' || issue.status === 'CANCELED' ? (
+            ) : !isMyWorkEntry && (issue.status === 'DONE' || issue.status === 'CANCELED') ? (
               <Button size="sm" variant="outline" onClick={() => void statusAction('REOPEN')}>
                 다시 열기
               </Button>
-            ) : (
+            ) : !isMyWorkEntry ? (
               <Button size="sm" variant="outline" onClick={() => void statusAction('PAUSE')}>
                 일시 중지
               </Button>
-            )}
+            ) : null}
           </div>
         </div>
+        {myWorkIsExcluded ? (
+          <Alert>
+            <CircleAlert />
+            <AlertTitle>내 작업에서 제외된 작업입니다</AlertTitle>
+            <AlertDescription>
+              현재 상태는 계속 확인할 수 있습니다. <Link className="underline underline-offset-4" href="/my-issues">내 작업으로 돌아가기</Link>
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <nav className="flex gap-4 border-b text-sm" aria-label="이슈 상세 탭">
           {(
             [
@@ -906,6 +986,7 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
           ).map((item) => {
             const next = new URLSearchParams(searchParams.toString());
             next.set('tab', item.key);
+            if (isMyWorkEntry) next.delete('work');
             return (
               <Link
                 key={item.key}
@@ -945,6 +1026,10 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
                   if (!value) return;
                   const next = new URLSearchParams(searchParams.toString());
                   next.set('tab', 'work');
+                  if (isMyWorkEntry) {
+                    router.push(detailHref(value), { scroll: false });
+                    return;
+                  }
                   next.set('work', value);
                   router.push(`${pathname}?${next.toString()}`, { scroll: false });
                 }}
@@ -967,11 +1052,11 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
                   const active = work.id === selectedWork?.id;
                   const next = new URLSearchParams(searchParams.toString());
                   next.set('tab', 'work');
-                  next.set('work', work.identifier);
+                  if (!isMyWorkEntry) next.set('work', work.identifier);
                   return (
                     <Link
                       key={work.id}
-                      href={`${pathname}?${next.toString()}`}
+                      href={isMyWorkEntry ? detailHref(work.identifier) : `${pathname}?${next.toString()}`}
                       scroll={false}
                       aria-current={active ? 'page' : undefined}
                       className={`block border-l-2 px-2 py-2 ${active ? 'border-primary bg-muted/40' : 'hover:bg-muted/40 border-transparent'}`}
@@ -1076,6 +1161,7 @@ export function IssueDetailScreen({ issueRef }: { issueRef: string }) {
             <>
               {selectedWork ? (
                 <TeamWorkPanel
+                  handoffHref={`${detailHref(selectedWork.identifier, 'handoffs')}${requestedHandoff ? `&handoff=${encodeURIComponent(requestedHandoff)}` : ''}`}
                   key={selectedWork.id}
                   highlightedHandoffId={requestedHandoff}
                   issue={issue}

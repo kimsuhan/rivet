@@ -12,7 +12,7 @@ import type { TeamWorksControllerListUnassigned } from './teamWorksControllerLis
 
 export type TeamWorksControllerListParams = {
 /**
- * 표시 ID 또는 상위 이슈 제목 검색
+ * 팀 작업 표시 ID, 상위 이슈 표시 ID·제목 또는 프로젝트 이름 검색
  * @maxLength 500
  */
 query?: string;

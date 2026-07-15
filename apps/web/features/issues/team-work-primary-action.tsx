@@ -6,8 +6,6 @@ import type { TeamWorkSummaryResponseDto, WorkflowStateResponseDto } from '@rive
 
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { cn } from '@/lib/utils';
-
 function firstStartedState(states: WorkflowStateResponseDto[]): WorkflowStateResponseDto | null {
   return (
     [...states]
@@ -36,19 +34,6 @@ export function TeamWorkPrimaryAction({
   work: TeamWorkSummaryResponseDto;
 }) {
   const size = compact ? 'sm' : 'default';
-  if (work.stateCategory === 'BACKLOG' && work.workflowState.isDefault && !work.assignee) {
-    return (
-      <Button
-        aria-label={`${work.identifier}: 담당자를 선택해 주세요`}
-        className={cn('justify-start', className)}
-        disabled
-        size={size}
-        variant="outline"
-      >
-        {compact ? '담당자 필요' : '담당자를 선택해 주세요'}
-      </Button>
-    );
-  }
   if (work.stateCategory === 'UNSTARTED') {
     const target = firstStartedState(states);
     return (
@@ -77,20 +62,6 @@ export function TeamWorkPrimaryAction({
       >
         {busy ? <Spinner /> : <Check className="size-4" />}
         완료
-      </Button>
-    );
-  }
-  if (work.stateCategory === 'COMPLETED') {
-    return (
-      <Button
-        aria-label={`${work.identifier}: 완료됨`}
-        className={className}
-        disabled
-        size={size}
-        variant="outline"
-      >
-        <Check className="size-4" />
-        완료됨
       </Button>
     );
   }
