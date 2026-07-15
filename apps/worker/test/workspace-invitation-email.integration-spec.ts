@@ -25,6 +25,7 @@ import { WorkspaceInvitationEmailHandler } from '../src/modules/outbox/handlers/
 import { OutboxService } from '../src/modules/outbox/outbox.service';
 import type { ClaimedOutboxEvent } from '../src/modules/outbox/outbox.types';
 import { OutboxProcessorService } from '../src/modules/outbox/outbox-processor.service';
+import { claimIsolatedOutboxEvent, ISOLATED_OUTBOX_AVAILABLE_AT } from './outbox-test-helpers';
 
 describe('workspace invitation email integration', () => {
   const emailSender = { send: jest.fn() };
@@ -36,7 +37,6 @@ describe('workspace invitation email integration', () => {
   let context: INestApplicationContext;
   let database: DatabaseService;
   let handler: WorkspaceInvitationEmailHandler;
-  let outbox: OutboxService;
   let processor: OutboxProcessorService;
 
   beforeAll(async () => {
@@ -66,7 +66,6 @@ describe('workspace invitation email integration', () => {
     await context.init();
     database = context.get(DatabaseService);
     handler = context.get(WorkspaceInvitationEmailHandler);
-    outbox = context.get(OutboxService);
     processor = context.get(OutboxProcessorService);
   });
 
@@ -213,6 +212,7 @@ describe('workspace invitation email integration', () => {
         actorMembershipId: inviterMembershipId,
         aggregateId: invitationId,
         aggregateType: 'WORKSPACE_INVITATION',
+        availableAt: ISOLATED_OUTBOX_AVAILABLE_AT,
         eventType: WORKSPACE_INVITATION_REQUESTED,
         id: eventId,
         payload,
@@ -224,11 +224,7 @@ describe('workspace invitation email integration', () => {
   }
 
   async function processEvent(eventId: string, workerId: string): Promise<ClaimedOutboxEvent> {
-    const claimed = (await outbox.claimBatch(workerId)).find((event) => event.id === eventId);
-
-    if (!claimed) {
-      throw new Error('테스트 초대 Outbox 이벤트를 claim하지 못했습니다.');
-    }
+    const claimed = await claimIsolatedOutboxEvent(database, eventId, workerId);
 
     await processor.processBatch([claimed], workerId);
     return claimed;
@@ -263,13 +259,11 @@ describe('workspace invitation email integration', () => {
 
   it('permanently rejects an event workspace that does not match the invitation', async () => {
     const fixture = await createFixture();
-    const claimed = (await outbox.claimBatch('invitation-workspace-worker')).find(
-      (event) => event.id === fixture.eventId,
+    const claimed = await claimIsolatedOutboxEvent(
+      database,
+      fixture.eventId,
+      'invitation-workspace-worker',
     );
-
-    if (!claimed) {
-      throw new Error('테스트 초대 Outbox 이벤트를 claim하지 못했습니다.');
-    }
 
     await expect(
       handler.handle({ ...claimed, workspaceId: randomUUID() }, fixture.payload),

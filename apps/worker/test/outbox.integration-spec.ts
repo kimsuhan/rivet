@@ -17,6 +17,7 @@ import { ResourcePurgeHandler } from '../src/modules/outbox/handlers/resource-pu
 import { WorkspaceInvitationEmailHandler } from '../src/modules/outbox/handlers/workspace-invitation-email.handler';
 import { OutboxService } from '../src/modules/outbox/outbox.service';
 import { OutboxProcessorService } from '../src/modules/outbox/outbox-processor.service';
+import { createTransactionalOutbox } from './outbox-test-helpers';
 
 describe('outbox integration', () => {
   let context: INestApplicationContext;
@@ -74,40 +75,47 @@ describe('outbox integration', () => {
     const futureEventId = randomUUID();
     const failedEventId = randomUUID();
 
-    await database.client.outboxEvent.createMany({
-      data: [
-        {
-          aggregateId: randomUUID(),
-          aggregateType: 'ACCOUNT',
-          eventType: 'M0_TEST_DUE',
-          id: dueEventId,
-          payload: { schemaVersion: 1 },
-        },
-        {
-          aggregateId: randomUUID(),
-          aggregateType: 'ACCOUNT',
-          eventType: 'M0_TEST_FUTURE',
-          id: futureEventId,
-          payload: { schemaVersion: 1 },
-        },
-        {
-          aggregateId: randomUUID(),
-          aggregateType: 'ACCOUNT',
-          attemptCount: 7,
-          eventType: 'M0_TEST_FAILED',
-          id: failedEventId,
-          nextAttemptAt: null,
-          payload: { schemaVersion: 1 },
-        },
-      ],
-    });
-    await database.client.$executeRaw`
-      UPDATE "outbox_events"
-      SET "available_at" = NOW() + INTERVAL '1 hour'
-      WHERE "id" = ${futureEventId}::uuid
-    `;
+    const claimed = await database.client.$transaction(async (transaction) => {
+      const transactionalOutbox = createTransactionalOutbox(transaction);
 
-    const claimed = await outbox.claimBatch('worker-test');
+      await transaction.outboxEvent.createMany({
+        data: [
+          {
+            aggregateId: randomUUID(),
+            aggregateType: 'ACCOUNT',
+            eventType: 'M0_TEST_DUE',
+            id: dueEventId,
+            payload: { schemaVersion: 1 },
+          },
+          {
+            aggregateId: randomUUID(),
+            aggregateType: 'ACCOUNT',
+            eventType: 'M0_TEST_FUTURE',
+            id: futureEventId,
+            payload: { schemaVersion: 1 },
+          },
+          {
+            aggregateId: randomUUID(),
+            aggregateType: 'ACCOUNT',
+            attemptCount: 7,
+            eventType: 'M0_TEST_FAILED',
+            id: failedEventId,
+            nextAttemptAt: null,
+            payload: { schemaVersion: 1 },
+          },
+        ],
+      });
+      await transaction.$executeRaw`
+        UPDATE "outbox_events"
+        SET "available_at" = CASE
+          WHEN "id" = ${futureEventId}::uuid THEN NOW() + INTERVAL '1 hour'
+          ELSE NOW() - INTERVAL '1 second'
+        END
+        WHERE "id" IN (${dueEventId}::uuid, ${futureEventId}::uuid, ${failedEventId}::uuid)
+      `;
+
+      return transactionalOutbox.claimBatch('worker-test');
+    });
     const claimedIds = claimed.map((event) => event.id);
 
     expect(claimed).toContainEqual(expect.objectContaining({ attemptCount: 1, id: dueEventId }));
@@ -116,61 +124,82 @@ describe('outbox integration', () => {
   });
 
   it('counts only currently claimable events as pending', async () => {
-    const baseline = await outbox.metrics();
     const dueEventId = randomUUID();
     const futureEventId = randomUUID();
     const lockedEventId = randomUUID();
     const retryWaitEventId = randomUUID();
 
-    await database.client.outboxEvent.createMany({
-      data: [
-        {
-          aggregateId: randomUUID(),
-          aggregateType: 'ACCOUNT',
-          eventType: 'M0_TEST_METRICS_DUE',
-          id: dueEventId,
-          payload: { schemaVersion: 1 },
-        },
-        {
-          aggregateId: randomUUID(),
-          aggregateType: 'ACCOUNT',
-          eventType: 'M0_TEST_METRICS_FUTURE',
-          id: futureEventId,
-          payload: { schemaVersion: 1 },
-        },
-        {
-          aggregateId: randomUUID(),
-          aggregateType: 'ACCOUNT',
-          eventType: 'M0_TEST_METRICS_LOCKED',
-          id: lockedEventId,
-          payload: { schemaVersion: 1 },
-        },
-        {
-          aggregateId: randomUUID(),
-          aggregateType: 'ACCOUNT',
-          eventType: 'M0_TEST_METRICS_RETRY_WAIT',
-          id: retryWaitEventId,
-          payload: { schemaVersion: 1 },
-        },
-      ],
-    });
-    await database.client.$executeRaw`
-      UPDATE "outbox_events"
-      SET "available_at" = NOW() + INTERVAL '1 hour'
-      WHERE "id" = ${futureEventId}::uuid
-    `;
-    await database.client.$executeRaw`
-      UPDATE "outbox_events"
-      SET "locked_at" = NOW(), "locked_by" = 'active-worker'
-      WHERE "id" = ${lockedEventId}::uuid
-    `;
-    await database.client.$executeRaw`
-      UPDATE "outbox_events"
-      SET "next_attempt_at" = NOW() + INTERVAL '1 hour'
-      WHERE "id" = ${retryWaitEventId}::uuid
-    `;
+    const { baseline, metrics } = await database.client.$transaction(
+      async (transaction) => {
+        const transactionalOutbox = createTransactionalOutbox(transaction);
+        const baseline = await transactionalOutbox.metrics();
 
-    const metrics = await outbox.metrics();
+        await transaction.outboxEvent.createMany({
+          data: [
+            {
+              aggregateId: randomUUID(),
+              aggregateType: 'ACCOUNT',
+              eventType: 'M0_TEST_METRICS_DUE',
+              id: dueEventId,
+              payload: { schemaVersion: 1 },
+            },
+            {
+              aggregateId: randomUUID(),
+              aggregateType: 'ACCOUNT',
+              eventType: 'M0_TEST_METRICS_FUTURE',
+              id: futureEventId,
+              payload: { schemaVersion: 1 },
+            },
+            {
+              aggregateId: randomUUID(),
+              aggregateType: 'ACCOUNT',
+              eventType: 'M0_TEST_METRICS_LOCKED',
+              id: lockedEventId,
+              payload: { schemaVersion: 1 },
+            },
+            {
+              aggregateId: randomUUID(),
+              aggregateType: 'ACCOUNT',
+              eventType: 'M0_TEST_METRICS_RETRY_WAIT',
+              id: retryWaitEventId,
+              payload: { schemaVersion: 1 },
+            },
+          ],
+        });
+        await transaction.$executeRaw`
+          UPDATE "outbox_events"
+          SET "available_at" = NOW() - INTERVAL '1 second'
+          WHERE "id" IN (
+            ${dueEventId}::uuid,
+            ${futureEventId}::uuid,
+            ${lockedEventId}::uuid,
+            ${retryWaitEventId}::uuid
+          )
+        `;
+        await transaction.$executeRaw`
+          UPDATE "outbox_events"
+          SET "available_at" = NOW() + INTERVAL '1 hour'
+          WHERE "id" = ${futureEventId}::uuid
+        `;
+        await transaction.$executeRaw`
+          UPDATE "outbox_events"
+          SET "locked_at" = NOW(), "locked_by" = 'active-worker'
+          WHERE "id" = ${lockedEventId}::uuid
+        `;
+        await transaction.$executeRaw`
+          UPDATE "outbox_events"
+          SET "next_attempt_at" = NOW() + INTERVAL '1 hour'
+          WHERE "id" = ${retryWaitEventId}::uuid
+        `;
+
+        const metrics = await transactionalOutbox.metrics();
+        await transaction.outboxEvent.deleteMany({
+          where: { eventType: { startsWith: 'M0_TEST_METRICS_' } },
+        });
+        return { baseline, metrics };
+      },
+      { isolationLevel: 'RepeatableRead' },
+    );
 
     expect(metrics.pendingCount).toBe(baseline.pendingCount + 1);
   });
@@ -179,38 +208,43 @@ describe('outbox integration', () => {
     const expiredEventId = randomUUID();
     const activeEventId = randomUUID();
 
-    await database.client.outboxEvent.createMany({
-      data: [
-        {
-          aggregateId: randomUUID(),
-          aggregateType: 'ACCOUNT',
-          eventType: 'M0_TEST_EXPIRED_LOCK',
-          id: expiredEventId,
-          payload: { schemaVersion: 1 },
-        },
-        {
-          aggregateId: randomUUID(),
-          aggregateType: 'ACCOUNT',
-          eventType: 'M0_TEST_ACTIVE_LOCK',
-          id: activeEventId,
-          payload: { schemaVersion: 1 },
-        },
-      ],
-    });
-    await database.client.$executeRaw`
-      UPDATE "outbox_events"
-      SET "locked_at" = NOW() - INTERVAL '6 minutes',
-          "locked_by" = 'stopped-worker'
-      WHERE "id" = ${expiredEventId}::uuid
-    `;
-    await database.client.$executeRaw`
-      UPDATE "outbox_events"
-      SET "locked_at" = NOW(),
-          "locked_by" = 'active-worker'
-      WHERE "id" = ${activeEventId}::uuid
-    `;
+    const claimed = await database.client.$transaction(async (transaction) => {
+      const transactionalOutbox = createTransactionalOutbox(transaction);
 
-    const claimed = await outbox.claimBatch('recovery-worker');
+      await transaction.outboxEvent.createMany({
+        data: [
+          {
+            aggregateId: randomUUID(),
+            aggregateType: 'ACCOUNT',
+            eventType: 'M0_TEST_EXPIRED_LOCK',
+            id: expiredEventId,
+            payload: { schemaVersion: 1 },
+          },
+          {
+            aggregateId: randomUUID(),
+            aggregateType: 'ACCOUNT',
+            eventType: 'M0_TEST_ACTIVE_LOCK',
+            id: activeEventId,
+            payload: { schemaVersion: 1 },
+          },
+        ],
+      });
+      await transaction.$executeRaw`
+        UPDATE "outbox_events"
+        SET "available_at" = NOW() - INTERVAL '1 second',
+            "locked_at" = CASE
+              WHEN "id" = ${expiredEventId}::uuid THEN NOW() - INTERVAL '6 minutes'
+              ELSE NOW()
+            END,
+            "locked_by" = CASE
+              WHEN "id" = ${expiredEventId}::uuid THEN 'stopped-worker'
+              ELSE 'active-worker'
+            END
+        WHERE "id" IN (${expiredEventId}::uuid, ${activeEventId}::uuid)
+      `;
+
+      return transactionalOutbox.claimBatch('recovery-worker');
+    });
     const claimedIds = claimed.map((event) => event.id);
 
     expect(claimedIds).toContain(expiredEventId);
@@ -228,6 +262,8 @@ describe('outbox integration', () => {
           aggregateType: 'ACCOUNT',
           eventType: 'M0_TEST_DATABASE_CLOCK_COMPLETED',
           id: completedEventId,
+          lockedAt: new Date(),
+          lockedBy: 'clock-worker',
           payload: { schemaVersion: 1 },
         },
         {
@@ -235,6 +271,8 @@ describe('outbox integration', () => {
           aggregateType: 'ACCOUNT',
           eventType: 'M0_TEST_DATABASE_CLOCK_RETRY',
           id: retryEventId,
+          lockedAt: new Date(),
+          lockedBy: 'clock-worker',
           payload: { schemaVersion: 1 },
         },
       ],
@@ -277,6 +315,8 @@ describe('outbox integration', () => {
         aggregateType: 'ACCOUNT',
         eventType: 'M0_TEST_CANCELED_RACE',
         id: eventId,
+        lockedAt: new Date(),
+        lockedBy: 'race-worker',
         payload: { schemaVersion: 1 },
       },
     });
@@ -308,23 +348,35 @@ describe('outbox integration', () => {
   });
 
   it('isolates an unsupported event as a permanent failure', async () => {
-    const event = await database.client.outboxEvent.create({
-      data: {
-        aggregateId: randomUUID(),
-        aggregateType: 'ACCOUNT',
-        eventType: 'M0_TEST_UNSUPPORTED',
-        payload: { schemaVersion: 1 },
-      },
+    const eventId = randomUUID();
+    const claimed = await database.client.$transaction(async (transaction) => {
+      const transactionalOutbox = createTransactionalOutbox(transaction);
+
+      await transaction.outboxEvent.create({
+        data: {
+          aggregateId: randomUUID(),
+          aggregateType: 'ACCOUNT',
+          eventType: 'M0_TEST_UNSUPPORTED',
+          id: eventId,
+          payload: { schemaVersion: 1 },
+        },
+      });
+      await transaction.$executeRaw`
+        UPDATE "outbox_events"
+        SET "available_at" = NOW() - INTERVAL '1 second'
+        WHERE "id" = ${eventId}::uuid
+      `;
+
+      return transactionalOutbox.claimBatch('processor-worker');
     });
-    const claimed = await outbox.claimBatch('processor-worker');
 
     await processor.processBatch(
-      claimed.filter((candidate) => candidate.id === event.id),
+      claimed.filter((candidate) => candidate.id === eventId),
       'processor-worker',
     );
 
     const failed = await database.client.outboxEvent.findUniqueOrThrow({
-      where: { id: event.id },
+      where: { id: eventId },
     });
     expect(failed).toMatchObject({
       attemptCount: 7,

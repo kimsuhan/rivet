@@ -28,6 +28,7 @@ import { WorkspaceInvitationEmailHandler } from '../src/modules/outbox/handlers/
 import { OutboxService } from '../src/modules/outbox/outbox.service';
 import type { ClaimedOutboxEvent } from '../src/modules/outbox/outbox.types';
 import { OutboxProcessorService } from '../src/modules/outbox/outbox-processor.service';
+import { claimIsolatedOutboxEvent, ISOLATED_OUTBOX_AVAILABLE_AT } from './outbox-test-helpers';
 
 describe('account email integration', () => {
   const emailSender = { send: jest.fn() };
@@ -38,7 +39,6 @@ describe('account email integration', () => {
   let accountEmailHandler: AccountEmailHandler;
   let context: INestApplicationContext;
   let database: DatabaseService;
-  let outbox: OutboxService;
   let processor: OutboxProcessorService;
 
   beforeAll(async () => {
@@ -68,7 +68,6 @@ describe('account email integration', () => {
     await context.init();
     accountEmailHandler = context.get(AccountEmailHandler);
     database = context.get(DatabaseService);
-    outbox = context.get(OutboxService);
     processor = context.get(OutboxProcessorService);
   });
 
@@ -160,6 +159,7 @@ describe('account email integration', () => {
       data: {
         aggregateId: userId,
         aggregateType: 'USER',
+        availableAt: ISOLATED_OUTBOX_AVAILABLE_AT,
         eventType,
         id,
         payload,
@@ -169,11 +169,7 @@ describe('account email integration', () => {
   }
 
   async function processEvent(eventId: string, workerId: string): Promise<ClaimedOutboxEvent> {
-    const claimed = (await outbox.claimBatch(workerId)).find((event) => event.id === eventId);
-
-    if (!claimed) {
-      throw new Error('테스트 Outbox 이벤트를 claim하지 못했습니다.');
-    }
+    const claimed = await claimIsolatedOutboxEvent(database, eventId, workerId);
 
     await processor.processBatch([claimed], workerId);
     return claimed;

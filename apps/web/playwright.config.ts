@@ -9,8 +9,8 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error('Playwright E2E requires DATABASE_URL in .env.test.local.');
 }
-const apiPort = process.env.PLAYWRIGHT_API_PORT ?? '4000';
-const webPort = process.env.PLAYWRIGHT_WEB_PORT ?? '3000';
+const apiPort = process.env.PLAYWRIGHT_API_PORT ?? '4300';
+const webPort = process.env.PLAYWRIGHT_WEB_PORT ?? '3300';
 const apiOrigin = `http://127.0.0.1:${apiPort}`;
 const webOrigin = `http://127.0.0.1:${webPort}`;
 

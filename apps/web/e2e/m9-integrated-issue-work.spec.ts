@@ -203,7 +203,11 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     await expect(page.getByText('m9-shared.txt')).toBeVisible();
     await page.getByRole('checkbox', { name: '웹 프론트' }).click();
     await page.getByRole('button', { name: '선택한 작업 시작' }).click();
-    await expect(page.getByRole('button', { name: /: 담당자를 선택해 주세요$/u })).toBeVisible();
+    await expect(
+      page.getByRole('combobox', {
+        name: /^팀 작업 담당자 \([^)]+\): 담당자 없음$/u,
+      }),
+    ).toBeVisible();
     await captureIssueStep(page, testInfo, 'frontend-only-ready');
 
     const editor = page.getByRole('textbox', { name: 'Markdown 본문 편집기' }).first();
@@ -235,7 +239,11 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     if (!issueIdentifier || !backendIdentifier)
       throw new Error('M9 이슈와 백엔드 작업 표시 ID를 찾지 못했습니다.');
 
-    await page.getByLabel(/팀 작업 담당자/u).click();
+    await page
+      .getByRole('combobox', {
+        name: /^팀 작업 담당자 \([^)]+\): 담당자 없음$/u,
+      })
+      .click();
     await page
       .locator('[data-slot="select-content"]')
       .getByRole('option', { name: 'M9 브라우저 사용자', exact: true })
@@ -251,10 +259,18 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     const webIdentifier = new URL(page.url()).searchParams.get('work');
     if (!webIdentifier) throw new Error('M9 웹 팀 작업 표시 ID를 찾지 못했습니다.');
     await expect(page.getByText('모든 팀 작업이 같은 본문을 사용합니다.')).toBeVisible();
-    await expect(page.getByRole('button', { name: /: 담당자를 선택해 주세요$/u })).toBeVisible();
+    await expect(
+      page.getByRole('combobox', {
+        name: /^팀 작업 담당자 \([^)]+\): 담당자 없음$/u,
+      }),
+    ).toBeVisible();
 
     // 백엔드의 API 전달을 기다리지 않고 프론트 작업을 담당자 지정과 함께 즉시 시작할 수 있다.
-    await page.getByLabel(/팀 작업 담당자/u).click();
+    await page
+      .getByRole('combobox', {
+        name: /^팀 작업 담당자 \([^)]+\): 담당자 없음$/u,
+      })
+      .click();
     await page
       .locator('[data-slot="select-content"]')
       .getByRole('option', { name: 'M9 브라우저 사용자', exact: true })
@@ -283,17 +299,19 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
 
     await page.goto(`/my-issues`);
     await expect(page.getByRole('heading', { name: '내 작업' })).toBeVisible();
-    await page.getByText(backendIdentifier, { exact: true }).click();
-    await expect(page).toHaveURL(
-      new RegExp(`/my-issues/${backendIdentifier}\\?tab=work$`, 'u'),
-    );
+    await page
+      .getByRole('link', { name: `${backendIdentifier} 작업 상세 열기`, exact: true })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/my-issues/${backendIdentifier}\\?tab=work$`, 'u'));
     await expect(page.getByRole('link', { name: '내 작업', exact: true })).toBeVisible();
     await page.reload();
     await expect(page).toHaveURL(new RegExp(`/my-issues/${backendIdentifier}\\?tab=work$`, 'u'));
     await page.getByRole('link', { name: '전달', exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`/my-issues/${backendIdentifier}\\?tab=handoffs$`, 'u'));
+    await expect(page).toHaveURL(
+      new RegExp(`/my-issues/${backendIdentifier}\\?tab=handoffs$`, 'u'),
+    );
     await page.goto(`/teams/${encodeURIComponent(apiTeam.key)}/issues`);
-    await page.getByText(backendIdentifier, { exact: true }).click();
+    await page.getByRole('link', { name: backendIdentifier, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`work=${backendIdentifier}$`, 'u'));
 
     const backendStates = await apiRequest<WorkflowStateList>(
