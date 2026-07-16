@@ -83,6 +83,13 @@ export {
   validateTeamWorkCreatedOutboxPayload,
 } from './team-work';
 export {
+  validateWebPushTestRequestedOutboxPayload,
+  WEB_PUSH_TEST_REQUESTED,
+  WEB_PUSH_TEST_REQUESTED_SCHEMA_VERSION,
+  type WebPushTestRequestedOutboxPayload,
+  type WebPushTestRequestedPayloadValidationResult,
+} from './web-push';
+export {
   validateWorkspaceInvitationEmailOutboxPayload,
   WORKSPACE_INVITATION_EMAIL_SCHEMA_VERSION,
   WORKSPACE_INVITATION_REQUESTED,

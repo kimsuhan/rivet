@@ -29,4 +29,9 @@ export const workerConfig = registerAs('worker', () => ({
   rateLimitHmacKey: process.env.RATE_LIMIT_HMAC_KEY as string,
   releaseId: process.env.RELEASE_ID as string,
   webOrigin: process.env.WEB_ORIGIN as string,
+  webPush: {
+    privateKey: process.env.WEB_PUSH_VAPID_PRIVATE_KEY?.trim() || null,
+    publicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY?.trim() || null,
+    subject: process.env.WEB_PUSH_VAPID_SUBJECT?.trim() || null,
+  },
 }));

@@ -13,7 +13,22 @@ export function createWorkerLoggerOptions(config: ConfigType<typeof workerConfig
       level: config.environment === 'production' ? 'info' : 'debug',
       redact: {
         censor: '[REDACTED]',
-        paths: ['email', 'password', 'payload', 'token'],
+        paths: [
+          'auth',
+          '*.auth',
+          'email',
+          'endpoint',
+          '*.endpoint',
+          'p256dh',
+          '*.p256dh',
+          'password',
+          'payload',
+          'privateKey',
+          '*.privateKey',
+          'publicKey',
+          '*.publicKey',
+          'token',
+        ],
       },
     },
   };

@@ -1,5 +1,13 @@
 import { validateWorkerEnvironment } from './worker-environment';
 
+const webPushEnvironment = {
+  WEB_PUSH_VAPID_PRIVATE_KEY: Buffer.alloc(32, 1).toString('base64url'),
+  WEB_PUSH_VAPID_PUBLIC_KEY: Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 2)]).toString(
+    'base64url',
+  ),
+  WEB_PUSH_VAPID_SUBJECT: 'mailto:push@example.test',
+};
+
 const validValues = {
   DATABASE_URL: 'postgresql://user:password@localhost:5432/rivet?schema=public',
   FILE_STORAGE_ROOT: '/tmp/rivet-files',
@@ -117,6 +125,7 @@ describe('validateWorkerEnvironment', () => {
         RESEND_ALLOWED_RECIPIENTS: undefined,
         SLACK_ALERT_WEBHOOK_URL: 'https://hooks.slack.com/services/team/channel/secret',
         WEB_ORIGIN: 'https://rivet.example.com',
+        ...webPushEnvironment,
       }).RESEND_ALLOWED_RECIPIENTS,
     ).toBeUndefined();
   });
@@ -133,6 +142,7 @@ describe('validateWorkerEnvironment', () => {
       RESEND_ALLOWED_RECIPIENTS: undefined,
       SLACK_ALERT_WEBHOOK_URL: 'https://hooks.slack.com/services/team/channel/secret',
       WEB_ORIGIN: 'https://rivet.example.com',
+      ...webPushEnvironment,
     };
 
     expect(() => validateWorkerEnvironment(production)).not.toThrow();
@@ -145,5 +155,26 @@ describe('validateWorkerEnvironment', () => {
         SLACK_ALERT_WEBHOOK_URL: 'http://hooks.slack.com/services/team/channel/secret',
       }),
     ).toThrow('SLACK_ALERT_WEBHOOK_URL');
+  });
+
+  it('requires the complete VAPID environment group in production', () => {
+    expect(() =>
+      validateWorkerEnvironment({
+        ...validValues,
+        NODE_ENV: 'production',
+        POSTHOG_API_KEY: 'phc_12345678',
+        RESEND_ALLOWED_RECIPIENTS: undefined,
+        SLACK_ALERT_WEBHOOK_URL: 'https://hooks.slack.com/services/team/channel/secret',
+        WEB_ORIGIN: 'https://rivet.example.com',
+        WEB_PUSH_VAPID_PUBLIC_KEY: webPushEnvironment.WEB_PUSH_VAPID_PUBLIC_KEY,
+      }),
+    ).toThrow('WEB_PUSH_VAPID_PRIVATE_KEY');
+    expect(() =>
+      validateWorkerEnvironment({
+        ...validValues,
+        ...webPushEnvironment,
+        WEB_PUSH_VAPID_PUBLIC_KEY: Buffer.alloc(65, 2).toString('base64url'),
+      }),
+    ).toThrow('WEB_PUSH_VAPID_PUBLIC_KEY');
   });
 });

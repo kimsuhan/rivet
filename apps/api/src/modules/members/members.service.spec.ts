@@ -33,6 +33,7 @@ describe('MembersService', () => {
     $executeRaw: jest.fn(),
     $queryRaw: jest.fn(),
     session: { updateMany: jest.fn() },
+    webPushSubscription: { updateMany: jest.fn() },
     workspaceMembership: { findFirst: jest.fn(), updateMany: jest.fn() },
   };
   const database = {
@@ -63,6 +64,7 @@ describe('MembersService', () => {
     });
     transaction.workspaceMembership.updateMany.mockResolvedValue({ count: 1 });
     transaction.session.updateMany.mockResolvedValue({ count: 2 });
+    transaction.webPushSubscription.updateMany.mockResolvedValue({ count: 2 });
     database.client.$transaction.mockImplementation(
       async (operation: (client: typeof transaction) => Promise<unknown>) => operation(transaction),
     );
@@ -198,6 +200,16 @@ describe('MembersService', () => {
       data: { revokedAt: expect.any(Date) },
       where: { revokedAt: null, userId: 'member-user-id' },
     });
+    expect(transaction.webPushSubscription.updateMany).toHaveBeenCalledWith({
+      data: {
+        auth: null,
+        disabledAt: expect.any(Date),
+        endpoint: null,
+        p256dh: null,
+        status: 'INACTIVE',
+      },
+      where: { session: { userId: 'member-user-id' }, status: 'ACTIVE' },
+    });
     expect(result).toMatchObject({
       email: 'member@example.com',
       id: membershipId,
@@ -226,6 +238,7 @@ describe('MembersService', () => {
     });
     expect(transaction.workspaceMembership.updateMany).not.toHaveBeenCalled();
     expect(transaction.session.updateMany).not.toHaveBeenCalled();
+    expect(transaction.webPushSubscription.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects cross-workspace IDs and administrator self-deactivation before writes', async () => {

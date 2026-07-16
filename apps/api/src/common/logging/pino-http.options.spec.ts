@@ -27,6 +27,7 @@ const config: ConfigType<typeof apiConfig> = {
     rateLimitHmacKey: 'rate-key-that-is-at-least-32-bytes-long',
   },
   webOrigin: 'http://localhost:3000',
+  webPush: { vapidPublicKey: null },
 };
 
 const session = {

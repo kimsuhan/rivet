@@ -27,30 +27,31 @@ model Workspace {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  createdByUser     User                  @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  memberships       WorkspaceMembership[]
-  invitations       WorkspaceInvitation[]
-  teams             Team[]
-  labels            Label[]
-  outboxEvents      OutboxEvent[]
-  projects          Project[]
-  projectRoles      ProjectRoleTeam[]
-  issues            Issue[]
-  teamWorks         TeamWork[]
-  issueLabels       IssueLabel[]
-  subscriptions     IssueSubscription[]
-  apiHandoffs       ApiHandoff[]
-  apiHandoffTargets ApiHandoffTarget[]
-  activityEvents    ActivityEvent[]
-  notifications     Notification[]
-  comments          Comment[]
-  mentions          Mention[]
-  files             File[]
-  fileAttachments   IssueFileAttachment[]
-  exportAudits      ExportAudit[]
-  importRuns        ImportRun[]
-  importSourceRows  ImportSourceRow[]
-  savedViews        SavedView[]
+  createdByUser        User                  @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  memberships          WorkspaceMembership[]
+  invitations          WorkspaceInvitation[]
+  teams                Team[]
+  labels               Label[]
+  outboxEvents         OutboxEvent[]
+  projects             Project[]
+  projectRoles         ProjectRoleTeam[]
+  issues               Issue[]
+  teamWorks            TeamWork[]
+  issueLabels          IssueLabel[]
+  subscriptions        IssueSubscription[]
+  apiHandoffs          ApiHandoff[]
+  apiHandoffTargets    ApiHandoffTarget[]
+  activityEvents       ActivityEvent[]
+  notifications        Notification[]
+  comments             Comment[]
+  mentions             Mention[]
+  files                File[]
+  fileAttachments      IssueFileAttachment[]
+  exportAudits         ExportAudit[]
+  importRuns           ImportRun[]
+  importSourceRows     ImportSourceRow[]
+  savedViews           SavedView[]
+  webPushSubscriptions WebPushSubscription[]
 
   @@map("workspaces")
 }
@@ -89,6 +90,7 @@ model WorkspaceMembership {
   requestedExports       ExportAudit[]         @relation("ExportRequesterMembership")
   requestedImportRuns    ImportRun[]           @relation("ImportRequesterMembership")
   savedViews             SavedView[]
+  webPushSubscriptions   WebPushSubscription[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, status])
@@ -118,7 +120,7 @@ model SavedView {
 
   @@unique([workspaceId, id])
   @@unique([membershipId, resourceType, normalizedName])
-  @@index([workspaceId, membershipId, resourceType, updatedAt, id])
+  @@index([workspaceId, membershipId, resourceType, updatedAt, id], map: "saved_views_workspace_id_membership_id_resource_type_updated_at")
   @@map("saved_views")
 }
 

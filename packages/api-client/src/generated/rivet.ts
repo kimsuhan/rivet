@@ -91,6 +91,7 @@ import type {
   ProjectListResponseDto,
   ProjectResponseDto,
   ProjectsControllerListParams,
+  RegisterWebPushSubscriptionDto,
   RemoveTeamWorkDto,
   ReorderWorkflowStatesDto,
   ResetPasswordDto,
@@ -133,6 +134,10 @@ import type {
   UpdateWorkflowStateDto,
   VerifiedEmailDto,
   VersionDto,
+  WebPushConfigResponseDto,
+  WebPushSubscriptionListResponseDto,
+  WebPushSubscriptionResponseDto,
+  WebPushTestAcceptedResponseDto,
   WorkflowStateListResponseDto,
   WorkflowStateResponseDto,
   WorkspaceResponseDto
@@ -5324,6 +5329,421 @@ export const useMembersControllerDeactivate = <TError = ErrorType<ApiErrorRespon
         TContext
       > => {
       return useMutation(getMembersControllerDeactivateMutationOptions(options), queryClient);
+    }
+
+export const getNotificationsControllerPushConfigUrl = () => {
+
+
+
+
+  return `/api/v1/notifications/push/config`
+}
+
+/**
+ * @summary Web Push 브라우저 설정 조회
+ */
+export const notificationsControllerPushConfig = async ( options?: RequestInit): Promise<WebPushConfigResponseDto> => {
+
+  return rivetFetch<WebPushConfigResponseDto>(getNotificationsControllerPushConfigUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getNotificationsControllerPushConfigQueryKey = () => {
+    return [
+    `/api/v1/notifications/push/config`
+    ] as const;
+    }
+
+
+export const getNotificationsControllerPushConfigQueryOptions = <TData = Awaited<ReturnType<typeof notificationsControllerPushConfig>>, TError = ErrorType<ApiErrorResponseDto>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushConfig>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getNotificationsControllerPushConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof notificationsControllerPushConfig>>> = ({ signal }) => notificationsControllerPushConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushConfig>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type NotificationsControllerPushConfigQueryResult = NonNullable<Awaited<ReturnType<typeof notificationsControllerPushConfig>>>
+export type NotificationsControllerPushConfigQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useNotificationsControllerPushConfig<TData = Awaited<ReturnType<typeof notificationsControllerPushConfig>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushConfig>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof notificationsControllerPushConfig>>,
+          TError,
+          Awaited<ReturnType<typeof notificationsControllerPushConfig>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useNotificationsControllerPushConfig<TData = Awaited<ReturnType<typeof notificationsControllerPushConfig>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushConfig>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof notificationsControllerPushConfig>>,
+          TError,
+          Awaited<ReturnType<typeof notificationsControllerPushConfig>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useNotificationsControllerPushConfig<TData = Awaited<ReturnType<typeof notificationsControllerPushConfig>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushConfig>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Web Push 브라우저 설정 조회
+ */
+
+export function useNotificationsControllerPushConfig<TData = Awaited<ReturnType<typeof notificationsControllerPushConfig>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushConfig>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getNotificationsControllerPushConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getNotificationsControllerPushSubscriptionsUrl = () => {
+
+
+
+
+  return `/api/v1/notifications/push/subscriptions`
+}
+
+/**
+ * @summary 현재 사용자의 브라우저 Push 구독 목록
+ */
+export const notificationsControllerPushSubscriptions = async ( options?: RequestInit): Promise<WebPushSubscriptionListResponseDto> => {
+
+  return rivetFetch<WebPushSubscriptionListResponseDto>(getNotificationsControllerPushSubscriptionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getNotificationsControllerPushSubscriptionsQueryKey = () => {
+    return [
+    `/api/v1/notifications/push/subscriptions`
+    ] as const;
+    }
+
+
+export const getNotificationsControllerPushSubscriptionsQueryOptions = <TData = Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>, TError = ErrorType<ApiErrorResponseDto>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getNotificationsControllerPushSubscriptionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>> = ({ signal }) => notificationsControllerPushSubscriptions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type NotificationsControllerPushSubscriptionsQueryResult = NonNullable<Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>>
+export type NotificationsControllerPushSubscriptionsQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useNotificationsControllerPushSubscriptions<TData = Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>,
+          TError,
+          Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useNotificationsControllerPushSubscriptions<TData = Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>,
+          TError,
+          Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useNotificationsControllerPushSubscriptions<TData = Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 현재 사용자의 브라우저 Push 구독 목록
+ */
+
+export function useNotificationsControllerPushSubscriptions<TData = Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof notificationsControllerPushSubscriptions>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getNotificationsControllerPushSubscriptionsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getNotificationsControllerRegisterPushSubscriptionUrl = () => {
+
+
+
+
+  return `/api/v1/notifications/push/subscriptions`
+}
+
+/**
+ * @summary 현재 브라우저 Push 구독 등록 또는 갱신
+ */
+export const notificationsControllerRegisterPushSubscription = async (registerWebPushSubscriptionDto: RegisterWebPushSubscriptionDto, options?: RequestInit): Promise<WebPushSubscriptionResponseDto> => {
+
+  return rivetFetch<WebPushSubscriptionResponseDto>(getNotificationsControllerRegisterPushSubscriptionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(registerWebPushSubscriptionDto)
+  }
+);}
+
+
+
+
+
+export const getNotificationsControllerRegisterPushSubscriptionMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof notificationsControllerRegisterPushSubscription>>, TError,{data: BodyType<RegisterWebPushSubscriptionDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof notificationsControllerRegisterPushSubscription>>, TError,{data: BodyType<RegisterWebPushSubscriptionDto>}, TContext> => {
+
+const mutationKey = ['notificationsControllerRegisterPushSubscription'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof notificationsControllerRegisterPushSubscription>>, {data: BodyType<RegisterWebPushSubscriptionDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  notificationsControllerRegisterPushSubscription(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type NotificationsControllerRegisterPushSubscriptionMutationResult = NonNullable<Awaited<ReturnType<typeof notificationsControllerRegisterPushSubscription>>>
+    export type NotificationsControllerRegisterPushSubscriptionMutationBody = BodyType<RegisterWebPushSubscriptionDto>
+    export type NotificationsControllerRegisterPushSubscriptionMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 현재 브라우저 Push 구독 등록 또는 갱신
+ */
+export const useNotificationsControllerRegisterPushSubscription = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof notificationsControllerRegisterPushSubscription>>, TError,{data: BodyType<RegisterWebPushSubscriptionDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof notificationsControllerRegisterPushSubscription>>,
+        TError,
+        {data: BodyType<RegisterWebPushSubscriptionDto>},
+        TContext
+      > => {
+      return useMutation(getNotificationsControllerRegisterPushSubscriptionMutationOptions(options), queryClient);
+    }
+
+export const getNotificationsControllerDeactivatePushSubscriptionUrl = (subscriptionId: string,) => {
+
+
+
+
+  return `/api/v1/notifications/push/subscriptions/${subscriptionId}`
+}
+
+/**
+ * @summary 브라우저 Push 구독 해제
+ */
+export const notificationsControllerDeactivatePushSubscription = async (subscriptionId: string, options?: RequestInit): Promise<void> => {
+
+  return rivetFetch<void>(getNotificationsControllerDeactivatePushSubscriptionUrl(subscriptionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getNotificationsControllerDeactivatePushSubscriptionMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof notificationsControllerDeactivatePushSubscription>>, TError,{subscriptionId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof notificationsControllerDeactivatePushSubscription>>, TError,{subscriptionId: string}, TContext> => {
+
+const mutationKey = ['notificationsControllerDeactivatePushSubscription'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof notificationsControllerDeactivatePushSubscription>>, {subscriptionId: string}> = (props) => {
+          const {subscriptionId} = props ?? {};
+
+          return  notificationsControllerDeactivatePushSubscription(subscriptionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type NotificationsControllerDeactivatePushSubscriptionMutationResult = NonNullable<Awaited<ReturnType<typeof notificationsControllerDeactivatePushSubscription>>>
+
+    export type NotificationsControllerDeactivatePushSubscriptionMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 브라우저 Push 구독 해제
+ */
+export const useNotificationsControllerDeactivatePushSubscription = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof notificationsControllerDeactivatePushSubscription>>, TError,{subscriptionId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof notificationsControllerDeactivatePushSubscription>>,
+        TError,
+        {subscriptionId: string},
+        TContext
+      > => {
+      return useMutation(getNotificationsControllerDeactivatePushSubscriptionMutationOptions(options), queryClient);
+    }
+
+export const getNotificationsControllerRequestPushTestUrl = (subscriptionId: string,) => {
+
+
+
+
+  return `/api/v1/notifications/push/subscriptions/${subscriptionId}/test`
+}
+
+/**
+ * @summary 브라우저 Push 테스트 발송 요청
+ */
+export const notificationsControllerRequestPushTest = async (subscriptionId: string, options?: RequestInit): Promise<WebPushTestAcceptedResponseDto> => {
+
+  return rivetFetch<WebPushTestAcceptedResponseDto>(getNotificationsControllerRequestPushTestUrl(subscriptionId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getNotificationsControllerRequestPushTestMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof notificationsControllerRequestPushTest>>, TError,{subscriptionId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof notificationsControllerRequestPushTest>>, TError,{subscriptionId: string}, TContext> => {
+
+const mutationKey = ['notificationsControllerRequestPushTest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof notificationsControllerRequestPushTest>>, {subscriptionId: string}> = (props) => {
+          const {subscriptionId} = props ?? {};
+
+          return  notificationsControllerRequestPushTest(subscriptionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type NotificationsControllerRequestPushTestMutationResult = NonNullable<Awaited<ReturnType<typeof notificationsControllerRequestPushTest>>>
+
+    export type NotificationsControllerRequestPushTestMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 브라우저 Push 테스트 발송 요청
+ */
+export const useNotificationsControllerRequestPushTest = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof notificationsControllerRequestPushTest>>, TError,{subscriptionId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof notificationsControllerRequestPushTest>>,
+        TError,
+        {subscriptionId: string},
+        TContext
+      > => {
+      return useMutation(getNotificationsControllerRequestPushTestMutationOptions(options), queryClient);
     }
 
 export const getNotificationsControllerListUrl = (params?: NotificationsControllerListParams,) => {

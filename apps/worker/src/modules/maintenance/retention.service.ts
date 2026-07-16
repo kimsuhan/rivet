@@ -9,6 +9,7 @@ const BATCH_SIZE = 100;
 type DeletedRow = { id: string };
 
 export type RetentionCleanupResult = {
+  deactivatedPushSubscriptions: number;
   deletedEmailDeliveries: number;
   deletedExportAudits: number;
   deletedOutboxEvents: number;
@@ -30,6 +31,7 @@ export class RetentionService {
 
   async cleanup(jobId: string): Promise<RetentionCleanupResult> {
     const result: RetentionCleanupResult = {
+      deactivatedPushSubscriptions: 0,
       deletedEmailDeliveries: 0,
       deletedExportAudits: 0,
       deletedOutboxEvents: 0,
@@ -52,6 +54,11 @@ export class RetentionService {
         counter: 'deletedTokens',
         deleteBatch: () => this.deleteTokenBatch(),
         name: 'one_time_token',
+      },
+      {
+        counter: 'deactivatedPushSubscriptions',
+        deleteBatch: () => this.deactivateExpiredSessionSubscriptionBatch(),
+        name: 'web_push_subscription',
       },
       {
         counter: 'deletedSessions',
@@ -148,21 +155,63 @@ export class RetentionService {
     `;
   }
 
+  private deactivateExpiredSessionSubscriptionBatch(): Promise<DeletedRow[]> {
+    return this.database.client.$queryRaw<DeletedRow[]>`
+      WITH candidates AS (
+        SELECT subscription."id"
+        FROM "web_push_subscriptions" AS subscription
+        INNER JOIN "sessions" AS session
+          ON session."id" = subscription."session_id"
+        WHERE subscription."status" = 'ACTIVE'
+          AND (
+            session."revoked_at" IS NOT NULL
+            OR session."idle_expires_at" <= NOW()
+            OR session."absolute_expires_at" <= NOW()
+          )
+        ORDER BY LEAST(
+          session."idle_expires_at",
+          session."absolute_expires_at",
+          COALESCE(session."revoked_at", 'infinity'::timestamptz)
+        ), subscription."id"
+        LIMIT ${BATCH_SIZE}
+        FOR UPDATE OF subscription SKIP LOCKED
+      )
+      UPDATE "web_push_subscriptions" AS target
+      SET "auth" = NULL,
+          "disabled_at" = NOW(),
+          "endpoint" = NULL,
+          "last_error_code" = 'WEB_PUSH_SESSION_INACTIVE',
+          "last_failed_at" = NOW(),
+          "p256dh" = NULL,
+          "status" = 'EXPIRED',
+          "updated_at" = NOW()
+      FROM candidates
+      WHERE target."id" = candidates."id"
+      RETURNING target."id"
+    `;
+  }
+
   private deleteSessionBatch(): Promise<DeletedRow[]> {
     return this.database.client.$queryRaw<DeletedRow[]>`
       WITH candidates AS (
-        SELECT "id"
-        FROM "sessions"
+        SELECT session."id"
+        FROM "sessions" AS session
         WHERE LEAST(
-          "idle_expires_at",
-          "absolute_expires_at",
-          COALESCE("revoked_at", 'infinity'::timestamptz)
+          session."idle_expires_at",
+          session."absolute_expires_at",
+          COALESCE(session."revoked_at", 'infinity'::timestamptz)
         ) < NOW() - INTERVAL '30 days'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "web_push_subscriptions" AS subscription
+            WHERE subscription."session_id" = session."id"
+              AND subscription."status" = 'ACTIVE'
+          )
         ORDER BY LEAST(
-          "idle_expires_at",
-          "absolute_expires_at",
-          COALESCE("revoked_at", 'infinity'::timestamptz)
-        ), "id"
+          session."idle_expires_at",
+          session."absolute_expires_at",
+          COALESCE(session."revoked_at", 'infinity'::timestamptz)
+        ), session."id"
         LIMIT ${BATCH_SIZE}
         FOR UPDATE SKIP LOCKED
       )

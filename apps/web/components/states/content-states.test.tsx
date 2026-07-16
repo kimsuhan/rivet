@@ -36,6 +36,22 @@ describe('공통 콘텐츠 상태', () => {
     ).toBeVisible();
   });
 
+  it('요청한 화면에서는 빈 상태 내용을 가운데로 정렬한다', () => {
+    const { container } = render(
+      <ContentEmpty
+        align="center"
+        icon={Inbox}
+        title="읽지 않은 알림이 없습니다"
+        description="확인한 알림은 모든 알림 탭에서 다시 볼 수 있습니다."
+      />,
+    );
+
+    expect(container.querySelector('[data-slot="empty"]')).toHaveClass(
+      'items-center',
+      'text-center',
+    );
+  });
+
   it('로딩 상태를 보조 기술에 한 번만 알린다', () => {
     render(<ContentLoading label="내용을 불러오는 중입니다." />);
 

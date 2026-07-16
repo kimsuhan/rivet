@@ -16,6 +16,7 @@ import { RetentionService } from './retention.service';
 jest.mock('node:timers/promises', () => ({ setTimeout: jest.fn() }));
 
 const emptyResult: FileCleanupResult = {
+  deactivatedPushSubscriptions: 0,
   deletedEmailDeliveries: 0,
   deletedExportAudits: 0,
   deletedBinaries: 0,
@@ -57,6 +58,7 @@ describe('FileCleanupService', () => {
     );
     retention = {
       cleanup: jest.fn().mockResolvedValue({
+        deactivatedPushSubscriptions: 0,
         deletedEmailDeliveries: 0,
         deletedExportAudits: 0,
         deletedOutboxEvents: 0,

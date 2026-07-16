@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isExcludedFromMyWork,
+  issueNotificationHref,
   issueWorkHref,
   matchesRequestedTeamWork,
   myWorkHref,
@@ -11,6 +12,32 @@ describe('통합 이슈 상세 라우팅', () => {
   it('이슈와 팀 작업 식별자를 정본 work query 주소로 인코딩한다', () => {
     expect(issueWorkHref('F 10', 'WEB/2')).toBe('/issues/F%2010?tab=work&work=WEB%2F2');
     expect(issueWorkHref('F-10')).toBe('/issues/F-10?tab=work');
+  });
+
+  it.each([
+    {
+      anchors: { commentId: null, handoffId: null, teamWorkIdentifier: 'WEB/2' },
+      expected: '/issues/F%2010?tab=work&work=WEB%2F2',
+    },
+    {
+      anchors: {
+        commentId: '5cb38c29-d14f-4451-bd11-af837a6ac598',
+        handoffId: null,
+        teamWorkIdentifier: 'WEB/2',
+      },
+      expected: '/issues/F%2010?tab=work&work=WEB%2F2#comment-5cb38c29-d14f-4451-bd11-af837a6ac598',
+    },
+    {
+      anchors: {
+        commentId: null,
+        handoffId: '5cb38c29-d14f-4451-bd11-af837a6ac598',
+        teamWorkIdentifier: 'WEB/2',
+      },
+      expected:
+        '/issues/F%2010?tab=work&work=WEB%2F2&handoff=5cb38c29-d14f-4451-bd11-af837a6ac598#handoff-5cb38c29-d14f-4451-bd11-af837a6ac598',
+    },
+  ])('알림 앵커를 정본 work 주소에 유지한다', ({ anchors, expected }) => {
+    expect(issueNotificationHref('F 10', anchors)).toBe(expected);
   });
 
   it('팀 작업 딥 링크는 대소문자와 무관하게 선택한다', () => {

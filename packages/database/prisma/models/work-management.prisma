@@ -44,6 +44,27 @@ enum NotificationType {
   API_HANDOFF_FOLLOW_UP_CREATED
 }
 
+enum WebPushBrowser {
+  CHROME
+  EDGE
+  FIREFOX
+  SAFARI
+  OTHER
+}
+
+enum WebPushSubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum WebPushDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
 model Project {
   id                    String        @id @default(uuid()) @db.Uuid
   workspaceId           String        @map("workspace_id") @db.Uuid
@@ -294,6 +315,7 @@ model Notification {
   teamWork            TeamWork?            @relation(fields: [workspaceId, teamWorkId], references: [workspaceId, id], onDelete: Cascade)
   comment             Comment?             @relation(fields: [workspaceId, issueId, commentId], references: [workspaceId, issueId, id], onDelete: Cascade, map: "notifications_workspace_issue_comment_fkey")
   handoff             ApiHandoff?          @relation(fields: [workspaceId, handoffId], references: [workspaceId, id], onDelete: Cascade)
+  webPushDeliveries   WebPushDelivery[]
 
   @@unique([workspaceId, id])
   @@unique([eventId, recipientMembershipId])
@@ -301,4 +323,58 @@ model Notification {
   @@index([workspaceId, issueId, createdAt, id])
   @@index([workspaceId, teamWorkId, createdAt, id])
   @@map("notifications")
+}
+
+model WebPushSubscription {
+  id              String                    @id @default(uuid()) @db.Uuid
+  workspaceId     String                    @map("workspace_id") @db.Uuid
+  membershipId    String                    @map("membership_id") @db.Uuid
+  sessionId       String?                   @map("session_id") @db.Uuid
+  browser         WebPushBrowser
+  endpointHash    String                    @map("endpoint_hash") @db.Char(64)
+  endpoint        String?                   @db.Text
+  p256dh          String?                   @db.Text
+  auth            String?                   @db.Text
+  expirationTime  DateTime?                 @map("expiration_time") @db.Timestamptz(3)
+  status          WebPushSubscriptionStatus @default(ACTIVE)
+  lastSucceededAt DateTime?                 @map("last_succeeded_at") @db.Timestamptz(3)
+  lastFailedAt    DateTime?                 @map("last_failed_at") @db.Timestamptz(3)
+  lastErrorCode   String?                   @map("last_error_code") @db.VarChar(100)
+  disabledAt      DateTime?                 @map("disabled_at") @db.Timestamptz(3)
+  createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  membership WorkspaceMembership @relation(fields: [workspaceId, membershipId], references: [workspaceId, id], onDelete: Restrict)
+  session    Session?            @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  deliveries WebPushDelivery[]
+
+  @@unique([workspaceId, id])
+  @@unique([membershipId, endpointHash])
+  @@index([workspaceId, membershipId, status, createdAt, id], map: "web_push_subscriptions_workspace_id_membership_id_status_create")
+  @@index([sessionId, status])
+  @@map("web_push_subscriptions")
+}
+
+model WebPushDelivery {
+  id             String                @id @default(uuid()) @db.Uuid
+  notificationId String?               @map("notification_id") @db.Uuid
+  outboxEventId  String?               @map("outbox_event_id") @db.Uuid
+  subscriptionId String                @map("subscription_id") @db.Uuid
+  status         WebPushDeliveryStatus @default(PENDING)
+  attemptCount   Int                   @default(0) @map("attempt_count")
+  sentAt         DateTime?             @map("sent_at") @db.Timestamptz(3)
+  failedAt       DateTime?             @map("failed_at") @db.Timestamptz(3)
+  lastErrorCode  String?               @map("last_error_code") @db.VarChar(100)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  notification Notification?       @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  outboxEvent  OutboxEvent?        @relation(fields: [outboxEventId], references: [id], onDelete: Cascade)
+  subscription WebPushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+
+  @@unique([notificationId, subscriptionId])
+  @@unique([outboxEventId, subscriptionId])
+  @@index([subscriptionId, status, createdAt, id])
+  @@map("web_push_deliveries")
 }

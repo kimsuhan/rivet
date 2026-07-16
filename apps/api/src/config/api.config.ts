@@ -21,4 +21,7 @@ export const apiConfig = registerAs('api', () => ({
     rateLimitHmacKey: process.env.RATE_LIMIT_HMAC_KEY as string,
   },
   webOrigin: process.env.WEB_ORIGIN as string,
+  webPush: {
+    vapidPublicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY?.trim() || null,
+  },
 }));
