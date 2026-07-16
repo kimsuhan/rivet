@@ -10,7 +10,7 @@ import { SessionAuthGuard } from './session-auth.guard';
 
 @Module({
   controllers: [AuthController],
-  exports: [AuthRateLimitService],
+  exports: [AuthRateLimitService, AuthSessionService],
   providers: [
     AuthService,
     AuthRateLimitService,

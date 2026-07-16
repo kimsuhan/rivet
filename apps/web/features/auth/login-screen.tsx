@@ -75,7 +75,9 @@ export function LoginScreen({
         setCsrfToken(session.csrfToken);
         queryClient.setQueryData(getAuthControllerGetSessionQueryKey(), session);
         router.replace(
-          session.onboardingStep === 'CREATE_WORKSPACE'
+          session.onboardingStep === 'ACCEPT_INVITATION'
+            ? '/invite'
+            : session.onboardingStep === 'CREATE_WORKSPACE'
             ? '/onboarding/workspace'
             : session.onboardingStep === 'CREATE_TEAM'
               ? '/onboarding/team'

@@ -28,6 +28,7 @@ import {
   createCsrfToken,
   createOneTimeToken,
   getOneTimeTokenRateLimitKey,
+  hashOpaqueToken,
   verifyOneTimeToken,
 } from './auth-token';
 import type {
@@ -81,7 +82,11 @@ export class AuthService {
     @Inject(apiConfig.KEY) private readonly config: ConfigType<typeof apiConfig>,
   ) {}
 
-  async signUp(dto: SignUpDto, clientIp: string): Promise<AcceptedAuthRequestDto> {
+  async signUp(
+    dto: SignUpDto,
+    clientIp: string,
+    invitationContinuationToken: string | null = null,
+  ): Promise<AcceptedAuthRequestDto> {
     const { displayName, email, normalizedEmail, password } = this.normalizeSignUp(dto);
 
     await Promise.all([
@@ -92,47 +97,73 @@ export class AuthService {
     // 기존 계정 경로도 신규 계정과 같은 고비용 연산을 거쳐 존재 여부의 시간 차이를 줄인다.
     const passwordHash = await hashPassword(password);
 
-    try {
-      await this.database.client.$transaction(async (transaction) => {
-        const [existingUser] = await transaction.$queryRaw<
-          Array<{ emailVerifiedAt: Date | null; id: string }>
-        >`
-          SELECT "id", "email_verified_at" AS "emailVerifiedAt"
-          FROM "users"
-          WHERE "normalized_email" = ${normalizedEmail}
-          FOR UPDATE
-        `;
+    let nextStep: AcceptedAuthRequestDto['nextStep'];
 
-        if (existingUser) {
-          if (!existingUser.emailVerifiedAt) {
-            await this.issueAccountEmail(
+    try {
+      const invitationVerifiedEmail = await this.database.client.$transaction(
+        async (transaction) => {
+          const [existingUser] = await transaction.$queryRaw<
+            Array<{ emailVerifiedAt: Date | null; id: string }>
+          >`
+            SELECT "id", "email_verified_at" AS "emailVerifiedAt"
+            FROM "users"
+            WHERE "normalized_email" = ${normalizedEmail}
+            FOR UPDATE
+          `;
+
+          if (existingUser) {
+            const hasInvitationProof = await this.bindInvitationContinuation(
               transaction,
               existingUser.id,
+              normalizedEmail,
+              invitationContinuationToken,
+              true,
+            );
+            if (hasInvitationProof && !existingUser.emailVerifiedAt) {
+              await this.verifyEmailFromInvitation(transaction, existingUser.id);
+            } else if (!existingUser.emailVerifiedAt) {
+              await this.issueAccountEmail(
+                transaction,
+                existingUser.id,
+                TokenPurpose.EMAIL_VERIFICATION,
+                AUTH_EMAIL_VERIFICATION_REQUESTED,
+                24 * 60 * 60,
+              );
+            }
+            return hasInvitationProof;
+          }
+
+          const user = await transaction.user.create({
+            data: {
+              displayName,
+              email,
+              normalizedEmail,
+              passwordHash,
+            },
+            select: { id: true },
+          });
+          const hasInvitationProof = await this.bindInvitationContinuation(
+            transaction,
+            user.id,
+            normalizedEmail,
+            invitationContinuationToken,
+            true,
+          );
+          if (hasInvitationProof) {
+            await this.verifyEmailFromInvitation(transaction, user.id);
+          } else {
+            await this.issueAccountEmail(
+              transaction,
+              user.id,
               TokenPurpose.EMAIL_VERIFICATION,
               AUTH_EMAIL_VERIFICATION_REQUESTED,
               24 * 60 * 60,
             );
           }
-          return;
-        }
-
-        const user = await transaction.user.create({
-          data: {
-            displayName,
-            email,
-            normalizedEmail,
-            passwordHash,
-          },
-          select: { id: true },
-        });
-        await this.issueAccountEmail(
-          transaction,
-          user.id,
-          TokenPurpose.EMAIL_VERIFICATION,
-          AUTH_EMAIL_VERIFICATION_REQUESTED,
-          24 * 60 * 60,
-        );
-      });
+          return hasInvitationProof;
+        },
+      );
+      nextStep = invitationVerifiedEmail ? 'LOGIN' : 'VERIFY_EMAIL';
     } catch (error) {
       if (
         !(error instanceof Prisma.PrismaClientKnownRequestError) ||
@@ -149,9 +180,25 @@ export class AuthService {
       if (!user) {
         throw error;
       }
+      const invitationVerifiedEmail = await this.database.client.$transaction(
+        async (transaction) => {
+          const hasInvitationProof = await this.bindInvitationContinuation(
+            transaction,
+            user.id,
+            normalizedEmail,
+            invitationContinuationToken,
+            true,
+          );
+          if (hasInvitationProof) {
+            await this.verifyEmailFromInvitation(transaction, user.id);
+          }
+          return hasInvitationProof;
+        },
+      );
+      nextStep = invitationVerifiedEmail ? 'LOGIN' : 'VERIFY_EMAIL';
     }
 
-    return { accepted: true, emailMasked: this.maskEmail(email) };
+    return { accepted: true, emailMasked: this.maskEmail(email), nextStep };
   }
 
   async verifyEmail(dto: TokenDto, clientIp: string): Promise<VerifiedEmailDto> {
@@ -251,12 +298,17 @@ export class AuthService {
       }
     });
 
-    return { accepted: true, emailMasked: this.maskEmail(email) };
+    return {
+      accepted: true,
+      emailMasked: this.maskEmail(email),
+      nextStep: 'VERIFY_EMAIL',
+    };
   }
 
   async login(
     dto: LoginDto,
     clientIp: string,
+    invitationContinuationToken: string | null = null,
   ): Promise<{
     absoluteExpiresAt: Date;
     response: AuthenticatedSessionDto;
@@ -309,6 +361,24 @@ export class AuthService {
       });
     }
 
+    if (invitationContinuationToken) {
+      await this.database.client.$transaction(async (transaction) => {
+        await transaction.$queryRaw`
+          SELECT "id"
+          FROM "users"
+          WHERE "id" = ${user.id}::uuid
+          FOR UPDATE
+        `;
+        await this.bindInvitationContinuation(
+          transaction,
+          user.id,
+          email,
+          invitationContinuationToken,
+          false,
+        );
+      });
+    }
+
     if (passwordHashNeedsRehash(user.passwordHash)) {
       const passwordHash = await hashPassword(password);
       await this.database.client.user.updateMany({
@@ -322,7 +392,11 @@ export class AuthService {
 
     return {
       absoluteExpiresAt: session.absoluteExpiresAt,
-      response: await this.toAuthenticatedSession(session.context, session.token),
+      response: await this.toAuthenticatedSession(
+        session.context,
+        session.token,
+        invitationContinuationToken,
+      ),
       token: session.token,
     };
   }
@@ -333,6 +407,7 @@ export class AuthService {
 
   async getSession(
     sessionToken: string | null,
+    invitationContinuationToken: string | null = null,
   ): Promise<AuthenticatedSessionDto | UnauthenticatedSessionDto> {
     if (!sessionToken) {
       return { authenticated: false };
@@ -343,7 +418,7 @@ export class AuthService {
       return { authenticated: false };
     }
 
-    return this.toAuthenticatedSession(session, sessionToken);
+    return this.toAuthenticatedSession(session, sessionToken, invitationContinuationToken);
   }
 
   async requestPasswordReset(dto: EmailDto, clientIp: string): Promise<void> {
@@ -564,18 +639,53 @@ export class AuthService {
     `;
   }
 
+  private async verifyEmailFromInvitation(
+    transaction: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<void> {
+    await transaction.$executeRaw`
+      UPDATE "users"
+      SET "email_verified_at" = COALESCE("email_verified_at", NOW()),
+          "updated_at" = NOW()
+      WHERE "id" = ${userId}::uuid
+    `;
+    await transaction.$executeRaw`
+      UPDATE "one_time_tokens"
+      SET "revoked_at" = NOW()
+      WHERE "user_id" = ${userId}::uuid
+        AND "purpose" = ${TokenPurpose.EMAIL_VERIFICATION}::"TokenPurpose"
+        AND "used_at" IS NULL
+        AND "revoked_at" IS NULL
+    `;
+    await transaction.$executeRaw`
+      UPDATE "outbox_events"
+      SET "canceled_at" = NOW()
+      WHERE "aggregate_type" = 'USER'
+        AND "aggregate_id" = ${userId}::uuid
+        AND "event_type" = ${AUTH_EMAIL_VERIFICATION_REQUESTED}
+        AND "processed_at" IS NULL
+        AND "canceled_at" IS NULL
+    `;
+  }
+
   private async toAuthenticatedSession(
     session: AuthSessionContext,
     sessionToken: string,
+    invitationContinuationToken: string | null = null,
   ): Promise<AuthenticatedSessionDto> {
-    const hasTeam = session.workspace
-      ? Boolean(
-          await this.database.client.team.findFirst({
-            select: { id: true },
-            where: { archivedAt: null, workspaceId: session.workspace.id },
-          }),
-        )
-      : false;
+    const hasInvitation = await this.hasInvitationContinuation(
+      session.user.id,
+      invitationContinuationToken,
+    );
+    const hasTeam =
+      !hasInvitation && session.workspace
+        ? Boolean(
+            await this.database.client.team.findFirst({
+              select: { id: true },
+              where: { archivedAt: null, workspaceId: session.workspace.id },
+            }),
+          )
+        : false;
 
     return {
       authenticated: true,
@@ -587,14 +697,124 @@ export class AuthService {
             status: 'ACTIVE',
           }
         : null,
-      onboardingStep: !session.workspace
-        ? 'CREATE_WORKSPACE'
-        : hasTeam
-          ? 'COMPLETE'
-          : 'CREATE_TEAM',
+      onboardingStep: hasInvitation
+        ? 'ACCEPT_INVITATION'
+        : !session.workspace
+          ? 'CREATE_WORKSPACE'
+          : hasTeam
+            ? 'COMPLETE'
+            : 'CREATE_TEAM',
       user: this.getMe(session),
       workspace: session.workspace,
     };
+  }
+
+  private async bindInvitationContinuation(
+    transaction: Prisma.TransactionClient,
+    userId: string,
+    normalizedEmail: string,
+    continuationToken: string | null,
+    rejectEmailMismatch: boolean,
+  ): Promise<boolean> {
+    if (!continuationToken) {
+      return false;
+    }
+
+    const [continuation] = await transaction.$queryRaw<
+      Array<{ id: string; invitationEmail: string; userId: string | null }>
+    >`
+      SELECT continuation."id",
+             continuation."user_id" AS "userId",
+             invitation."normalized_email" AS "invitationEmail"
+      FROM "workspace_invitation_continuations" AS continuation
+      INNER JOIN "one_time_tokens" AS token
+        ON token."id" = continuation."one_time_token_id"
+      INNER JOIN "workspace_invitations" AS invitation
+        ON invitation."id" = token."invitation_id"
+      WHERE continuation."token_hash" = ${hashOpaqueToken(continuationToken)}
+        AND continuation."consumed_at" IS NULL
+        AND continuation."revoked_at" IS NULL
+        AND token."purpose" = 'WORKSPACE_INVITATION'::"TokenPurpose"
+        AND token."used_at" IS NULL
+        AND token."revoked_at" IS NULL
+        AND token."expires_at" > NOW()
+        AND invitation."accepted_at" IS NULL
+        AND invitation."canceled_at" IS NULL
+        AND invitation."expires_at" > NOW()
+      LIMIT 1
+      FOR UPDATE OF continuation, token, invitation
+    `;
+    if (!continuation) {
+      return false;
+    }
+    if (continuation.invitationEmail !== normalizedEmail || continuation.userId !== null) {
+      if (continuation.userId === userId && continuation.invitationEmail === normalizedEmail) {
+        return true;
+      }
+      if (rejectEmailMismatch) {
+        throw new ApiError({
+          code: 'INVITATION_EMAIL_MISMATCH',
+          fieldErrors: { email: ['초대받은 이메일 주소로 가입해 주세요.'] },
+          message: '초대받은 이메일 주소로 가입해 주세요.',
+          status: HttpStatus.CONFLICT,
+        });
+      }
+      return false;
+    }
+
+    await transaction.$executeRaw`
+      UPDATE "workspace_invitation_continuations"
+      SET "revoked_at" = NOW(),
+          "updated_at" = NOW()
+      WHERE "user_id" = ${userId}::uuid
+        AND "id" <> ${continuation.id}::uuid
+        AND "consumed_at" IS NULL
+        AND "revoked_at" IS NULL
+    `;
+    await transaction.$executeRaw`
+      UPDATE "workspace_invitation_continuations"
+      SET "user_id" = ${userId}::uuid,
+          "updated_at" = NOW()
+      WHERE "id" = ${continuation.id}::uuid
+        AND "user_id" IS NULL
+        AND "consumed_at" IS NULL
+        AND "revoked_at" IS NULL
+    `;
+    return true;
+  }
+
+  private async hasInvitationContinuation(
+    userId: string,
+    continuationToken: string | null,
+  ): Promise<boolean> {
+    const [continuation] = await this.database.client.$queryRaw<Array<{ id: string }>>`
+      SELECT continuation."id"
+      FROM "workspace_invitation_continuations" AS continuation
+      INNER JOIN "one_time_tokens" AS token
+        ON token."id" = continuation."one_time_token_id"
+      INNER JOIN "workspace_invitations" AS invitation
+        ON invitation."id" = token."invitation_id"
+      WHERE (
+          continuation."user_id" = ${userId}::uuid
+          OR (
+            ${continuationToken !== null}::boolean
+            AND continuation."token_hash" = ${continuationToken ? hashOpaqueToken(continuationToken) : Buffer.alloc(0)}
+            AND continuation."user_id" IS NULL
+          )
+        )
+        AND continuation."consumed_at" IS NULL
+        AND continuation."revoked_at" IS NULL
+        AND token."purpose" = 'WORKSPACE_INVITATION'::"TokenPurpose"
+        AND token."used_at" IS NULL
+        AND token."revoked_at" IS NULL
+        AND token."expires_at" > NOW()
+        AND invitation."accepted_at" IS NULL
+        AND invitation."canceled_at" IS NULL
+        AND invitation."expires_at" > NOW()
+      LIMIT 1
+    `;
+
+    return Boolean(continuation);
   }
 
   private normalizeSignUp(dto: SignUpDto): {

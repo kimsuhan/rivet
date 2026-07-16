@@ -47,6 +47,7 @@ describe('AuthController', () => {
     getSession: jest.fn(),
     login: jest.fn(),
     logout: jest.fn(),
+    signUp: jest.fn(),
   };
   const request = {
     headers: {},
@@ -78,6 +79,11 @@ describe('AuthController', () => {
         response,
       ),
     ).resolves.toBe(authenticatedResponse);
+    expect(auth.login).toHaveBeenCalledWith(
+      { email: 'user@example.com', password: 'a sufficiently long phrase' },
+      '127.0.0.1',
+      null,
+    );
     expect(response.cookie).toHaveBeenCalledWith(
       'rivet_session',
       'session-token',
@@ -88,12 +94,35 @@ describe('AuthController', () => {
   it('returns optional session state from the cookie without requiring authentication', async () => {
     const requestWithCookie = {
       ...request,
-      headers: { cookie: 'rivet_session=session-token' },
+      headers: { cookie: 'rivet_session=session-token; rivet_invite_flow=continuation-token' },
     } as Request;
     auth.getSession.mockResolvedValue(authenticatedResponse);
 
     await expect(controller.getSession(requestWithCookie)).resolves.toBe(authenticatedResponse);
-    expect(auth.getSession).toHaveBeenCalledWith('session-token');
+    expect(auth.getSession).toHaveBeenCalledWith('session-token', 'continuation-token');
+  });
+
+  it('forwards the invitation continuation when signing up', async () => {
+    const invitationRequest = {
+      ...request,
+      headers: { cookie: 'rivet_invite_flow=continuation-token' },
+    } as Request;
+    auth.signUp.mockResolvedValue({ accepted: true, emailMasked: 'us***@example.com' });
+
+    await controller.signUp(
+      {
+        displayName: '리벳 사용자',
+        email: 'user@example.com',
+        password: 'a sufficiently long phrase',
+      },
+      invitationRequest,
+    );
+
+    expect(auth.signUp).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'user@example.com' }),
+      '127.0.0.1',
+      'continuation-token',
+    );
   });
 
   it('revokes the guarded session and clears the cookie on logout', async () => {

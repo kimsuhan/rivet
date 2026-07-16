@@ -1,16 +1,26 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { LockKeyhole } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import { useAuthControllerSignUp } from '@rivet/api-client';
+import {
+  useAuthControllerResendEmailVerification,
+  useAuthControllerSignUp,
+  useInvitationAuthControllerGetContinuation,
+} from '@rivet/api-client';
 
-import { Alert, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Spinner } from '@/components/ui/spinner';
+import { Link } from '@/i18n/navigation';
 
 import { AuthFrame, type AuthFrameLabels, AuthLink } from './auth-frame';
 import { countUnicodeCodePoints, normalizePasswordInput } from './auth-validation';
@@ -19,6 +29,12 @@ import { PasswordInput } from './password-input';
 type SignUpLabels = AuthFrameLabels & {
   displayName: string;
   email: string;
+  invitationLoading: string;
+  invitationDescription: string;
+  invitationEmailDescription: string;
+  invitationEmailFixed: string;
+  invitationErrorTitle: string;
+  invitationErrorDescription: string;
   password: string;
   confirmPassword: string;
   passwordHelp: string;
@@ -32,6 +48,15 @@ type SignUpLabels = AuthFrameLabels & {
   acceptedTitle: string;
   acceptedDescription: string;
   acceptedEmailLabel: string;
+  invitationAcceptedTitle: string;
+  invitationAcceptedDescription: string;
+  continueToLogin: string;
+  resend: string;
+  resending: string;
+  resentTitle: string;
+  resentDescription: string;
+  resendRateLimited: string;
+  resendUnexpectedError: string;
   displayNameRequired: string;
   displayNameTooLong: string;
   emailInvalid: string;
@@ -44,13 +69,21 @@ type SignUpLabels = AuthFrameLabels & {
 
 export function SignUpScreen({
   forgotPasswordHref,
+  isInvitationSignUp = false,
   labels,
   loginHref,
 }: {
   forgotPasswordHref: string;
+  isInvitationSignUp?: boolean;
   labels: SignUpLabels;
   loginHref: string;
 }) {
+  const t = useTranslations('Auth.signUp');
+  const [resendRetryAfterSeconds, setResendRetryAfterSeconds] = useState(0);
+  const invitationContinuation = useInvitationAuthControllerGetContinuation({
+    query: { enabled: isInvitationSignUp, retry: false },
+  });
+  const invitedEmail = invitationContinuation.data?.email;
   const form = useForm<{
     displayName: string;
     email: string;
@@ -105,21 +138,133 @@ export function SignUpScreen({
       },
     },
   });
+  const resendEmail = useAuthControllerResendEmailVerification({
+    mutation: {
+      onSuccess: () => setResendRetryAfterSeconds(0),
+      onError: (error) => {
+        setResendRetryAfterSeconds(
+          error.body.code === 'RATE_LIMITED' ? (error.retryAfterSeconds ?? 0) : 0,
+        );
+      },
+    },
+  });
+
+  const { setValue } = form;
+  useEffect(() => {
+    if (!invitedEmail) return;
+
+    setValue('email', invitedEmail, {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+  }, [invitedEmail, setValue]);
+
+  useEffect(() => {
+    if (resendRetryAfterSeconds <= 0) return;
+
+    const timeout = window.setTimeout(
+      () => setResendRetryAfterSeconds((seconds) => Math.max(0, seconds - 1)),
+      1_000,
+    );
+
+    return () => window.clearTimeout(timeout);
+  }, [resendRetryAfterSeconds]);
+
+  const frameLabels = isInvitationSignUp
+    ? { ...labels, description: labels.invitationDescription }
+    : labels;
+
+  if (isInvitationSignUp && invitationContinuation.isPending) {
+    return (
+      <AuthFrame labels={frameLabels}>
+        <div role="status" className="text-muted-foreground flex items-center justify-center gap-2">
+          <Spinner aria-hidden="true" />
+          {labels.invitationLoading}
+        </div>
+      </AuthFrame>
+    );
+  }
+
+  if (isInvitationSignUp && invitationContinuation.error) {
+    return (
+      <AuthFrame labels={frameLabels}>
+        <Alert variant="destructive">
+          <AlertTitle>{labels.invitationErrorTitle}</AlertTitle>
+          <AlertDescription>{labels.invitationErrorDescription}</AlertDescription>
+        </Alert>
+      </AuthFrame>
+    );
+  }
 
   if (signUp.data) {
+    const invitationEmailVerified = signUp.data.nextStep === 'LOGIN';
+
     return (
       <AuthFrame
-        labels={{ ...labels, title: labels.acceptedTitle, description: labels.acceptedDescription }}
+        labels={{
+          ...labels,
+          title: invitationEmailVerified ? labels.invitationAcceptedTitle : labels.acceptedTitle,
+          description: invitationEmailVerified
+            ? labels.invitationAcceptedDescription
+            : labels.acceptedDescription,
+        }}
       >
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           <div className="border-border bg-surface-2 rounded-lg border px-4 py-3">
             <div className="text-muted-foreground text-xs">{labels.acceptedEmailLabel}</div>
             <div className="mt-1 font-medium">{signUp.data.emailMasked}</div>
           </div>
-          <div className="text-muted-foreground flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm">
-            <AuthLink href={loginHref}>{labels.loginLink}</AuthLink>
-            <AuthLink href={forgotPasswordHref}>{labels.passwordResetLink}</AuthLink>
-          </div>
+
+          {invitationEmailVerified ? (
+            <div className="flex flex-col items-center gap-4">
+              <Button render={<Link href={loginHref} />} size="lg" className="w-full">
+                {labels.continueToLogin}
+              </Button>
+              <AuthLink href={forgotPasswordHref}>{labels.passwordResetLink}</AuthLink>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {resendEmail.data ? (
+                <Alert>
+                  <AlertTitle>{labels.resentTitle}</AlertTitle>
+                  <AlertDescription>{labels.resentDescription}</AlertDescription>
+                </Alert>
+              ) : resendEmail.error || resendRetryAfterSeconds > 0 ? (
+                <Alert variant="destructive">
+                  <AlertTitle>
+                    {resendRetryAfterSeconds > 0
+                      ? t('resendRateLimitedWithRetry', { seconds: resendRetryAfterSeconds })
+                      : resendEmail.error?.body.code === 'RATE_LIMITED'
+                        ? labels.resendRateLimited
+                        : labels.resendUnexpectedError}
+                  </AlertTitle>
+                </Alert>
+              ) : null}
+
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="w-full"
+                disabled={resendEmail.isPending || resendRetryAfterSeconds > 0}
+                onClick={() => {
+                  if (resendEmail.isPending || resendRetryAfterSeconds > 0) return;
+                  resendEmail.mutate({ data: { email: form.getValues('email').trim() } });
+                }}
+              >
+                {resendEmail.isPending ? <Spinner aria-label={labels.resending} /> : null}
+                {labels.resend}
+              </Button>
+            </div>
+          )}
+
+          {!invitationEmailVerified ? (
+            <div className="text-muted-foreground flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm">
+              <AuthLink href={loginHref}>{labels.loginLink}</AuthLink>
+              <AuthLink href={forgotPasswordHref}>{labels.passwordResetLink}</AuthLink>
+            </div>
+          ) : null}
         </div>
       </AuthFrame>
     );
@@ -132,7 +277,7 @@ export function SignUpScreen({
     : null;
 
   return (
-    <AuthFrame labels={labels}>
+    <AuthFrame labels={frameLabels}>
       <form
         className="space-y-6"
         noValidate
@@ -167,17 +312,48 @@ export function SignUpScreen({
 
           <Field data-invalid={Boolean(form.formState.errors.email)}>
             <FieldLabel htmlFor="sign-up-email">{labels.email}</FieldLabel>
-            <Input
-              id="sign-up-email"
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              autoCapitalize="none"
-              spellCheck={false}
-              aria-errormessage={form.formState.errors.email ? 'sign-up-email-error' : undefined}
-              aria-invalid={Boolean(form.formState.errors.email)}
-              {...form.register('email')}
-            />
+            {invitedEmail ? (
+              <InputGroup data-readonly="true">
+                <InputGroupAddon>
+                  <LockKeyhole aria-hidden="true" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  id="sign-up-email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  readOnly
+                  aria-describedby="sign-up-email-description"
+                  aria-errormessage={
+                    form.formState.errors.email ? 'sign-up-email-error' : undefined
+                  }
+                  aria-invalid={Boolean(form.formState.errors.email)}
+                  {...form.register('email')}
+                />
+                <InputGroupAddon align="inline-end">
+                  <Badge variant="secondary">{labels.invitationEmailFixed}</Badge>
+                </InputGroupAddon>
+              </InputGroup>
+            ) : (
+              <Input
+                id="sign-up-email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                aria-errormessage={form.formState.errors.email ? 'sign-up-email-error' : undefined}
+                aria-invalid={Boolean(form.formState.errors.email)}
+                {...form.register('email')}
+              />
+            )}
+            {invitedEmail ? (
+              <FieldDescription id="sign-up-email-description">
+                {labels.invitationEmailDescription}
+              </FieldDescription>
+            ) : null}
             <FieldError id="sign-up-email-error" errors={[form.formState.errors.email]} />
           </Field>
 

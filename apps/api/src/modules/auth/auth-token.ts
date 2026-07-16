@@ -13,8 +13,13 @@ function createTokenHmac(key: string | Buffer, value: string): Buffer {
   return createHmac('sha256', key).update(value).digest();
 }
 
-function hashToken(token: string): Buffer {
+export function hashOpaqueToken(token: string): Buffer {
   return createHash('sha256').update(token).digest();
+}
+
+export function createOpaqueToken(): { token: string; tokenHash: Buffer } {
+  const token = randomBytes(32).toString('base64url');
+  return { token, tokenHash: hashOpaqueToken(token) };
 }
 
 function uuidToBytes(tokenId: string): Buffer {
@@ -45,12 +50,11 @@ function decodeBase64Url(value: string, expectedByteLength: number): Buffer | nu
 }
 
 export function createSessionToken(): { token: string; tokenHash: Buffer } {
-  const token = randomBytes(32).toString('base64url');
-  return { token, tokenHash: hashToken(token) };
+  return createOpaqueToken();
 }
 
 export function hashSessionToken(token: string): Buffer {
-  return hashToken(token);
+  return hashOpaqueToken(token);
 }
 
 export function createOneTimeToken(
@@ -63,7 +67,7 @@ export function createOneTimeToken(
   const mac = createTokenHmac(key, `${purpose}:${normalizedTokenId}`).toString('base64url');
   const token = `${id}.${mac}`;
 
-  return { token, tokenHash: hashToken(token), tokenId: normalizedTokenId };
+  return { token, tokenHash: hashOpaqueToken(token), tokenId: normalizedTokenId };
 }
 
 export function verifyOneTimeToken(
@@ -88,14 +92,16 @@ export function verifyOneTimeToken(
     return null;
   }
 
-  return { tokenHash: hashToken(token), tokenId };
+  return { tokenHash: hashOpaqueToken(token), tokenId };
 }
 
 export function getOneTimeTokenRateLimitKey(token: string): string {
   const encodedId = token.split('.', 1)[0];
   const id = encodedId ? decodeBase64Url(encodedId, 16) : null;
 
-  return id ? `id:${uuidFromBytes(id)}` : `malformed:${hashToken(token).toString('base64url')}`;
+  return id
+    ? `id:${uuidFromBytes(id)}`
+    : `malformed:${hashOpaqueToken(token).toString('base64url')}`;
 }
 
 export function createCsrfToken(sessionToken: string, key: string | Buffer): string {

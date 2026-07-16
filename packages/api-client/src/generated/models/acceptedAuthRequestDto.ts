@@ -5,8 +5,10 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
+import type { AcceptedAuthRequestDtoNextStep } from './acceptedAuthRequestDtoNextStep';
 
 export interface AcceptedAuthRequestDto {
   accepted: true;
   emailMasked: string;
+  nextStep: AcceptedAuthRequestDtoNextStep;
 }

@@ -180,6 +180,7 @@ describe('M1 authentication and first workspace', () => {
       .expect(202);
     expect(signup.body.accepted).toBe(true);
     expect(signup.body.emailMasked).toBe(`M1***@Example.com`);
+    expect(signup.body.nextStep).toBe('VERIFY_EMAIL');
     expect(signup.headers['set-cookie']).toBeUndefined();
 
     const user = await database.client.user.findUniqueOrThrow({

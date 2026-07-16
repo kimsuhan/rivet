@@ -7,6 +7,7 @@
  */
 
 export * from './acceptedAuthRequestDto';
+export * from './acceptedAuthRequestDtoNextStep';
 export * from './acceptedInvitationMembershipDto';
 export * from './acceptedInvitationMembershipDtoRole';
 export * from './acceptedInvitationMembershipDtoStatus';
@@ -97,6 +98,7 @@ export * from './initialRoleAssignmentDto';
 export * from './initialRoleAssignmentDtoProjectRole';
 export * from './inlineHandoffDto';
 export * from './inlineHandoffDtoDestinationRolesItem';
+export * from './invitationContinuationResponseDto';
 export * from './invitationListResponseDto';
 export * from './invitationPreviewResponseDto';
 export * from './invitationResponseDto';

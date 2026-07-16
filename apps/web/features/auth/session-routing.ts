@@ -3,6 +3,7 @@ import type { AuthenticatedSessionDto, UnauthenticatedSessionDto } from '@rivet/
 export type RequiredSessionStep = AuthenticatedSessionDto['onboardingStep'];
 
 const stepPath: Record<RequiredSessionStep, string> = {
+  ACCEPT_INVITATION: '/invite',
   COMPLETE: '/my-issues',
   CREATE_TEAM: '/onboarding/team',
   CREATE_WORKSPACE: '/onboarding/workspace',

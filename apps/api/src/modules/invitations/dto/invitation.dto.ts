@@ -137,6 +137,14 @@ export class InvitationPreviewResponseDto {
   expiresAt!: string;
 }
 
+export class InvitationContinuationResponseDto extends InvitationPreviewResponseDto {
+  @ApiProperty({
+    description: '유효한 초대 진행 상태에서 가입·로그인 계정을 고정하는 원문 이메일',
+    format: 'email',
+  })
+  email!: string;
+}
+
 export class AcceptedInvitationMembershipDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;

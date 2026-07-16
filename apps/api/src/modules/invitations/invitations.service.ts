@@ -19,12 +19,15 @@ import { normalizeEmail } from '../auth/auth-input';
 import { AUTH_RATE_LIMITS, AuthRateLimitService } from '../auth/auth-rate-limit.service';
 import {
   createOneTimeToken,
+  createOpaqueToken,
   getOneTimeTokenRateLimitKey,
+  hashOpaqueToken,
   verifyOneTimeToken,
 } from '../auth/auth-token';
 import type {
   AcceptInvitationResponseDto,
   CreateInvitationsResponseDto,
+  InvitationContinuationResponseDto,
   InvitationListQueryDto,
   InvitationListResponseDto,
   InvitationPreviewResponseDto,
@@ -50,12 +53,21 @@ type LockedInvitationRow = InvitationRow & {
 type InvitationTokenRow = LockedInvitationRow & {
   invitationId: string;
   isTokenExpired: boolean;
+  oneTimeTokenId: string;
   purpose: string;
   revokedAt: Date | null;
   tokenHash: Uint8Array;
   usedAt: Date | null;
   workspaceName: string;
   workspaceSlug: string;
+};
+
+type InvitationContinuationRow = InvitationTokenRow & {
+  continuationConsumedAt: Date | null;
+  continuationId: string;
+  continuationRevokedAt: Date | null;
+  continuationTokenHash: Uint8Array;
+  continuationUserId: string | null;
 };
 
 type TokenOutcome = 'EXPIRED' | 'INVALID' | 'SUCCESS' | 'USED';
@@ -462,7 +474,15 @@ export class InvitationsService {
     return this.getResponse(workspaceId, invitationId);
   }
 
-  async preview(token: string, clientIp: string): Promise<InvitationPreviewResponseDto> {
+  async startContinuation(
+    token: string,
+    currentContinuationToken: string | null,
+    clientIp: string,
+  ): Promise<{
+    continuationToken: string;
+    expiresAt: Date;
+    response: InvitationPreviewResponseDto;
+  }> {
     await this.assertTokenLimits(token, clientIp);
     const parsed = verifyOneTimeToken(
       token,
@@ -479,34 +499,92 @@ export class InvitationsService {
       return this.rejectToken(outcome, token, clientIp);
     }
 
+    const continuation = createOpaqueToken();
+    await this.database.client.$transaction(async (transaction) => {
+      if (currentContinuationToken) {
+        await transaction.$executeRaw`
+          UPDATE "workspace_invitation_continuations"
+          SET "revoked_at" = COALESCE("revoked_at", NOW()),
+              "updated_at" = NOW()
+          WHERE "token_hash" = ${hashOpaqueToken(currentContinuationToken)}
+            AND "consumed_at" IS NULL
+            AND "revoked_at" IS NULL
+        `;
+      }
+      await transaction.$executeRaw`
+        INSERT INTO "workspace_invitation_continuations" (
+          "id", "one_time_token_id", "token_hash", "updated_at"
+        ) VALUES (
+          ${randomUUID()}::uuid,
+          ${parsed.tokenId}::uuid,
+          ${continuation.tokenHash},
+          NOW()
+        )
+      `;
+    });
+
     return {
-      emailMasked: this.maskEmail(invitation.email),
-      expiresAt: invitation.expiresAt.toISOString(),
-      invitedByDisplayName: invitation.invitedByDisplayName,
-      workspaceName: invitation.workspaceName,
+      continuationToken: continuation.token,
+      expiresAt: invitation.expiresAt,
+      response: this.toPreviewResponse(invitation),
     };
+  }
+
+  async getContinuation(
+    continuationToken: string | null,
+    userId: string | null,
+  ): Promise<InvitationContinuationResponseDto> {
+    const continuation = await this.loadContinuation(continuationToken, userId);
+    if (!continuation) {
+      this.throwContinuationNotFound();
+    }
+
+    const outcome = this.continuationOutcome(continuation);
+    if (outcome !== 'SUCCESS') {
+      return this.throwTokenOutcome(outcome);
+    }
+
+    return { ...this.toPreviewResponse(continuation), email: continuation.email };
+  }
+
+  async dismissContinuation(
+    continuationToken: string | null,
+    userId: string | null,
+  ): Promise<void> {
+    const continuationId = await this.findContinuationId(continuationToken, userId);
+    if (!continuationId) {
+      return;
+    }
+
+    await this.database.client.$executeRaw`
+      UPDATE "workspace_invitation_continuations"
+      SET "revoked_at" = COALESCE("revoked_at", NOW()),
+          "updated_at" = NOW()
+      WHERE "id" = ${continuationId}::uuid
+        AND "consumed_at" IS NULL
+    `;
   }
 
   async accept(
     userId: string,
-    token: string,
-    clientIp: string,
+    continuationToken: string | null,
   ): Promise<AcceptInvitationResponseDto> {
-    await this.assertTokenLimits(token, clientIp);
-    const parsed = verifyOneTimeToken(
-      token,
-      'WORKSPACE_INVITATION',
-      this.config.security.oneTimeTokenHmacKey,
-    );
-    if (!parsed) {
-      return this.rejectToken('INVALID', token, clientIp);
+    const continuationId = await this.findContinuationId(continuationToken, userId);
+    if (!continuationId) {
+      this.throwContinuationNotFound();
     }
 
     const result = await this.database.client.$transaction(async (transaction) => {
       const [invitation] = await transaction.$queryRaw<
-        Array<InvitationTokenRow & { accountNormalizedEmail: string }>
+        Array<InvitationContinuationRow & { accountNormalizedEmail: string }>
       >`
-        SELECT token."invitation_id" AS "invitationId",
+        SELECT continuation."id" AS "continuationId",
+               continuation."token_hash" AS "continuationTokenHash",
+               continuation."user_id" AS "continuationUserId",
+               continuation."consumed_at" AS "continuationConsumedAt",
+               continuation."revoked_at" AS "continuationRevokedAt",
+               token."id" AS "oneTimeTokenId",
+               token."invitation_id" AS "invitationId",
                token."purpose",
                token."token_hash" AS "tokenHash",
                token."used_at" AS "usedAt",
@@ -525,7 +603,9 @@ export class InvitationsService {
                workspace."name" AS "workspaceName",
                workspace."slug" AS "workspaceSlug",
                account."normalized_email" AS "accountNormalizedEmail"
-        FROM "one_time_tokens" AS token
+        FROM "workspace_invitation_continuations" AS continuation
+        INNER JOIN "one_time_tokens" AS token
+          ON token."id" = continuation."one_time_token_id"
         INNER JOIN "workspace_invitations" AS invitation
           ON invitation."id" = token."invitation_id"
         INNER JOIN "workspaces" AS workspace ON workspace."id" = invitation."workspace_id"
@@ -534,10 +614,10 @@ export class InvitationsService {
          AND inviter."id" = invitation."invited_by_membership_id"
         INNER JOIN "users" AS inviter_user ON inviter_user."id" = inviter."user_id"
         INNER JOIN "users" AS account ON account."id" = ${userId}::uuid
-        WHERE token."id" = ${parsed.tokenId}::uuid
-        FOR UPDATE OF token, invitation, account
+        WHERE continuation."id" = ${continuationId}::uuid
+        FOR UPDATE OF continuation, token, invitation, account
       `;
-      const outcome = this.tokenOutcome(invitation, parsed.tokenHash);
+      const outcome = this.continuationOutcome(invitation);
       if (outcome !== 'SUCCESS' || !invitation) {
         return { outcome, success: false as const };
       }
@@ -607,7 +687,13 @@ export class InvitationsService {
       await transaction.$executeRaw`
         UPDATE "one_time_tokens"
         SET "used_at" = NOW()
-        WHERE "id" = ${parsed.tokenId}::uuid
+        WHERE "id" = ${invitation.oneTimeTokenId}::uuid
+      `;
+      await transaction.$executeRaw`
+        UPDATE "workspace_invitation_continuations"
+        SET "consumed_at" = NOW(),
+            "updated_at" = NOW()
+        WHERE "id" = ${continuationId}::uuid
       `;
       await transaction.$executeRaw`
         UPDATE "outbox_events"
@@ -637,7 +723,7 @@ export class InvitationsService {
     });
 
     if (!result.success) {
-      return this.rejectToken(result.outcome, token, clientIp);
+      return this.throwTokenOutcome(result.outcome);
     }
 
     return {
@@ -844,7 +930,8 @@ export class InvitationsService {
 
   private async loadToken(tokenId: string): Promise<InvitationTokenRow | undefined> {
     const [invitation] = await this.database.client.$queryRaw<InvitationTokenRow[]>`
-      SELECT token."invitation_id" AS "invitationId",
+      SELECT token."id" AS "oneTimeTokenId",
+             token."invitation_id" AS "invitationId",
              token."purpose",
              token."token_hash" AS "tokenHash",
              token."used_at" AS "usedAt",
@@ -876,6 +963,88 @@ export class InvitationsService {
     return invitation;
   }
 
+  private async findContinuationId(
+    continuationToken: string | null,
+    userId: string | null,
+  ): Promise<string | null> {
+    if (continuationToken) {
+      const [continuation] = await this.database.client.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "workspace_invitation_continuations"
+        WHERE "token_hash" = ${hashOpaqueToken(continuationToken)}
+        LIMIT 1
+      `;
+      if (continuation) {
+        return continuation.id;
+      }
+    }
+
+    const [continuation] = userId
+      ? await this.database.client.$queryRaw<Array<{ id: string }>>`
+          SELECT "id"
+          FROM "workspace_invitation_continuations"
+          WHERE "user_id" = ${userId}::uuid
+            AND "consumed_at" IS NULL
+            AND "revoked_at" IS NULL
+          ORDER BY "created_at" DESC
+          LIMIT 1
+        `
+      : [];
+
+    return continuation?.id ?? null;
+  }
+
+  private async loadContinuation(
+    continuationToken: string | null,
+    userId: string | null,
+  ): Promise<InvitationContinuationRow | undefined> {
+    const continuationId = await this.findContinuationId(continuationToken, userId);
+    if (!continuationId) {
+      return undefined;
+    }
+
+    const [continuation] = await this.database.client.$queryRaw<InvitationContinuationRow[]>`
+      SELECT continuation."id" AS "continuationId",
+             continuation."token_hash" AS "continuationTokenHash",
+             continuation."user_id" AS "continuationUserId",
+             continuation."consumed_at" AS "continuationConsumedAt",
+             continuation."revoked_at" AS "continuationRevokedAt",
+             token."id" AS "oneTimeTokenId",
+             token."invitation_id" AS "invitationId",
+             token."purpose",
+             token."token_hash" AS "tokenHash",
+             token."used_at" AS "usedAt",
+             token."revoked_at" AS "revokedAt",
+             token."expires_at" <= NOW() AS "isTokenExpired",
+             invitation."id",
+             invitation."workspace_id" AS "workspaceId",
+             invitation."email",
+             invitation."normalized_email" AS "normalizedEmail",
+             invitation."expires_at" AS "expiresAt",
+             invitation."accepted_at" AS "acceptedAt",
+             invitation."canceled_at" AS "canceledAt",
+             invitation."invited_by_membership_id" AS "invitedByMembershipId",
+             invitation."created_at" AS "createdAt",
+             inviter_user."display_name" AS "invitedByDisplayName",
+             workspace."name" AS "workspaceName",
+             workspace."slug" AS "workspaceSlug"
+      FROM "workspace_invitation_continuations" AS continuation
+      INNER JOIN "one_time_tokens" AS token
+        ON token."id" = continuation."one_time_token_id"
+      INNER JOIN "workspace_invitations" AS invitation
+        ON invitation."id" = token."invitation_id"
+      INNER JOIN "workspaces" AS workspace ON workspace."id" = invitation."workspace_id"
+      INNER JOIN "workspace_memberships" AS inviter
+        ON inviter."workspace_id" = invitation."workspace_id"
+       AND inviter."id" = invitation."invited_by_membership_id"
+      INNER JOIN "users" AS inviter_user ON inviter_user."id" = inviter."user_id"
+      WHERE continuation."id" = ${continuationId}::uuid
+      LIMIT 1
+    `;
+
+    return continuation;
+  }
+
   private tokenOutcome(
     invitation: InvitationTokenRow | undefined,
     expectedHash: Uint8Array,
@@ -898,6 +1067,17 @@ export class InvitationsService {
     return invitation.isTokenExpired || invitation.expiresAt <= new Date() ? 'EXPIRED' : 'SUCCESS';
   }
 
+  private continuationOutcome(invitation: InvitationContinuationRow | undefined): TokenOutcome {
+    if (!invitation || invitation.continuationRevokedAt) {
+      return 'INVALID';
+    }
+    if (invitation.continuationConsumedAt) {
+      return 'USED';
+    }
+
+    return this.tokenOutcome(invitation, invitation.tokenHash);
+  }
+
   private async assertTokenLimits(token: string, clientIp: string): Promise<void> {
     const key = getOneTimeTokenRateLimitKey(token);
     await Promise.all([
@@ -917,6 +1097,10 @@ export class InvitationsService {
       this.rateLimits.consume(AUTH_RATE_LIMITS.tokenValue, key),
     ]);
 
+    return this.throwTokenOutcome(outcome);
+  }
+
+  private throwTokenOutcome(outcome: TokenOutcome): never {
     if (outcome === 'USED') {
       throw new ApiError({
         code: 'TOKEN_ALREADY_USED',
@@ -936,6 +1120,15 @@ export class InvitationsService {
       message: '초대 링크를 확인할 수 없습니다.',
       status: HttpStatus.UNPROCESSABLE_ENTITY,
     });
+  }
+
+  private toPreviewResponse(invitation: InvitationTokenRow): InvitationPreviewResponseDto {
+    return {
+      emailMasked: this.maskEmail(invitation.email),
+      expiresAt: invitation.expiresAt.toISOString(),
+      invitedByDisplayName: invitation.invitedByDisplayName,
+      workspaceName: invitation.workspaceName,
+    };
   }
 
   private toResponse(invitation: InvitationRow): InvitationResponseDto {
@@ -968,6 +1161,14 @@ export class InvitationsService {
     throw new ApiError({
       code: 'RESOURCE_NOT_FOUND',
       message: '초대를 찾을 수 없습니다.',
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+
+  private throwContinuationNotFound(): never {
+    throw new ApiError({
+      code: 'INVITATION_CONTINUATION_NOT_FOUND',
+      message: '진행 중인 초대를 찾을 수 없습니다.',
       status: HttpStatus.NOT_FOUND,
     });
   }

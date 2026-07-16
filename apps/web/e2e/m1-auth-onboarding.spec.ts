@@ -56,6 +56,8 @@ test('가입부터 이메일 인증과 기본 팀 생성까지 완료한다', as
     await page.getByRole('button', { name: '가입하기' }).click();
 
     await expect(page.getByRole('heading', { name: '이메일을 확인해 주세요' })).toBeVisible();
+    await page.getByRole('button', { name: '인증 메일 다시 보내기' }).click();
+    await expect(page.getByText('재전송 요청을 완료했습니다')).toBeVisible();
 
     const verificationToken = await getLatestM1Token(email, 'EMAIL_VERIFICATION');
     await page.goto(`/verify-email#token=${encodeURIComponent(verificationToken)}`);
@@ -98,7 +100,9 @@ test('가입부터 이메일 인증과 기본 팀 생성까지 완료한다', as
   }
 });
 
-test('미가입 사용자가 가입과 인증 후 초대를 다시 열어 수락한다', async ({ page }, testInfo) => {
+test('미가입 사용자가 가입과 인증 후 자동으로 복귀한 초대를 수락한다', async ({
+  page,
+}, testInfo) => {
   test.setTimeout(90_000);
 
   const runId = randomUUID().replaceAll('-', '').slice(0, 10);
@@ -246,23 +250,25 @@ test('미가입 사용자가 가입과 인증 후 초대를 다시 열어 수락
     await checkLayout(page, testInfo.project.name, 'invite-preview');
     await page.getByRole('link', { name: '가입하기' }).click();
 
+    await expect(page).toHaveURL(/\/signup\?invitation=1$/);
     await page.getByLabel('표시 이름').fill('M2 초대 멤버');
-    await page.getByLabel('이메일').fill(inviteeEmail);
+    await expect(page.getByLabel('이메일')).toHaveValue(inviteeEmail);
+    await expect(page.getByLabel('이메일')).toHaveAttribute('readonly', '');
+    await expect(
+      page.getByText('초대 메일에서 확인된 주소입니다. 이 가입에서는 변경할 수 없습니다.'),
+    ).toBeVisible();
+    await expect(page.getByText('고정됨', { exact: true })).toBeVisible();
+    await checkLayout(page, testInfo.project.name, 'invite-signup-readonly-email');
     await page.getByLabel('비밀번호', { exact: true }).fill(password);
     await page.getByLabel('비밀번호 확인').fill(password);
     await page.getByRole('button', { name: '가입하기' }).click();
-    await expect(page.getByRole('heading', { name: '이메일을 확인해 주세요' })).toBeVisible();
-
-    const inviteeVerificationToken = await getLatestM1Token(inviteeEmail, 'EMAIL_VERIFICATION');
-    await page.goto(`/verify-email#token=${encodeURIComponent(inviteeVerificationToken)}`);
-    await expect(page.getByRole('heading', { name: '이메일 인증을 마쳤습니다' })).toBeVisible();
-    await page.getByRole('link', { name: '로그인' }).click();
+    await expect(page.getByRole('heading', { name: '이메일 확인을 마쳤습니다' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '인증 메일 다시 보내기' })).toBeHidden();
+    await page.getByRole('link', { name: '로그인으로 계속' }).click();
     await page.getByLabel('이메일').fill(inviteeEmail);
     await page.getByLabel('비밀번호', { exact: true }).fill(password);
     await page.getByRole('button', { name: '로그인', exact: true }).click();
-    await expect(page).toHaveURL(/\/onboarding\/workspace$/);
-
-    await page.goto(`/invite#token=${encodeURIComponent(invitationToken)}`);
+    await expect(page).toHaveURL(/\/invite$/);
     await expect(page.getByText(inviteeEmail, { exact: true })).toBeVisible();
     await page.getByRole('button', { name: '초대 수락' }).click();
     await expect(page).toHaveURL(/\/my-issues$/);

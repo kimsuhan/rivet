@@ -26,6 +26,9 @@ import {
 import type { Request, Response } from 'express';
 
 import {
+  readInvitationContinuationCookie,
+} from '../../common/auth/invitation-continuation-cookie';
+import {
   clearSessionCookie,
   readSessionCookie,
   setSessionCookie,
@@ -101,9 +104,18 @@ export class AuthController {
   @Header('Cache-Control', 'no-store')
   @ApiOperation({ summary: '회원가입 요청' })
   @ApiAcceptedResponse({ type: AcceptedAuthRequestDto })
+  @ApiResponse({
+    description: 'INVITATION_EMAIL_MISMATCH: 초대 이메일과 가입 이메일 불일치',
+    status: HttpStatus.CONFLICT,
+    type: ApiErrorResponseDto,
+  })
   @ApiPublicMutationErrors()
   signUp(@Body() dto: SignUpDto, @Req() request: Request): Promise<AcceptedAuthRequestDto> {
-    return this.auth.signUp(dto, clientIp(request));
+    return this.auth.signUp(
+      dto,
+      clientIp(request),
+      readInvitationContinuationCookie(request, this.config),
+    );
   }
 
   @PublicEndpoint()
@@ -155,7 +167,11 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthenticatedSessionDto> {
-    const result = await this.auth.login(dto, clientIp(request));
+    const result = await this.auth.login(
+      dto,
+      clientIp(request),
+      readInvitationContinuationCookie(request, this.config),
+    );
     setSessionCookie(response, this.config, result.token, result.absoluteExpiresAt);
     return result.response;
   }
@@ -199,7 +215,10 @@ export class AuthController {
   getSession(
     @Req() request: Request,
   ): Promise<AuthenticatedSessionDto | UnauthenticatedSessionDto> {
-    return this.auth.getSession(readSessionCookie(request, this.config));
+    return this.auth.getSession(
+      readSessionCookie(request, this.config),
+      readInvitationContinuationCookie(request, this.config),
+    );
   }
 
   @PublicEndpoint()

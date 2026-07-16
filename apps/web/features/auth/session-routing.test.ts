@@ -21,6 +21,7 @@ describe('getSessionRedirect', () => {
   });
 
   it.each([
+    ['ACCEPT_INVITATION', '/invite'],
     ['CREATE_WORKSPACE', '/onboarding/workspace'],
     ['CREATE_TEAM', '/onboarding/team'],
     ['COMPLETE', '/my-issues'],

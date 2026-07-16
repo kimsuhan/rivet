@@ -14,14 +14,21 @@ export async function generateMetadata({
   return { title: t('title') };
 }
 
-export default async function SignUpPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
+export default async function SignUpPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ invitation?: string | string[] }>;
+}) {
+  const [{ locale }, query] = await Promise.all([params, searchParams]);
   setRequestLocale(locale);
   const t = await getTranslations('Auth.signUp');
 
   return (
     <SignUpScreen
       forgotPasswordHref="/forgot-password"
+      isInvitationSignUp={query.invitation === '1'}
       loginHref="/login"
       labels={{
         productName: t('productName'),
@@ -29,6 +36,12 @@ export default async function SignUpPage({ params }: { params: Promise<{ locale:
         description: t('description'),
         displayName: t('displayName'),
         email: t('email'),
+        invitationLoading: t('invitationLoading'),
+        invitationDescription: t('invitationDescription'),
+        invitationEmailDescription: t('invitationEmailDescription'),
+        invitationEmailFixed: t('invitationEmailFixed'),
+        invitationErrorTitle: t('invitationErrorTitle'),
+        invitationErrorDescription: t('invitationErrorDescription'),
         password: t('password'),
         confirmPassword: t('confirmPassword'),
         passwordHelp: t('passwordHelp'),
@@ -41,6 +54,15 @@ export default async function SignUpPage({ params }: { params: Promise<{ locale:
         acceptedTitle: t('acceptedTitle'),
         acceptedDescription: t('acceptedDescription'),
         acceptedEmailLabel: t('acceptedEmailLabel'),
+        invitationAcceptedTitle: t('invitationAcceptedTitle'),
+        invitationAcceptedDescription: t('invitationAcceptedDescription'),
+        continueToLogin: t('continueToLogin'),
+        resend: t('resend'),
+        resending: t('resending'),
+        resentTitle: t('resentTitle'),
+        resentDescription: t('resentDescription'),
+        resendRateLimited: t('resendRateLimited'),
+        resendUnexpectedError: t('resendUnexpectedError'),
         passwordResetLink: t('passwordResetLink'),
         displayNameRequired: t('displayNameRequired'),
         displayNameTooLong: t('displayNameTooLong'),

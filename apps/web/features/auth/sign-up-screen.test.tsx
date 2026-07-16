@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,21 +11,55 @@ type SignUpOptions = {
   };
 };
 
+type ResendError = {
+  body: { code: string };
+  retryAfterSeconds: number | null;
+};
+
+type ResendOptions = {
+  mutation?: {
+    onError?: (error: ResendError) => void;
+    onSuccess?: () => void;
+  };
+};
+
 const auth = vi.hoisted(() => ({
+  invitationState: {
+    data: null as { email: string } | null,
+    error: null as { body: { code: string } } | null,
+    isPending: false,
+  },
   mutate: vi.fn(),
   options: null as SignUpOptions | null,
-  state: {
+  resend: vi.fn(),
+  resendOptions: null as ResendOptions | null,
+  resendState: {
     data: null as { emailMasked: string } | null,
+    error: null as { body: { code: string } } | null,
+    isPending: false,
+  },
+  state: {
+    data: null as { emailMasked: string; nextStep: 'LOGIN' | 'VERIFY_EMAIL' } | null,
     error: null as { body: { code: string } } | null,
     isPending: false,
   },
 }));
 
 vi.mock('@rivet/api-client', () => ({
+  useAuthControllerResendEmailVerification: (options: ResendOptions) => {
+    auth.resendOptions = options;
+    return { ...auth.resendState, mutate: auth.resend };
+  },
   useAuthControllerSignUp: (options: SignUpOptions) => {
     auth.options = options;
     return { ...auth.state, mutate: auth.mutate };
   },
+  useInvitationAuthControllerGetContinuation: () => auth.invitationState,
+}));
+
+vi.mock('next-intl', () => ({
+  useTranslations: () => (_key: string, values: { seconds: number }) =>
+    `재전송 요청이 너무 많습니다. ${values.seconds}초 후 다시 시도해 주세요.`,
 }));
 
 vi.mock('@/i18n/navigation', () => ({
@@ -42,6 +76,13 @@ const labels = {
   description: '이메일 인증이 필요합니다.',
   displayName: '표시 이름',
   email: '이메일',
+  invitationLoading: '초대받은 이메일을 확인하는 중입니다.',
+  invitationDescription:
+    '초대받은 이메일로 계정을 만드세요. 초대 링크로 이메일 확인까지 완료됩니다.',
+  invitationEmailDescription: '초대 메일에서 확인된 주소입니다. 이 가입에서는 변경할 수 없습니다.',
+  invitationEmailFixed: '고정됨',
+  invitationErrorTitle: '초대 정보를 확인할 수 없습니다',
+  invitationErrorDescription: '초대 메일의 원래 링크를 다시 열어 주세요.',
   password: '비밀번호',
   confirmPassword: '비밀번호 확인',
   passwordHelp: '12자 이상 입력하세요.',
@@ -56,6 +97,16 @@ const labels = {
   acceptedDescription:
     '입력하신 이메일 주소를 확인했습니다.\n\n새 계정이라면 인증 메일을 보내드립니다.\n이미 가입된 계정이라면 로그인하거나 비밀번호를 재설정해 주세요.',
   acceptedEmailLabel: '이메일',
+  invitationAcceptedTitle: '이메일 확인을 마쳤습니다',
+  invitationAcceptedDescription:
+    '초대 링크로 이메일 확인을 마쳤습니다.\n\n로그인하면 초대로 자동으로 돌아갑니다.',
+  continueToLogin: '로그인으로 계속',
+  resend: '인증 메일 다시 보내기',
+  resending: '인증 메일 재전송 중',
+  resentTitle: '재전송 요청을 완료했습니다',
+  resentDescription: '인증이 필요한 계정이라면 새 메일을 보내드립니다.',
+  resendRateLimited: '재전송 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+  resendUnexpectedError: '인증 메일을 다시 요청하지 못했습니다.',
   displayNameRequired: '표시 이름을 입력하세요.',
   displayNameTooLong: '표시 이름이 너무 깁니다.',
   emailInvalid: '올바른 이메일을 입력하세요.',
@@ -66,12 +117,23 @@ const labels = {
   unexpectedError: '가입 요청을 처리하지 못했습니다.',
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe('SignUpScreen', () => {
   beforeEach(() => {
+    auth.invitationState.data = null;
+    auth.invitationState.error = null;
+    auth.invitationState.isPending = false;
     auth.mutate.mockReset();
     auth.options = null;
+    auth.resend.mockReset();
+    auth.resendOptions = null;
+    auth.resendState.data = null;
+    auth.resendState.error = null;
+    auth.resendState.isPending = false;
     auth.state.data = null;
     auth.state.error = null;
     auth.state.isPending = false;
@@ -218,8 +280,49 @@ describe('SignUpScreen', () => {
     expect(screen.getByLabelText('비밀번호 확인')).toHaveFocus();
   });
 
+  it('초대 가입은 초대받은 이메일을 채우고 수정하지 못하게 한다', async () => {
+    const user = userEvent.setup();
+    auth.invitationState.data = { email: 'invitee@example.com' };
+    render(
+      <SignUpScreen
+        isInvitationSignUp
+        labels={labels}
+        loginHref="/login"
+        forgotPasswordHref="/forgot-password"
+      />,
+    );
+
+    const email = screen.getByLabelText('이메일');
+    await waitFor(() => expect(email).toHaveValue('invitee@example.com'));
+    expect(email).toHaveAttribute('readonly');
+    expect(email).toHaveAttribute('aria-describedby', 'sign-up-email-description');
+    expect(email.closest('[data-slot="input-group"]')).toHaveAttribute('data-readonly', 'true');
+    expect(screen.getByText(labels.invitationEmailFixed)).toBeVisible();
+    expect(screen.getByText(labels.invitationDescription)).toBeVisible();
+    expect(screen.getByText(labels.invitationEmailDescription)).toBeVisible();
+
+    await user.type(email, 'other@example.com');
+    expect(email).toHaveValue('invitee@example.com');
+
+    await user.type(screen.getByLabelText('표시 이름'), '초대 멤버');
+    await user.type(
+      screen.getByLabelText('비밀번호', { selector: '#sign-up-password' }),
+      'correct-password',
+    );
+    await user.type(screen.getByLabelText('비밀번호 확인'), 'correct-password');
+    await user.click(screen.getByRole('button', { name: '회원가입' }));
+
+    expect(auth.mutate).toHaveBeenCalledWith({
+      data: {
+        displayName: '초대 멤버',
+        email: 'invitee@example.com',
+        password: 'correct-password',
+      },
+    });
+  });
+
   it('접수 결과에는 가린 이메일만 표시한다', () => {
-    auth.state.data = { emailMasked: 'u***@example.com' };
+    auth.state.data = { emailMasked: 'u***@example.com', nextStep: 'VERIFY_EMAIL' };
     render(
       <SignUpScreen labels={labels} loginHref="/login" forgotPasswordHref="/forgot-password" />,
     );
@@ -230,10 +333,86 @@ describe('SignUpScreen', () => {
     ).toHaveTextContent(labels.acceptedDescription.replace(/\s+/g, ' '));
     expect(screen.getByText('이메일', { selector: 'div' })).toBeVisible();
     expect(screen.getByText('u***@example.com')).toBeVisible();
+    expect(screen.getByRole('button', { name: '인증 메일 다시 보내기' })).toBeVisible();
     expect(screen.getByRole('link', { name: '로그인' })).toHaveAttribute('href', '/login');
     expect(screen.getByRole('link', { name: '비밀번호 재설정' })).toHaveAttribute(
       'href',
       '/forgot-password',
     );
+  });
+
+  it('초대 가입은 별도 인증 안내 없이 로그인으로 연결한다', () => {
+    auth.state.data = { emailMasked: 'u***@example.com', nextStep: 'LOGIN' };
+    render(
+      <SignUpScreen labels={labels} loginHref="/login" forgotPasswordHref="/forgot-password" />,
+    );
+
+    expect(screen.getByRole('heading', { name: labels.invitationAcceptedTitle })).toBeVisible();
+    expect(screen.getByRole('link', { name: labels.continueToLogin })).toHaveAttribute(
+      'href',
+      '/login',
+    );
+    expect(screen.queryByRole('button', { name: labels.resend })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: labels.passwordResetLink })).toBeVisible();
+  });
+
+  it('가입한 이메일로 인증 메일을 다시 요청하고 완료 상태를 표시한다', async () => {
+    const user = userEvent.setup();
+    const view = render(
+      <SignUpScreen labels={labels} loginHref="/login" forgotPasswordHref="/forgot-password" />,
+    );
+
+    await user.type(screen.getByLabelText('표시 이름'), '김리벳');
+    await user.type(screen.getByLabelText('이메일'), ' user@example.com ');
+    await user.type(
+      screen.getByLabelText('비밀번호', { selector: '#sign-up-password' }),
+      'correct-password',
+    );
+    await user.type(screen.getByLabelText('비밀번호 확인'), 'correct-password');
+    await user.click(screen.getByRole('button', { name: '회원가입' }));
+
+    auth.state.data = { emailMasked: 'u***@example.com', nextStep: 'VERIFY_EMAIL' };
+    view.rerender(
+      <SignUpScreen labels={labels} loginHref="/login" forgotPasswordHref="/forgot-password" />,
+    );
+    await user.click(screen.getByRole('button', { name: '인증 메일 다시 보내기' }));
+
+    expect(auth.resend).toHaveBeenCalledWith({ data: { email: 'user@example.com' } });
+
+    auth.resendState.data = { emailMasked: 'u***@example.com' };
+    view.rerender(
+      <SignUpScreen labels={labels} loginHref="/login" forgotPasswordHref="/forgot-password" />,
+    );
+    expect(screen.getByText(labels.resentTitle)).toBeVisible();
+    expect(screen.getByText(labels.resentDescription)).toBeVisible();
+  });
+
+  it('재전송 제한 시간을 표시하고 만료될 때까지 버튼을 비활성화한다', () => {
+    vi.useFakeTimers();
+    auth.state.data = { emailMasked: 'u***@example.com', nextStep: 'VERIFY_EMAIL' };
+    render(
+      <SignUpScreen labels={labels} loginHref="/login" forgotPasswordHref="/forgot-password" />,
+    );
+
+    act(() => {
+      auth.resendOptions?.mutation?.onError?.({
+        body: { code: 'RATE_LIMITED' },
+        retryAfterSeconds: 2,
+      });
+    });
+
+    const resendButton = screen.getByRole('button', { name: '인증 메일 다시 보내기' });
+    expect(
+      screen.getByText('재전송 요청이 너무 많습니다. 2초 후 다시 시도해 주세요.'),
+    ).toBeVisible();
+    expect(resendButton).toBeDisabled();
+
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(
+      screen.getByText('재전송 요청이 너무 많습니다. 1초 후 다시 시도해 주세요.'),
+    ).toBeVisible();
+
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(resendButton).toBeEnabled();
   });
 });

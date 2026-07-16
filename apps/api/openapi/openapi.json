@@ -46,6 +46,16 @@
               }
             }
           },
+          "409": {
+            "description": "INVITATION_EMAIL_MISMATCH: 초대 이메일과 가입 이메일 불일치",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
           "422": {
             "description": "VALIDATION_ERROR 또는 TOKEN_INVALID: 요청 입력 또는 토큰이 유효하지 않음",
             "content": {
@@ -2057,9 +2067,9 @@
         ]
       }
     },
-    "/api/v1/auth/invitations/preview": {
+    "/api/v1/auth/invitations/continuation": {
       "post": {
-        "operationId": "InvitationAuthController_preview",
+        "operationId": "InvitationAuthController_startContinuation",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -2152,27 +2162,90 @@
             }
           }
         },
-        "summary": "초대 토큰의 안전한 표시 정보 조회",
+        "summary": "초대 링크를 브라우저의 안전한 진행 상태로 교환",
+        "tags": [
+          "invitations"
+        ]
+      },
+      "get": {
+        "operationId": "InvitationAuthController_getContinuation",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationContinuationResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "INVITATION_CONTINUATION_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "TOKEN_ALREADY_USED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "TOKEN_EXPIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "TOKEN_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "현재 브라우저 또는 로그인 계정의 초대 진행 상태 조회",
+        "tags": [
+          "invitations"
+        ]
+      },
+      "delete": {
+        "operationId": "InvitationAuthController_dismissContinuation",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "현재 초대 진행 상태 닫기",
         "tags": [
           "invitations"
         ]
       }
     },
-    "/api/v1/auth/invitations/accept": {
+    "/api/v1/auth/invitations/continuation/accept": {
       "post": {
         "description": "멤버십이 없으면 새 MEMBER를 만들고, 같은 워크스페이스의 기존 활성 MEMBER가 재발급 링크를 확인하면 멤버십을 재사용해 초대와 토큰만 종료한다.",
         "operationId": "InvitationAuthController_accept",
         "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InvitationTokenDto"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "수락에 사용한 신규 또는 기존 활성 멤버십과 워크스페이스",
@@ -2206,6 +2279,16 @@
           },
           "403": {
             "description": "EMAIL_NOT_VERIFIED 또는 CSRF_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "INVITATION_CONTINUATION_NOT_FOUND",
             "content": {
               "application/json": {
                 "schema": {
@@ -7846,6 +7929,7 @@
           },
           "onboardingStep": {
             "enum": [
+              "ACCEPT_INVITATION",
               "CREATE_WORKSPACE",
               "CREATE_TEAM",
               "COMPLETE"
@@ -7917,11 +8001,19 @@
           "emailMasked": {
             "type": "string",
             "example": "mi***@example.com"
+          },
+          "nextStep": {
+            "enum": [
+              "LOGIN",
+              "VERIFY_EMAIL"
+            ],
+            "type": "string"
           }
         },
         "required": [
           "accepted",
-          "emailMasked"
+          "emailMasked",
+          "nextStep"
         ]
       },
       "ApiErrorResponseDto": {
@@ -8650,6 +8742,39 @@
           "emailMasked",
           "invitedByDisplayName",
           "expiresAt"
+        ]
+      },
+      "InvitationContinuationResponseDto": {
+        "type": "object",
+        "properties": {
+          "workspaceName": {
+            "type": "string",
+            "example": "제품 개발팀"
+          },
+          "emailMasked": {
+            "type": "string",
+            "example": "we***@example.com"
+          },
+          "invitedByDisplayName": {
+            "type": "string",
+            "example": "김관리"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "email": {
+            "type": "string",
+            "description": "유효한 초대 진행 상태에서 가입·로그인 계정을 고정하는 원문 이메일",
+            "format": "email"
+          }
+        },
+        "required": [
+          "workspaceName",
+          "emailMasked",
+          "invitedByDisplayName",
+          "expiresAt",
+          "email"
         ]
       },
       "AcceptedInvitationMembershipDto": {

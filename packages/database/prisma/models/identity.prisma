@@ -15,13 +15,14 @@ model User {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  avatarFile          File?                 @relation("UserAvatarFile", fields: [avatarFileId], references: [id], onDelete: Restrict)
-  uploadedFiles       File[]                @relation("FileUploader")
-  sessions            Session[]
-  oneTimeTokens       OneTimeToken[]
-  createdWorkspaces   Workspace[]           @relation("WorkspaceCreator")
-  membership          WorkspaceMembership?
-  acceptedInvitations WorkspaceInvitation[] @relation("InvitationAcceptor")
+  avatarFile              File?                             @relation("UserAvatarFile", fields: [avatarFileId], references: [id], onDelete: Restrict)
+  uploadedFiles           File[]                            @relation("FileUploader")
+  sessions                Session[]
+  oneTimeTokens           OneTimeToken[]
+  invitationContinuations WorkspaceInvitationContinuation[]
+  createdWorkspaces       Workspace[]                       @relation("WorkspaceCreator")
+  membership              WorkspaceMembership?
+  acceptedInvitations     WorkspaceInvitation[]             @relation("InvitationAcceptor")
 
   @@map("users")
 }
@@ -54,12 +55,31 @@ model OneTimeToken {
   revokedAt    DateTime?    @map("revoked_at") @db.Timestamptz(3)
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  user       User?                @relation(fields: [userId], references: [id], onDelete: Restrict)
-  invitation WorkspaceInvitation? @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+  user                    User?                             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  invitation              WorkspaceInvitation?              @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+  invitationContinuations WorkspaceInvitationContinuation[]
 
   @@index([userId, purpose])
   @@index([invitationId, purpose])
   @@map("one_time_tokens")
+}
+
+model WorkspaceInvitationContinuation {
+  id             String    @id @default(uuid()) @db.Uuid
+  oneTimeTokenId String    @map("one_time_token_id") @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid
+  tokenHash      Bytes     @unique @map("token_hash") @db.ByteA
+  consumedAt     DateTime? @map("consumed_at") @db.Timestamptz(3)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  oneTimeToken OneTimeToken @relation(fields: [oneTimeTokenId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([oneTimeTokenId])
+  @@index([userId, createdAt])
+  @@map("workspace_invitation_continuations")
 }
 
 model AuthRateLimitBucket {
