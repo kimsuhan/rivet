@@ -34,6 +34,11 @@ import {
   type IssueCreateLabels,
   type IssueCreateSeed,
 } from '@/features/issues/global-issue-create';
+import {
+  rememberSavedViewNavigation,
+  savedViewNavigationHref,
+} from '@/features/issues/saved-view-navigation';
+import { SavedViewSidebarNavigation } from '@/features/issues/saved-view-sidebar-navigation';
 import { ProfileDialog, type ProfileDialogLabels } from '@/features/profile/profile-dialog';
 import { GlobalSearch, type GlobalSearchLabels } from '@/features/search/global-search';
 import {
@@ -164,6 +169,8 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
   const selectedTeamKey = selectedTeamLocation?.teamKey ?? null;
   const selectedTeamView = selectedTeamLocation?.view ?? null;
   const lastTeamView = selectedTeamView ?? storedTeamView;
+  const membershipId = session.data?.authenticated ? session.data.membership?.id : undefined;
+  const currentSearch = searchParams.toString();
 
   useEffect(() => {
     if (selectedTeamKey && selectedTeamView) {
@@ -171,6 +178,15 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
       rememberTeamView(selectedTeamView);
     }
   }, [selectedTeamKey, selectedTeamView]);
+
+  useEffect(() => {
+    rememberSavedViewNavigation(membershipId, pathname, currentSearch);
+  }, [currentSearch, membershipId, pathname]);
+
+  function navigationHref(href: NavigationItem['href']): string {
+    if (href !== '/issues' && href !== '/my-issues') return href;
+    return savedViewNavigationHref(membershipId, href, pathname, currentSearch);
+  }
 
   useLayoutEffect(() => {
     function openGlobalOverlay(event: KeyboardEvent) {
@@ -366,36 +382,43 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
             const active = isCurrentPath(pathname, href);
 
             return (
-              <Link
-                key={href}
-                href={href}
-                aria-current={active ? 'page' : undefined}
-                aria-label={href === '/inbox' ? inboxNavigationLabel : label}
-                title={label}
-                className={cn(
-                  'focus-visible:ring-sidebar-ring relative flex h-8 items-center gap-2 rounded-md border-l-2 px-2 text-sm transition-colors outline-none focus-visible:ring-2',
-                  active
-                    ? 'border-primary bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground hover:bg-surface-2 hover:text-foreground border-transparent',
-                )}
-              >
-                <span className="relative shrink-0">
-                  <Icon aria-hidden="true" className="size-4" strokeWidth={1.75} />
+              <div key={href} className="flex flex-col gap-0.5">
+                <Link
+                  href={navigationHref(href)}
+                  aria-current={active ? 'page' : undefined}
+                  aria-label={href === '/inbox' ? inboxNavigationLabel : label}
+                  title={label}
+                  className={cn(
+                    'focus-visible:ring-sidebar-ring relative flex h-8 items-center gap-2 rounded-md border-l-2 px-2 text-sm transition-colors outline-none focus-visible:ring-2',
+                    active
+                      ? 'border-primary bg-sidebar-accent text-sidebar-accent-foreground'
+                      : 'text-sidebar-foreground hover:bg-surface-2 hover:text-foreground border-transparent',
+                  )}
+                >
+                  <span className="relative shrink-0">
+                    <Icon aria-hidden="true" className="size-4" strokeWidth={1.75} />
+                    {href === '/inbox' ? (
+                      <NotificationCountBadge
+                        count={unreadNotificationCount}
+                        className="absolute -top-2 left-2 xl:hidden"
+                      />
+                    ) : null}
+                  </span>
+                  <span className="hidden truncate xl:inline">{label}</span>
                   {href === '/inbox' ? (
                     <NotificationCountBadge
                       count={unreadNotificationCount}
-                      className="absolute -top-2 left-2 xl:hidden"
+                      className="ml-auto hidden xl:flex"
                     />
                   ) : null}
-                </span>
-                <span className="hidden truncate xl:inline">{label}</span>
-                {href === '/inbox' ? (
-                  <NotificationCountBadge
-                    count={unreadNotificationCount}
-                    className="ml-auto hidden xl:flex"
-                  />
+                </Link>
+                {session.data?.authenticated && href === '/issues' ? (
+                  <SavedViewSidebarNavigation resourceType="ISSUES" />
                 ) : null}
-              </Link>
+                {session.data?.authenticated && href === '/my-issues' ? (
+                  <SavedViewSidebarNavigation resourceType="MY_WORK" />
+                ) : null}
+              </div>
             );
           })}
         </nav>
@@ -504,7 +527,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
           return (
             <Link
               key={href}
-              href={href}
+              href={navigationHref(href)}
               aria-current={active ? 'page' : undefined}
               aria-label={href === '/inbox' ? inboxNavigationLabel : label}
               className={cn(
@@ -532,7 +555,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
           return (
             <Link
               key={href}
-              href={href}
+              href={navigationHref(href)}
               aria-current={active ? 'page' : undefined}
               className={cn(
                 'focus-visible:ring-ring flex min-h-11 flex-col items-center justify-center gap-0.5 text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-inset',
@@ -562,7 +585,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
 
       <GlobalSearch open={searchOpen} onOpenChange={changeSearchOpen} labels={labels.search} />
       <GlobalIssueCreate
-        key={issueCreateOpen ? issueCreateSeed?.projectId ?? 'new' : 'closed'}
+        key={issueCreateOpen ? (issueCreateSeed?.projectId ?? 'new') : 'closed'}
         currentTeamKey={selectedTeamKey}
         open={issueCreateOpen}
         onOpenChange={changeIssueCreateOpen}

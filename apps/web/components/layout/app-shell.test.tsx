@@ -11,7 +11,7 @@ vi.mock('@rivet/api-client', () => ({
   useAuthControllerGetSession: () => ({
     data: {
       authenticated: true,
-      membership: { role: 'ADMIN', status: 'ACTIVE' },
+      membership: { id: 'membership-1', role: 'ADMIN', status: 'ACTIVE' },
       user: {
         avatarFileId: null,
         displayName: '김리벳',
@@ -21,6 +21,37 @@ vi.mock('@rivet/api-client', () => ({
     },
   }),
   useNotificationsControllerUnreadCount: () => ({ data: { count: 7 } }),
+  useSavedViewsControllerList: ({ resourceType }: { resourceType: 'ISSUES' | 'MY_WORK' }) => ({
+    data: {
+      items:
+        resourceType === 'ISSUES'
+          ? [
+              {
+                configuration: { query: '긴급', sort: 'priority', sortDirection: 'desc' },
+                createdAt: '2026-07-16T00:00:00.000Z',
+                id: 'saved-issues',
+                isDefault: true,
+                name: '긴급 이슈',
+                resourceType: 'ISSUES',
+                updatedAt: '2026-07-16T00:00:00.000Z',
+                version: 1,
+              },
+            ]
+          : [
+              {
+                configuration: { sort: 'executionOrder', sortDirection: 'desc' },
+                createdAt: '2026-07-16T00:00:00.000Z',
+                id: 'saved-my-work',
+                isDefault: false,
+                name: '오늘 할 일',
+                resourceType: 'MY_WORK',
+                updatedAt: '2026-07-16T00:00:00.000Z',
+                version: 1,
+              },
+            ],
+      nextCursor: null,
+    },
+  }),
 }));
 
 vi.mock('@/features/search/global-search', () => ({
@@ -239,6 +270,7 @@ describe('AppShell', () => {
     pathname = '/my-issues';
     window.history.replaceState({}, '', '/ko/my-issues');
     window.localStorage.clear();
+    window.sessionStorage.clear();
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);
       return 1;
@@ -277,7 +309,9 @@ describe('AppShell', () => {
     ).getAllByRole('link');
     expect(desktopLinks.map((link) => link.getAttribute('href'))).toEqual([
       '/issues',
+      '/issues?view=saved-issues&query=%EA%B8%B4%EA%B8%89&sort=priority&sortDirection=desc',
       '/my-issues',
+      '/my-issues?view=saved-my-work&sort=executionOrder&sortDirection=desc',
       '/inbox',
       '/projects',
     ]);
@@ -297,6 +331,79 @@ describe('AppShell', () => {
       within(mobileNavigation).getByRole('button', { name: labels.openTeamSelector }),
     ).toBeVisible();
     expect(screen.getAllByRole('button', { name: labels.openSearch })).toHaveLength(2);
+  });
+
+  it('다른 목록을 거쳐도 membership별 이슈 저장된 보기 URL을 복원한다', async () => {
+    pathname = '/issues';
+    window.history.replaceState(
+      {},
+      '',
+      '/ko/issues?view=issue-view&query=%EA%B8%B4%EA%B8%89&sort=priority',
+    );
+    const view = render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    await waitFor(() => {
+      expect(
+        window.sessionStorage.getItem('rivet:saved-view-navigation:v1:membership-1:/issues'),
+      ).toBe('view=issue-view&query=%EA%B8%B4%EA%B8%89&sort=priority');
+    });
+
+    pathname = '/my-issues';
+    window.history.replaceState({}, '', '/ko/my-issues');
+    view.rerender(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    expect(
+      within(screen.getByRole('navigation', { name: labels.desktopNavigation })).getByRole('link', {
+        name: labels.navigation.issues,
+      }),
+    ).toHaveAttribute('href', '/issues?view=issue-view&query=%EA%B8%B4%EA%B8%89&sort=priority');
+    expect(
+      within(screen.getByRole('navigation', { name: labels.mobileNavigation })).getByRole('link', {
+        name: labels.navigation.issues,
+      }),
+    ).toHaveAttribute('href', '/issues?view=issue-view&query=%EA%B8%B4%EA%B8%89&sort=priority');
+  });
+
+  it('데스크톱 사이드바에서 개인 보기를 상위 목록 메뉴 아래에서 바로 연다', () => {
+    pathname = '/issues';
+    window.history.replaceState({}, '', '/ko/issues?view=saved-issues');
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    const desktopNavigation = screen.getByRole('navigation', { name: labels.desktopNavigation });
+    const issueViewGroup = within(desktopNavigation).getByRole('group', {
+      name: '이슈 저장된 보기',
+    });
+    const myWorkViewGroup = within(desktopNavigation).getByRole('group', {
+      name: '내 작업 저장된 보기',
+    });
+    const issueParent = within(desktopNavigation).getByRole('link', {
+      name: labels.navigation.issues,
+    });
+    const issueView = within(issueViewGroup).getByRole('link', { name: /긴급 이슈/u });
+
+    expect(issueParent).toHaveAttribute('aria-current', 'page');
+    expect(issueView).toHaveAttribute('aria-current', 'location');
+    expect(issueView).not.toHaveClass('bg-sidebar-accent');
+    expect(issueView).toHaveAttribute(
+      'href',
+      '/issues?view=saved-issues&query=%EA%B8%B4%EA%B8%89&sort=priority&sortDirection=desc',
+    );
+    expect(within(myWorkViewGroup).getByRole('link', { name: '오늘 할 일' })).toHaveAttribute(
+      'href',
+      '/my-issues?view=saved-my-work&sort=executionOrder&sortDirection=desc',
+    );
   });
 
   it('내 작업 상세 경로에서는 내 작업 탐색을 활성화한다', () => {

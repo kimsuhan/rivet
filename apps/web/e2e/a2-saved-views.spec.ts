@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test } from '@playwright/test';
 
-import { cleanupM2Users, clearM1RateLimits, getLatestM1Token } from '../../../scripts/e2e/m1-auth-fixture';
+import {
+  cleanupM2Users,
+  clearM1RateLimits,
+  getLatestM1Token,
+} from '../../../scripts/e2e/m1-auth-fixture';
 
 test('A2 개인 저장된 보기를 저장하고 기본 보기로 복원한다', async ({ page }, testInfo) => {
   test.skip(
@@ -16,6 +20,7 @@ test('A2 개인 저장된 보기를 저장하고 기본 보기로 복원한다',
   const email = `a2.saved-view.${runId}@example.com`;
   const password = `A2 저장된 보기 브라우저 검증 전용 비밀번호! ${runId}`;
   const viewName = `긴급 작업 ${runId}`;
+  const updatedQuery = '긴급 수정';
 
   await clearM1RateLimits();
   try {
@@ -47,18 +52,31 @@ test('A2 개인 저장된 보기를 저장하고 기본 보기로 복원한다',
     await search.fill('긴급');
     await search.press('Enter');
     await expect(page).toHaveURL(/query=%EA%B8%B4%EA%B8%89/u);
-    await page.getByRole('button', { name: '현재 보기 저장' }).click();
-    const createDialog = page.getByRole('dialog', { name: '현재 보기 저장' });
+    await page.getByRole('button', { name: '보기 저장', exact: true }).click();
+    const createDialog = page.getByRole('dialog', { name: '새 보기 만들기' });
     await createDialog.getByLabel('저장된 보기 이름').fill(viewName);
-    await createDialog.getByRole('button', { name: '저장', exact: true }).click();
+    await createDialog.getByRole('button', { name: '보기 저장', exact: true }).click();
     await expect(createDialog).toBeHidden();
     await expect(page).toHaveURL(/view=/u);
 
-    await page.getByRole('button', { name: '기본 보기' }).click();
-    await page.goto('/my-issues');
-    await expect(search).toHaveValue('긴급');
+    await search.fill(updatedQuery);
+    await search.press('Enter');
+    await expect(page).toHaveURL(/view=/u);
+    await page.getByRole('button', { name: '변경 저장' }).click();
+    await expect(page.getByRole('button', { name: '변경 저장' })).toBeHidden();
+
+    await page.getByRole('button', { name: `${viewName} 보기 관리` }).click();
+    await page.getByRole('button', { name: '기본 보기로 지정' }).click();
+    await page.getByRole('button', { name: `${viewName} 보기 관리` }).click();
+    await expect(page.getByRole('button', { name: '기본 보기' })).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await page.getByRole('link', { name: '이슈', exact: true }).click();
+    await expect(page).toHaveURL(/\/issues$/u);
+    await page.getByRole('link', { name: '내 작업', exact: true }).click();
+    await expect(search).toHaveValue(updatedQuery);
     await expect(page).toHaveURL(/view=/u);
 
+    await page.getByRole('button', { name: `${viewName} 보기 관리` }).click();
     await page.getByRole('button', { name: '이름 변경' }).click();
     const renameDialog = page.getByRole('dialog', { name: '저장된 보기 이름 변경' });
     await renameDialog.getByLabel('새 저장된 보기 이름').fill(`${viewName} 수정`);

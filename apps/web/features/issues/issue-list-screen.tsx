@@ -1,6 +1,6 @@
 'use client';
 
-import { Filter, ListTodo, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { ArrowDownUp, Filter, ListTodo, Plus, Search, X } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
@@ -16,6 +16,7 @@ import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -27,6 +28,7 @@ import {
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
+import { IssueListDisplayControls } from './issue-list-display-controls';
 import { useTeamWorkPages } from './issue-list-queries';
 import { MY_WORK_GRID_COLUMNS, MyWorkListRow } from './my-work-list-row';
 import { SavedViewControls } from './saved-view-controls';
@@ -61,6 +63,19 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
   const sort = searchParams.get('sort') ?? (mode === 'my' ? 'executionOrder' : 'updatedAt');
   const sortDirection = searchParams.get('sortDirection') ?? 'desc';
   const density = searchParams.get('density') ?? 'comfortable';
+  const defaultMyWorkConfiguration = {
+    density: 'comfortable',
+    sort: 'executionOrder',
+    sortDirection: 'desc',
+  };
+  const myWorkConfiguration = {
+    ...(query ? { query } : {}),
+    ...(projectId ? { projectId } : {}),
+    ...(category && category !== MY_WORK_CATEGORIES ? { stateCategory: category } : {}),
+    sort,
+    sortDirection,
+    density,
+  };
   const params: TeamWorksControllerListParams = {
     ...(mode === 'my'
       ? { assigneeMembershipId: 'me', stateCategory: category as never }
@@ -86,17 +101,29 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
 
   function replace(key: string, value: string) {
     const next = new URLSearchParams(searchParams.toString());
-    next.delete('view');
     if (value) next.set(key, value);
     else next.delete(key);
     router.push(`${pathname}${next.size ? `?${next.toString()}` : ''}`, { scroll: false });
   }
+
+  function replaceMany(values: Record<string, string>) {
+    const next = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(values)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    router.push(`${pathname}${next.size ? `?${next.toString()}` : ''}`, { scroll: false });
+  }
+
   function reset() {
     router.push(pathname, { scroll: false });
   }
 
   const pending = teams.isPending || (mode === 'my' ? myWorks.isPending : teamWorks.isPending);
   const errored = teams.isError || (mode === 'my' ? myWorks.isError : teamWorks.isError);
+  const selectedCategory = mode === 'my' && category === MY_WORK_CATEGORIES ? '' : category;
+  const activeProjectName = projects.data?.items.find((project) => project.id === projectId)?.name;
+  const activeFilterCount = Number(Boolean(projectId)) + Number(Boolean(selectedCategory));
   return (
     <section className="mx-auto max-w-[1440px] space-y-5" aria-labelledby="team-work-list-title">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -123,164 +150,244 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           이슈 만들기
         </Link>
       </header>
-      <div className="border-b pb-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {mode === 'my' ? (
-            <SavedViewControls
-              resourceType="MY_WORK"
-              configuration={{
-                ...(query ? { query } : {}),
-                ...(projectId ? { projectId } : {}),
-                ...(category && category !== MY_WORK_CATEGORIES ? { stateCategory: category } : {}),
-                sort,
-                sortDirection,
-                density,
-              }}
-              {...(projectId &&
-              projects.data &&
-              !projects.data.items.some((project) => project.id === projectId)
-                ? {
-                    staleValueMessage:
-                      '저장된 보기의 프로젝트가 보관되었거나 접근 권한이 없습니다. 필터를 수정한 뒤 보기를 다시 저장하세요.',
-                  }
-                : {})}
-            />
-          ) : null}
-          {mode === 'my' ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => replace('density', density === 'compact' ? 'comfortable' : 'compact')}
-            >
-              {density === 'compact' ? '여유 보기' : '촘촘히 보기'}
-            </Button>
-          ) : null}
+      {mode === 'my' ? (
+        <SavedViewControls
+          resourceType="MY_WORK"
+          configuration={myWorkConfiguration}
+          defaultConfiguration={defaultMyWorkConfiguration}
+          activeFilters={
+            query || projectId || selectedCategory ? (
+              <>
+                {query ? (
+                  <Button size="xs" variant="secondary" onClick={() => replace('query', '')}>
+                    검색: {query}
+                    <X data-icon="inline-end" aria-label="검색어 제거" />
+                  </Button>
+                ) : null}
+                {projectId ? (
+                  <Button size="xs" variant="secondary" onClick={() => replace('projectId', '')}>
+                    프로젝트: {activeProjectName ?? '접근할 수 없음'}
+                    <X data-icon="inline-end" aria-label="프로젝트 필터 제거" />
+                  </Button>
+                ) : null}
+                {selectedCategory ? (
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={() => replace('stateCategory', '')}
+                  >
+                    상태:{' '}
+                    {CATEGORY_LABELS[selectedCategory as keyof typeof CATEGORY_LABELS] ??
+                      selectedCategory}
+                    <X data-icon="inline-end" aria-label="상태 필터 제거" />
+                  </Button>
+                ) : null}
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => replaceMany({ projectId: '', query: '', stateCategory: '' })}
+                >
+                  필터 초기화
+                </Button>
+              </>
+            ) : undefined
+          }
+          {...(projectId && projects.data && !activeProjectName
+            ? {
+                staleValueMessage:
+                  '저장된 보기의 프로젝트가 보관되었거나 접근 권한이 없습니다. 필터를 수정한 뒤 보기를 다시 저장하세요.',
+              }
+            : {})}
+        >
           <WorkSearchInput
             key={query}
             initialQuery={query}
             mode={mode}
             onSubmit={(value) => replace('query', value)}
           />
-          <Filter className="text-muted-foreground size-4" aria-hidden="true" />
-          <Select
-            items={[
-              { label: '모든 상태', value: '' },
-              ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ label, value })),
+          <Popover>
+            <PopoverTrigger
+              type="button"
+              aria-label={activeFilterCount ? `필터 ${activeFilterCount}개` : '필터'}
+              className={buttonVariants({ size: 'sm', variant: 'ghost' })}
+            >
+              <Filter data-icon="inline-start" />
+              필터
+              {activeFilterCount ? (
+                <span className="bg-secondary text-secondary-foreground min-w-5 rounded-full px-1.5 text-center text-xs">
+                  {activeFilterCount}
+                </span>
+              ) : null}
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-64 gap-2.5 p-3">
+              <PopoverTitle className="text-sm">내 작업 필터</PopoverTitle>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-muted-foreground text-xs">상태</span>
+                <Select
+                  items={[
+                    { label: '모든 상태', value: '' },
+                    ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ label, value })),
+                  ]}
+                  value={selectedCategory}
+                  onValueChange={(value) => replace('stateCategory', value ?? '')}
+                >
+                  <SelectTrigger className="w-full" size="sm" aria-label="작업 상태 필터">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="">모든 상태</SelectItem>
+                      {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-muted-foreground text-xs">프로젝트</span>
+                <Select
+                  items={[
+                    { label: '모든 프로젝트', value: '' },
+                    ...(projects.data?.items ?? []).map((project) => ({
+                      label: project.name,
+                      value: project.id,
+                    })),
+                  ]}
+                  value={projectId}
+                  onValueChange={(value) => replace('projectId', value ?? '')}
+                >
+                  <SelectTrigger className="w-full" size="sm" aria-label="프로젝트 필터">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="">모든 프로젝트</SelectItem>
+                      {(projects.data?.items ?? []).map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+              {activeFilterCount ? (
+                <Button
+                  className="w-full"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => replaceMany({ projectId: '', stateCategory: '' })}
+                >
+                  필터 초기화
+                </Button>
+              ) : null}
+            </PopoverContent>
+          </Popover>
+          <IssueListDisplayControls
+            density={density}
+            sort={sort}
+            sortDirection={sortDirection}
+            sortLabel="내 작업 정렬 기준"
+            sortOptions={[
+              { label: '실행 순서', value: 'executionOrder' },
+              { label: '우선순위', value: 'priority' },
+              { label: '생성일', value: 'createdAt' },
+              { label: '최근 수정일', value: 'updatedAt' },
             ]}
-            value={mode === 'my' && category === MY_WORK_CATEGORIES ? '' : category}
-            onValueChange={(value) => replace('stateCategory', value ?? '')}
-          >
-            <SelectTrigger size="sm" aria-label="작업 상태 필터">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="">모든 상태</SelectItem>
-                {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          {mode === 'my' ? (
+            onSortChange={(value) => replace('sort', value)}
+            onSortDirectionChange={(value) => replace('sortDirection', value)}
+            onDensityChange={(value) => replace('density', value)}
+          />
+        </SavedViewControls>
+      ) : (
+        <div className="border-b pb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <WorkSearchInput
+              key={query}
+              initialQuery={query}
+              mode={mode}
+              onSubmit={(value) => replace('query', value)}
+            />
             <Select
               items={[
-                { label: '모든 프로젝트', value: '' },
-                ...(projects.data?.items ?? []).map((project) => ({
-                  label: project.name,
-                  value: project.id,
-                })),
+                { label: '모든 상태', value: '' },
+                ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ label, value })),
               ]}
-              value={projectId}
-              onValueChange={(value) => replace('projectId', value ?? '')}
+              value={category}
+              onValueChange={(value) => replace('stateCategory', value ?? '')}
             >
-              <SelectTrigger size="sm" aria-label="프로젝트 필터">
+              <SelectTrigger size="sm" aria-label="작업 상태 필터">
+                <Filter data-icon="inline-start" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="">모든 프로젝트</SelectItem>
-                  {(projects.data?.items ?? []).map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
+                  <SelectItem value="">모든 상태</SelectItem>
+                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
                     </SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
-          ) : null}
-          <SlidersHorizontal className="text-muted-foreground size-4" aria-hidden="true" />
-          <Select
-            items={['executionOrder', 'priority', 'createdAt', 'updatedAt'].map((value) => ({
-              value,
-              label:
-                {
-                  executionOrder: '실행 순서',
-                  priority: '우선순위',
-                  createdAt: '생성일',
-                  updatedAt: '최근 수정일',
-                }[value] ?? value,
-            }))}
-            value={sort}
-            onValueChange={(value) => replace('sort', value ?? '')}
-          >
-            <SelectTrigger
-              size="sm"
-              aria-label="정렬 기준"
-              title={
-                sort === 'executionOrder'
-                  ? '실행 순서: 진행 중 → 시작 전 → 백로그, 그 안에서 우선순위 순으로 정렬합니다'
-                  : undefined
-              }
+            <Select
+              items={['priority', 'createdAt', 'updatedAt', 'status'].map((value) => ({
+                value,
+                label:
+                  {
+                    priority: '우선순위',
+                    createdAt: '생성일',
+                    updatedAt: '최근 수정일',
+                    status: '상태',
+                  }[value] ?? value,
+              }))}
+              value={sort}
+              onValueChange={(value) => replace('sort', value ?? '')}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {['executionOrder', 'priority', 'createdAt', 'updatedAt'].map((value) => (
-                  <SelectItem
-                    key={value}
-                    value={value}
-                    title={
-                      value === 'executionOrder'
-                        ? '진행 중 → 시작 전 → 백로그, 우선순위 순'
-                        : undefined
-                    }
-                  >
-                    {
+              <SelectTrigger size="sm" aria-label="정렬 기준">
+                <ArrowDownUp data-icon="inline-start" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {['priority', 'createdAt', 'updatedAt', 'status'].map((value) => (
+                    <SelectItem key={value} value={value}>
                       {
-                        executionOrder: '실행 순서',
-                        priority: '우선순위',
-                        createdAt: '생성일',
-                        updatedAt: '최근 수정일',
-                      }[value]
-                    }
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Button
-            aria-label={sortDirection === 'desc' ? '내림차순 정렬' : '오름차순 정렬'}
-            onClick={() => replace('sortDirection', sortDirection === 'desc' ? 'asc' : 'desc')}
-            size="sm"
-            variant="ghost"
-          >
-            {sortDirection === 'desc' ? '↓' : '↑'}
-          </Button>
-          {query ||
-          projectId ||
-          searchParams.get('stateCategory') ||
-          searchParams.get('sort') ||
-          searchParams.get('sortDirection') ? (
-            <Button onClick={reset} size="sm" variant="ghost">
-              초기화
+                        {
+                          priority: '우선순위',
+                          createdAt: '생성일',
+                          updatedAt: '최근 수정일',
+                          status: '상태',
+                        }[value]
+                      }
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Button
+              aria-label={sortDirection === 'desc' ? '내림차순 정렬' : '오름차순 정렬'}
+              onClick={() => replace('sortDirection', sortDirection === 'desc' ? 'asc' : 'desc')}
+              size="sm"
+              variant="ghost"
+            >
+              {sortDirection === 'desc' ? '↓' : '↑'}
             </Button>
-          ) : null}
+            {query ||
+            searchParams.get('stateCategory') ||
+            searchParams.get('sort') ||
+            searchParams.get('sortDirection') ? (
+              <Button onClick={reset} size="sm" variant="ghost">
+                초기화
+              </Button>
+            ) : null}
+          </div>
         </div>
-      </div>
+      )}
       {pending ? <ContentLoading label="팀 작업을 불러오는 중입니다" /> : null}
       {errored ? (
         <ContentError
@@ -324,7 +431,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
         </ContentEmpty>
       ) : null}
       {works?.length ? (
-        <div className={density === 'compact' ? 'text-sm' : undefined}>
+        <div>
           <div
             className={cn(
               'text-muted-foreground grid gap-3 border-b px-3 py-2 text-xs font-medium max-md:hidden',
@@ -355,9 +462,17 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           <ul>
             {works.map((work) =>
               mode === 'my' ? (
-                <MyWorkListRow key={work.id} work={work} />
+                <MyWorkListRow
+                  key={work.id}
+                  work={work}
+                  density={density as 'compact' | 'comfortable'}
+                />
               ) : (
-                <TeamWorkListRow key={work.id} work={work} />
+                <TeamWorkListRow
+                  key={work.id}
+                  work={work}
+                  density={density as 'compact' | 'comfortable'}
+                />
               ),
             )}
           </ul>
@@ -389,7 +504,7 @@ function WorkSearchInput({
 
   return (
     <form
-      className="relative min-w-56 flex-1 sm:max-w-sm"
+      className="relative w-full min-w-56 sm:w-80 sm:flex-none"
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit(draft.trim());

@@ -24,7 +24,13 @@ import { useTeamWorkInlineMutation } from './use-team-work-inline-mutation';
 export const MY_WORK_GRID_COLUMNS =
   'grid-cols-[6.5rem_minmax(18rem,30rem)_minmax(15rem,20rem)_8.5rem_8rem] max-xl:grid-cols-[6rem_minmax(15rem,24rem)_minmax(12rem,16rem)_7.5rem_7rem] max-md:grid-cols-1';
 
-export function MyWorkListRow({ work }: { work: TeamWorkSummaryResponseDto }) {
+export function MyWorkListRow({
+  work,
+  density = 'comfortable',
+}: {
+  work: TeamWorkSummaryResponseDto;
+  density?: 'compact' | 'comfortable';
+}) {
   const states = useTeamsControllerListWorkflowStates(work.team.id, { query: { retry: false } });
   const stateMutation = useTeamWorkInlineMutation(work, 'workflowState');
   const [completionModalOpen, setCompletionModalOpen] = useState(false);
@@ -51,7 +57,9 @@ export function MyWorkListRow({ work }: { work: TeamWorkSummaryResponseDto }) {
       >
         <span className="sr-only">{work.issue.title}</span>
       </Link>
-      <div className={`pointer-events-none relative z-10 grid min-h-16 ${MY_WORK_GRID_COLUMNS} items-center gap-3 px-3 py-2.5 text-sm max-md:gap-2 max-md:py-3`}>
+      <div
+        className={`pointer-events-none relative z-10 grid ${density === 'compact' ? 'min-h-11 gap-2 py-1.5' : 'min-h-16 gap-3 py-2.5'} ${MY_WORK_GRID_COLUMNS} items-center px-3 text-sm max-md:gap-2 max-md:py-3`}
+      >
         <div className="min-w-0"><PriorityDisplay priority={work.issue.priority} /></div>
         <div className="min-w-0">
           <p className="truncate font-medium" title={work.issue.title}>{work.issue.title}</p>

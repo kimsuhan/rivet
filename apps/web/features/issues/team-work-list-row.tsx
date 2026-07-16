@@ -34,7 +34,13 @@ function relativeUpdatedAt(value: string) {
       : `${Math.round(minutes / 1_440)}일 전`;
 }
 
-export function TeamWorkListRow({ work }: { work: TeamWorkSummaryResponseDto }) {
+export function TeamWorkListRow({
+  work,
+  density = 'comfortable',
+}: {
+  work: TeamWorkSummaryResponseDto;
+  density?: 'compact' | 'comfortable';
+}) {
   const states = useTeamsControllerListWorkflowStates(work.team.id, { query: { retry: false } });
   const members = useMembersControllerList(
     { limit: 100, status: 'ACTIVE', teamId: work.team.id },
@@ -46,7 +52,7 @@ export function TeamWorkListRow({ work }: { work: TeamWorkSummaryResponseDto }) 
   return (
     <li className="group border-b last:border-b-0">
       <div
-        className={`grid min-h-16 ${TEAM_WORK_GRID_COLUMNS} items-center gap-3 px-3 py-2.5 text-sm`}
+        className={`grid ${density === 'compact' ? 'min-h-11 gap-2 py-1.5' : 'min-h-16 gap-3 py-2.5'} ${TEAM_WORK_GRID_COLUMNS} items-center px-3 text-sm`}
       >
         <Link
           href={issueWorkHref(work.issue.identifier, work.identifier)}

@@ -74,4 +74,26 @@ describe('IssueListRow', () => {
     const action = screen.getByRole('link', { name: /업무 보기/ });
     expect(action.className).not.toContain('border');
   });
+
+  it('compact 밀도는 comfortable보다 낮은 최소 높이와 좁은 패딩을 적용한다', () => {
+    const { container: compactContainer } = render(
+      <ul>
+        <IssueListRow issue={issue({})} queryKey={['issues']} density="compact" />
+      </ul>,
+    );
+    const { container: comfortableContainer } = render(
+      <ul>
+        <IssueListRow issue={issue({})} queryKey={['issues']} density="comfortable" />
+      </ul>,
+    );
+
+    const compactRow = compactContainer.querySelector('li > div');
+    const comfortableRow = comfortableContainer.querySelector('li > div');
+
+    expect(compactRow?.className).toContain('min-h-11');
+    expect(compactRow?.className).toContain('py-1.5');
+    expect(comfortableRow?.className).toContain('min-h-16');
+    expect(comfortableRow?.className).toContain('py-2.5');
+    expect(compactRow?.className).not.toEqual(comfortableRow?.className);
+  });
 });

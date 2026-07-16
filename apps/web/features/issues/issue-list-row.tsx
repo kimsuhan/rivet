@@ -31,9 +31,11 @@ function relativeUpdatedAt(value: string) {
 export function IssueListRow({
   issue,
   queryKey,
+  density = 'comfortable',
 }: {
   issue: IssueSummaryResponseDto;
   queryKey: QueryKey;
+  density?: 'compact' | 'comfortable';
 }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -80,7 +82,7 @@ export function IssueListRow({
   return (
     <li className="group border-b last:border-b-0">
       <div
-        className={`grid min-h-16 ${ISSUE_LIST_GRID_COLUMNS} items-center gap-3 px-3 py-2.5 text-sm`}
+        className={`grid ${density === 'compact' ? 'min-h-11 gap-2 py-1.5' : 'min-h-16 gap-3 py-2.5'} ${ISSUE_LIST_GRID_COLUMNS} items-center px-3 text-sm`}
       >
         <Link
           href={`/issues/${encodeURIComponent(issue.identifier)}?tab=work`}
