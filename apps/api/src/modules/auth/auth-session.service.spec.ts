@@ -28,13 +28,24 @@ const sessionContext = {
 describe('AuthSessionService', () => {
   const queryRaw = jest.fn();
   const executeRaw = jest.fn();
+  const deactivatePushSubscriptions = jest.fn();
   let service: AuthSessionService;
 
   beforeEach(() => {
     queryRaw.mockReset();
     executeRaw.mockReset();
+    deactivatePushSubscriptions.mockReset().mockResolvedValue({ count: 1 });
+    const transaction = {
+      $executeRaw: executeRaw,
+      webPushSubscription: { updateMany: deactivatePushSubscriptions },
+    };
     service = new AuthSessionService({
-      client: { $executeRaw: executeRaw, $queryRaw: queryRaw },
+      client: {
+        $executeRaw: executeRaw,
+        $queryRaw: queryRaw,
+        $transaction: (operation: (client: typeof transaction) => unknown) =>
+          operation(transaction),
+      },
     } as unknown as DatabaseService);
   });
 
@@ -103,5 +114,15 @@ describe('AuthSessionService', () => {
     expect((executeRaw.mock.calls[0]?.[0] as readonly string[]).join('?')).toEqual(
       expect.stringContaining('COALESCE("revoked_at", NOW())'),
     );
+    expect(deactivatePushSubscriptions).toHaveBeenCalledWith({
+      data: {
+        auth: null,
+        disabledAt: expect.any(Date),
+        endpoint: null,
+        p256dh: null,
+        status: 'INACTIVE',
+      },
+      where: { sessionId: 'session-id', status: 'ACTIVE' },
+    });
   });
 });

@@ -40,4 +40,8 @@ location / {
     proxy_pass http://127.0.0.1:3000;
     proxy_read_timeout 60s;
     proxy_send_timeout 60s;
+    # Next.js standalone 서버는 이 위치에서 받은 X-Forwarded-Proto를 내부 self-proxy(로케일 rewrite)
+    # 목적지 URL에도 그대로 써서 https로 자기 자신을 호출하려다 EPROTO로 죽는다. 웹 앱 소스는
+    # 이 헤더를 쓰지 않으므로 이 location에서만 http로 고정해 우회한다.
+    proxy_set_header X-Forwarded-Proto http;
 }

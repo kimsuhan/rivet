@@ -52,6 +52,10 @@ class ApiEnvironment {
   @IsString()
   SLACK_ALERT_WEBHOOK_URL?: string;
 
+  @IsOptional()
+  @IsString()
+  WEB_PUSH_VAPID_PUBLIC_KEY?: string;
+
   @Transform(({ value }) => toNumber(value, 10))
   @IsInt()
   @Min(1)
@@ -106,6 +110,19 @@ export function validateApiEnvironment(values: Record<string, unknown>): ApiEnvi
     } catch {
       invalidKeys.add('WEB_ORIGIN');
     }
+  }
+
+  const webPushPublicKey = environment.WEB_PUSH_VAPID_PUBLIC_KEY?.trim() ?? '';
+  const decodedWebPushPublicKey = Buffer.from(webPushPublicKey, 'base64url');
+  if (
+    (webPushPublicKey.length > 0 &&
+      (!/^[A-Za-z0-9_-]+$/.test(webPushPublicKey) ||
+        decodedWebPushPublicKey.byteLength !== 65 ||
+        decodedWebPushPublicKey[0] !== 4 ||
+        decodedWebPushPublicKey.toString('base64url') !== webPushPublicKey)) ||
+    (environment.NODE_ENV === 'production' && webPushPublicKey.length === 0)
+  ) {
+    invalidKeys.add('WEB_PUSH_VAPID_PUBLIC_KEY');
   }
 
   const hmacKeys = [

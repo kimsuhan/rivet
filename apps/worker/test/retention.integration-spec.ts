@@ -5,7 +5,14 @@ import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { PinoLogger } from 'nestjs-pino';
 
-import { EmailTemplateType, ExportType, MembershipRole, TokenPurpose } from '@rivet/database';
+import {
+  EmailTemplateType,
+  ExportType,
+  MembershipRole,
+  TokenPurpose,
+  WebPushBrowser,
+  WebPushSubscriptionStatus,
+} from '@rivet/database';
 
 import { DatabaseModule } from '../src/common/database/database.module';
 import { DatabaseService } from '../src/common/database/database.service';
@@ -29,7 +36,10 @@ describe('retention cleanup integration', () => {
   let failedOutboxId: string;
   let recentOutboxId: string;
   let activeSessionId: string;
+  let activeSubscriptionId: string;
   let activeTokenId: string;
+  let expiredSessionId: string;
+  let expiredSubscriptionId: string;
   let unfinishedAuditId: string;
   let fixtureReady = false;
 
@@ -115,6 +125,32 @@ describe('retention cleanup integration', () => {
           },
         }),
       ]);
+      const [expiredSubscription, activeSubscription] = await Promise.all([
+        transaction.webPushSubscription.create({
+          data: {
+            auth: 'expired-auth',
+            browser: WebPushBrowser.CHROME,
+            endpoint: `https://push.example.test/expired-${runId}`,
+            endpointHash: randomBytes(32).toString('hex'),
+            membershipId: membership.id,
+            p256dh: 'expired-p256dh',
+            sessionId: expiredSession.id,
+            workspaceId: workspace.id,
+          },
+        }),
+        transaction.webPushSubscription.create({
+          data: {
+            auth: 'active-auth',
+            browser: WebPushBrowser.FIREFOX,
+            endpoint: `https://push.example.test/active-${runId}`,
+            endpointHash: randomBytes(32).toString('hex'),
+            membershipId: membership.id,
+            p256dh: 'active-p256dh',
+            sessionId: activeSession.id,
+            workspaceId: workspace.id,
+          },
+        }),
+      ]);
       const [expiredBucket, activeBucket] = await Promise.all([
         transaction.authRateLimitBucket.create({
           data: {
@@ -196,10 +232,12 @@ describe('retention cleanup integration', () => {
 
       return {
         activeSessionId: activeSession.id,
+        activeSubscriptionId: activeSubscription.id,
         activeTokenId: activeToken.id,
         completedAuditId: completedAudit.id,
         expiredBucketId: expiredBucket.id,
         expiredSessionId: expiredSession.id,
+        expiredSubscriptionId: expiredSubscription.id,
         expiredTokenId: expiredToken.id,
         failedOutboxId: failed.id,
         membershipId: membership.id,
@@ -218,7 +256,10 @@ describe('retention cleanup integration', () => {
     failedOutboxId = fixture.failedOutboxId;
     recentOutboxId = fixture.recentOutboxId;
     activeSessionId = fixture.activeSessionId;
+    activeSubscriptionId = fixture.activeSubscriptionId;
     activeTokenId = fixture.activeTokenId;
+    expiredSessionId = fixture.expiredSessionId;
+    expiredSubscriptionId = fixture.expiredSubscriptionId;
     unfinishedAuditId = fixture.unfinishedAuditId;
     outboxIds.push(...fixture.outboxIds);
     rateLimitIds.push(...fixture.rateLimitIds);
@@ -233,6 +274,7 @@ describe('retention cleanup integration', () => {
       });
       await database.client.outboxEvent.deleteMany({ where: { id: { in: outboxIds } } });
       await database.client.authRateLimitBucket.deleteMany({ where: { id: { in: rateLimitIds } } });
+      await database.client.webPushSubscription.deleteMany({ where: { workspaceId } });
       await database.client.session.deleteMany({ where: { userId } });
       await database.client.oneTimeToken.deleteMany({ where: { userId } });
       await database.client.workspaceMembership.deleteMany({ where: { id: membershipId } });
@@ -244,6 +286,7 @@ describe('retention cleanup integration', () => {
 
   it('deletes only expired terminal rows and is idempotent', async () => {
     await expect(service.cleanup(`retention-${runId}`)).resolves.toEqual({
+      deactivatedPushSubscriptions: 1,
       deletedEmailDeliveries: 1,
       deletedExportAudits: 1,
       deletedOutboxEvents: 3,
@@ -256,6 +299,9 @@ describe('retention cleanup integration', () => {
     await expect(
       Promise.all([
         database.client.session.findUnique({ where: { id: activeSessionId } }),
+        database.client.session.findUnique({ where: { id: expiredSessionId } }),
+        database.client.webPushSubscription.findUnique({ where: { id: activeSubscriptionId } }),
+        database.client.webPushSubscription.findUnique({ where: { id: expiredSubscriptionId } }),
         database.client.oneTimeToken.findUnique({ where: { id: activeTokenId } }),
         database.client.outboxEvent.findUnique({ where: { id: failedOutboxId } }),
         database.client.outboxEvent.findUnique({ where: { id: recentOutboxId } }),
@@ -263,6 +309,21 @@ describe('retention cleanup integration', () => {
       ]),
     ).resolves.toEqual([
       expect.objectContaining({ id: activeSessionId }),
+      null,
+      expect.objectContaining({
+        id: activeSubscriptionId,
+        sessionId: activeSessionId,
+        status: WebPushSubscriptionStatus.ACTIVE,
+      }),
+      expect.objectContaining({
+        auth: null,
+        endpoint: null,
+        id: expiredSubscriptionId,
+        lastErrorCode: 'WEB_PUSH_SESSION_INACTIVE',
+        p256dh: null,
+        sessionId: null,
+        status: WebPushSubscriptionStatus.EXPIRED,
+      }),
       expect.objectContaining({ id: activeTokenId }),
       expect.objectContaining({ id: failedOutboxId }),
       expect.objectContaining({ id: recentOutboxId }),
@@ -270,6 +331,7 @@ describe('retention cleanup integration', () => {
     ]);
 
     await expect(service.cleanup(`retention-${runId}-again`)).resolves.toEqual({
+      deactivatedPushSubscriptions: 0,
       deletedEmailDeliveries: 0,
       deletedExportAudits: 0,
       deletedOutboxEvents: 0,
@@ -278,5 +340,105 @@ describe('retention cleanup integration', () => {
       deletedTokens: 0,
       failedSteps: 0,
     });
+  });
+
+  it('keeps an expired session until its locked active push subscription can be cleaned', async () => {
+    const lockedSession = await database.client.session.create({
+      data: {
+        absoluteExpiresAt: old,
+        createdAt: beforeOld,
+        idleExpiresAt: old,
+        lastSeenAt: old,
+        tokenHash: randomBytes(32),
+        userId,
+      },
+    });
+    const lockedSubscription = await database.client.webPushSubscription.create({
+      data: {
+        auth: 'locked-auth',
+        browser: WebPushBrowser.CHROME,
+        endpoint: `https://push.example.test/locked-${runId}`,
+        endpointHash: randomBytes(32).toString('hex'),
+        membershipId,
+        p256dh: 'locked-p256dh',
+        sessionId: lockedSession.id,
+        workspaceId,
+      },
+    });
+    let notifyLockAcquired: () => void = () => undefined;
+    let releaseLock: () => void = () => undefined;
+    const lockAcquired = new Promise<void>((resolve) => {
+      notifyLockAcquired = resolve;
+    });
+    const lockReleased = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    const lockTransaction = database.client.$transaction(async (transaction) => {
+      await transaction.$queryRaw`
+        SELECT "id"
+        FROM "web_push_subscriptions"
+        WHERE "id" = ${lockedSubscription.id}::uuid
+        FOR UPDATE
+      `;
+      notifyLockAcquired();
+      await lockReleased;
+    });
+    await lockAcquired;
+
+    const cleanup = service.cleanup(`retention-${runId}-locked`);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        cleanup,
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error('잠긴 활성 Push 구독 때문에 세션 정리가 대기했습니다.')),
+            2_000,
+          );
+        }),
+      ]);
+      expect(result.deactivatedPushSubscriptions).toBe(0);
+      expect(result.deletedSessions).toBe(0);
+      await expect(
+        Promise.all([
+          database.client.session.findUnique({ where: { id: lockedSession.id } }),
+          database.client.webPushSubscription.findUnique({
+            where: { id: lockedSubscription.id },
+          }),
+        ]),
+      ).resolves.toEqual([
+        expect.objectContaining({ id: lockedSession.id }),
+        expect.objectContaining({
+          id: lockedSubscription.id,
+          sessionId: lockedSession.id,
+          status: WebPushSubscriptionStatus.ACTIVE,
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      releaseLock();
+      await lockTransaction;
+      await cleanup.catch(() => undefined);
+    }
+
+    const recovered = await service.cleanup(`retention-${runId}-locked-recovered`);
+    expect(recovered.deactivatedPushSubscriptions).toBe(1);
+    expect(recovered.deletedSessions).toBe(1);
+    await expect(
+      Promise.all([
+        database.client.session.findUnique({ where: { id: lockedSession.id } }),
+        database.client.webPushSubscription.findUnique({ where: { id: lockedSubscription.id } }),
+      ]),
+    ).resolves.toEqual([
+      null,
+      expect.objectContaining({
+        auth: null,
+        endpoint: null,
+        id: lockedSubscription.id,
+        p256dh: null,
+        sessionId: null,
+        status: WebPushSubscriptionStatus.EXPIRED,
+      }),
+    ]);
   });
 });

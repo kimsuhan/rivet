@@ -1,5 +1,9 @@
 import { validateApiEnvironment } from './api-environment';
 
+const webPushPublicKey = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 1)]).toString(
+  'base64url',
+);
+
 const validValues = {
   API_PORT: '4000',
   CSRF_HMAC_KEY: 'test-csrf-hmac-key-with-at-least-32-bytes',
@@ -84,6 +88,7 @@ describe('validateApiEnvironment', () => {
       POSTHOG_API_KEY: 'phc_12345678',
       SLACK_ALERT_WEBHOOK_URL: 'https://hooks.slack.com/services/team/channel/secret',
       WEB_ORIGIN: 'https://rivet.example.com',
+      WEB_PUSH_VAPID_PUBLIC_KEY: webPushPublicKey,
     };
 
     expect(() => validateApiEnvironment(production)).not.toThrow();
@@ -96,5 +101,28 @@ describe('validateApiEnvironment', () => {
         SLACK_ALERT_WEBHOOK_URL: 'https://example.com/services/team/channel/secret',
       }),
     ).toThrow('SLACK_ALERT_WEBHOOK_URL');
+  });
+
+  it('requires a valid VAPID public key in production without exposing its value', () => {
+    expect(() =>
+      validateApiEnvironment({
+        ...validValues,
+        NODE_ENV: 'production',
+        POSTHOG_API_KEY: 'phc_12345678',
+        SLACK_ALERT_WEBHOOK_URL: 'https://hooks.slack.com/services/team/channel/secret',
+        WEB_ORIGIN: 'https://rivet.example.com',
+        WEB_PUSH_VAPID_PUBLIC_KEY: 'not-a-key',
+      }),
+    ).toThrow('WEB_PUSH_VAPID_PUBLIC_KEY');
+    expect(() =>
+      validateApiEnvironment({
+        ...validValues,
+        NODE_ENV: 'production',
+        POSTHOG_API_KEY: 'phc_12345678',
+        SLACK_ALERT_WEBHOOK_URL: 'https://hooks.slack.com/services/team/channel/secret',
+        WEB_ORIGIN: 'https://rivet.example.com',
+        WEB_PUSH_VAPID_PUBLIC_KEY: Buffer.alloc(65, 1).toString('base64url'),
+      }),
+    ).toThrow('WEB_PUSH_VAPID_PUBLIC_KEY');
   });
 });

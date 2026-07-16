@@ -2,6 +2,7 @@ import type { ObservabilityService } from '../../common/observability/observabil
 import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
 import { NotificationsController } from './notifications.controller';
 import type { NotificationsService } from './notifications.service';
+import type { WebPushSubscriptionsService } from './web-push-subscriptions.service';
 
 const authentication = {
   session: {
@@ -22,6 +23,7 @@ describe('NotificationsController analytics', () => {
   const isProductAnalyticsEnabled = jest.fn().mockReturnValue(true);
   const controller = new NotificationsController(
     { list, unreadCount } as unknown as NotificationsService,
+    {} as WebPushSubscriptionsService,
     { capture, isProductAnalyticsEnabled } as unknown as ObservabilityService,
   );
 

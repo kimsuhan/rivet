@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -12,14 +13,18 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  ApiAcceptedResponse,
   ApiBadRequestResponse,
   ApiCookieAuth,
+  ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
@@ -37,10 +42,19 @@ import {
   NotificationUnreadCountResponseDto,
   UpdateNotificationReadDto,
 } from './dto/notification.dto';
+import {
+  RegisterWebPushSubscriptionDto,
+  WebPushConfigResponseDto,
+  WebPushSubscriptionListResponseDto,
+  WebPushSubscriptionResponseDto,
+  WebPushTestAcceptedResponseDto,
+} from './dto/web-push-subscription.dto';
 import { NotificationsService } from './notifications.service';
+import { WebPushSubscriptionsService } from './web-push-subscriptions.service';
 
 function activeWorkspace(authentication: AuthenticatedRequestContext): {
   membershipId: string;
+  sessionId: string;
   workspaceId: string;
 } {
   const { membership, workspace } = authentication.session;
@@ -58,7 +72,11 @@ function activeWorkspace(authentication: AuthenticatedRequestContext): {
     });
   }
 
-  return { membershipId: membership.id, workspaceId: workspace.id };
+  return {
+    membershipId: membership.id,
+    sessionId: authentication.session.sessionId,
+    workspaceId: workspace.id,
+  };
 }
 
 @ApiTags('notifications')
@@ -69,8 +87,92 @@ export class NotificationsController {
 
   constructor(
     private readonly notifications: NotificationsService,
+    private readonly webPushSubscriptions: WebPushSubscriptionsService,
     private readonly observability: ObservabilityService,
   ) {}
+
+  @Get('push/config')
+  @ApiOperation({ summary: 'Web Push 브라우저 설정 조회' })
+  @ApiOkResponse({ type: WebPushConfigResponseDto })
+  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({
+    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE 또는 FORBIDDEN',
+    type: ApiErrorResponseDto,
+  })
+  pushConfig(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+  ): WebPushConfigResponseDto {
+    activeWorkspace(authentication);
+    return this.webPushSubscriptions.configResponse();
+  }
+
+  @Get('push/subscriptions')
+  @ApiOperation({ summary: '현재 사용자의 브라우저 Push 구독 목록' })
+  @ApiOkResponse({ type: WebPushSubscriptionListResponseDto })
+  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({
+    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE 또는 FORBIDDEN',
+    type: ApiErrorResponseDto,
+  })
+  pushSubscriptions(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+  ): Promise<WebPushSubscriptionListResponseDto> {
+    return this.webPushSubscriptions.list(activeWorkspace(authentication));
+  }
+
+  @Post('push/subscriptions')
+  @ApiOperation({ summary: '현재 브라우저 Push 구독 등록 또는 갱신' })
+  @ApiCreatedResponse({ type: WebPushSubscriptionResponseDto })
+  @ApiBadRequestResponse({ description: '잘못된 구독 정보', type: ApiErrorResponseDto })
+  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({
+    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
+    type: ApiErrorResponseDto,
+  })
+  @ApiUnprocessableEntityResponse({ description: 'VALIDATION_ERROR', type: ApiErrorResponseDto })
+  registerPushSubscription(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Body() dto: RegisterWebPushSubscriptionDto,
+  ): Promise<WebPushSubscriptionResponseDto> {
+    return this.webPushSubscriptions.register(activeWorkspace(authentication), dto);
+  }
+
+  @Delete('push/subscriptions/:subscriptionId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: '브라우저 Push 구독 해제' })
+  @ApiParam({ format: 'uuid', name: 'subscriptionId' })
+  @ApiNoContentResponse()
+  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({
+    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
+    type: ApiErrorResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  deactivatePushSubscription(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('subscriptionId', new ParseUUIDPipe({ version: '4' })) subscriptionId: string,
+  ): Promise<void> {
+    return this.webPushSubscriptions.deactivate(activeWorkspace(authentication), subscriptionId);
+  }
+
+  @Post('push/subscriptions/:subscriptionId/test')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: '브라우저 Push 테스트 발송 요청' })
+  @ApiParam({ format: 'uuid', name: 'subscriptionId' })
+  @ApiAcceptedResponse({ type: WebPushTestAcceptedResponseDto })
+  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({
+    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
+    type: ApiErrorResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  @ApiTooManyRequestsResponse({ description: 'RATE_LIMITED', type: ApiErrorResponseDto })
+  requestPushTest(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('subscriptionId', new ParseUUIDPipe({ version: '4' })) subscriptionId: string,
+  ): Promise<WebPushTestAcceptedResponseDto> {
+    return this.webPushSubscriptions.requestTest(activeWorkspace(authentication), subscriptionId);
+  }
 
   @Get()
   @ApiOperation({ summary: '현재 사용자의 알림 목록' })

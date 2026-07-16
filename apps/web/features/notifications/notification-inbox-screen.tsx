@@ -9,6 +9,7 @@ import {
   type LucideIcon,
   MessageSquare,
   Send,
+  SlidersHorizontal,
   UserRoundCheck,
 } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -33,9 +34,11 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserAvatar } from '@/components/user-avatar';
 import { useRouter } from '@/i18n/navigation';
+import { cn } from '@/lib/utils';
 
-import { issueWorkHref } from '../issues/issue-work-routing';
+import { issueNotificationHref } from '../issues/issue-work-routing';
 import { getNotificationPagesQueryKey, useNotificationPages } from './notification-queries';
+import { WebPushSettings } from './web-push-settings';
 
 const NOTIFICATION_ICONS: Record<NotificationResponseDto['type'], LucideIcon> = {
   API_HANDOFF_CREATED: Send,
@@ -85,12 +88,11 @@ function updateUnreadNotifications(
 }
 
 function notificationHref(notification: NotificationResponseDto): string {
-  const issueHref = issueWorkHref(notification.issue.identifier, notification.teamWork?.identifier);
-  if (notification.commentId) return `${issueHref}#comment-${notification.commentId}`;
-  if (notification.handoffId) {
-    return `${issueHref}&handoff=${encodeURIComponent(notification.handoffId)}#handoff-${notification.handoffId}`;
-  }
-  return issueHref;
+  return issueNotificationHref(notification.issue.identifier, {
+    commentId: notification.commentId,
+    handoffId: notification.handoffId,
+    teamWorkIdentifier: notification.teamWork?.identifier,
+  });
 }
 
 function NotificationRow({
@@ -227,12 +229,14 @@ export function NotificationInboxScreen() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<'all' | 'unread'>('unread');
   const [failedNotificationId, setFailedNotificationId] = useState<string | null>(null);
+  const [webPushSettingsOpen, setWebPushSettingsOpen] = useState(false);
   const notifications = useNotificationPages(tab === 'unread' ? false : undefined);
   const unreadCount = useNotificationsControllerUnreadCount({ query: { retry: false } });
   const updateRead = useNotificationsControllerUpdateRead();
   const readAll = useNotificationsControllerReadAll();
   const items = notifications.data?.pages.flatMap((page) => page.items) ?? [];
   const visibleUnreadCount = unreadCount.data?.count ?? items.filter((item) => !item.readAt).length;
+  const isEmpty = !notifications.isPending && !notifications.isError && items.length === 0;
 
   function refreshNotificationCaches(): void {
     void Promise.allSettled([
@@ -349,16 +353,24 @@ export function NotificationInboxScreen() {
             </Button>
           ) : null}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={readAll.isPending || visibleUnreadCount === 0}
-          onClick={() => void markAllRead()}
-        >
-          {readAll.isPending ? <Spinner data-icon="inline-start" /> : null}
-          {t('readAll')}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="ghost" onClick={() => setWebPushSettingsOpen(true)}>
+            <SlidersHorizontal data-icon="inline-start" />
+            {t('push.openSettings')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={readAll.isPending || visibleUnreadCount === 0}
+            onClick={() => void markAllRead()}
+          >
+            {readAll.isPending ? <Spinner data-icon="inline-start" /> : null}
+            {t('readAll')}
+          </Button>
+        </div>
       </header>
+
+      <WebPushSettings open={webPushSettingsOpen} onOpenChange={setWebPushSettingsOpen} />
 
       {readAll.isError ? (
         <div className="pt-4">
@@ -373,7 +385,7 @@ export function NotificationInboxScreen() {
 
       <Tabs
         value={tab}
-        className="pt-4"
+        className="items-center pt-4"
         onValueChange={(value) => {
           if (value === 'all' || value === 'unread') {
             setFailedNotificationId(null);
@@ -386,7 +398,7 @@ export function NotificationInboxScreen() {
           <TabsTrigger value="all">{t('allTab')}</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={tab} className="mt-3">
+        <TabsContent value={tab} className={cn('mt-3 w-full', isEmpty && 'flex items-center')}>
           {notifications.isPending ? <ContentLoading label={t('loading')} /> : null}
 
           {notifications.isError && !notifications.data ? (
@@ -398,8 +410,9 @@ export function NotificationInboxScreen() {
             />
           ) : null}
 
-          {!notifications.isPending && !notifications.isError && items.length === 0 ? (
+          {isEmpty ? (
             <ContentEmpty
+              align="center"
               icon={Bell}
               title={t(tab === 'unread' ? 'unreadEmptyTitle' : 'emptyTitle')}
               description={t(tab === 'unread' ? 'unreadEmptyDescription' : 'emptyDescription')}

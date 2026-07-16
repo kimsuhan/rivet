@@ -169,10 +169,22 @@ export class AuthSessionService {
   }
 
   async revoke(sessionId: string): Promise<void> {
-    await this.database.client.$executeRaw`
-      UPDATE "sessions"
-      SET "revoked_at" = COALESCE("revoked_at", NOW())
-      WHERE "id" = ${sessionId}::uuid
-    `;
+    await this.database.client.$transaction(async (transaction) => {
+      await transaction.webPushSubscription.updateMany({
+        data: {
+          auth: null,
+          disabledAt: new Date(),
+          endpoint: null,
+          p256dh: null,
+          status: 'INACTIVE',
+        },
+        where: { sessionId, status: 'ACTIVE' },
+      });
+      await transaction.$executeRaw`
+        UPDATE "sessions"
+        SET "revoked_at" = COALESCE("revoked_at", NOW())
+        WHERE "id" = ${sessionId}::uuid
+      `;
+    });
   }
 }

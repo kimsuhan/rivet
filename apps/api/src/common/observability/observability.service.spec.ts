@@ -25,6 +25,7 @@ const productionConfig: ConfigType<typeof apiConfig> = {
     rateLimitHmacKey: 'rate-key-that-is-at-least-32-bytes-long',
   },
   webOrigin: 'https://rivet.example.com',
+  webPush: { vapidPublicKey: null },
 };
 
 function flushRequests(): Promise<void> {

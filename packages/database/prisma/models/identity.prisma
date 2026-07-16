@@ -36,7 +36,8 @@ model Session {
   revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(3)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  webPushSubscriptions WebPushSubscription[]
 
   @@index([userId])
   @@map("sessions")

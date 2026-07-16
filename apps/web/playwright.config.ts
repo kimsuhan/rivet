@@ -1,3 +1,4 @@
+import { createECDH } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -13,6 +14,10 @@ const apiPort = process.env.PLAYWRIGHT_API_PORT ?? '4300';
 const webPort = process.env.PLAYWRIGHT_WEB_PORT ?? '3300';
 const apiOrigin = `http://127.0.0.1:${apiPort}`;
 const webOrigin = `http://127.0.0.1:${webPort}`;
+const webPushKeys = createECDH('prime256v1');
+webPushKeys.generateKeys();
+const webPushPublicKey = webPushKeys.getPublicKey().toString('base64url');
+const webPushPrivateKey = webPushKeys.getPrivateKey().toString('base64url');
 
 const apiEnvironment = {
   API_PORT: apiPort,
@@ -26,6 +31,7 @@ const apiEnvironment = {
   RELEASE_ID: 'playwright-e2e',
   SLACK_ALERT_WEBHOOK_URL: '',
   WEB_ORIGIN: webOrigin,
+  WEB_PUSH_VAPID_PUBLIC_KEY: webPushPublicKey,
 };
 
 const workerEnvironment = {
@@ -41,6 +47,9 @@ const workerEnvironment = {
   RESEND_FROM: 'rivet-playwright@example.test',
   SLACK_ALERT_WEBHOOK_URL: '',
   WEB_ORIGIN: apiEnvironment.WEB_ORIGIN,
+  WEB_PUSH_VAPID_PRIVATE_KEY: webPushPrivateKey,
+  WEB_PUSH_VAPID_PUBLIC_KEY: webPushPublicKey,
+  WEB_PUSH_VAPID_SUBJECT: 'mailto:playwright@example.test',
 };
 
 mkdirSync(apiEnvironment.FILE_STORAGE_ROOT, { recursive: true });
@@ -60,15 +69,31 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop-chromium',
-      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: 'chromium',
+        viewport: { width: 1280, height: 800 },
+      },
     },
     {
       name: 'compact-chromium',
-      use: { ...devices['Desktop Chrome'], viewport: { width: 1024, height: 640 } },
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: 'chromium',
+        viewport: { width: 1024, height: 640 },
+      },
     },
     {
       name: 'mobile-chromium',
-      use: { ...devices['Pixel 5'] },
+      use: { ...devices['Pixel 5'], channel: 'chromium' },
+    },
+    {
+      name: 'desktop-firefox',
+      use: { ...devices['Desktop Firefox'], viewport: { width: 1280, height: 800 } },
+    },
+    {
+      name: 'desktop-webkit',
+      use: { ...devices['Desktop Safari'], viewport: { width: 1280, height: 800 } },
     },
   ],
   webServer: [

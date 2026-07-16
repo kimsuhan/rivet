@@ -26,6 +26,7 @@ const productionConfig: ConfigType<typeof workerConfig> = {
   rateLimitHmacKey: 'rate-key-that-is-at-least-32-bytes-long',
   releaseId: 'release-test',
   webOrigin: 'https://rivet.example.com',
+  webPush: { privateKey: null, publicKey: null, subject: null },
 };
 
 function flushRequests(): Promise<void> {

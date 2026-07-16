@@ -1,3 +1,4 @@
+import { createECDH } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -20,3 +21,6 @@ process.env.RATE_LIMIT_HMAC_KEY = 'test-rate-hmac-key-with-at-least-32-bytes';
 process.env.RELEASE_ID = 'api-integration-test';
 process.env.SLACK_ALERT_WEBHOOK_URL = '';
 process.env.WEB_ORIGIN = 'http://localhost:3000';
+const webPushKeys = createECDH('prime256v1');
+webPushKeys.generateKeys();
+process.env.WEB_PUSH_VAPID_PUBLIC_KEY = webPushKeys.getPublicKey().toString('base64url');

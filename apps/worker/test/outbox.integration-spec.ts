@@ -17,6 +17,7 @@ import { ResourcePurgeHandler } from '../src/modules/outbox/handlers/resource-pu
 import { WorkspaceInvitationEmailHandler } from '../src/modules/outbox/handlers/workspace-invitation-email.handler';
 import { OutboxService } from '../src/modules/outbox/outbox.service';
 import { OutboxProcessorService } from '../src/modules/outbox/outbox-processor.service';
+import { WebPushDeliveryService } from '../src/modules/web-push/web-push-delivery.service';
 import { createTransactionalOutbox } from './outbox-test-helpers';
 
 describe('outbox integration', () => {
@@ -38,6 +39,10 @@ describe('outbox integration', () => {
         { provide: IssueCollaborationNotificationHandler, useValue: {} },
         ResourcePurgeHandler,
         { provide: WorkspaceInvitationEmailHandler, useValue: { handle: jest.fn() } },
+        {
+          provide: WebPushDeliveryService,
+          useValue: { deliverNotifications: jest.fn(), deliverTest: jest.fn() },
+        },
         OutboxProcessorService,
         OutboxService,
         {

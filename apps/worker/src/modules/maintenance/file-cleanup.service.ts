@@ -42,6 +42,7 @@ type UnlinkedCleanupResult = {
 };
 
 export type FileCleanupResult = {
+  deactivatedPushSubscriptions: number;
   deletedEmailDeliveries: number;
   deletedExportAudits: number;
   deletedBinaries: number;
@@ -122,6 +123,7 @@ export class FileCleanupService implements OnApplicationBootstrap, OnApplication
       const result = await this.performCleanup(jobId);
       if (result.failedSteps === 0) this.lastSuccessAt = new Date();
       const deletedCount =
+        result.deactivatedPushSubscriptions +
         result.deletedBinaries +
         result.deletedEmailDeliveries +
         result.deletedExportAudits +
@@ -200,6 +202,7 @@ export class FileCleanupService implements OnApplicationBootstrap, OnApplication
 
     try {
       const retention = await this.retention.cleanup(jobId);
+      result.deactivatedPushSubscriptions = retention.deactivatedPushSubscriptions;
       result.deletedEmailDeliveries = retention.deletedEmailDeliveries;
       result.deletedExportAudits = retention.deletedExportAudits;
       result.deletedOutboxEvents = retention.deletedOutboxEvents;
@@ -555,6 +558,7 @@ export class FileCleanupService implements OnApplicationBootstrap, OnApplication
 
   private emptyResult(): FileCleanupResult {
     return {
+      deactivatedPushSubscriptions: 0,
       deletedEmailDeliveries: 0,
       deletedExportAudits: 0,
       deletedBinaries: 0,

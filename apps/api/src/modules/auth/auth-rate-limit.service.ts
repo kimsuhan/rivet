@@ -24,6 +24,8 @@ export const AUTH_RATE_LIMITS = {
   signUpIp: { limit: 10, scope: 'SIGN_UP_IP', windowSeconds: 3_600 },
   tokenIp: { limit: 30, scope: 'TOKEN_IP', windowSeconds: 900 },
   tokenValue: { limit: 5, scope: 'TOKEN_VALUE', windowSeconds: 900 },
+  webPushTestMembership: { limit: 10, scope: 'WEB_PUSH_TEST_MEMBERSHIP', windowSeconds: 600 },
+  webPushTestSubscription: { limit: 3, scope: 'WEB_PUSH_TEST_SUBSCRIPTION', windowSeconds: 300 },
   workspaceInvitationEmail: {
     limit: 100,
     scope: 'WORKSPACE_INVITATION_EMAIL',

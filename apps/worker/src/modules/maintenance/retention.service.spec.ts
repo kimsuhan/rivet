@@ -26,6 +26,9 @@ describe('RetentionService', () => {
       if (sql.includes('"one_time_tokens"')) {
         return Promise.reject(new Error('TOKEN_DELETE_FAILED'));
       }
+      if (sql.includes('UPDATE "web_push_subscriptions" AS target')) {
+        return Promise.resolve([]);
+      }
       if (sql.includes('"sessions"')) {
         sessionCalls += 1;
         return Promise.resolve(
@@ -38,6 +41,7 @@ describe('RetentionService', () => {
     });
 
     await expect(service.cleanup('maintenance-test')).resolves.toEqual({
+      deactivatedPushSubscriptions: 0,
       deletedEmailDeliveries: 0,
       deletedExportAudits: 0,
       deletedOutboxEvents: 0,
@@ -51,6 +55,7 @@ describe('RetentionService', () => {
     for (const table of [
       '"email_deliveries"',
       '"one_time_tokens"',
+      '"web_push_subscriptions"',
       '"sessions"',
       '"auth_rate_limit_buckets"',
       '"export_audits"',
@@ -89,6 +94,18 @@ describe('RetentionService', () => {
     );
     expect(sql.find((value) => value.includes('"email_deliveries"'))).toContain(
       '"sent_at" IS NOT NULL OR "failed_at" IS NOT NULL',
+    );
+    expect(sql.find((value) => value.includes('"web_push_subscriptions"'))).toEqual(
+      expect.stringContaining('session."idle_expires_at" <= NOW()'),
+    );
+    expect(sql.find((value) => value.includes('"web_push_subscriptions"'))).toEqual(
+      expect.stringContaining('"last_error_code" = \'WEB_PUSH_SESSION_INACTIVE\''),
+    );
+    expect(sql.find((value) => value.includes('DELETE FROM "sessions"'))).toEqual(
+      expect.stringContaining('AND NOT EXISTS ('),
+    );
+    expect(sql.find((value) => value.includes('DELETE FROM "sessions"'))).toEqual(
+      expect.stringContaining('subscription."status" = \'ACTIVE\''),
     );
   });
 });

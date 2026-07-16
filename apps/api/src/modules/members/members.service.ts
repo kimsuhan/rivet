@@ -337,6 +337,16 @@ export class MembersService {
         data: { revokedAt },
         where: { revokedAt: null, userId: target.userId },
       });
+      await transaction.webPushSubscription.updateMany({
+        data: {
+          auth: null,
+          disabledAt: revokedAt,
+          endpoint: null,
+          p256dh: null,
+          status: 'INACTIVE',
+        },
+        where: { session: { userId: target.userId }, status: 'ACTIVE' },
+      });
 
       return this.findDetail(transaction, context.workspaceId, membershipId);
     });

@@ -149,6 +149,19 @@ export async function cleanupM2Users(emails: string[]): Promise<void> {
       );
       const outboxEventIds = outboxEvents.rows.map(({ id }) => id);
 
+      await database.query(
+        `DELETE FROM web_push_deliveries
+         WHERE subscription_id IN (
+           SELECT id FROM web_push_subscriptions
+           WHERE workspace_id = ANY($1::uuid[]) OR membership_id = ANY($2::uuid[])
+         )`,
+        [workspaceIds, membershipIds],
+      );
+      await database.query(
+        `DELETE FROM web_push_subscriptions
+         WHERE workspace_id = ANY($1::uuid[]) OR membership_id = ANY($2::uuid[])`,
+        [workspaceIds, membershipIds],
+      );
       await database.query('DELETE FROM notifications WHERE workspace_id = ANY($1::uuid[])', [
         workspaceIds,
       ]);
@@ -283,6 +296,19 @@ export async function cleanupM1User(email: string): Promise<void> {
                                  OR workspace_id IN (${workspaceSubquery})`;
 
       await database.query(
+        `DELETE FROM web_push_deliveries
+         WHERE subscription_id IN (
+           SELECT id FROM web_push_subscriptions
+           WHERE workspace_id IN (${workspaceSubquery})
+         )`,
+        [userId],
+      );
+      await database.query(
+        `DELETE FROM web_push_subscriptions
+         WHERE workspace_id IN (${workspaceSubquery})`,
+        [userId],
+      );
+      await database.query(
         `DELETE FROM email_deliveries WHERE outbox_event_id IN (${outboxSubquery})`,
         [userId],
       );
@@ -291,7 +317,13 @@ export async function cleanupM1User(email: string): Promise<void> {
          WHERE aggregate_id = $1 OR workspace_id IN (${workspaceSubquery})`,
         [userId],
       );
-      for (const table of ['saved_views', 'workflow_states', 'team_members', 'teams', 'workspace_memberships']) {
+      for (const table of [
+        'saved_views',
+        'workflow_states',
+        'team_members',
+        'teams',
+        'workspace_memberships',
+      ]) {
         await database.query(`DELETE FROM ${table} WHERE workspace_id IN (${workspaceSubquery})`, [
           userId,
         ]);

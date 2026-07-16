@@ -26,8 +26,10 @@ import {
   validateProjectStatusChangedOutboxPayload,
   validateTeamWorkChangedOutboxPayload,
   validateTeamWorkCreatedOutboxPayload,
+  validateWebPushTestRequestedOutboxPayload,
   validateWorkspaceCreatedOutboxPayload,
   validateWorkspaceInvitationEmailOutboxPayload,
+  WEB_PUSH_TEST_REQUESTED,
   WORKSPACE_CREATED,
   WORKSPACE_INVITATION_REQUESTED,
 } from '@rivet/event-contracts';
@@ -35,6 +37,7 @@ import {
 import { DatabaseService } from '../../common/database/database.service';
 import { ObservabilityService } from '../../common/observability/observability.service';
 import { EmailDeliveryError } from '../email/email-delivery.error';
+import { WebPushDeliveryService } from '../web-push/web-push-delivery.service';
 import { AccountEmailHandler } from './handlers/account-email.handler';
 import { ApiHandoffNotificationHandler } from './handlers/api-handoff-notification.handler';
 import { IssueCollaborationNotificationHandler } from './handlers/issue-collaboration-notification.handler';
@@ -57,6 +60,7 @@ export class OutboxProcessorService {
     private readonly issueCollaborationNotificationHandler: IssueCollaborationNotificationHandler,
     private readonly resourcePurgeHandler: ResourcePurgeHandler,
     private readonly workspaceInvitationEmailHandler: WorkspaceInvitationEmailHandler,
+    private readonly webPushDelivery: WebPushDeliveryService,
     private readonly observability: ObservabilityService,
     private readonly logger: PinoLogger,
   ) {}
@@ -347,6 +351,7 @@ export class OutboxProcessorService {
         event,
         validation.payload,
       );
+      await this.webPushDelivery.deliverNotifications(event);
       return;
     }
 
@@ -374,6 +379,7 @@ export class OutboxProcessorService {
         event,
         validation.payload,
       );
+      await this.webPushDelivery.deliverNotifications(event);
       return;
     }
 
@@ -398,6 +404,7 @@ export class OutboxProcessorService {
         event,
         validation.payload,
       );
+      await this.webPushDelivery.deliverNotifications(event);
       return;
     }
 
@@ -422,6 +429,7 @@ export class OutboxProcessorService {
         event,
         validation.payload,
       );
+      await this.webPushDelivery.deliverNotifications(event);
       return;
     }
 
@@ -449,6 +457,7 @@ export class OutboxProcessorService {
         event,
         validation.payload,
       );
+      await this.webPushDelivery.deliverNotifications(event);
       return;
     }
 
@@ -476,6 +485,7 @@ export class OutboxProcessorService {
         event,
         validation.payload,
       );
+      await this.webPushDelivery.deliverNotifications(event);
       return;
     }
 
@@ -500,6 +510,28 @@ export class OutboxProcessorService {
       }
 
       await this.apiHandoffNotificationHandler.handle(event, validation.payload);
+      await this.webPushDelivery.deliverNotifications(event);
+      return;
+    }
+
+    if (event.eventType === WEB_PUSH_TEST_REQUESTED) {
+      const validation = validateWebPushTestRequestedOutboxPayload(event.payload);
+      if (!validation.success) {
+        throw new PermanentOutboxError(
+          validation.reason === 'UNSUPPORTED_SCHEMA_VERSION'
+            ? 'OUTBOX_SCHEMA_VERSION_UNSUPPORTED'
+            : 'OUTBOX_PAYLOAD_INVALID',
+        );
+      }
+      if (
+        event.workspaceId === null ||
+        event.actorMembershipId === null ||
+        event.aggregateType !== 'WEB_PUSH_SUBSCRIPTION' ||
+        event.aggregateId !== validation.payload.subscriptionId
+      ) {
+        throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
+      }
+      await this.webPushDelivery.deliverTest(event, validation.payload);
       return;
     }
 

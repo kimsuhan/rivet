@@ -82,6 +82,18 @@ class WorkerEnvironment {
   @IsOptional()
   @IsString()
   SLACK_ALERT_WEBHOOK_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  WEB_PUSH_VAPID_PUBLIC_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  WEB_PUSH_VAPID_PRIVATE_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  WEB_PUSH_VAPID_SUBJECT?: string;
 }
 
 export function validateWorkerEnvironment(values: Record<string, unknown>): WorkerEnvironment {
@@ -110,6 +122,52 @@ export function validateWorkerEnvironment(values: Record<string, unknown>): Work
       }
     } catch {
       invalidKeys.add('WEB_ORIGIN');
+    }
+  }
+
+  const webPushPublicKey = environment.WEB_PUSH_VAPID_PUBLIC_KEY?.trim() ?? '';
+  const webPushPrivateKey = environment.WEB_PUSH_VAPID_PRIVATE_KEY?.trim() ?? '';
+  const webPushSubject = environment.WEB_PUSH_VAPID_SUBJECT?.trim() ?? '';
+  const decodedWebPushPublicKey = Buffer.from(webPushPublicKey, 'base64url');
+  const hasCompleteWebPushConfig =
+    webPushPublicKey.length > 0 && webPushPrivateKey.length > 0 && webPushSubject.length > 0;
+
+  if (
+    (webPushPublicKey.length > 0 &&
+      (!/^[A-Za-z0-9_-]+$/.test(webPushPublicKey) ||
+        decodedWebPushPublicKey.byteLength !== 65 ||
+        decodedWebPushPublicKey[0] !== 4 ||
+        decodedWebPushPublicKey.toString('base64url') !== webPushPublicKey)) ||
+    ((environment.NODE_ENV === 'production' || webPushPrivateKey || webPushSubject) &&
+      webPushPublicKey.length === 0)
+  ) {
+    invalidKeys.add('WEB_PUSH_VAPID_PUBLIC_KEY');
+  }
+  if (
+    (webPushPrivateKey.length > 0 &&
+      (!/^[A-Za-z0-9_-]+$/.test(webPushPrivateKey) ||
+        Buffer.from(webPushPrivateKey, 'base64url').byteLength !== 32)) ||
+    ((environment.NODE_ENV === 'production' || webPushPublicKey || webPushSubject) &&
+      webPushPrivateKey.length === 0)
+  ) {
+    invalidKeys.add('WEB_PUSH_VAPID_PRIVATE_KEY');
+  }
+  if (
+    !hasCompleteWebPushConfig &&
+    (environment.NODE_ENV === 'production' || webPushPublicKey || webPushPrivateKey)
+  ) {
+    invalidKeys.add('WEB_PUSH_VAPID_SUBJECT');
+  } else if (webPushSubject.length > 0) {
+    try {
+      const subject = new URL(webPushSubject);
+      if (
+        (subject.protocol !== 'https:' && subject.protocol !== 'mailto:') ||
+        (subject.protocol === 'https:' && subject.origin !== webPushSubject)
+      ) {
+        invalidKeys.add('WEB_PUSH_VAPID_SUBJECT');
+      }
+    } catch {
+      invalidKeys.add('WEB_PUSH_VAPID_SUBJECT');
     }
   }
 

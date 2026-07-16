@@ -25,6 +25,7 @@ import { WorkspaceInvitationEmailHandler } from '../src/modules/outbox/handlers/
 import { OutboxService } from '../src/modules/outbox/outbox.service';
 import type { ClaimedOutboxEvent } from '../src/modules/outbox/outbox.types';
 import { OutboxProcessorService } from '../src/modules/outbox/outbox-processor.service';
+import { WebPushDeliveryService } from '../src/modules/web-push/web-push-delivery.service';
 import { claimIsolatedOutboxEvent, ISOLATED_OUTBOX_AVAILABLE_AT } from './outbox-test-helpers';
 
 describe('workspace invitation email integration', () => {
@@ -54,6 +55,10 @@ describe('workspace invitation email integration', () => {
         { provide: IssueCollaborationNotificationHandler, useValue: {} },
         ResourcePurgeHandler,
         WorkspaceInvitationEmailHandler,
+        {
+          provide: WebPushDeliveryService,
+          useValue: { deliverNotifications: jest.fn(), deliverTest: jest.fn() },
+        },
         OutboxProcessorService,
         OutboxService,
         {

@@ -445,6 +445,74 @@
       "ISSUE_CANCELED": "구독 중인 이슈가 취소되었습니다.",
       "API_HANDOFF_CREATED": "API 작업 전달이 추가되었습니다.",
       "API_HANDOFF_FOLLOW_UP_CREATED": "API 추가 전달이 추가되었습니다."
+    },
+    "push": {
+      "title": "브라우저 알림",
+      "description": "앱을 닫아도 중요한 개인 알림을 받고 해당 업무로 바로 이동합니다.",
+      "openSettings": "알림 설정",
+      "close": "알림 설정 닫기",
+      "loading": "브라우저 알림 상태를 확인하는 중입니다.",
+      "states": {
+        "unsupported": "권한 미지원",
+        "default": "권한 미선택",
+        "granted": "권한 허용",
+        "denied": "권한 거절",
+        "expired": "구독 만료"
+      },
+      "stateTitles": {
+        "unsupported": "이 브라우저에서는 Web Push를 사용할 수 없습니다",
+        "default": "브라우저 알림을 아직 선택하지 않았습니다",
+        "granted": "이 브라우저를 알림 수신에 연결해 주세요",
+        "denied": "브라우저 알림 권한이 차단되었습니다",
+        "expired": "브라우저 구독을 다시 연결해야 합니다"
+      },
+      "readyTitle": "이 브라우저에서 알림을 받고 있습니다",
+      "readyHelp": "앱을 닫아도 이 브라우저로 개인 알림을 보냅니다.",
+      "stateHelp": {
+        "unsupported": "지원 브라우저 또는 iOS 홈 화면에 추가한 앱에서 다시 시도해 주세요.",
+        "default": "알림 켜기를 누를 때만 브라우저가 권한을 요청합니다.",
+        "granted": "권한은 허용되어 있습니다. 연결하면 앱을 닫아도 알림을 받을 수 있습니다.",
+        "denied": "Rivet은 권한을 다시 요청할 수 없습니다. 브라우저 사이트 설정에서 직접 허용해 주세요.",
+        "expired": "다시 등록하면 만료된 연결을 비활성화하고 현재 브라우저로 새 구독을 만듭니다."
+      },
+      "notConfigured": "브라우저 알림 설정이 아직 완료되지 않았습니다.",
+      "enable": "이 브라우저에서 알림 켜기",
+      "connect": "이 브라우저 연결",
+      "reregister": "현재 브라우저 다시 연결",
+      "recoveryTitle": "해결 방법",
+      "deniedRecovery": "주소창의 사이트 정보에서 알림을 허용한 뒤 이 페이지를 새로 고쳐 주세요.",
+      "unsupportedRecovery": "최신 Chrome, Edge, Firefox, macOS Safari를 사용하세요. iPhone과 iPad에서는 Rivet을 홈 화면에 추가한 뒤 실행해야 합니다.",
+      "operatorRecovery": "워크스페이스 관리자에게 브라우저 알림 설정을 문의해 주세요.",
+      "errorTitle": "브라우저 알림 작업을 완료하지 못했습니다",
+      "errorDescription": "인앱 알림은 그대로 유지됩니다. 브라우저 알림 설정과 현재 연결 상태를 확인해 주세요.",
+      "endpointRecoveredTitle": "이 브라우저 연결을 새로 만들었습니다",
+      "endpointRecoveredDescription": "이전에 다른 로그인에 연결된 브라우저 구독을 정리하고 현재 계정용 새 구독으로 연결했습니다.",
+      "browsersTitle": "등록된 브라우저 {count, number}개",
+      "browsersHelp": "브라우저별로 테스트 알림을 보내거나 더 이상 쓰지 않는 연결을 해제할 수 있습니다.",
+      "browsersLabel": "등록된 브라우저 목록",
+      "current": "현재 브라우저",
+      "browsers": {
+        "CHROME": "Chrome",
+        "EDGE": "Edge",
+        "FIREFOX": "Firefox",
+        "SAFARI": "Safari",
+        "OTHER": "기타 브라우저"
+      },
+      "serverStates": {
+        "ACTIVE": "활성",
+        "INACTIVE": "해제",
+        "EXPIRED": "만료"
+      },
+      "lastSucceeded": "마지막 전송 성공 · {date}",
+      "lastFailed": "마지막 전송 실패 · {date}",
+      "notTested": "아직 발송 기록이 없습니다.",
+      "test": "테스트 보내기",
+      "testAccepted": "테스트 알림을 전송 대기열에 추가했습니다.",
+      "deactivate": "연결 해제",
+      "deactivateTitle": "이 브라우저 연결을 해제할까요?",
+      "deactivateDescription": "{browser}에서는 더 이상 Rivet 브라우저 알림을 받지 않습니다.",
+      "cancel": "취소",
+      "deactivateConfirm": "연결 해제"
     }
   },
   "IssueCreate": {

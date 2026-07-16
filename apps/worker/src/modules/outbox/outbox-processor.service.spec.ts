@@ -12,6 +12,7 @@ import {
   PROJECT_CREATED,
   PROJECT_STATUS_CHANGED,
   TEAM_WORK_CREATED,
+  WEB_PUSH_TEST_REQUESTED,
   WORKSPACE_CREATED,
   WORKSPACE_INVITATION_REQUESTED,
 } from '@rivet/event-contracts';
@@ -19,6 +20,7 @@ import {
 import { DatabaseService } from '../../common/database/database.service';
 import { ObservabilityService } from '../../common/observability/observability.service';
 import { EmailDeliveryError } from '../email/email-delivery.error';
+import { WebPushDeliveryService } from '../web-push/web-push-delivery.service';
 import { AccountEmailHandler } from './handlers/account-email.handler';
 import { ApiHandoffNotificationHandler } from './handlers/api-handoff-notification.handler';
 import { IssueCollaborationNotificationHandler } from './handlers/issue-collaboration-notification.handler';
@@ -53,6 +55,18 @@ describe('OutboxProcessorService', () => {
       userId: '9d349d04-c7d5-43fb-bb57-b768e2bf0e86',
     },
   };
+  const webPushTestEvent: ClaimedOutboxEvent = {
+    ...event,
+    actorMembershipId: '69b38d72-6a3b-4f3c-a2e7-2b2f6941c3dc',
+    aggregateId: '9d72f1f7-7ec5-4f51-bf82-9a3b5ddff99c',
+    aggregateType: 'WEB_PUSH_SUBSCRIPTION',
+    eventType: WEB_PUSH_TEST_REQUESTED,
+    payload: {
+      schemaVersion: 1,
+      subscriptionId: '9d72f1f7-7ec5-4f51-bf82-9a3b5ddff99c',
+    },
+    workspaceId: '7f5f6cb1-d957-438d-aafe-a9b51d01ad5b',
+  };
   const error = jest.fn();
   const info = jest.fn();
   const warn = jest.fn();
@@ -68,6 +82,7 @@ describe('OutboxProcessorService', () => {
   };
   const resourcePurgeHandler = { handleIssue: jest.fn(), handleProject: jest.fn() };
   const workspaceInvitationEmailHandler = { handle: jest.fn() };
+  const webPushDelivery = { deliverNotifications: jest.fn(), deliverTest: jest.fn() };
   const observability = { alert: jest.fn(), capture: jest.fn(), captureException: jest.fn() };
   const database = {
     client: {
@@ -109,6 +124,7 @@ describe('OutboxProcessorService', () => {
           provide: WorkspaceInvitationEmailHandler,
           useValue: workspaceInvitationEmailHandler,
         },
+        { provide: WebPushDeliveryService, useValue: webPushDelivery },
         { provide: OutboxService, useValue: outbox },
         { provide: ObservabilityService, useValue: observability },
         {
@@ -165,6 +181,18 @@ describe('OutboxProcessorService', () => {
       AUTH_EMAIL_VERIFICATION_REQUESTED,
       accountEmailEvent.payload,
     );
+  });
+
+  it('validates and dispatches a minimal Web Push test contract', async () => {
+    outbox.complete.mockResolvedValue(true);
+
+    await processor.processBatch([webPushTestEvent], 'worker-test');
+
+    expect(webPushDelivery.deliverTest).toHaveBeenCalledWith(
+      webPushTestEvent,
+      webPushTestEvent.payload,
+    );
+    expect(accountEmailHandler.handle).not.toHaveBeenCalled();
   });
 
   it('validates and dispatches a supported workspace invitation contract', async () => {
@@ -266,7 +294,9 @@ describe('OutboxProcessorService', () => {
       ...event,
       actorMembershipId: '607629d0-53e6-469d-bbc8-eb86c50a0288',
       aggregateId:
-        input.eventType === WORKSPACE_CREATED ? event.workspaceId! : input.aggregateId ?? event.id,
+        input.eventType === WORKSPACE_CREATED
+          ? event.workspaceId!
+          : (input.aggregateId ?? event.id),
       aggregateType: input.aggregateType,
       eventType: input.eventType,
       payload: input.payload,
