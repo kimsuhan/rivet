@@ -78,7 +78,7 @@ describe('AuthService', () => {
     $queryRaw: jest.fn(),
     $transaction: jest.fn(),
     team: { findFirst: jest.fn() },
-    user: { findUnique: jest.fn(), updateMany: jest.fn() },
+    user: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   };
   const rateLimits = {
     assertNotBlocked: jest.fn(),
@@ -103,6 +103,12 @@ describe('AuthService', () => {
     );
     client.team.findFirst.mockResolvedValue(null);
     client.user.findUnique.mockResolvedValue(null);
+    client.user.update.mockResolvedValue({
+      avatarFileId: null,
+      displayName: '바뀐 사용자',
+      email: sessionContext.user.email,
+      id: sessionContext.user.id,
+    });
     client.user.updateMany.mockResolvedValue({ count: 1 });
     rateLimits.assertNotBlocked.mockResolvedValue(undefined);
     rateLimits.clear.mockResolvedValue(undefined);
@@ -121,6 +127,33 @@ describe('AuthService', () => {
       sessions as unknown as AuthSessionService,
       config,
     );
+  });
+
+  it('normalizes and updates the current user display name', async () => {
+    await expect(
+      service.updateMe(sessionContext, { displayName: '  바뀐 사용자  ' }),
+    ).resolves.toEqual({
+      avatarFileId: null,
+      displayName: '바뀐 사용자',
+      email: sessionContext.user.email,
+      id: sessionContext.user.id,
+    });
+    expect(client.user.update).toHaveBeenCalledWith({
+      data: { displayName: '바뀐 사용자' },
+      select: { avatarFileId: true, displayName: true, email: true, id: true },
+      where: { id: sessionContext.user.id },
+    });
+  });
+
+  it('rejects an invalid current user display name without updating the account', async () => {
+    await expect(service.updateMe(sessionContext, { displayName: '   ' })).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'VALIDATION_ERROR',
+        fieldErrors: { displayName: ['표시 이름을 확인해 주세요.'] },
+      }),
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+    });
+    expect(client.user.update).not.toHaveBeenCalled();
   });
 
   it('creates a new account, token, and email outbox atomically while preserving email casing', async () => {

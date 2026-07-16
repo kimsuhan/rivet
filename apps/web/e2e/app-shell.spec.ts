@@ -6,6 +6,7 @@ const ONE_PIXEL_PNG =
 test.beforeEach(async ({ page }) => {
   const avatarFileId = '4bfe36e1-2a0f-463c-874b-909b25d0cd8a';
   let currentAvatarFileId: string | null = null;
+  let currentDisplayName = 'E2E 사용자';
   await page.route('**/api/v1/auth/session', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
@@ -20,7 +21,7 @@ test.beforeEach(async ({ page }) => {
         onboardingStep: 'COMPLETE',
         user: {
           avatarFileId: currentAvatarFileId,
-          displayName: 'E2E 사용자',
+          displayName: currentDisplayName,
           email: 'e2e@example.com',
           id: '00000000-0000-4000-8000-000000000001',
         },
@@ -37,12 +38,13 @@ test.beforeEach(async ({ page }) => {
   await page.route(
     /\/api\/v1\/(?:issues|labels|projects|saved-views|team-works|teams)(?:\?.*)?$/u,
     async (route) => {
-    await route.fulfill({
-      contentType: 'application/json',
-      json: { items: [], nextCursor: null, totalCount: 0 },
-      status: 200,
-    });
-  });
+      await route.fulfill({
+        contentType: 'application/json',
+        json: { items: [], nextCursor: null, totalCount: 0 },
+        status: 200,
+      });
+    },
+  );
   await page.route('**/api/v1/notifications/unread-count', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
@@ -74,7 +76,22 @@ test.beforeEach(async ({ page }) => {
       contentType: 'application/json',
       json: {
         avatarFileId: currentAvatarFileId,
-        displayName: 'E2E 사용자',
+        displayName: currentDisplayName,
+        id: '00000000-0000-4000-8000-000000000001',
+      },
+      status: 200,
+    });
+  });
+  await page.route('**/api/v1/me', async (route) => {
+    if (route.request().method() === 'PATCH') {
+      currentDisplayName = (route.request().postDataJSON() as { displayName: string }).displayName;
+    }
+    await route.fulfill({
+      contentType: 'application/json',
+      json: {
+        avatarFileId: currentAvatarFileId,
+        displayName: currentDisplayName,
+        email: 'e2e@example.com',
         id: '00000000-0000-4000-8000-000000000001',
       },
       status: 200,
@@ -98,6 +115,21 @@ test('기본 경로에서 내 작업으로 이동하고 주 탐색 상태를 표
     'aria-current',
     'page',
   );
+});
+
+test('주요 목록의 빈 상태를 콘텐츠 영역 가운데에 표시한다', async ({ page }) => {
+  for (const [path, title] of [
+    ['/issues', '조건에 맞는 이슈가 없습니다'],
+    ['/my-issues', '현재 할당된 작업이 없습니다'],
+    ['/projects', '프로젝트가 없습니다'],
+  ] as const) {
+    await page.goto(path);
+
+    const empty = page.locator('[data-slot="empty"]').filter({ hasText: title });
+    await expect(empty).toBeVisible();
+    await expect(empty).toHaveClass(/items-center/u);
+    await expect(empty).toHaveClass(/text-center/u);
+  }
 });
 
 test('검색을 열고 닫을 때 입력 포커스를 관리한다', async ({ page, isMobile }) => {
@@ -141,24 +173,30 @@ test('모바일에서는 5개 하단 탐색 항목을 제공한다', async ({ pa
   await expect(page.getByRole('button', { name: '검색 열기' })).toBeVisible();
 });
 
-test('PROFILE-01 프로필 사진을 데스크톱과 모바일 셸에서 교체한다', async ({ page }) => {
+test('PROFILE-01 표시 이름과 프로필 사진을 데스크톱과 모바일 셸에서 변경한다', async ({ page }) => {
   await page.goto('/my-issues');
   const trigger = page.getByRole('button', { name: '사용자 메뉴 열기' });
   await trigger.click();
   await page.getByRole('button', { name: '프로필 설정', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '프로필 설정' })).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: '프로필 설정' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('프로필 사진', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('이메일', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('e2e@example.com', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '취소', exact: true })).toBeVisible();
+  await page.getByRole('textbox', { name: '이름' }).fill('바뀐 E2E 사용자');
 
   await page.getByLabel('사진 선택').setInputFiles({
     buffer: Buffer.from(ONE_PIXEL_PNG, 'base64'),
     mimeType: 'image/png',
     name: 'avatar.png',
   });
-  const save = page.getByRole('button', { name: '프로필 사진 저장' });
+  const save = page.getByRole('button', { name: '변경 사항 저장' });
   await expect(save).toBeEnabled();
   await save.click();
 
   await expect(page.getByRole('heading', { name: '프로필 설정' })).toBeHidden();
-  await expect(trigger.getByRole('img', { name: 'E2E 사용자' })).toBeVisible();
+  await expect(trigger.getByRole('img', { name: '바뀐 E2E 사용자' })).toBeVisible();
 });
 
 test('LOGOUT-01 사용자 메뉴에서 로그아웃하면 로그인 화면으로 돌아간다', async ({ page }) => {

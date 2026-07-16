@@ -127,6 +127,7 @@ import type {
   UpdateIssueResponseDto,
   UpdateLabelDto,
   UpdateNotificationReadDto,
+  UpdateProfileDto,
   UpdateProjectDto,
   UpdateSavedViewDto,
   UpdateTeamDto,
@@ -863,6 +864,77 @@ export function useAuthControllerGetMe<TData = Awaited<ReturnType<typeof authCon
 
 
 
+
+export const getAuthControllerUpdateMeUrl = () => {
+
+
+
+
+  return `/api/v1/me`
+}
+
+/**
+ * @summary 현재 사용자의 표시 이름 변경
+ */
+export const authControllerUpdateMe = async (updateProfileDto: UpdateProfileDto, options?: RequestInit): Promise<SessionUserDto> => {
+
+  return rivetFetch<SessionUserDto>(getAuthControllerUpdateMeUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateProfileDto)
+  }
+);}
+
+
+
+
+
+export const getAuthControllerUpdateMeMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authControllerUpdateMe>>, TError,{data: BodyType<UpdateProfileDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof authControllerUpdateMe>>, TError,{data: BodyType<UpdateProfileDto>}, TContext> => {
+
+const mutationKey = ['authControllerUpdateMe'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authControllerUpdateMe>>, {data: BodyType<UpdateProfileDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  authControllerUpdateMe(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthControllerUpdateMeMutationResult = NonNullable<Awaited<ReturnType<typeof authControllerUpdateMe>>>
+    export type AuthControllerUpdateMeMutationBody = BodyType<UpdateProfileDto>
+    export type AuthControllerUpdateMeMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 현재 사용자의 표시 이름 변경
+ */
+export const useAuthControllerUpdateMe = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authControllerUpdateMe>>, TError,{data: BodyType<UpdateProfileDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof authControllerUpdateMe>>,
+        TError,
+        {data: BodyType<UpdateProfileDto>},
+        TContext
+      > => {
+      return useMutation(getAuthControllerUpdateMeMutationOptions(options), queryClient);
+    }
 
 export const getCommentsControllerUpdateUrl = (commentId: string,) => {
 

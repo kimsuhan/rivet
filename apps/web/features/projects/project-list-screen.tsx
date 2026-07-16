@@ -203,6 +203,7 @@ export function ProjectListScreen() {
 
       {items.length === 0 ? (
         <ContentEmpty
+          align="center"
           icon={FolderKanban}
           title={hasFilters ? t('empty.filteredTitle') : t('empty.title')}
           description={hasFilters ? t('empty.filteredDescription') : t('empty.description')}

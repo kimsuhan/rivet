@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Patch,
   Post,
   Req,
   Res,
@@ -25,9 +26,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
-import {
-  readInvitationContinuationCookie,
-} from '../../common/auth/invitation-continuation-cookie';
+import { readInvitationContinuationCookie } from '../../common/auth/invitation-continuation-cookie';
 import {
   clearSessionCookie,
   readSessionCookie,
@@ -48,6 +47,7 @@ import {
 } from './dto/auth-response.dto';
 import { EmailDto } from './dto/email.dto';
 import { LoginDto } from './dto/login.dto';
+import { UpdateProfileDto } from './dto/profile.dto';
 import { SignUpDto } from './dto/sign-up.dto';
 import { ConfirmPasswordResetDto, TokenDto } from './dto/token.dto';
 import { PublicEndpoint } from './public.decorator';
@@ -273,5 +273,22 @@ export class AuthController {
   })
   getMe(@CurrentAuthentication() authentication: AuthenticatedRequestContext): SessionUserDto {
     return this.auth.getMe(authentication.session);
+  }
+
+  @Patch('me')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: '현재 사용자의 표시 이름 변경' })
+  @ApiCookieAuth('sessionCookie')
+  @ApiOkResponse({ type: SessionUserDto })
+  @ApiResponse({
+    description: 'VALIDATION_ERROR: 표시 이름이 유효하지 않음',
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    type: ApiErrorResponseDto,
+  })
+  updateMe(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<SessionUserDto> {
+    return this.auth.updateMe(authentication.session, dto);
   }
 }

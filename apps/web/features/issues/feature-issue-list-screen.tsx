@@ -267,6 +267,7 @@ export function FeatureIssueListScreen() {
       ) : null}
       {issues.data?.items.length === 0 ? (
         <ContentEmpty
+          align="center"
           icon={CircleDot}
           title="조건에 맞는 이슈가 없습니다"
           description="필터를 바꾸거나 새 이슈를 만들어 보세요."

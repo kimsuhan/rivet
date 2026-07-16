@@ -48,6 +48,7 @@ describe('AuthController', () => {
     login: jest.fn(),
     logout: jest.fn(),
     signUp: jest.fn(),
+    updateMe: jest.fn(),
   };
   const request = {
     headers: {},
@@ -138,6 +139,20 @@ describe('AuthController', () => {
       'rivet_session',
       expect.objectContaining({ httpOnly: true, sameSite: 'lax' }),
     );
+  });
+
+  it('updates the guarded current user profile', async () => {
+    const authentication = {
+      session: { user: { id: 'user-id' } },
+      sessionToken: 'session-token',
+    } as AuthenticatedRequestContext;
+    const updatedUser = { ...authenticatedResponse.user, displayName: '새 이름' };
+    auth.updateMe.mockResolvedValue(updatedUser);
+
+    await expect(controller.updateMe(authentication, { displayName: '새 이름' })).resolves.toBe(
+      updatedUser,
+    );
+    expect(auth.updateMe).toHaveBeenCalledWith(authentication.session, { displayName: '새 이름' });
   });
 
   it('clears any existing session cookie only after a successful password reset', async () => {

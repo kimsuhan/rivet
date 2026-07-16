@@ -41,6 +41,7 @@ import type {
 } from './dto/auth-response.dto';
 import type { EmailDto } from './dto/email.dto';
 import type { LoginDto } from './dto/login.dto';
+import type { UpdateProfileDto } from './dto/profile.dto';
 import type { SignUpDto } from './dto/sign-up.dto';
 import type { ConfirmPasswordResetDto, TokenDto } from './dto/token.dto';
 import { hashPassword, passwordHashNeedsRehash, verifyPassword } from './password';
@@ -554,6 +555,21 @@ export class AuthService {
       email: session.user.email,
       id: session.user.id,
     };
+  }
+
+  async updateMe(session: AuthSessionContext, dto: UpdateProfileDto): Promise<SessionUserDto> {
+    let displayName: string;
+    try {
+      displayName = normalizeDisplayName(dto.displayName);
+    } catch (error) {
+      return this.throwInputError(error);
+    }
+
+    return this.database.client.user.update({
+      data: { displayName },
+      select: { avatarFileId: true, displayName: true, email: true, id: true },
+      where: { id: session.user.id },
+    });
   }
 
   private async issueAccountEmail(

@@ -258,6 +258,7 @@ export * from './updateIssueResponseDtoPriority';
 export * from './updateIssueResponseDtoStatus';
 export * from './updateLabelDto';
 export * from './updateNotificationReadDto';
+export * from './updateProfileDto';
 export * from './updateProjectDto';
 export * from './updateProjectDtoStatus';
 export * from './updateSavedViewDto';

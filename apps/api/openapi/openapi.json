@@ -654,6 +654,51 @@
         "tags": [
           "Auth"
         ]
+      },
+      "patch": {
+        "operationId": "AuthController_updateMe",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionUserDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "VALIDATION_ERROR: 표시 이름이 유효하지 않음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "현재 사용자의 표시 이름 변경",
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/api/v1/comments/{commentId}": {
@@ -8155,6 +8200,20 @@
         },
         "required": [
           "reset"
+        ]
+      },
+      "UpdateProfileDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 50,
+            "example": "김민수",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "displayName"
         ]
       },
       "UpdateCommentDto": {
