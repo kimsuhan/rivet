@@ -50,9 +50,10 @@ export class ApiHandoffNotificationHandler {
       }
       if (handoff.issue.deletedAt !== null) return;
 
-      const candidateRecipientMembershipIds = payload.candidateRecipientMembershipIds.filter(
-        (membershipId) => membershipId !== actorMembershipId,
-      );
+      const mentionedMembershipIds = new Set(payload.mentionedMembershipIds);
+      const candidateRecipientMembershipIds = [
+        ...new Set([...payload.candidateRecipientMembershipIds, ...payload.mentionedMembershipIds]),
+      ].filter((membershipId) => membershipId !== actorMembershipId);
       const targetTeamWorks = await transaction.teamWork.findMany({
         select: {
           assigneeMembershipId: true,
@@ -60,7 +61,14 @@ export class ApiHandoffNotificationHandler {
           id: true,
           identifier: true,
           projectRole: true,
-          issue: { select: { subscriptions: { select: { membershipId: true }, where: { membershipId: { in: candidateRecipientMembershipIds } } } } },
+          issue: {
+            select: {
+              subscriptions: {
+                select: { membershipId: true },
+                where: { membershipId: { in: candidateRecipientMembershipIds } },
+              },
+            },
+          },
           team: {
             select: {
               teamMembers: {
@@ -142,8 +150,9 @@ export class ApiHandoffNotificationHandler {
             teamTargetByMembershipId.get(recipientMembershipId) ??
             null,
           recipientMembershipId,
-          type:
-            payload.kind === 'INITIAL'
+          type: mentionedMembershipIds.has(recipientMembershipId)
+            ? NotificationType.MENTIONED
+            : payload.kind === 'INITIAL'
               ? NotificationType.API_HANDOFF_CREATED
               : NotificationType.API_HANDOFF_FOLLOW_UP_CREATED,
           workspaceId,

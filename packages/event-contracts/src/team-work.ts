@@ -1,7 +1,7 @@
 export const TEAM_WORK_CREATED = 'TEAM_WORK_CREATED' as const;
 export const TEAM_WORK_CREATED_SCHEMA_VERSION = 1 as const;
 export const TEAM_WORK_CHANGED = 'TEAM_WORK_CHANGED' as const;
-export const TEAM_WORK_CHANGED_SCHEMA_VERSION = 1 as const;
+export const TEAM_WORK_CHANGED_SCHEMA_VERSION = 2 as const;
 
 export const TEAM_WORK_CHANGED_FIELDS = ['WORKFLOW_STATE', 'ASSIGNEE', 'WORK_NOTE'] as const;
 export const TEAM_WORK_PROJECT_ROLES = ['BACKEND', 'WEB_FRONTEND', 'APP_FRONTEND'] as const;
@@ -22,6 +22,7 @@ export type TeamWorkChangedOutboxPayload = {
   teamWorkId: string;
   changedFields: TeamWorkChangedField[];
   assigneeMembershipId?: string | null;
+  mentionedMembershipIds: string[];
   terminalCategory: 'COMPLETED' | 'CANCELED' | null;
   subscriberMembershipIds: string[];
 };
@@ -88,9 +89,15 @@ export function validateTeamWorkChangedOutboxPayload(
   value: unknown,
 ): { payload: TeamWorkChangedOutboxPayload; success: true } | ValidationFailure {
   const payload = record(value);
-  const versionFailure = validateVersion(payload, TEAM_WORK_CHANGED_SCHEMA_VERSION);
-  if (versionFailure) return versionFailure;
+  if (!payload || !('schemaVersion' in payload)) {
+    return { reason: 'INVALID_PAYLOAD', success: false };
+  }
+  if (payload.schemaVersion !== 1 && payload.schemaVersion !== TEAM_WORK_CHANGED_SCHEMA_VERSION) {
+    return { reason: 'UNSUPPORTED_SCHEMA_VERSION', success: false };
+  }
+  const isLegacyPayload = payload.schemaVersion === 1;
   const fields = payload!.changedFields;
+  const mentions = isLegacyPayload ? [] : payload!.mentionedMembershipIds;
   const subscribers = payload!.subscriberMembershipIds;
   if (
     !hasOnly(payload!, [
@@ -99,6 +106,7 @@ export function validateTeamWorkChangedOutboxPayload(
       'teamWorkId',
       'changedFields',
       'assigneeMembershipId',
+      ...(isLegacyPayload ? [] : ['mentionedMembershipIds']),
       'terminalCategory',
       'subscriberMembershipIds',
     ]) ||
@@ -118,9 +126,13 @@ export function validateTeamWorkChangedOutboxPayload(
     (payload!.terminalCategory !== null &&
       payload!.terminalCategory !== 'COMPLETED' &&
       payload!.terminalCategory !== 'CANCELED') ||
+    !Array.isArray(mentions) ||
+    mentions.some((id) => !uuid(id)) ||
+    new Set(mentions.map((id) => id.toLowerCase())).size !== mentions.length ||
+    (mentions.length > 0 && !fields.includes('WORK_NOTE')) ||
     !Array.isArray(subscribers) ||
     subscribers.some((id) => !uuid(id)) ||
-    new Set(subscribers).size !== subscribers.length
+    new Set(subscribers.map((id) => id.toLowerCase())).size !== subscribers.length
   ) {
     return { reason: 'INVALID_PAYLOAD', success: false };
   }
@@ -131,6 +143,7 @@ export function validateTeamWorkChangedOutboxPayload(
         : {}),
       changedFields: [...fields] as TeamWorkChangedField[],
       issueId: payload!.issueId,
+      mentionedMembershipIds: [...mentions],
       schemaVersion: TEAM_WORK_CHANGED_SCHEMA_VERSION,
       subscriberMembershipIds: [...subscribers] as string[],
       teamWorkId: payload!.teamWorkId,

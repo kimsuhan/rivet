@@ -18,7 +18,7 @@ const CSRF_HMAC_KEY = 'test-csrf-hmac-key-with-at-least-32-bytes';
 const PASSWORD_HASH =
   '$argon2id$v=19$m=19456,t=2,p=1$u5oksZN2qlFVAyszxdWrug$xmy/xfzl6zj7sfdlIBgb2F6zHrOnBcsxDzJEO7QyG0A';
 
-function handoffBody(): string {
+function handoffBody(mentionedMembershipId?: string): string {
   return [
     '## 변경 요약',
     '통합 계약 적용',
@@ -33,7 +33,9 @@ function handoffBody(): string {
     '## 오류·권한',
     '기존 정책 유지',
     '## 프론트 주의사항',
-    '정본 통합 상세 사용',
+    mentionedMembershipId
+      ? `정본 통합 상세는 @[M9 두 번째 사용자](rivet-member:${mentionedMembershipId})에게 확인`
+      : '정본 통합 상세 사용',
   ].join('\n\n');
 }
 
@@ -427,14 +429,37 @@ describe('M9 issue content and team execution API', () => {
     const note = await mutate('patch', `/api/v1/team-works/${web.id}`)
       .send({
         assigneeMembershipId: membershipId,
-        workNoteMarkdown: '## 응답 계약\n\n`workspaceId`를 사용합니다.',
+        workNoteMarkdown: `## 응답 계약\n\n@[M9 두 번째 사용자](rivet-member:${secondMembershipId})와 \`workspaceId\`를 확인합니다.`,
         version: web.version,
       })
       .expect(200);
     expect(note.body.teamWork).toMatchObject({
       assignee: { id: membershipId },
-      workNoteMarkdown: '## 응답 계약\n\n`workspaceId`를 사용합니다.',
+      workNoteMarkdown: `## 응답 계약\n\n@[M9 두 번째 사용자](rivet-member:${secondMembershipId})와 \`workspaceId\`를 확인합니다.`,
     });
+    await expect(
+      database.client.mention.findFirstOrThrow({
+        where: { mentionedMembershipId: secondMembershipId, teamWorkId: web.id, workspaceId },
+      }),
+    ).resolves.toMatchObject({ issueId: issue.id });
+    await expect(
+      database.client.outboxEvent.findFirstOrThrow({
+        orderBy: { createdAt: 'desc' },
+        where: { aggregateId: web.id, eventType: 'TEAM_WORK_CHANGED', workspaceId },
+      }),
+    ).resolves.toMatchObject({
+      payload: expect.objectContaining({
+        mentionedMembershipIds: [secondMembershipId],
+        schemaVersion: 2,
+      }),
+    });
+    await expect(
+      database.client.issueSubscription.findUnique({
+        where: {
+          issueId_membershipId: { issueId: issue.id, membershipId: secondMembershipId },
+        },
+      }),
+    ).resolves.not.toBeNull();
     expect(note.body.teamWork.readinessStatus).toBeUndefined();
     const startedWeb = await mutate('patch', `/api/v1/team-works/${web.id}`)
       .send({ version: note.body.teamWork.version, workflowStateId: webStartedId })
@@ -489,7 +514,10 @@ describe('M9 issue content and team execution API', () => {
     const delivered = await mutate('patch', `/api/v1/team-works/${backend.id}`)
       .send({
         completionMode: 'HANDOFF_AND_COMPLETE',
-        handoff: { bodyMarkdown: handoffBody(), destinationRoles: ['WEB_FRONTEND'] },
+        handoff: {
+          bodyMarkdown: handoffBody(secondMembershipId),
+          destinationRoles: ['WEB_FRONTEND'],
+        },
         version: currentBackend.body.version,
         workflowStateId: backendDoneId,
       })
@@ -500,6 +528,29 @@ describe('M9 issue content and team execution API', () => {
     expect(delivered.body.handoff).toMatchObject({
       sourceTeamWorkId: backend.id,
       targetTeamWorkIds: [web.id],
+    });
+    await expect(
+      database.client.mention.findFirstOrThrow({
+        where: {
+          apiHandoffId: delivered.body.handoff.id,
+          mentionedMembershipId: secondMembershipId,
+          workspaceId,
+        },
+      }),
+    ).resolves.toMatchObject({ issueId: issue.id });
+    await expect(
+      database.client.outboxEvent.findFirstOrThrow({
+        where: {
+          aggregateId: delivered.body.handoff.id,
+          eventType: 'API_HANDOFF_CREATED',
+          workspaceId,
+        },
+      }),
+    ).resolves.toMatchObject({
+      payload: expect.objectContaining({
+        mentionedMembershipIds: [secondMembershipId],
+        schemaVersion: 2,
+      }),
     });
     expect(await database.client.apiHandoffTarget.count({ where: { teamWorkId: web.id } })).toBe(1);
     const readyWeb = await request(app.getHttpServer())

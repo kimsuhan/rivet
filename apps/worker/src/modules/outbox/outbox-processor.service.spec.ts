@@ -3,6 +3,7 @@ import { PinoLogger } from 'nestjs-pino';
 
 import {
   API_HANDOFF_CREATED,
+  API_HANDOFF_CREATED_SCHEMA_VERSION,
   AUTH_EMAIL_VERIFICATION_REQUESTED,
   COMMENT_CREATED,
   COMMENT_MENTIONS_ADDED,
@@ -11,6 +12,8 @@ import {
   ISSUE_PURGE_SCHEDULED,
   PROJECT_CREATED,
   PROJECT_STATUS_CHANGED,
+  TEAM_WORK_CHANGED,
+  TEAM_WORK_CHANGED_SCHEMA_VERSION,
   TEAM_WORK_CREATED,
   WEB_PUSH_TEST_REQUESTED,
   WORKSPACE_CREATED,
@@ -384,7 +387,8 @@ describe('OutboxProcessorService', () => {
         handoffId: 'de9d55e4-6181-4a8a-8fdf-f8faf536dc99',
         issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
         kind: 'INITIAL',
-        schemaVersion: 1,
+        mentionedMembershipIds: ['c7223ce5-74b3-4495-ae66-a3d269017f6a'],
+        schemaVersion: API_HANDOFF_CREATED_SCHEMA_VERSION,
         sourceTeamWorkId: '98ab3a6d-0d24-484e-a36a-b8028dc00465',
         targetTeamWorkIds: ['c7223ce5-74b3-4495-ae66-a3d269017f6a'],
       },
@@ -411,6 +415,22 @@ describe('OutboxProcessorService', () => {
   });
 
   it.each([
+    {
+      aggregateId: 'c7223ce5-74b3-4495-ae66-a3d269017f6a',
+      aggregateType: 'TEAM_WORK',
+      eventType: TEAM_WORK_CHANGED,
+      handler: 'handleTeamWorkChanged' as const,
+      payload: {
+        assigneeMembershipId: null,
+        changedFields: ['WORK_NOTE'],
+        issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
+        mentionedMembershipIds: ['607629d0-53e6-469d-bbc8-eb86c50a0288'],
+        schemaVersion: TEAM_WORK_CHANGED_SCHEMA_VERSION,
+        subscriberMembershipIds: [],
+        teamWorkId: 'c7223ce5-74b3-4495-ae66-a3d269017f6a',
+        terminalCategory: null,
+      },
+    },
     {
       aggregateId: 'c7223ce5-74b3-4495-ae66-a3d269017f6a',
       aggregateType: 'TEAM_WORK',
@@ -602,7 +622,7 @@ describe('OutboxProcessorService', () => {
         handoffId: 'de9d55e4-6181-4a8a-8fdf-f8faf536dc99',
         issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
         kind: 'INITIAL',
-        schemaVersion: 2,
+        schemaVersion: 3,
         sourceTeamWorkId: '98ab3a6d-0d24-484e-a36a-b8028dc00465',
         targetTeamWorkIds: [],
       },

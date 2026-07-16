@@ -1,4 +1,4 @@
-export const API_HANDOFF_CREATED_SCHEMA_VERSION = 1 as const;
+export const API_HANDOFF_CREATED_SCHEMA_VERSION = 2 as const;
 export const API_HANDOFF_CREATED = 'API_HANDOFF_CREATED' as const;
 
 export type ApiHandoffCreatedOutboxPayload = {
@@ -9,6 +9,7 @@ export type ApiHandoffCreatedOutboxPayload = {
   kind: 'INITIAL' | 'FOLLOW_UP';
   targetTeamWorkIds: string[];
   candidateRecipientMembershipIds: string[];
+  mentionedMembershipIds: string[];
 };
 
 export type ApiHandoffCreatedPayloadValidationResult =
@@ -25,7 +26,7 @@ function isUniqueUuidV4Array(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.every((item): item is string => typeof item === 'string' && uuidV4Pattern.test(item)) &&
-    new Set(value).size === value.length
+    new Set(value.map((id) => id.toLowerCase())).size === value.length
   );
 }
 
@@ -40,9 +41,11 @@ export function validateApiHandoffCreatedOutboxPayload(
     return { reason: 'INVALID_PAYLOAD', success: false };
   }
 
-  if (value.schemaVersion !== API_HANDOFF_CREATED_SCHEMA_VERSION) {
+  if (value.schemaVersion !== 1 && value.schemaVersion !== API_HANDOFF_CREATED_SCHEMA_VERSION) {
     return { reason: 'UNSUPPORTED_SCHEMA_VERSION', success: false };
   }
+  const isLegacyPayload = value.schemaVersion === 1;
+  const mentionedMembershipIds = isLegacyPayload ? [] : value.mentionedMembershipIds;
 
   const allowedKeys = new Set([
     'schemaVersion',
@@ -52,6 +55,7 @@ export function validateApiHandoffCreatedOutboxPayload(
     'sourceTeamWorkId',
     'targetTeamWorkIds',
     'candidateRecipientMembershipIds',
+    ...(isLegacyPayload ? [] : ['mentionedMembershipIds']),
   ]);
   const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -65,7 +69,8 @@ export function validateApiHandoffCreatedOutboxPayload(
     !uuidV4Pattern.test(value.handoffId) ||
     (value.kind !== 'INITIAL' && value.kind !== 'FOLLOW_UP') ||
     !isUniqueUuidV4Array(value.targetTeamWorkIds) ||
-    !isUniqueUuidV4Array(value.candidateRecipientMembershipIds)
+    !isUniqueUuidV4Array(value.candidateRecipientMembershipIds) ||
+    !isUniqueUuidV4Array(mentionedMembershipIds)
   ) {
     return { reason: 'INVALID_PAYLOAD', success: false };
   }
@@ -79,6 +84,7 @@ export function validateApiHandoffCreatedOutboxPayload(
       kind: value.kind,
       targetTeamWorkIds: [...value.targetTeamWorkIds],
       candidateRecipientMembershipIds: [...value.candidateRecipientMembershipIds],
+      mentionedMembershipIds: [...mentionedMembershipIds],
     },
     success: true,
   };

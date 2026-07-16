@@ -10933,7 +10933,7 @@
             "type": "string",
             "nullable": true,
             "maxLength": 10000,
-            "description": "멘션, 이미지와 파일을 제외한 팀 작업 전용 Markdown 노트"
+            "description": "멤버 멘션을 지원하고 이미지와 파일은 제외한 팀 작업 전용 Markdown 노트"
           },
           "handoff": {
             "$ref": "#/components/schemas/InlineHandoffDto"

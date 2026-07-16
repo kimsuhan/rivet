@@ -186,6 +186,7 @@ model TeamWork {
   sourceHandoffs      ApiHandoff[]        @relation("ApiHandoffSourceTeamWork")
   handoffTargets      ApiHandoffTarget[]
   comments            Comment[]
+  mentions            Mention[]
   activityEvents      ActivityEvent[]
   notifications       Notification[]
 
@@ -218,6 +219,7 @@ model ApiHandoff {
   targets          ApiHandoffTarget[]
   notifications    Notification[]
   fileAttachments  IssueFileAttachment[]
+  mentions         Mention[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, issueId, id])

@@ -11,6 +11,7 @@ import {
   getProjectsControllerListQueryKey,
   useIssuesControllerCreate,
   useLabelsControllerList,
+  useMembersControllerList,
   useProjectsControllerList,
 } from '@rivet/api-client';
 
@@ -108,6 +109,10 @@ export function GlobalIssueCreate({
     { includeArchived: false, limit: 100 },
     { query: { enabled: open, retry: false } },
   );
+  const members = useMembersControllerList(
+    { limit: 100, status: 'ACTIVE' },
+    { query: { enabled: open, retry: false } },
+  );
   const create = useIssuesControllerCreate();
   const [title, setTitle] = useState('');
   const [descriptionMarkdown, setDescriptionMarkdown] = useState('');
@@ -132,6 +137,14 @@ export function GlobalIssueCreate({
         value,
       })),
     [labels.priorities],
+  );
+  const mentionOptions = useMemo(
+    () =>
+      (members.data?.items ?? []).map((member) => ({
+        displayName: member.user.displayName,
+        membershipId: member.id,
+      })),
+    [members.data?.items],
   );
   const selectedProject = projects.data?.items.find((project) => project.id === projectId);
   const availableRoles = useMemo(
@@ -240,6 +253,7 @@ export function GlobalIssueCreate({
             <IssueDescriptionEditor
               charLimit={100_000}
               labels={editorLabels}
+              mentionOptions={mentionOptions}
               onChange={setDescriptionMarkdown}
               value={descriptionMarkdown}
             />

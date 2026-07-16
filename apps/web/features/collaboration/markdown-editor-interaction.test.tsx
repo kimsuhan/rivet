@@ -1,11 +1,19 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { $createParagraphNode, $createTextNode, $getRoot, type LexicalEditor } from 'lexical';
 import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { optimizeWorkspaceImage } from '@/features/files/image-optimizer';
 
-import { MarkdownEditor, type MarkdownEditorLabels } from './markdown-editor';
+import {
+  CommentEditor,
+  HandoffEditor,
+  IssueDescriptionEditor,
+  MarkdownEditor,
+  type MarkdownEditorLabels,
+  WorkNoteEditor,
+} from './markdown-editor';
 
 vi.mock('@/features/files/image-optimizer', () => ({
   ImageOptimizationError: class ImageOptimizationError extends Error {},
@@ -39,8 +47,6 @@ const labels: MarkdownEditorLabels = {
   linkInvalid: '링크 오류',
   linkPrompt: '링크 입력',
   mention: '멘션',
-  mentionDisabled: '멘션 사용 불가',
-  mentionPlaceholder: '멤버 멘션',
   numberedList: '번호 목록',
   placeholder: '본문 입력',
   preview: '미리보기',
@@ -168,26 +174,143 @@ describe('MarkdownEditor image lifecycle', () => {
     await waitFor(() => expect(screen.getByTestId('markdown-value')).toBeEmptyDOMElement());
     expect(removeFile).not.toHaveBeenCalled();
   });
+});
 
-  it('mentionsEnabled가 꺼진 작업 전달에서는 멘션 선택기를 숨기고 직렬화 참조를 저장 불가로 알린다', async () => {
-    const onCanSubmitChange = vi.fn();
+describe('MarkdownEditor @ mention typeahead', () => {
+  const originalRangeGetBoundingClientRect = Range.prototype.getBoundingClientRect;
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class ResizeObserver {
+        disconnect() {}
+        observe() {}
+        unobserve() {}
+      },
+    );
+    vi.spyOn(window, 'scrollBy').mockImplementation(() => undefined);
+    Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => new DOMRect(0, 0, 1, 16),
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: originalRangeGetBoundingClientRect,
+    });
+  });
+
+  it('멤버 목록이 입력 뒤 로드되어도 열린 검색어에 결과를 표시한다', async () => {
     const membershipId = '4bfe36e1-2a0f-463c-874b-909b25d0cd8a';
+    const browser = userEvent.setup();
+
+    function DelayedMentionOptions() {
+      const [mentionOptions, setMentionOptions] = useState<
+        Array<{ displayName: string; membershipId: string }>
+      >([]);
+
+      return (
+        <>
+          <Harness>
+            {(value, onChange) => (
+              <MarkdownEditor
+                charLimit={50_000}
+                labels={labels}
+                mentionOptions={mentionOptions}
+                onChange={onChange}
+                value={value}
+              />
+            )}
+          </Harness>
+          <button
+            type="button"
+            onClick={() => setMentionOptions([{ displayName: '김리벳', membershipId }])}
+          >
+            멤버 로드
+          </button>
+        </>
+      );
+    }
+
+    render(<DelayedMentionOptions />);
+    const editor = screen.getByRole('textbox', { name: labels.editorLabel });
+    const lexicalEditor = (editor as HTMLElement & { __lexicalEditor?: LexicalEditor })
+      .__lexicalEditor;
+    act(() => {
+      lexicalEditor?.update(() => {
+        const paragraph = $createParagraphNode();
+        paragraph.append($createTextNode('@김'));
+        $getRoot().clear().append(paragraph);
+        paragraph.selectEnd();
+      });
+    });
+    await waitFor(() => expect(editor).toHaveTextContent('@김'));
+    expect(screen.queryByRole('listbox', { name: labels.mention })).not.toBeInTheDocument();
+
+    await browser.click(screen.getByRole('button', { name: '멤버 로드' }));
+
+    expect(await screen.findByRole('option', { name: '김리벳' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['이슈 설명', IssueDescriptionEditor],
+    ['작업 노트', WorkNoteEditor],
+    ['작업 전달', HandoffEditor],
+    ['댓글', CommentEditor],
+  ])('%s 에디터에서 @ 검색과 Enter 선택으로 멘션 토큰을 삽입한다', async (_name, Editor) => {
+    const membershipId = '4bfe36e1-2a0f-463c-874b-909b25d0cd8a';
+    const browser = userEvent.setup();
 
     render(
-      <MarkdownEditor
-        charLimit={50_000}
-        labels={labels}
-        value={`@[김리벳](rivet-member:${membershipId})`}
-        onChange={() => undefined}
-        onCanSubmitChange={onCanSubmitChange}
-        mentionsEnabled={false}
-        mentionOptions={[{ displayName: '김리벳', membershipId }]}
-      />,
+      <Harness>
+        {(value, onChange) => (
+          <Editor
+            charLimit={50_000}
+            labels={labels}
+            mentionOptions={[
+              { displayName: '김리벳', membershipId },
+              { displayName: '박명수', membershipId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd' },
+            ]}
+            onChange={onChange}
+            value={value}
+          />
+        )}
+      </Harness>,
     );
 
-    expect(screen.queryByRole('combobox', { name: labels.mention })).not.toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent(labels.mentionDisabled);
-    await waitFor(() => expect(onCanSubmitChange).toHaveBeenLastCalledWith(false));
+    const editor = screen.getByRole('textbox', { name: labels.editorLabel });
+    expect(editor).toHaveAttribute('contenteditable', 'true');
+    await browser.click(editor);
+    expect(editor).toHaveFocus();
+    const lexicalEditor = (editor as HTMLElement & { __lexicalEditor?: LexicalEditor })
+      .__lexicalEditor;
+    expect(lexicalEditor).toBeDefined();
+    act(() => {
+      lexicalEditor?.update(() => {
+        const paragraph = $createParagraphNode();
+        paragraph.append($createTextNode('@김'));
+        $getRoot().clear().append(paragraph);
+        paragraph.selectEnd();
+      });
+    });
+    await waitFor(() => expect(editor).toHaveTextContent('@김'));
+
+    expect(await screen.findByRole('listbox', { name: labels.mention })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '김리벳' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('option', { name: '박명수' })).not.toBeInTheDocument();
+
+    await browser.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByTestId('markdown-value')).toHaveTextContent(
+        `@[김리벳](rivet-member:${membershipId})`,
+      ),
+    );
+    expect(screen.queryByRole('listbox', { name: labels.mention })).not.toBeInTheDocument();
   });
 });
 

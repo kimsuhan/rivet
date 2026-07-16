@@ -299,7 +299,10 @@ export class TrashIssueDto {
 }
 
 export class TeamWorkListQueryDto {
-  @ApiPropertyOptional({ description: '팀 작업 표시 ID, 상위 이슈 표시 ID·제목 또는 프로젝트 이름 검색', maxLength: 500 })
+  @ApiPropertyOptional({
+    description: '팀 작업 표시 ID, 상위 이슈 표시 ID·제목 또는 프로젝트 이름 검색',
+    maxLength: 500,
+  })
   @Transform(({ value }) => normalizeString(value))
   @IsOptional()
   @IsString()
@@ -425,7 +428,7 @@ export class UpdateTeamWorkDto {
   assigneeMembershipId?: string | null;
 
   @ApiPropertyOptional({
-    description: '멘션, 이미지와 파일을 제외한 팀 작업 전용 Markdown 노트',
+    description: '멤버 멘션을 지원하고 이미지와 파일은 제외한 팀 작업 전용 Markdown 노트',
     maxLength: 10000,
     nullable: true,
     type: String,

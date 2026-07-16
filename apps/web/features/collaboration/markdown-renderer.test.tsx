@@ -6,6 +6,27 @@ import { MarkdownRenderer, safeMarkdownUrl } from './markdown-renderer';
 const fileId = '4bfe36e1-2a0f-463c-874b-909b25d0cd8a';
 
 describe('MarkdownRenderer', () => {
+  it('멤버 멘션의 접두사 @만 숨기고 일반 텍스트와 코드의 @는 유지한다', () => {
+    const { container } = render(
+      <MarkdownRenderer
+        imageUnavailableLabel="이미지를 불러올 수 없습니다"
+        markdown={[
+          `@[박명수](rivet-member:${fileId}) 확인`,
+          '일반 @문자는 유지',
+          `\`@[박명수](rivet-member:${fileId})\``,
+        ].join('\n\n')}
+      />,
+    );
+
+    const mention = container.querySelector(`[data-mention-membership-id="${fileId}"]`);
+
+    expect(mention).toHaveTextContent('박명수');
+    expect(mention?.parentElement).toHaveTextContent('박명수 확인');
+    expect(mention?.parentElement).not.toHaveTextContent('@박명수');
+    expect(screen.getByText('일반 @문자는 유지')).toBeInTheDocument();
+    expect(screen.getByText(`@[박명수](rivet-member:${fileId})`)).toBeInTheDocument();
+  });
+
   it('HTTP(S) 링크만 탐색 가능하게 남기고 위험하거나 모호한 href는 제거한다', () => {
     render(
       <MarkdownRenderer

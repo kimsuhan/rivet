@@ -71,6 +71,9 @@ export class IssueCollaborationNotificationHandler {
     if (payload.assigneeMembershipId !== undefined && payload.assigneeMembershipId !== null) {
       candidates.set(payload.assigneeMembershipId, NotificationType.TEAM_WORK_ASSIGNED);
     }
+    for (const membershipId of payload.mentionedMembershipIds) {
+      candidates.set(membershipId, NotificationType.MENTIONED);
+    }
     await this.createNotifications(
       event,
       { issueId: payload.issueId, kind: 'TEAM_WORK_CHANGED', teamWorkId: payload.teamWorkId },
@@ -108,7 +111,12 @@ export class IssueCollaborationNotificationHandler {
 
     await this.createNotifications(
       event,
-      { commentId: payload.commentId, issueId: payload.issueId, kind: 'COMMENT', teamWorkId: payload.teamWorkId },
+      {
+        commentId: payload.commentId,
+        issueId: payload.issueId,
+        kind: 'COMMENT',
+        teamWorkId: payload.teamWorkId,
+      },
       candidates,
     );
   }
@@ -119,7 +127,12 @@ export class IssueCollaborationNotificationHandler {
   ): Promise<void> {
     await this.createNotifications(
       event,
-      { commentId: payload.commentId, issueId: payload.issueId, kind: 'COMMENT', teamWorkId: payload.teamWorkId },
+      {
+        commentId: payload.commentId,
+        issueId: payload.issueId,
+        kind: 'COMMENT',
+        teamWorkId: payload.teamWorkId,
+      },
       new Map(
         payload.mentionedMembershipIds.map((membershipId) => [
           membershipId,
@@ -209,7 +222,10 @@ export class IssueCollaborationNotificationHandler {
             commentId: source.kind === 'COMMENT' ? source.commentId : null,
             eventId: event.id,
             issueId: source.issueId,
-            teamWorkId: source.kind === 'TEAM_WORK_CHANGED' || source.kind === 'COMMENT' ? source.teamWorkId : null,
+            teamWorkId:
+              source.kind === 'TEAM_WORK_CHANGED' || source.kind === 'COMMENT'
+                ? source.teamWorkId
+                : null,
             recipientMembershipId,
             type,
             workspaceId,
