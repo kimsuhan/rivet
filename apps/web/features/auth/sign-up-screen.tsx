@@ -57,6 +57,7 @@ export function SignUpScreen({
     password: string;
     confirmPassword: string;
   }>({
+    mode: 'onBlur',
     resolver: zodResolver(
       z
         .object({
@@ -185,6 +186,7 @@ export function SignUpScreen({
             <PasswordInput
               id="sign-up-password"
               autoComplete="new-password"
+              excludeToggleFromTabOrder
               aria-describedby="sign-up-password-description"
               aria-errormessage={
                 form.formState.errors.password ? 'sign-up-password-error' : undefined
@@ -204,6 +206,7 @@ export function SignUpScreen({
             <PasswordInput
               id="sign-up-confirm-password"
               autoComplete="new-password"
+              excludeToggleFromTabOrder
               aria-errormessage={
                 form.formState.errors.confirmPassword ? 'sign-up-confirm-password-error' : undefined
               }

@@ -22,7 +22,9 @@ export function AuthFrame({ labels, children }: { labels: AuthFrameLabels; child
             <h1 className="text-[1.75rem] leading-[2.375rem] font-semibold tracking-[-0.012em]">
               {labels.title}
             </h1>
-            <CardDescription className="leading-6">{labels.description}</CardDescription>
+            <CardDescription className="leading-6 whitespace-pre-line">
+              {labels.description}
+            </CardDescription>
           </CardHeader>
           <CardContent className="px-6">{children}</CardContent>
         </Card>

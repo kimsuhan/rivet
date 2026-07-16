@@ -55,7 +55,7 @@ test('가입부터 이메일 인증과 기본 팀 생성까지 완료한다', as
     await page.getByLabel('비밀번호 확인').fill(password);
     await page.getByRole('button', { name: '가입하기' }).click();
 
-    await expect(page.getByRole('heading', { name: '요청을 접수했습니다' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '이메일을 확인해 주세요' })).toBeVisible();
 
     const verificationToken = await getLatestM1Token(email, 'EMAIL_VERIFICATION');
     await page.goto(`/verify-email#token=${encodeURIComponent(verificationToken)}`);
@@ -116,7 +116,7 @@ test('미가입 사용자가 가입과 인증 후 초대를 다시 열어 수락
     await page.getByLabel('비밀번호', { exact: true }).fill(password);
     await page.getByLabel('비밀번호 확인').fill(password);
     await page.getByRole('button', { name: '가입하기' }).click();
-    await expect(page.getByRole('heading', { name: '요청을 접수했습니다' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '이메일을 확인해 주세요' })).toBeVisible();
 
     const adminVerificationToken = await getLatestM1Token(adminEmail, 'EMAIL_VERIFICATION');
     await page.goto(`/verify-email#token=${encodeURIComponent(adminVerificationToken)}`);
@@ -251,7 +251,7 @@ test('미가입 사용자가 가입과 인증 후 초대를 다시 열어 수락
     await page.getByLabel('비밀번호', { exact: true }).fill(password);
     await page.getByLabel('비밀번호 확인').fill(password);
     await page.getByRole('button', { name: '가입하기' }).click();
-    await expect(page.getByRole('heading', { name: '요청을 접수했습니다' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '이메일을 확인해 주세요' })).toBeVisible();
 
     const inviteeVerificationToken = await getLatestM1Token(inviteeEmail, 'EMAIL_VERIFICATION');
     await page.goto(`/verify-email#token=${encodeURIComponent(inviteeVerificationToken)}`);

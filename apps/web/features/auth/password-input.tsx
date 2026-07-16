@@ -12,9 +12,11 @@ import {
 } from '@/components/ui/input-group';
 
 export function PasswordInput({
+  excludeToggleFromTabOrder = false,
   labels,
   ...props
 }: Omit<ComponentProps<'input'>, 'type'> & {
+  excludeToggleFromTabOrder?: boolean;
   labels: { show: string; hide: string };
 }) {
   const [isVisible, setIsVisible] = useState(false);
@@ -29,6 +31,7 @@ export function PasswordInput({
           size="icon-xs"
           aria-label={actionLabel}
           title={actionLabel}
+          tabIndex={excludeToggleFromTabOrder ? -1 : undefined}
           onClick={() => setIsVisible((current) => !current)}
         >
           {isVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}

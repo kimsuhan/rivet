@@ -52,9 +52,10 @@ const labels = {
   loginPrompt: '이미 계정이 있나요?',
   loginLink: '로그인',
   passwordResetLink: '비밀번호 재설정',
-  acceptedTitle: '메일을 확인하세요',
-  acceptedDescription: '계정이 있으면 인증 메일을 보냈습니다.',
-  acceptedEmailLabel: '요청한 이메일',
+  acceptedTitle: '이메일을 확인해 주세요',
+  acceptedDescription:
+    '입력하신 이메일 주소를 확인했습니다.\n\n새 계정이라면 인증 메일을 보내드립니다.\n이미 가입된 계정이라면 로그인하거나 비밀번호를 재설정해 주세요.',
+  acceptedEmailLabel: '이메일',
   displayNameRequired: '표시 이름을 입력하세요.',
   displayNameTooLong: '표시 이름이 너무 깁니다.',
   emailInvalid: '올바른 이메일을 입력하세요.',
@@ -100,6 +101,35 @@ describe('SignUpScreen', () => {
     expect(document.getElementById('sign-up-confirm-password-error')).toHaveTextContent(
       '비밀번호가 일치하지 않습니다.',
     );
+    expect(auth.mutate).not.toHaveBeenCalled();
+  });
+
+  it('필드에서 포커스를 잃으면 제출 전에도 invalid 상태를 표시한다', async () => {
+    const user = userEvent.setup();
+    render(
+      <SignUpScreen labels={labels} loginHref="/login" forgotPasswordHref="/forgot-password" />,
+    );
+
+    const email = screen.getByLabelText('이메일');
+    await user.type(email, 'not-an-email');
+    await user.tab();
+
+    expect(await screen.findByText(labels.emailInvalid)).toBeVisible();
+    expect(email).toHaveAttribute('aria-invalid', 'true');
+
+    const password = screen.getByLabelText('비밀번호', { selector: '#sign-up-password' });
+    await user.type(password, 'short');
+    await user.tab();
+
+    expect(await screen.findByText(labels.passwordTooShort)).toBeVisible();
+    expect(password).toHaveAttribute('aria-invalid', 'true');
+
+    const confirmation = screen.getByLabelText('비밀번호 확인');
+    await user.type(confirmation, 'different-value');
+    await user.tab();
+
+    expect(await screen.findByText(labels.passwordMismatch)).toBeVisible();
+    expect(confirmation).toHaveAttribute('aria-invalid', 'true');
     expect(auth.mutate).not.toHaveBeenCalled();
   });
 
@@ -172,13 +202,33 @@ describe('SignUpScreen', () => {
     expect(password).toHaveAttribute('aria-describedby', 'sign-up-password-description');
   });
 
+  it('비밀번호 표시 토글을 건너뛰고 다음 필드로 Tab 이동한다', async () => {
+    const user = userEvent.setup();
+    render(
+      <SignUpScreen labels={labels} loginHref="/login" forgotPasswordHref="/forgot-password" />,
+    );
+
+    await user.tab();
+    expect(screen.getByLabelText('표시 이름')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText('이메일')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText('비밀번호', { selector: '#sign-up-password' })).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText('비밀번호 확인')).toHaveFocus();
+  });
+
   it('접수 결과에는 가린 이메일만 표시한다', () => {
     auth.state.data = { emailMasked: 'u***@example.com' };
     render(
       <SignUpScreen labels={labels} loginHref="/login" forgotPasswordHref="/forgot-password" />,
     );
 
-    expect(screen.getByRole('heading', { name: '메일을 확인하세요' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: '이메일을 확인해 주세요' })).toBeVisible();
+    expect(
+      screen.getByText((_, element) => element?.getAttribute('data-slot') === 'card-description'),
+    ).toHaveTextContent(labels.acceptedDescription.replace(/\s+/g, ' '));
+    expect(screen.getByText('이메일', { selector: 'div' })).toBeVisible();
     expect(screen.getByText('u***@example.com')).toBeVisible();
     expect(screen.getByRole('link', { name: '로그인' })).toHaveAttribute('href', '/login');
     expect(screen.getByRole('link', { name: '비밀번호 재설정' })).toHaveAttribute(
