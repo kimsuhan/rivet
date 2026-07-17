@@ -1,17 +1,21 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   ParseUUIDPipe,
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -27,10 +31,18 @@ import {
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
+import {
+  clearInvitationContinuationCookie,
+  readInvitationContinuationCookie,
+  setInvitationContinuationCookie,
+} from '../../common/auth/invitation-continuation-cookie';
+import { readSessionCookie } from '../../common/auth/session-cookie';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
 import { AdminGuard } from '../../common/guards/admin.guard';
+import { apiConfig } from '../../config/api.config';
+import { AuthSessionService } from '../auth/auth-session.service';
 import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import { PublicEndpoint } from '../auth/public.decorator';
@@ -38,6 +50,7 @@ import {
   AcceptInvitationResponseDto,
   CreateInvitationsDto,
   CreateInvitationsResponseDto,
+  InvitationContinuationResponseDto,
   InvitationListQueryDto,
   InvitationListResponseDto,
   InvitationPreviewResponseDto,
@@ -53,14 +66,18 @@ function clientIp(request: Request): string {
 @ApiTags('invitations')
 @Controller('auth/invitations')
 export class InvitationAuthController {
-  constructor(private readonly invitations: InvitationsService) {}
+  constructor(
+    private readonly invitations: InvitationsService,
+    private readonly sessions: AuthSessionService,
+    @Inject(apiConfig.KEY) private readonly config: ConfigType<typeof apiConfig>,
+  ) {}
 
   @PublicEndpoint()
-  @Post('preview')
+  @Post('continuation')
   @HttpCode(HttpStatus.OK)
   @Header('Cache-Control', 'no-store')
   @Header('Referrer-Policy', 'no-referrer')
-  @ApiOperation({ summary: '초대 토큰의 안전한 표시 정보 조회' })
+  @ApiOperation({ summary: '초대 링크를 브라우저의 안전한 진행 상태로 교환' })
   @ApiOkResponse({ type: InvitationPreviewResponseDto })
   @ApiBadRequestResponse({ description: 'INVALID_REQUEST', type: ApiErrorResponseDto })
   @ApiForbiddenResponse({ description: 'CSRF_INVALID', type: ApiErrorResponseDto })
@@ -80,14 +97,62 @@ export class InvitationAuthController {
     },
     type: ApiErrorResponseDto,
   })
-  preview(
+  async startContinuation(
     @Body() dto: InvitationTokenDto,
     @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<InvitationPreviewResponseDto> {
-    return this.invitations.preview(dto.token, clientIp(request));
+    const result = await this.invitations.startContinuation(
+      dto.token,
+      readInvitationContinuationCookie(request, this.config),
+      clientIp(request),
+    );
+    setInvitationContinuationCookie(
+      response,
+      this.config,
+      result.continuationToken,
+      result.expiresAt,
+    );
+    return result.response;
   }
 
-  @Post('accept')
+  @PublicEndpoint()
+  @Get('continuation')
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
+  @ApiOperation({ summary: '현재 브라우저 또는 로그인 계정의 초대 진행 상태 조회' })
+  @ApiOkResponse({ type: InvitationContinuationResponseDto })
+  @ApiConflictResponse({ description: 'TOKEN_ALREADY_USED', type: ApiErrorResponseDto })
+  @ApiGoneResponse({ description: 'TOKEN_EXPIRED', type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({
+    description: 'INVITATION_CONTINUATION_NOT_FOUND',
+    type: ApiErrorResponseDto,
+  })
+  @ApiUnprocessableEntityResponse({ description: 'TOKEN_INVALID', type: ApiErrorResponseDto })
+  async getContinuation(@Req() request: Request): Promise<InvitationContinuationResponseDto> {
+    return this.invitations.getContinuation(
+      readInvitationContinuationCookie(request, this.config),
+      await this.optionalUserId(request),
+    );
+  }
+
+  @PublicEndpoint()
+  @Delete('continuation')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: '현재 초대 진행 상태 닫기' })
+  async dismissContinuation(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    await this.invitations.dismissContinuation(
+      readInvitationContinuationCookie(request, this.config),
+      await this.optionalUserId(request),
+    );
+    clearInvitationContinuationCookie(response, this.config);
+  }
+
+  @Post('continuation/accept')
   @HttpCode(HttpStatus.OK)
   @Header('Cache-Control', 'no-store')
   @Header('Referrer-Policy', 'no-referrer')
@@ -112,6 +177,10 @@ export class InvitationAuthController {
     type: ApiErrorResponseDto,
   })
   @ApiGoneResponse({ description: 'TOKEN_EXPIRED', type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({
+    description: 'INVITATION_CONTINUATION_NOT_FOUND',
+    type: ApiErrorResponseDto,
+  })
   @ApiUnprocessableEntityResponse({
     description: 'VALIDATION_ERROR 또는 TOKEN_INVALID',
     type: ApiErrorResponseDto,
@@ -126,12 +195,26 @@ export class InvitationAuthController {
     },
     type: ApiErrorResponseDto,
   })
-  accept(
+  async accept(
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
-    @Body() dto: InvitationTokenDto,
     @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<AcceptInvitationResponseDto> {
-    return this.invitations.accept(authentication.session.user.id, dto.token, clientIp(request));
+    const result = await this.invitations.accept(
+      authentication.session.user.id,
+      readInvitationContinuationCookie(request, this.config),
+    );
+    clearInvitationContinuationCookie(response, this.config);
+    return result;
+  }
+
+  private async optionalUserId(request: Request): Promise<string | null> {
+    const sessionToken = readSessionCookie(request, this.config);
+    if (!sessionToken) {
+      return null;
+    }
+
+    return (await this.sessions.resolve(sessionToken))?.user.id ?? null;
   }
 }
 

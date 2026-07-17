@@ -7,7 +7,7 @@ import { LoginScreen } from './login-screen';
 
 type LoginSession = {
   csrfToken: string;
-  onboardingStep: 'CREATE_WORKSPACE' | 'CREATE_TEAM' | 'COMPLETE';
+  onboardingStep: 'ACCEPT_INVITATION' | 'CREATE_WORKSPACE' | 'CREATE_TEAM' | 'COMPLETE';
 };
 
 type LoginOptions = {
@@ -114,6 +114,19 @@ describe('LoginScreen', () => {
     expect(auth.setCsrfToken).toHaveBeenCalledWith('csrf-token');
     expect(auth.setQueryData).toHaveBeenCalledWith(['/api/v1/auth/session'], session);
     expect(auth.replace).toHaveBeenCalledWith('/onboarding/workspace');
+  });
+
+  it('진행 중인 초대가 있으면 워크스페이스 생성보다 초대 수락으로 이동한다', () => {
+    renderLogin('/onboarding/workspace');
+
+    act(() => {
+      auth.options?.mutation?.onSuccess?.({
+        csrfToken: 'csrf-token',
+        onboardingStep: 'ACCEPT_INVITATION',
+      });
+    });
+
+    expect(auth.replace).toHaveBeenCalledWith('/invite');
   });
 
   it.each([

@@ -6,6 +6,9 @@ export class AcceptedAuthRequestDto {
 
   @ApiProperty({ example: 'mi***@example.com' })
   emailMasked!: string;
+
+  @ApiProperty({ enum: ['LOGIN', 'VERIFY_EMAIL'] })
+  nextStep!: 'LOGIN' | 'VERIFY_EMAIL';
 }
 
 export class VerifiedEmailDto {
@@ -73,8 +76,8 @@ export class AuthenticatedSessionDto {
   @ApiProperty({ nullable: true, type: SessionWorkspaceDto })
   workspace!: SessionWorkspaceDto | null;
 
-  @ApiProperty({ enum: ['CREATE_WORKSPACE', 'CREATE_TEAM', 'COMPLETE'] })
-  onboardingStep!: 'CREATE_WORKSPACE' | 'CREATE_TEAM' | 'COMPLETE';
+  @ApiProperty({ enum: ['ACCEPT_INVITATION', 'CREATE_WORKSPACE', 'CREATE_TEAM', 'COMPLETE'] })
+  onboardingStep!: 'ACCEPT_INVITATION' | 'CREATE_WORKSPACE' | 'CREATE_TEAM' | 'COMPLETE';
 }
 
 export class UnauthenticatedSessionDto {

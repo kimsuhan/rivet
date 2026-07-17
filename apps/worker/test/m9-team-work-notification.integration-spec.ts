@@ -11,6 +11,10 @@ import type {
   TeamWorkChangedOutboxPayload,
   TeamWorkCreatedOutboxPayload,
 } from '@rivet/event-contracts';
+import {
+  API_HANDOFF_CREATED_SCHEMA_VERSION,
+  TEAM_WORK_CHANGED_SCHEMA_VERSION,
+} from '@rivet/event-contracts';
 
 import { DatabaseModule } from '../src/common/database/database.module';
 import { DatabaseService } from '../src/common/database/database.service';
@@ -107,9 +111,31 @@ describe('M9 team-work worker PostgreSQL integration', () => {
   }
 
   it('anchors assignment notifications to the selected team work', async () => {
-    const payload: TeamWorkChangedOutboxPayload = { assigneeMembershipId: recipientMembershipId, changedFields: ['ASSIGNEE'], issueId, schemaVersion: 1, subscriberMembershipIds: [], teamWorkId: webWorkId, terminalCategory: null };
+    const payload: TeamWorkChangedOutboxPayload = { assigneeMembershipId: recipientMembershipId, changedFields: ['ASSIGNEE'], issueId, mentionedMembershipIds: [], schemaVersion: TEAM_WORK_CHANGED_SCHEMA_VERSION, subscriberMembershipIds: [], teamWorkId: webWorkId, terminalCategory: null };
     await teamWorkHandler.handleTeamWorkChanged(event('TEAM_WORK_CHANGED', webWorkId), payload);
     await expect(database.client.notification.findFirstOrThrow({ where: { type: NotificationType.TEAM_WORK_ASSIGNED, workspaceId } })).resolves.toMatchObject({ issueId, recipientMembershipId, teamWorkId: webWorkId });
+  });
+
+  it('prioritizes work-note mentions and anchors them to the edited team work', async () => {
+    const payload: TeamWorkChangedOutboxPayload = {
+      assigneeMembershipId: recipientMembershipId,
+      changedFields: ['WORK_NOTE'],
+      issueId,
+      mentionedMembershipIds: [recipientMembershipId],
+      schemaVersion: TEAM_WORK_CHANGED_SCHEMA_VERSION,
+      subscriberMembershipIds: [recipientMembershipId],
+      teamWorkId: webWorkId,
+      terminalCategory: null,
+    };
+
+    await teamWorkHandler.handleTeamWorkChanged(event('TEAM_WORK_CHANGED', webWorkId), payload);
+
+    await expect(
+      database.client.notification.findFirstOrThrow({
+        orderBy: { createdAt: 'desc' },
+        where: { teamWorkId: webWorkId, type: NotificationType.MENTIONED, workspaceId },
+      }),
+    ).resolves.toMatchObject({ issueId, recipientMembershipId, teamWorkId: webWorkId });
   });
 
   it('anchors creation assignment notifications to the created team work', async () => {
@@ -136,8 +162,34 @@ describe('M9 team-work worker PostgreSQL integration', () => {
   });
 
   it('anchors handoff notifications to the actual reused target team work', async () => {
-    const payload: ApiHandoffCreatedOutboxPayload = { candidateRecipientMembershipIds: [recipientMembershipId], handoffId, issueId, kind: 'INITIAL', schemaVersion: 1, sourceTeamWorkId: backendWorkId, targetTeamWorkIds: [webWorkId] };
+    const payload: ApiHandoffCreatedOutboxPayload = { candidateRecipientMembershipIds: [recipientMembershipId], handoffId, issueId, kind: 'INITIAL', mentionedMembershipIds: [], schemaVersion: API_HANDOFF_CREATED_SCHEMA_VERSION, sourceTeamWorkId: backendWorkId, targetTeamWorkIds: [webWorkId] };
     await handoffHandler.handle(event('API_HANDOFF_CREATED', backendWorkId), payload);
     await expect(database.client.notification.findFirstOrThrow({ where: { handoffId, workspaceId } })).resolves.toMatchObject({ issueId, recipientMembershipId, teamWorkId: webWorkId, type: NotificationType.API_HANDOFF_CREATED });
+  });
+
+  it('prioritizes handoff mentions and keeps the handoff target anchor', async () => {
+    const payload: ApiHandoffCreatedOutboxPayload = {
+      candidateRecipientMembershipIds: [recipientMembershipId],
+      handoffId,
+      issueId,
+      kind: 'INITIAL',
+      mentionedMembershipIds: [recipientMembershipId],
+      schemaVersion: API_HANDOFF_CREATED_SCHEMA_VERSION,
+      sourceTeamWorkId: backendWorkId,
+      targetTeamWorkIds: [webWorkId],
+    };
+
+    await handoffHandler.handle(event('API_HANDOFF_CREATED', backendWorkId), payload);
+
+    await expect(
+      database.client.notification.findFirstOrThrow({
+        orderBy: { createdAt: 'desc' },
+        where: { handoffId, type: NotificationType.MENTIONED, workspaceId },
+      }),
+    ).resolves.toMatchObject({
+      issueId,
+      recipientMembershipId,
+      teamWorkId: webWorkId,
+    });
   });
 });

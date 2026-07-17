@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { AnchorHTMLAttributes } from 'react';
+import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppShell } from './app-shell';
@@ -57,6 +57,33 @@ vi.mock('@rivet/api-client', () => ({
 vi.mock('@/features/search/global-search', () => ({
   GlobalSearch: ({ open }: { open: boolean }) =>
     open ? <div role="dialog" aria-label="검색 모달" /> : null,
+}));
+
+vi.mock('@/features/auth/user-menu', () => ({
+  UserMenu: ({
+    children,
+    labels,
+    onOpenChange,
+    onOpenProfile,
+    open,
+  }: {
+    children: ReactNode;
+    labels: { open: string; profile: string };
+    onOpenChange: (open: boolean) => void;
+    onOpenProfile: () => void;
+    open: boolean;
+  }) => (
+    <div>
+      <button type="button" aria-label={labels.open} onClick={() => onOpenChange(!open)}>
+        {children}
+      </button>
+      {open ? (
+        <button type="button" onClick={onOpenProfile}>
+          {labels.profile}
+        </button>
+      ) : null}
+    </div>
+  ),
 }));
 
 vi.mock('@/features/profile/profile-dialog', () => ({
@@ -134,7 +161,6 @@ const labels = {
   inboxUnread: '알림함, 읽지 않은 알림 {count}개',
   mobileNavigation: '모바일 주 탐색',
   openIssueCreate: '이슈 만들기 열기',
-  openProfile: '프로필 설정 열기',
   navigation: {
     inbox: '알림함',
     issues: '이슈',
@@ -147,14 +173,23 @@ const labels = {
   openSearch: '검색 열기',
   openTeamSelector: '팀 선택 열기',
   profile: {
+    cancel: '취소',
     choose: '사진 선택',
     close: '프로필 닫기',
     description: '프로필 설명',
     discard: '선택 제거',
+    emailDescription: '이메일 변경 불가',
+    emailLabel: '이메일',
     emptyFile: '빈 파일',
     fileLimit: '파일 제한',
     invalidType: '잘못된 형식',
+    nameDescription: '이름 설명',
+    nameLabel: '이름',
+    nameRequired: '이름 필수',
+    nameTooLong: '이름 길이 초과',
     optimizing: '최적화 중',
+    photoDescription: '사진 설명',
+    photoLabel: '프로필 사진',
     previewAlt: '사진 미리보기',
     remove: '사진 삭제',
     removing: '삭제 중',
@@ -164,6 +199,13 @@ const labels = {
     title: '프로필 설정',
     unexpectedError: '사진 오류',
     uploading: '업로드 중',
+  },
+  userMenu: {
+    loggingOut: '로그아웃 중',
+    logout: '로그아웃',
+    logoutError: '로그아웃 실패',
+    open: '사용자 메뉴 열기',
+    profile: '프로필 설정',
   },
   issueCreate: {
     cancel: '취소',
@@ -496,7 +538,8 @@ describe('AppShell', () => {
       </AppShell>,
     );
 
-    await user.click(screen.getAllByRole('button', { name: labels.openProfile })[0]!);
+    await user.click(screen.getAllByRole('button', { name: labels.userMenu.open })[0]!);
+    await user.click(screen.getByRole('button', { name: labels.userMenu.profile }));
     expect(screen.getByRole('dialog', { name: '프로필 모달' })).toBeVisible();
 
     fireEvent.keyDown(window, { code: 'Slash', key: '/' });

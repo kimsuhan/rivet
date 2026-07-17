@@ -10,6 +10,7 @@ import { configureApplication } from '../src/bootstrap';
 import { DatabaseService } from '../src/common/database/database.service';
 import { AuthSessionService } from '../src/modules/auth/auth-session.service';
 import { createCsrfToken, createOneTimeToken } from '../src/modules/auth/auth-token';
+import { hashPassword } from '../src/modules/auth/password';
 
 const WEB_ORIGIN = 'http://localhost:3000';
 const CSRF_HMAC_KEY = 'test-csrf-hmac-key-with-at-least-32-bytes';
@@ -17,6 +18,7 @@ const TOKEN_HMAC_KEY = 'test-token-hmac-key-with-at-least-32-bytes';
 const RATE_LIMIT_HMAC_KEY = 'test-rate-hmac-key-with-at-least-32-bytes';
 const PASSWORD_HASH =
   '$argon2id$v=19$m=19456,t=2,p=1$u5oksZN2qlFVAyszxdWrug$xmy/xfzl6zj7sfdlIBgb2F6zHrOnBcsxDzJEO7QyG0A';
+const INVITEE_PASSWORD = 'invitee secure password 2026';
 const runId = randomUUID().slice(0, 8);
 const emails = {
   admin: `m2.admin.${runId}@example.com`,
@@ -28,6 +30,28 @@ const emails = {
   other: `m2.other.${runId}@example.com`,
   rateLimited: `m2.rate-limited.${runId}@example.com`,
 };
+
+function invitationContinuationCookie(headers: { 'set-cookie'?: string | string[] }): string {
+  const setCookie = headers['set-cookie'];
+  const cookies = typeof setCookie === 'string' ? [setCookie] : (setCookie ?? []);
+  const continuation = cookies.find((cookie) => cookie.startsWith('rivet_invite_flow='));
+  if (!continuation) {
+    throw new Error('초대 진행 쿠키를 확인할 수 없습니다.');
+  }
+
+  return continuation.split(';', 1)[0]!;
+}
+
+function sessionCookie(headers: { 'set-cookie'?: string | string[] }): string {
+  const setCookie = headers['set-cookie'];
+  const cookies = typeof setCookie === 'string' ? [setCookie] : (setCookie ?? []);
+  const session = cookies.find((cookie) => cookie.startsWith('rivet_session='));
+  if (!session) {
+    throw new Error('세션 쿠키를 확인할 수 없습니다.');
+  }
+
+  return session.split(';', 1)[0]!;
+}
 
 describe('M2 workspace invitations', () => {
   let app: INestApplication;
@@ -73,6 +97,10 @@ describe('M2 workspace invitations', () => {
       createUser('다른 워크스페이스', emails.other),
     ]);
     userIds.push(admin.id, invitee.id, mismatch.id, other.id);
+    await database.client.user.update({
+      data: { passwordHash: await hashPassword(INVITEE_PASSWORD) },
+      where: { id: invitee.id },
+    });
 
     const workspace = await database.client.workspace.create({
       data: {
@@ -174,7 +202,7 @@ describe('M2 workspace invitations', () => {
 
   it('creates, previews, accepts, rejects, resends, cancels, and reopens invitations safely', async () => {
     const malformed = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/preview')
+      .post('/api/v1/auth/invitations/continuation')
       .set('Origin', WEB_ORIGIN)
       .send({ token: 'not-an-invitation-token' })
       .expect(422);
@@ -210,7 +238,7 @@ describe('M2 workspace invitations', () => {
     const token = createOneTimeToken('WORKSPACE_INVITATION', TOKEN_HMAC_KEY, issuedToken.id).token;
 
     const preview = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/preview')
+      .post('/api/v1/auth/invitations/continuation')
       .set('Origin', WEB_ORIGIN)
       .send({ token })
       .expect(200);
@@ -219,24 +247,51 @@ describe('M2 workspace invitations', () => {
       invitedByDisplayName: '관리자',
       workspaceName: 'M2 초대 워크스페이스',
     });
+    expect(preview.body.email).toBeUndefined();
     expect(preview.headers['cache-control']).toContain('no-store');
     expect(preview.headers['referrer-policy']).toBe('no-referrer');
+    const continuationCookie = invitationContinuationCookie(preview.headers);
+
+    const continuation = await request(app.getHttpServer())
+      .get('/api/v1/auth/invitations/continuation')
+      .set('Cookie', continuationCookie)
+      .expect(200);
+    expect(continuation.body).toMatchObject({
+      email: displayedInviteeEmail,
+      emailMasked: 'M2***@EXAMPLE.COM',
+      workspaceName: 'M2 초대 워크스페이스',
+    });
+    expect(continuation.headers['cache-control']).toContain('no-store');
+    expect(continuation.headers['referrer-policy']).toBe('no-referrer');
 
     const mismatch = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/accept')
-      .set('Cookie', `rivet_session=${mismatchSessionToken}`)
+      .post('/api/v1/auth/invitations/continuation/accept')
+      .set('Cookie', `rivet_session=${mismatchSessionToken}; ${continuationCookie}`)
       .set('Origin', WEB_ORIGIN)
       .set('X-CSRF-Token', mismatchCsrfToken)
-      .send({ token })
       .expect(409);
     expect(mismatch.body.code).toBe('INVITATION_EMAIL_MISMATCH');
 
-    const accepted = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/accept')
-      .set('Cookie', `rivet_session=${inviteeSessionToken}`)
+    const loggedIn = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', continuationCookie)
       .set('Origin', WEB_ORIGIN)
-      .set('X-CSRF-Token', inviteeCsrfToken)
-      .send({ token })
+      .send({ email: emails.invitee, password: INVITEE_PASSWORD })
+      .expect(200);
+    expect(loggedIn.body.onboardingStep).toBe('ACCEPT_INVITATION');
+    const boundSessionCookie = sessionCookie(loggedIn.headers);
+
+    const recoveredOnAnotherDevice = await request(app.getHttpServer())
+      .get('/api/v1/auth/session')
+      .set('Cookie', boundSessionCookie)
+      .expect(200);
+    expect(recoveredOnAnotherDevice.body.onboardingStep).toBe('ACCEPT_INVITATION');
+
+    const accepted = await request(app.getHttpServer())
+      .post('/api/v1/auth/invitations/continuation/accept')
+      .set('Cookie', boundSessionCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', String(loggedIn.body.csrfToken))
       .expect(200);
     expect(accepted.body).toMatchObject({
       accepted: true,
@@ -250,11 +305,10 @@ describe('M2 workspace invitations', () => {
     ).toBe(1);
 
     const repeated = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/accept')
-      .set('Cookie', `rivet_session=${inviteeSessionToken}`)
+      .post('/api/v1/auth/invitations/continuation/accept')
+      .set('Cookie', `rivet_session=${inviteeSessionToken}; ${continuationCookie}`)
       .set('Origin', WEB_ORIGIN)
       .set('X-CSRF-Token', inviteeCsrfToken)
-      .send({ token })
       .expect(409);
     expect(repeated.body.code).toBe('TOKEN_ALREADY_USED');
 
@@ -289,14 +343,30 @@ describe('M2 workspace invitations', () => {
       TOKEN_HMAC_KEY,
       otherIssuedToken.id,
     ).token;
+    const otherContinuation = await request(app.getHttpServer())
+      .post('/api/v1/auth/invitations/continuation')
+      .set('Origin', WEB_ORIGIN)
+      .send({ token: otherToken })
+      .expect(200);
+    const otherContinuationCookie = invitationContinuationCookie(otherContinuation.headers);
     const workspaceLimited = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/accept')
-      .set('Cookie', `rivet_session=${otherSessionToken}`)
+      .post('/api/v1/auth/invitations/continuation/accept')
+      .set('Cookie', `rivet_session=${otherSessionToken}; ${otherContinuationCookie}`)
       .set('Origin', WEB_ORIGIN)
       .set('X-CSRF-Token', otherCsrfToken)
-      .send({ token: otherToken })
       .expect(409);
     expect(workspaceLimited.body.code).toBe('WORKSPACE_LIMIT_REACHED');
+    await request(app.getHttpServer())
+      .delete('/api/v1/auth/invitations/continuation')
+      .set('Cookie', `rivet_session=${otherSessionToken}; ${otherContinuationCookie}`)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', otherCsrfToken)
+      .expect(204);
+    const sessionAfterDismiss = await request(app.getHttpServer())
+      .get('/api/v1/auth/session')
+      .set('Cookie', `rivet_session=${otherSessionToken}`)
+      .expect(200);
+    expect(sessionAfterDismiss.body.onboardingStep).toBe('CREATE_TEAM');
 
     const canceledCreated = await request(app.getHttpServer())
       .post('/api/v1/invitations')
@@ -346,7 +416,7 @@ describe('M2 workspace invitations', () => {
       resentTokenRow.id,
     ).token;
     const supersededPreview = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/preview')
+      .post('/api/v1/auth/invitations/continuation')
       .set('Origin', WEB_ORIGIN)
       .send({ token: originalCanceledToken })
       .expect(422);
@@ -371,7 +441,7 @@ describe('M2 workspace invitations', () => {
       }),
     ).toBe(0);
     const canceledPreview = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/preview')
+      .post('/api/v1/auth/invitations/continuation')
       .set('Origin', WEB_ORIGIN)
       .send({ token: resentToken })
       .expect(422);
@@ -402,7 +472,7 @@ describe('M2 workspace invitations', () => {
       expiredTokenRow.id,
     ).token;
     const expiredPreview = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/preview')
+      .post('/api/v1/auth/invitations/continuation')
       .set('Origin', WEB_ORIGIN)
       .send({ token: expiredToken })
       .expect(410);
@@ -423,7 +493,7 @@ describe('M2 workspace invitations', () => {
       status: 'PENDING',
     });
     const supersededExpiredPreview = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/preview')
+      .post('/api/v1/auth/invitations/continuation')
       .set('Origin', WEB_ORIGIN)
       .send({ token: expiredToken })
       .expect(422);
@@ -543,12 +613,19 @@ describe('M2 workspace invitations', () => {
       TOKEN_HMAC_KEY,
       acceptedReissuedTokenRow.id,
     ).token;
+    const acceptedReissuedContinuation = await request(app.getHttpServer())
+      .post('/api/v1/auth/invitations/continuation')
+      .set('Origin', WEB_ORIGIN)
+      .send({ token: acceptedReissuedToken })
+      .expect(200);
+    const acceptedReissuedContinuationCookie = invitationContinuationCookie(
+      acceptedReissuedContinuation.headers,
+    );
     const acceptedAgain = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/accept')
-      .set('Cookie', `rivet_session=${inviteeSessionToken}`)
+      .post('/api/v1/auth/invitations/continuation/accept')
+      .set('Cookie', `rivet_session=${inviteeSessionToken}; ${acceptedReissuedContinuationCookie}`)
       .set('Origin', WEB_ORIGIN)
       .set('X-CSRF-Token', inviteeCsrfToken)
-      .send({ token: acceptedReissuedToken })
       .expect(200);
     expect(acceptedAgain.body).toMatchObject({
       accepted: true,
@@ -568,11 +645,10 @@ describe('M2 workspace invitations', () => {
       }),
     ).resolves.toEqual({ usedAt: expect.any(Date) });
     const acceptedAgainRepeated = await request(app.getHttpServer())
-      .post('/api/v1/auth/invitations/accept')
-      .set('Cookie', `rivet_session=${inviteeSessionToken}`)
+      .post('/api/v1/auth/invitations/continuation/accept')
+      .set('Cookie', `rivet_session=${inviteeSessionToken}; ${acceptedReissuedContinuationCookie}`)
       .set('Origin', WEB_ORIGIN)
       .set('X-CSRF-Token', inviteeCsrfToken)
-      .send({ token: acceptedReissuedToken })
       .expect(409);
     expect(acceptedAgainRepeated.body.code).toBe('TOKEN_ALREADY_USED');
     await expect(

@@ -10,6 +10,7 @@ export type AuthenticatedSessionDtoOnboardingStep = typeof AuthenticatedSessionD
 
 
 export const AuthenticatedSessionDtoOnboardingStep = {
+  ACCEPT_INVITATION: 'ACCEPT_INVITATION',
   CREATE_WORKSPACE: 'CREATE_WORKSPACE',
   CREATE_TEAM: 'CREATE_TEAM',
   COMPLETE: 'COMPLETE',

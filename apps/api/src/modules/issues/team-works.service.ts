@@ -14,6 +14,10 @@ import {
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
 import { notifyResourceChanged } from '../../common/realtime/notify-resource-changed';
+import {
+  assertActiveMentionMemberships,
+  parseOptionalMarkdown,
+} from '../../common/validation/markdown';
 import { IssueCollaborationService } from '../collaboration/issue-collaboration.service';
 import { shouldAutoStartOnAssignment } from './domain/team-work-transition';
 import type {
@@ -247,14 +251,18 @@ export class TeamWorksService {
     if (
       dto.workNoteMarkdown !== undefined &&
       dto.workNoteMarkdown !== null &&
-      this.containsUnsupportedWorkNoteContent(dto.workNoteMarkdown)
+      this.containsUnsupportedWorkNoteFileContent(dto.workNoteMarkdown)
     ) {
       throw new ApiError({
         code: 'TEAM_WORK_NOTE_INVALID',
-        message: '작업 노트에는 멘션, 본문 이미지와 파일을 포함할 수 없습니다.',
+        message: '작업 노트에는 본문 이미지와 파일을 포함할 수 없습니다.',
         status: HttpStatus.UNPROCESSABLE_ENTITY,
       });
     }
+    const workNote =
+      dto.workNoteMarkdown === undefined
+        ? undefined
+        : parseOptionalMarkdown(dto.workNoteMarkdown, 10_000);
     return this.database.client.$transaction(async (transaction) => {
       const current = await this.issues.findTeamWork(transaction, context.workspaceId, teamWorkId);
       if (current.version !== dto.version) {
@@ -283,6 +291,29 @@ export class TeamWorksService {
           });
         }
       }
+      if (workNote !== undefined) {
+        await assertActiveMentionMemberships(
+          transaction,
+          context.workspaceId,
+          workNote.mentionedMembershipIds,
+        );
+      }
+      const previousWorkNoteMentionIds =
+        workNote === undefined
+          ? []
+          : (
+              await transaction.mention.findMany({
+                orderBy: { mentionedMembershipId: 'asc' },
+                select: { mentionedMembershipId: true },
+                where: { teamWorkId, workspaceId: context.workspaceId },
+              })
+            ).map(({ mentionedMembershipId }) => mentionedMembershipId);
+      const newlyMentionedMembershipIds =
+        workNote === undefined
+          ? []
+          : workNote.mentionedMembershipIds.filter(
+              (membershipId) => !previousWorkNoteMentionIds.includes(membershipId),
+            );
       let nextCategory = current.workflowState.category;
       let nextState: { category: StateCategory; id: string; name: string } | undefined;
       if (dto.workflowStateId) {
@@ -389,7 +420,7 @@ export class TeamWorksService {
             ? { assigneeMembershipId: dto.assigneeMembershipId }
             : {}),
           ...(dto.workNoteMarkdown !== undefined
-            ? { workNoteMarkdown: dto.workNoteMarkdown || null }
+            ? { workNoteMarkdown: workNote?.bodyMarkdown ?? null }
             : {}),
           ...(dto.workflowStateId
             ? { workflowStateId: dto.workflowStateId }
@@ -418,6 +449,29 @@ export class TeamWorksService {
           ],
           skipDuplicates: true,
         });
+      if (workNote !== undefined) {
+        await transaction.mention.deleteMany({
+          where: { teamWorkId, workspaceId: context.workspaceId },
+        });
+        if (workNote.mentionedMembershipIds.length > 0) {
+          await transaction.mention.createMany({
+            data: workNote.mentionedMembershipIds.map((mentionedMembershipId) => ({
+              issueId: current.issue.id,
+              mentionedMembershipId,
+              teamWorkId,
+              workspaceId: context.workspaceId,
+            })),
+          });
+          await transaction.issueSubscription.createMany({
+            data: workNote.mentionedMembershipIds.map((membershipId) => ({
+              issueId: current.issue.id,
+              membershipId,
+              workspaceId: context.workspaceId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
       const appliedStateId = dto.workflowStateId ?? autoStartStateId;
       type ActivityFieldChange = {
         after: Prisma.InputJsonValue | typeof Prisma.JsonNull;
@@ -521,6 +575,7 @@ export class TeamWorksService {
                 : {}),
               changedFields,
               issueId: current.issue.id,
+              mentionedMembershipIds: newlyMentionedMembershipIds,
               schemaVersion: TEAM_WORK_CHANGED_SCHEMA_VERSION,
               subscriberMembershipIds,
               teamWorkId,
@@ -650,7 +705,7 @@ export class TeamWorksService {
       .then(toIssueDetail);
   }
 
-  private containsUnsupportedWorkNoteContent(value: string): boolean {
-    return /(?:!\[[^\]]*\]\(|@\[[^\]]+\]\(|\/files\/[0-9a-f-]{36})/imu.test(value);
+  private containsUnsupportedWorkNoteFileContent(value: string): boolean {
+    return /(?:!\[[^\]]*\]\(|\/files\/[0-9a-f-]{36})/imu.test(value);
   }
 }

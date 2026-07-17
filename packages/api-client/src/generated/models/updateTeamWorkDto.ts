@@ -17,7 +17,7 @@ export interface UpdateTeamWorkDto {
   /** @nullable */
   assigneeMembershipId?: string | null;
   /**
-     * 멘션, 이미지와 파일을 제외한 팀 작업 전용 Markdown 노트
+     * 멤버 멘션을 지원하고 이미지와 파일은 제외한 팀 작업 전용 Markdown 노트
      * @maxLength 10000
      * @nullable
      */

@@ -27,14 +27,23 @@ vi.mock('./profile-dialog', () => ({
 }));
 
 const dialog = {
+  cancel: '취소',
   choose: '사진 선택',
   close: '닫기',
   description: '설명',
   discard: '선택 제거',
+  emailDescription: '이메일 변경 불가',
+  emailLabel: '이메일',
   emptyFile: '빈 파일',
   fileLimit: '파일 제한',
   invalidType: '형식 오류',
+  nameDescription: '이름 설명',
+  nameLabel: '이름',
+  nameRequired: '이름 필수',
+  nameTooLong: '이름 길이 초과',
   optimizing: '최적화 중',
+  photoDescription: '사진 설명',
+  photoLabel: '프로필 사진',
   previewAlt: '미리보기',
   remove: '삭제',
   removing: '삭제 중',

@@ -9,13 +9,17 @@ const mocks = vi.hoisted(() => ({
   acceptHook: vi.fn(),
   acceptMutate: vi.fn(),
   acceptReset: vi.fn(),
-  previewHook: vi.fn(),
-  previewMutate: vi.fn(),
-  previewReset: vi.fn(),
+  currentHook: vi.fn(),
+  currentRefetch: vi.fn(),
+  dismissHook: vi.fn(),
+  dismissMutate: vi.fn(),
   replace: vi.fn(),
   sessionRefetch: vi.fn(),
   sessionHook: vi.fn(),
   setCsrfToken: vi.fn(),
+  startHook: vi.fn(),
+  startMutate: vi.fn(),
+  startReset: vi.fn(),
 }));
 
 vi.mock('@rivet/api-client', () => ({
@@ -23,7 +27,9 @@ vi.mock('@rivet/api-client', () => ({
   setCsrfToken: mocks.setCsrfToken,
   useAuthControllerGetSession: mocks.sessionHook,
   useInvitationAuthControllerAccept: mocks.acceptHook,
-  useInvitationAuthControllerPreview: mocks.previewHook,
+  useInvitationAuthControllerDismissContinuation: mocks.dismissHook,
+  useInvitationAuthControllerGetContinuation: mocks.currentHook,
+  useInvitationAuthControllerStartContinuation: mocks.startHook,
 }));
 
 vi.mock('@/i18n/navigation', () => ({
@@ -55,7 +61,7 @@ const labels = {
   loginRequiredDescription: '같은 이메일 계정으로 로그인하거나 가입하세요.',
   loginRequiredTitle: '로그인 또는 가입이 필요합니다',
   productName: 'Rivet',
-  reopenLinkDescription: '인증을 마친 뒤 초대 메일의 원래 링크를 다시 열어 주세요.',
+  continuationDescription: '인증을 마치면 이 초대로 자동으로 돌아옵니다.',
   retry: '다시 시도',
   sessionErrorDescription: '잠시 후 다시 시도해 주세요.',
   sessionErrorTitle: '로그인 상태를 확인하지 못했습니다',
@@ -79,13 +85,19 @@ const previewData = {
 };
 
 function mockPreview(value: Record<string, unknown> = {}) {
-  mocks.previewHook.mockReturnValue({
+  mocks.startHook.mockReturnValue({
     data: previewData,
     error: null,
     isPending: false,
-    mutate: mocks.previewMutate,
-    reset: mocks.previewReset,
+    mutate: mocks.startMutate,
+    reset: mocks.startReset,
     ...value,
+  } as never);
+  mocks.currentHook.mockReturnValue({
+    data: previewData,
+    error: null,
+    isPending: false,
+    refetch: mocks.currentRefetch,
   } as never);
 }
 
@@ -115,7 +127,7 @@ function renderScreen(token = 'invite-token') {
 
   const rendered = render(
     <QueryClientProvider client={queryClient}>
-      <InviteScreen labels={labels} loginHref="/login" signUpHref="/signup" />
+      <InviteScreen labels={labels} loginHref="/login" signUpHref="/signup?invitation=1" />
     </QueryClientProvider>,
   );
   return { invalidate, unmount: rendered.unmount };
@@ -129,6 +141,10 @@ describe('InviteScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.sessionRefetch.mockResolvedValue({ data: { authenticated: false } });
+    mocks.dismissHook.mockReturnValue({
+      isPending: false,
+      mutate: mocks.dismissMutate,
+    });
     mockPreview();
     mockAccept();
     mockSession({ authenticated: false });
@@ -138,7 +154,10 @@ describe('InviteScreen', () => {
     renderScreen();
 
     await waitFor(() =>
-      expect(mocks.previewMutate).toHaveBeenCalledWith({ data: { token: 'invite-token' } }),
+      expect(mocks.startMutate).toHaveBeenCalledWith(
+        { data: { token: 'invite-token' } },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      ),
     );
     expect(window.location.hash).toBe('');
     expect(screen.getByText(previewData.workspaceName)).toBeVisible();
@@ -146,15 +165,15 @@ describe('InviteScreen', () => {
     expect(screen.getByText(previewData.emailMasked)).toBeVisible();
   });
 
-  it('비로그인 사용자에게 가입·로그인과 원래 링크 재진입을 안내한다', async () => {
+  it('비로그인 사용자에게 가입·로그인 뒤 자동으로 초대를 이어 간다고 안내한다', async () => {
     renderScreen();
 
     expect(await screen.findByText(labels.loginRequiredTitle)).toBeVisible();
-    expect(screen.getByText(labels.reopenLinkDescription)).toBeVisible();
+    expect(screen.getByText(labels.continuationDescription)).toBeVisible();
     expect(screen.getByRole('link', { name: labels.loginLink })).toHaveAttribute('href', '/login');
     expect(screen.getByRole('link', { name: labels.signUpLink })).toHaveAttribute(
       'href',
-      '/signup',
+      '/signup?invitation=1',
     );
     expect(screen.queryByRole('button', { name: labels.accept })).not.toBeInTheDocument();
   });
@@ -167,8 +186,11 @@ describe('InviteScreen', () => {
     expect(await screen.findByText(labels.unexpectedTitle)).toBeVisible();
     await user.click(screen.getByRole('button', { name: labels.retry }));
 
-    expect(mocks.previewReset).toHaveBeenCalled();
-    expect(mocks.previewMutate).toHaveBeenLastCalledWith({ data: { token: 'invite-token' } });
+    expect(mocks.startReset).toHaveBeenCalled();
+    expect(mocks.startMutate).toHaveBeenLastCalledWith(
+      { data: { token: 'invite-token' } },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
   });
 
   it('이미 사용된 링크를 새로 열어도 세션을 갱신해 참여한 워크스페이스로 이동한다', async () => {
@@ -206,7 +228,7 @@ describe('InviteScreen', () => {
 
     expect(mocks.setCsrfToken).toHaveBeenCalledWith('csrf-token');
     expect(mocks.acceptMutate).toHaveBeenCalledWith(
-      { data: { token: 'invite-token' } },
+      undefined,
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
     await waitFor(() => expect(invalidate).toHaveBeenCalled());
@@ -224,11 +246,18 @@ describe('InviteScreen', () => {
     });
     renderScreen();
     const user = userEvent.setup();
+    mocks.dismissMutate.mockImplementation((_variables, options) => {
+      void options?.onSuccess?.();
+    });
 
     expect(await screen.findByText(labels.workspaceLimitTitle)).toBeVisible();
     expect(screen.queryByRole('button', { name: labels.accept })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: labels.currentWorkspace }));
-    expect(mocks.replace).toHaveBeenCalledWith('/my-issues');
+    expect(mocks.dismissMutate).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/my-issues'));
   });
 
   it('다른 탭에서 먼저 수락한 초대는 세션을 다시 확인해 워크스페이스로 이동한다', async () => {

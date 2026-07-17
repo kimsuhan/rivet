@@ -14,6 +14,7 @@ import {
 import {
   API_HANDOFF_CREATED,
   API_HANDOFF_CREATED_SCHEMA_VERSION,
+  type ApiHandoffCreatedOutboxPayload,
   COMMENT_CREATED,
   COMMENT_CREATED_SCHEMA_VERSION,
   COMMENT_MENTIONS_ADDED,
@@ -174,9 +175,6 @@ function parseHandoffMarkdown(value: string): ParsedMarkdown {
   const parsed = parseMarkdown(bodyMarkdown, 50_000);
   if (parsed.bodyMarkdown.replace(/^#{1,6}[ \t].*$/gmu, '').trim().length === 0) {
     unprocessable('HANDOFF_CONTENT_REQUIRED', '작업 전달의 실제 변경 내용을 입력해 주세요.');
-  }
-  if (parsed.mentionedMembershipIds.length > 0) {
-    unprocessable('MARKDOWN_INVALID', '작업 전달에는 멘션을 사용할 수 없습니다.');
   }
   return parsed;
 }
@@ -566,6 +564,11 @@ export class IssueCollaborationService {
         status: HttpStatus.FORBIDDEN,
       });
     }
+    await assertActiveMentionMemberships(
+      transaction,
+      context.workspaceId,
+      markdown.mentionedMembershipIds,
+    );
 
     const handoffs = await transaction.apiHandoff.findMany({
       orderBy: { sequenceNumber: 'desc' },
@@ -650,6 +653,16 @@ export class IssueCollaborationService {
         })),
       });
     }
+    if (markdown.mentionedMembershipIds.length > 0) {
+      await transaction.mention.createMany({
+        data: markdown.mentionedMembershipIds.map((mentionedMembershipId) => ({
+          apiHandoffId: created.id,
+          issueId: source.issueId,
+          mentionedMembershipId,
+          workspaceId: context.workspaceId,
+        })),
+      });
+    }
     await this.files.syncBodyImages(
       transaction,
       context,
@@ -688,6 +701,16 @@ export class IssueCollaborationService {
     ]
       .filter((membershipId) => membershipId !== context.membershipId)
       .sort();
+    if (markdown.mentionedMembershipIds.length > 0) {
+      await transaction.issueSubscription.createMany({
+        data: markdown.mentionedMembershipIds.map((membershipId) => ({
+          issueId: source.issueId,
+          membershipId,
+          workspaceId: context.workspaceId,
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     await transaction.activityEvent.create({
       data: {
@@ -718,9 +741,10 @@ export class IssueCollaborationService {
           handoffId: created.id,
           issueId: source.issueId,
           kind: created.kind,
+          mentionedMembershipIds: markdown.mentionedMembershipIds,
           schemaVersion: API_HANDOFF_CREATED_SCHEMA_VERSION,
           sourceTeamWorkId: teamWorkId,
-        },
+        } satisfies ApiHandoffCreatedOutboxPayload,
         workspaceId: context.workspaceId,
       },
     });

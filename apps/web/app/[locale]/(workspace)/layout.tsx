@@ -17,17 +17,27 @@ export default async function WorkspaceLayout({
   setRequestLocale(locale);
   const messages = await getMessages();
 
-  const [shell, navigation, search, issueCreate, session, teamSelector, profile, realtime] =
-    await Promise.all([
-      getTranslations('Shell'),
-      getTranslations('Navigation'),
-      getTranslations('Search'),
-      getTranslations('IssueCreate'),
-      getTranslations('Auth.session'),
-      getTranslations('TeamSelector'),
-      getTranslations('Profile'),
-      getTranslations('Realtime'),
-    ]);
+  const [
+    shell,
+    navigation,
+    search,
+    issueCreate,
+    session,
+    teamSelector,
+    profile,
+    userMenu,
+    realtime,
+  ] = await Promise.all([
+    getTranslations('Shell'),
+    getTranslations('Navigation'),
+    getTranslations('Search'),
+    getTranslations('IssueCreate'),
+    getTranslations('Auth.session'),
+    getTranslations('TeamSelector'),
+    getTranslations('Profile'),
+    getTranslations('UserMenu'),
+    getTranslations('Realtime'),
+  ]);
 
   return (
     <NextIntlClientProvider
@@ -61,7 +71,6 @@ export default async function WorkspaceLayout({
               openIssueCreate: shell('openIssueCreate'),
               openSearch: shell('openSearch'),
               openTeamSelector: shell('openTeamSelector'),
-              openProfile: shell('openProfile'),
               inboxUnread: shell.raw('inboxUnread') as string,
               skipToContent: shell('skipToContent'),
               navigation: {
@@ -171,14 +180,23 @@ export default async function WorkspaceLayout({
                 close: teamSelector('close'),
               },
               profile: {
+                cancel: profile('cancel'),
                 choose: profile('choose'),
                 close: profile('close'),
                 description: profile('description'),
                 discard: profile('discard'),
+                emailDescription: profile('emailDescription'),
+                emailLabel: profile('emailLabel'),
                 emptyFile: profile('emptyFile'),
                 fileLimit: profile('fileLimit'),
                 invalidType: profile('invalidType'),
+                nameDescription: profile('nameDescription'),
+                nameLabel: profile('nameLabel'),
+                nameRequired: profile('nameRequired'),
+                nameTooLong: profile('nameTooLong'),
                 optimizing: profile('optimizing'),
+                photoDescription: profile('photoDescription'),
+                photoLabel: profile('photoLabel'),
                 previewAlt: profile('previewAlt'),
                 remove: profile('remove'),
                 removing: profile('removing'),
@@ -188,6 +206,13 @@ export default async function WorkspaceLayout({
                 title: profile('title'),
                 unexpectedError: profile('unexpectedError'),
                 uploading: profile('uploading'),
+              },
+              userMenu: {
+                loggingOut: userMenu('loggingOut'),
+                logout: userMenu('logout'),
+                logoutError: userMenu('logoutError'),
+                open: userMenu('open'),
+                profile: userMenu('profile'),
               },
             }}
           >

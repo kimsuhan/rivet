@@ -65,6 +65,7 @@ import type {
   FilesControllerUploadBody,
   HandoffResourceResponseDto,
   HealthResponseDto,
+  InvitationContinuationResponseDto,
   InvitationListResponseDto,
   InvitationPreviewResponseDto,
   InvitationResponseDto,
@@ -126,6 +127,7 @@ import type {
   UpdateIssueResponseDto,
   UpdateLabelDto,
   UpdateNotificationReadDto,
+  UpdateProfileDto,
   UpdateProjectDto,
   UpdateSavedViewDto,
   UpdateTeamDto,
@@ -862,6 +864,77 @@ export function useAuthControllerGetMe<TData = Awaited<ReturnType<typeof authCon
 
 
 
+
+export const getAuthControllerUpdateMeUrl = () => {
+
+
+
+
+  return `/api/v1/me`
+}
+
+/**
+ * @summary 현재 사용자의 표시 이름 변경
+ */
+export const authControllerUpdateMe = async (updateProfileDto: UpdateProfileDto, options?: RequestInit): Promise<SessionUserDto> => {
+
+  return rivetFetch<SessionUserDto>(getAuthControllerUpdateMeUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateProfileDto)
+  }
+);}
+
+
+
+
+
+export const getAuthControllerUpdateMeMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authControllerUpdateMe>>, TError,{data: BodyType<UpdateProfileDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof authControllerUpdateMe>>, TError,{data: BodyType<UpdateProfileDto>}, TContext> => {
+
+const mutationKey = ['authControllerUpdateMe'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authControllerUpdateMe>>, {data: BodyType<UpdateProfileDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  authControllerUpdateMe(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthControllerUpdateMeMutationResult = NonNullable<Awaited<ReturnType<typeof authControllerUpdateMe>>>
+    export type AuthControllerUpdateMeMutationBody = BodyType<UpdateProfileDto>
+    export type AuthControllerUpdateMeMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 현재 사용자의 표시 이름 변경
+ */
+export const useAuthControllerUpdateMe = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authControllerUpdateMe>>, TError,{data: BodyType<UpdateProfileDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof authControllerUpdateMe>>,
+        TError,
+        {data: BodyType<UpdateProfileDto>},
+        TContext
+      > => {
+      return useMutation(getAuthControllerUpdateMeMutationOptions(options), queryClient);
+    }
 
 export const getCommentsControllerUpdateUrl = (commentId: string,) => {
 
@@ -2616,20 +2689,20 @@ export function useHealthControllerReady<TData = Awaited<ReturnType<typeof healt
 
 
 
-export const getInvitationAuthControllerPreviewUrl = () => {
+export const getInvitationAuthControllerStartContinuationUrl = () => {
 
 
 
 
-  return `/api/v1/auth/invitations/preview`
+  return `/api/v1/auth/invitations/continuation`
 }
 
 /**
- * @summary 초대 토큰의 안전한 표시 정보 조회
+ * @summary 초대 링크를 브라우저의 안전한 진행 상태로 교환
  */
-export const invitationAuthControllerPreview = async (invitationTokenDto: InvitationTokenDto, options?: RequestInit): Promise<InvitationPreviewResponseDto> => {
+export const invitationAuthControllerStartContinuation = async (invitationTokenDto: InvitationTokenDto, options?: RequestInit): Promise<InvitationPreviewResponseDto> => {
 
-  return rivetFetch<InvitationPreviewResponseDto>(getInvitationAuthControllerPreviewUrl(),
+  return rivetFetch<InvitationPreviewResponseDto>(getInvitationAuthControllerStartContinuationUrl(),
   {
     ...options,
     method: 'POST',
@@ -2642,11 +2715,11 @@ export const invitationAuthControllerPreview = async (invitationTokenDto: Invita
 
 
 
-export const getInvitationAuthControllerPreviewMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerPreview>>, TError,{data: BodyType<InvitationTokenDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerPreview>>, TError,{data: BodyType<InvitationTokenDto>}, TContext> => {
+export const getInvitationAuthControllerStartContinuationMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerStartContinuation>>, TError,{data: BodyType<InvitationTokenDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerStartContinuation>>, TError,{data: BodyType<InvitationTokenDto>}, TContext> => {
 
-const mutationKey = ['invitationAuthControllerPreview'];
+const mutationKey = ['invitationAuthControllerStartContinuation'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2656,10 +2729,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof invitationAuthControllerPreview>>, {data: BodyType<InvitationTokenDto>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof invitationAuthControllerStartContinuation>>, {data: BodyType<InvitationTokenDto>}> = (props) => {
           const {data} = props ?? {};
 
-          return  invitationAuthControllerPreview(data,requestOptions)
+          return  invitationAuthControllerStartContinuation(data,requestOptions)
         }
 
 
@@ -2669,22 +2742,194 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type InvitationAuthControllerPreviewMutationResult = NonNullable<Awaited<ReturnType<typeof invitationAuthControllerPreview>>>
-    export type InvitationAuthControllerPreviewMutationBody = BodyType<InvitationTokenDto>
-    export type InvitationAuthControllerPreviewMutationError = ErrorType<ApiErrorResponseDto>
+    export type InvitationAuthControllerStartContinuationMutationResult = NonNullable<Awaited<ReturnType<typeof invitationAuthControllerStartContinuation>>>
+    export type InvitationAuthControllerStartContinuationMutationBody = BodyType<InvitationTokenDto>
+    export type InvitationAuthControllerStartContinuationMutationError = ErrorType<ApiErrorResponseDto>
 
     /**
- * @summary 초대 토큰의 안전한 표시 정보 조회
+ * @summary 초대 링크를 브라우저의 안전한 진행 상태로 교환
  */
-export const useInvitationAuthControllerPreview = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerPreview>>, TError,{data: BodyType<InvitationTokenDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+export const useInvitationAuthControllerStartContinuation = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerStartContinuation>>, TError,{data: BodyType<InvitationTokenDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof invitationAuthControllerPreview>>,
+        Awaited<ReturnType<typeof invitationAuthControllerStartContinuation>>,
         TError,
         {data: BodyType<InvitationTokenDto>},
         TContext
       > => {
-      return useMutation(getInvitationAuthControllerPreviewMutationOptions(options), queryClient);
+      return useMutation(getInvitationAuthControllerStartContinuationMutationOptions(options), queryClient);
+    }
+
+export const getInvitationAuthControllerGetContinuationUrl = () => {
+
+
+
+
+  return `/api/v1/auth/invitations/continuation`
+}
+
+/**
+ * @summary 현재 브라우저 또는 로그인 계정의 초대 진행 상태 조회
+ */
+export const invitationAuthControllerGetContinuation = async ( options?: RequestInit): Promise<InvitationContinuationResponseDto> => {
+
+  return rivetFetch<InvitationContinuationResponseDto>(getInvitationAuthControllerGetContinuationUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getInvitationAuthControllerGetContinuationQueryKey = () => {
+    return [
+    `/api/v1/auth/invitations/continuation`
+    ] as const;
+    }
+
+
+export const getInvitationAuthControllerGetContinuationQueryOptions = <TData = Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>, TError = ErrorType<ApiErrorResponseDto>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvitationAuthControllerGetContinuationQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>> = ({ signal }) => invitationAuthControllerGetContinuation({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvitationAuthControllerGetContinuationQueryResult = NonNullable<Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>>
+export type InvitationAuthControllerGetContinuationQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useInvitationAuthControllerGetContinuation<TData = Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>,
+          TError,
+          Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvitationAuthControllerGetContinuation<TData = Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>,
+          TError,
+          Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvitationAuthControllerGetContinuation<TData = Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 현재 브라우저 또는 로그인 계정의 초대 진행 상태 조회
+ */
+
+export function useInvitationAuthControllerGetContinuation<TData = Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>, TError = ErrorType<ApiErrorResponseDto>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof invitationAuthControllerGetContinuation>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvitationAuthControllerGetContinuationQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getInvitationAuthControllerDismissContinuationUrl = () => {
+
+
+
+
+  return `/api/v1/auth/invitations/continuation`
+}
+
+/**
+ * @summary 현재 초대 진행 상태 닫기
+ */
+export const invitationAuthControllerDismissContinuation = async ( options?: RequestInit): Promise<void> => {
+
+  return rivetFetch<void>(getInvitationAuthControllerDismissContinuationUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getInvitationAuthControllerDismissContinuationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerDismissContinuation>>, TError,void, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerDismissContinuation>>, TError,void, TContext> => {
+
+const mutationKey = ['invitationAuthControllerDismissContinuation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof invitationAuthControllerDismissContinuation>>, void> = () => {
+
+
+          return  invitationAuthControllerDismissContinuation(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvitationAuthControllerDismissContinuationMutationResult = NonNullable<Awaited<ReturnType<typeof invitationAuthControllerDismissContinuation>>>
+
+    export type InvitationAuthControllerDismissContinuationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 현재 초대 진행 상태 닫기
+ */
+export const useInvitationAuthControllerDismissContinuation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerDismissContinuation>>, TError,void, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof invitationAuthControllerDismissContinuation>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getInvitationAuthControllerDismissContinuationMutationOptions(options), queryClient);
     }
 
 export const getInvitationAuthControllerAcceptUrl = () => {
@@ -2692,21 +2937,21 @@ export const getInvitationAuthControllerAcceptUrl = () => {
 
 
 
-  return `/api/v1/auth/invitations/accept`
+  return `/api/v1/auth/invitations/continuation/accept`
 }
 
 /**
  * 멤버십이 없으면 새 MEMBER를 만들고, 같은 워크스페이스의 기존 활성 MEMBER가 재발급 링크를 확인하면 멤버십을 재사용해 초대와 토큰만 종료한다.
  * @summary 현재 로그인 계정으로 초대 수락
  */
-export const invitationAuthControllerAccept = async (invitationTokenDto: InvitationTokenDto, options?: RequestInit): Promise<AcceptInvitationResponseDto> => {
+export const invitationAuthControllerAccept = async ( options?: RequestInit): Promise<AcceptInvitationResponseDto> => {
 
   return rivetFetch<AcceptInvitationResponseDto>(getInvitationAuthControllerAcceptUrl(),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(invitationTokenDto)
+    method: 'POST'
+
+
   }
 );}
 
@@ -2715,8 +2960,8 @@ export const invitationAuthControllerAccept = async (invitationTokenDto: Invitat
 
 
 export const getInvitationAuthControllerAcceptMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerAccept>>, TError,{data: BodyType<InvitationTokenDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerAccept>>, TError,{data: BodyType<InvitationTokenDto>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerAccept>>, TError,void, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerAccept>>, TError,void, TContext> => {
 
 const mutationKey = ['invitationAuthControllerAccept'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2728,10 +2973,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof invitationAuthControllerAccept>>, {data: BodyType<InvitationTokenDto>}> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof invitationAuthControllerAccept>>, void> = () => {
 
-          return  invitationAuthControllerAccept(data,requestOptions)
+
+          return  invitationAuthControllerAccept(requestOptions)
         }
 
 
@@ -2742,18 +2987,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type InvitationAuthControllerAcceptMutationResult = NonNullable<Awaited<ReturnType<typeof invitationAuthControllerAccept>>>
-    export type InvitationAuthControllerAcceptMutationBody = BodyType<InvitationTokenDto>
+
     export type InvitationAuthControllerAcceptMutationError = ErrorType<ApiErrorResponseDto>
 
     /**
  * @summary 현재 로그인 계정으로 초대 수락
  */
 export const useInvitationAuthControllerAccept = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerAccept>>, TError,{data: BodyType<InvitationTokenDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof invitationAuthControllerAccept>>, TError,void, TContext>, request?: SecondParameter<typeof rivetFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof invitationAuthControllerAccept>>,
         TError,
-        {data: BodyType<InvitationTokenDto>},
+        void,
         TContext
       > => {
       return useMutation(getInvitationAuthControllerAcceptMutationOptions(options), queryClient);

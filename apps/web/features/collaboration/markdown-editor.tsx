@@ -1,6 +1,6 @@
 'use client';
 
-import { CodeNode } from '@lexical/code';
+import { $isCodeNode, CodeNode } from '@lexical/code';
 import { $isLinkNode, LinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link';
 import {
   INSERT_ORDERED_LIST_COMMAND,
@@ -26,6 +26,11 @@ import { ListPlugin } from '@lexical/react/LexicalListPlugin';
 import { MarkdownShortcutPlugin } from '@lexical/react/LexicalMarkdownShortcutPlugin';
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
+import {
+  LexicalTypeaheadMenuPlugin,
+  MenuOption,
+  useBasicTypeaheadTriggerMatch,
+} from '@lexical/react/LexicalTypeaheadMenuPlugin';
 import { $createHeadingNode, $createQuoteNode, HeadingNode, QuoteNode } from '@lexical/rich-text';
 import { $setBlocksType } from '@lexical/selection';
 import {
@@ -40,6 +45,7 @@ import {
   createCommand,
   FORMAT_TEXT_COMMAND,
   type LexicalEditor,
+  type LexicalNode,
   type NodeKey,
   PASTE_COMMAND,
 } from 'lexical';
@@ -54,17 +60,10 @@ import {
   ListOrderedIcon,
   MessageSquareQuoteIcon,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   type DeleteUploadedFile,
@@ -90,7 +89,6 @@ import {
 import { MarkdownRenderer } from './markdown-renderer';
 
 const UUID_V4 = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
-const DISABLED_MENTION = new RegExp(`@\\[((?:\\\\.|[^\\]])+)\\]\\(rivet-member:${UUID_V4}\\)`, 'i');
 
 export type MentionOption = {
   displayName: string;
@@ -117,8 +115,6 @@ export type MarkdownEditorLabels = {
   linkInvalid: string;
   linkPrompt: string;
   mention: string;
-  mentionDisabled: string;
-  mentionPlaceholder: string;
   numberedList: string;
   placeholder: string;
   preview: string;
@@ -134,10 +130,6 @@ export function serializeMention(displayName: string, membershipId: string): str
 
 export function markdownCharacterCount(markdown: string): number {
   return Array.from(markdown).length;
-}
-
-export function hasSerializedMention(markdown: string): boolean {
-  return DISABLED_MENTION.test(markdown);
 }
 
 export function normalizeSafeHttpUrl(value: string): string | null {
@@ -215,45 +207,34 @@ const SAFE_TRANSFORMERS = TRANSFORMERS.map((transformer) =>
   transformer === LINK ? SAFE_LINK_TRANSFORMER : transformer,
 );
 
-function markdownTransformers(mentionsEnabled: boolean): Transformer[] {
-  return mentionsEnabled ? MARKDOWN_TRANSFORMERS : MARKDOWN_TRANSFORMERS_WITHOUT_MENTIONS;
-}
-
 const MARKDOWN_TRANSFORMERS: Transformer[] = [
   IMAGE_TRANSFORMER,
   MENTION_TRANSFORMER,
   ...SAFE_TRANSFORMERS,
 ];
-const MARKDOWN_TRANSFORMERS_WITHOUT_MENTIONS: Transformer[] = [
-  IMAGE_TRANSFORMER,
-  ...SAFE_TRANSFORMERS,
-];
 
 function EditorStatePlugin({
-  mentionsEnabled,
   onChange,
   value,
 }: {
-  mentionsEnabled: boolean;
   onChange: (markdown: string) => void;
   value: string;
 }) {
   const [editor] = useLexicalComposerContext();
   const lastValue = useRef(value);
-  const transformers = markdownTransformers(mentionsEnabled);
 
   useEffect(() => {
     if (value === lastValue.current) return;
     lastValue.current = value;
-    editor.update(() => $convertFromMarkdownString(value, transformers, undefined, true));
-  }, [editor, transformers, value]);
+    editor.update(() => $convertFromMarkdownString(value, MARKDOWN_TRANSFORMERS, undefined, true));
+  }, [editor, value]);
 
   return (
     <OnChangePlugin
       ignoreSelectionChange
       onChange={(editorState) => {
         editorState.read(() => {
-          const markdown = $convertToMarkdownString(transformers, undefined, true);
+          const markdown = $convertToMarkdownString(MARKDOWN_TRANSFORMERS, undefined, true);
           if (markdown === lastValue.current) return;
           lastValue.current = markdown;
           onChange(markdown);
@@ -467,14 +448,10 @@ function Toolbar({
   disabled,
   imagesEnabled,
   labels,
-  mentionOptions,
-  mentionsEnabled,
 }: {
   disabled: boolean;
   imagesEnabled: boolean;
   labels: MarkdownEditorLabels;
-  mentionOptions: MentionOption[];
-  mentionsEnabled: boolean;
 }) {
   const [editor] = useLexicalComposerContext();
   const [formats, setFormats] = useState({ bold: false, code: false, italic: false });
@@ -606,42 +583,6 @@ function Toolbar({
           <LinkIcon data-icon="inline-start" />
         </Button>
 
-        {mentionsEnabled && mentionOptions.length ? (
-          <Select
-            items={mentionOptions.map((option) => ({
-              label: option.displayName,
-              value: option.membershipId,
-            }))}
-            value=""
-            disabled={disabled}
-            onValueChange={(membershipId) => {
-              const option = mentionOptions.find((item) => item.membershipId === membershipId);
-              if (!option) return;
-              editor.update(() => {
-                const selection = $getSelection();
-                if (!$isRangeSelection(selection)) return;
-                selection.insertNodes([
-                  $createMentionNode(option.displayName, option.membershipId),
-                  $createTextNode(' '),
-                ]);
-              });
-            }}
-          >
-            <SelectTrigger aria-label={labels.mention} size="sm" className="max-w-44">
-              <SelectValue placeholder={labels.mentionPlaceholder} />
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectGroup>
-                {mentionOptions.map((option) => (
-                  <SelectItem key={option.membershipId} value={option.membershipId}>
-                    {option.displayName}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        ) : null}
-
         {imagesEnabled ? (
           <label className="ml-auto" title={labels.image.choose}>
             <input
@@ -676,6 +617,164 @@ function Toolbar({
   );
 }
 
+class MentionTypeaheadOption extends MenuOption {
+  constructor(
+    readonly displayName: string,
+    readonly membershipId: string,
+  ) {
+    super(membershipId);
+  }
+}
+
+function matchesMentionQuery(option: MentionOption, query: string): boolean {
+  const normalizedQuery = query.normalize('NFC').toLocaleLowerCase('ko-KR');
+  return option.displayName.normalize('NFC').toLocaleLowerCase('ko-KR').includes(normalizedQuery);
+}
+
+/* eslint-disable react-hooks/refs -- Lexical passes the attached portal host through this render callback. */
+function MentionTypeaheadMenu({
+  anchorElementRef,
+  label,
+  options,
+  selectOptionAndCleanUp,
+  selectedIndex,
+  setHighlightedIndex,
+}: {
+  anchorElementRef: RefObject<HTMLElement | null>;
+  label: string;
+  options: MentionTypeaheadOption[];
+  selectOptionAndCleanUp: (option: MentionTypeaheadOption) => void;
+  selectedIndex: number | null;
+  setHighlightedIndex: (index: number) => void;
+}) {
+  const anchorElement = anchorElementRef.current;
+  if (!anchorElement || options.length === 0) return null;
+
+  return createPortal(
+    <ul
+      aria-label={label}
+      role="listbox"
+      className="bg-popover text-popover-foreground pointer-events-auto max-h-60 min-w-48 overflow-y-auto rounded-md border p-1 shadow-md"
+    >
+      {options.map((option, index) => (
+        <li key={option.key} role="presentation">
+          <button
+            ref={option.setRefElement}
+            id={`typeahead-item-${index}`}
+            type="button"
+            role="option"
+            aria-selected={selectedIndex === index}
+            className="hover:bg-accent hover:text-accent-foreground aria-selected:bg-accent aria-selected:text-accent-foreground flex min-h-9 w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none max-md:min-h-11"
+            onClick={() => selectOptionAndCleanUp(option)}
+            onMouseDown={(event) => event.preventDefault()}
+            onMouseEnter={() => setHighlightedIndex(index)}
+          >
+            <span aria-hidden="true" className="text-muted-foreground">
+              @
+            </span>
+            <span className="truncate">{option.displayName}</span>
+          </button>
+        </li>
+      ))}
+    </ul>,
+    anchorElement,
+  );
+}
+/* eslint-enable react-hooks/refs */
+
+function MentionTypeaheadPlugin({
+  label,
+  menuParent,
+  mentionOptions,
+}: {
+  label: string;
+  menuParent: HTMLElement | null;
+  mentionOptions: MentionOption[];
+}) {
+  const [query, setQuery] = useState<string | null>(null);
+  const basicTrigger = useBasicTypeaheadTriggerMatch('@', { maxLength: 50, minLength: 0 });
+  const triggerFn = useCallback(
+    (text: string, editor: LexicalEditor) => {
+      const match = basicTrigger(text, editor);
+      if (!match) return null;
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection) || selection.hasFormat('code')) return null;
+
+      let node: LexicalNode | null = selection.anchor.getNode();
+      while (node) {
+        if ($isCodeNode(node) || $isLinkNode(node)) return null;
+        node = node.getParent();
+      }
+      return match;
+    },
+    [basicTrigger],
+  );
+  const options = useMemo(() => {
+    const resultLimit = 8;
+    return mentionOptions
+      .filter((option) => matchesMentionQuery(option, query ?? ''))
+      .slice(0, resultLimit)
+      .map((option) => new MentionTypeaheadOption(option.displayName, option.membershipId));
+  }, [mentionOptions, query]);
+
+  return (
+    <LexicalTypeaheadMenuPlugin<MentionTypeaheadOption>
+      {...(menuParent ? { parent: menuParent } : {})}
+      options={options}
+      triggerFn={triggerFn}
+      onQueryChange={setQuery}
+      onSelectOption={(option, textNodeContainingQuery, closeMenu) => {
+        const mentionNode = $createMentionNode(option.displayName, option.membershipId);
+        if (textNodeContainingQuery) {
+          textNodeContainingQuery.replace(mentionNode);
+        } else {
+          $insertNodes([mentionNode]);
+        }
+        const trailingSpace = $createTextNode(' ');
+        mentionNode.insertAfter(trailingSpace);
+        trailingSpace.select();
+        closeMenu();
+      }}
+      menuRenderFn={(
+        anchorElementRef,
+        { options: menuOptions, selectedIndex, selectOptionAndCleanUp, setHighlightedIndex },
+      ) => (
+        <MentionTypeaheadMenu
+          anchorElementRef={anchorElementRef}
+          label={label}
+          options={menuOptions}
+          selectOptionAndCleanUp={selectOptionAndCleanUp}
+          selectedIndex={selectedIndex}
+          setHighlightedIndex={setHighlightedIndex}
+        />
+      )}
+    />
+  );
+}
+
+function MentionMenuPortalHost({
+  onParentChange,
+}: {
+  onParentChange: (element: HTMLDivElement | null) => void;
+}) {
+  const [pageOffset, setPageOffset] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const updatePageOffset = () => setPageOffset({ x: window.pageXOffset, y: window.pageYOffset });
+    updatePageOffset();
+    window.addEventListener('scroll', updatePageOffset, { passive: true });
+    return () => window.removeEventListener('scroll', updatePageOffset);
+  }, []);
+
+  return (
+    <div
+      ref={onParentChange}
+      className="pointer-events-none fixed top-0 left-0 z-50 h-screen w-screen"
+      style={{ transform: `translate(${-pageOffset.x}px, ${-pageOffset.y}px)` }}
+    />
+  );
+}
+
 export type MarkdownEditorProps = {
   charLimit: number;
   className?: string;
@@ -685,7 +784,6 @@ export type MarkdownEditorProps = {
   imagesEnabled?: boolean;
   labels: MarkdownEditorLabels;
   mentionOptions?: MentionOption[];
-  mentionsEnabled?: boolean;
   onCanSubmitChange?: (canSubmit: boolean) => void;
   onChange: (markdown: string) => void;
   readOnly?: boolean;
@@ -704,7 +802,6 @@ export function MarkdownEditor({
   imagesEnabled = true,
   labels,
   mentionOptions = [],
-  mentionsEnabled = true,
   onCanSubmitChange,
   onChange,
   readOnly = false,
@@ -714,14 +811,13 @@ export function MarkdownEditor({
   value,
 }: MarkdownEditorProps) {
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit');
+  const [mentionMenuParent, setMentionMenuParent] = useState<HTMLElement | null>(null);
   const [pendingImages, setPendingImages] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const characterCount = markdownCharacterCount(value);
-  const mentionsInvalid = !mentionsEnabled && hasSerializedMention(value);
   const tooLong = characterCount > charLimit;
   const nearLimit = !tooLong && characterCount >= charLimit * 0.9;
-  const canSubmit = !disabled && !pendingImages && !tooLong && !mentionsInvalid;
-  const transformers = markdownTransformers(mentionsEnabled);
+  const canSubmit = !disabled && !pendingImages && !tooLong;
 
   useEffect(() => onCanSubmitChange?.(canSubmit), [canSubmit, onCanSubmitChange]);
 
@@ -746,11 +842,13 @@ export function MarkdownEditor({
           <TabsTrigger value="preview">{labels.preview}</TabsTrigger>
         </TabsList>
         <TabsContent value="edit">
+          <MentionMenuPortalHost onParentChange={setMentionMenuParent} />
           <MarkdownImageLabelsContext.Provider value={labels.image}>
             <LexicalComposer
               initialConfig={{
                 editable: !disabled,
-                editorState: () => $convertFromMarkdownString(value, transformers, undefined, true),
+                editorState: () =>
+                  $convertFromMarkdownString(value, MARKDOWN_TRANSFORMERS, undefined, true),
                 namespace: 'RivetMarkdownEditor',
                 nodes: [
                   CodeNode,
@@ -789,13 +887,7 @@ export function MarkdownEditor({
               }}
             >
               <div className="bg-background overflow-hidden rounded-lg border">
-                <Toolbar
-                  disabled={disabled}
-                  imagesEnabled={imagesEnabled}
-                  labels={labels}
-                  mentionOptions={mentionOptions}
-                  mentionsEnabled={mentionsEnabled}
-                />
+                <Toolbar disabled={disabled} imagesEnabled={imagesEnabled} labels={labels} />
                 <div className="relative">
                   <RichTextPlugin
                     contentEditable={
@@ -817,13 +909,14 @@ export function MarkdownEditor({
               <HistoryPlugin />
               <LinkPlugin validateUrl={(url) => normalizeSafeHttpUrl(url) !== null} />
               <ListPlugin />
-              <MarkdownShortcutPlugin transformers={transformers} />
-              <EditablePlugin editable={!disabled} />
-              <EditorStatePlugin
-                mentionsEnabled={mentionsEnabled}
-                value={value}
-                onChange={onChange}
+              <MarkdownShortcutPlugin transformers={MARKDOWN_TRANSFORMERS} />
+              <MentionTypeaheadPlugin
+                label={labels.mention}
+                menuParent={mentionMenuParent}
+                mentionOptions={mentionOptions}
               />
+              <EditablePlugin editable={!disabled} />
+              <EditorStatePlugin value={value} onChange={onChange} />
               {imagesEnabled ? (
                 <ImageUploadPlugin
                   labels={labels.image}
@@ -856,11 +949,6 @@ export function MarkdownEditor({
           {labels.tooLong}
         </p>
       ) : null}
-      {mentionsInvalid ? (
-        <p className="text-destructive text-sm" role="alert">
-          {labels.mentionDisabled}
-        </p>
-      ) : null}
       {uploadError ? (
         <p className="text-destructive text-sm" role="alert">
           {uploadError}
@@ -876,17 +964,15 @@ export function MarkdownEditor({
 }
 
 export function IssueDescriptionEditor(props: MarkdownEditorProps) {
-  return <MarkdownEditor {...props} imagesEnabled mentionsEnabled />;
+  return <MarkdownEditor {...props} imagesEnabled />;
 }
 
-export function WorkNoteEditor(
-  props: Omit<MarkdownEditorProps, 'imagesEnabled' | 'mentionsEnabled'>,
-) {
-  return <MarkdownEditor {...props} imagesEnabled={false} mentionsEnabled={false} />;
+export function WorkNoteEditor(props: Omit<MarkdownEditorProps, 'imagesEnabled'>) {
+  return <MarkdownEditor {...props} imagesEnabled={false} />;
 }
 
-export function HandoffEditor(props: Omit<MarkdownEditorProps, 'mentionsEnabled'>) {
-  return <MarkdownEditor {...props} mentionsEnabled={false} />;
+export function HandoffEditor(props: MarkdownEditorProps) {
+  return <MarkdownEditor {...props} />;
 }
 
 export function CommentEditor(props: MarkdownEditorProps) {

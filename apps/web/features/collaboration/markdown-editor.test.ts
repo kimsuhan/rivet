@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  hasSerializedMention,
-  markdownCharacterCount,
-  normalizeSafeHttpUrl,
-  serializeMention,
-} from './markdown-editor';
+import { markdownCharacterCount, normalizeSafeHttpUrl, serializeMention } from './markdown-editor';
 
 const membershipId = '4bfe36e1-2a0f-463c-874b-909b25d0cd8a';
 
@@ -17,12 +12,6 @@ describe('Markdown editor contract', () => {
     expect(serializeMention('김]리벳', membershipId)).toBe(
       `@[김\\]리벳](rivet-member:${membershipId})`,
     );
-  });
-
-  it('멘션 비활성 검사는 정확한 직렬화만 찾고 일반 텍스트와 코드는 허용한다', () => {
-    expect(hasSerializedMention(`@[김리벳](rivet-member:${membershipId})`)).toBe(true);
-    expect(hasSerializedMention(`rivet-member:${membershipId}`)).toBe(false);
-    expect(hasSerializedMention(`\`rivet-member:${membershipId}\``)).toBe(false);
   });
 
   it('글자 수를 UTF-16 코드 유닛이 아니라 code point로 계산한다', () => {

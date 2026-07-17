@@ -52,6 +52,7 @@ import { Spinner } from '@/components/ui/spinner';
 import {
   HandoffEditor,
   IssueDescriptionEditor,
+  type MentionOption,
   WorkNoteEditor,
 } from '@/features/collaboration/markdown-editor';
 import { MarkdownRenderer } from '@/features/collaboration/markdown-renderer';
@@ -230,11 +231,13 @@ function TeamWorkPanel({
   handoffHref,
   highlightedHandoffId,
   issue,
+  mentionOptions,
   work,
 }: {
   handoffHref: string;
   highlightedHandoffId: string | null;
   issue: IssueDetailResponseDto;
+  mentionOptions: MentionOption[];
   work: TeamWorkSummaryResponseDto;
 }) {
   const queryClient = useQueryClient();
@@ -495,6 +498,7 @@ function TeamWorkPanel({
                   <HandoffEditor
                     charLimit={50_000}
                     labels={editorLabels}
+                    mentionOptions={mentionOptions}
                     onChange={setFollowUpBody}
                     status={followUpMutation.isPending ? '저장 중…' : null}
                     value={followUpBody}
@@ -577,6 +581,7 @@ function TeamWorkPanel({
               <WorkNoteEditor
                 charLimit={10_000}
                 labels={editorLabels}
+                mentionOptions={mentionOptions}
                 onChange={setWorkNoteMarkdown}
                 status={noteMutation.isPending ? '저장 중…' : null}
                 value={workNoteMarkdown}
@@ -1225,6 +1230,7 @@ export function IssueDetailScreen({
                   key={selectedWork.id}
                   highlightedHandoffId={requestedHandoff}
                   issue={issue}
+                  mentionOptions={mentionOptions}
                   work={selectedWork}
                 />
               ) : (

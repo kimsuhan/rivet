@@ -75,9 +75,10 @@ describe('AuthService', () => {
     user: { create: jest.fn() },
   };
   const client = {
+    $queryRaw: jest.fn(),
     $transaction: jest.fn(),
     team: { findFirst: jest.fn() },
-    user: { findUnique: jest.fn(), updateMany: jest.fn() },
+    user: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   };
   const rateLimits = {
     assertNotBlocked: jest.fn(),
@@ -96,11 +97,18 @@ describe('AuthService', () => {
     transaction.$executeRaw.mockResolvedValue(1);
     transaction.$queryRaw.mockResolvedValue([]);
     transaction.user.create.mockResolvedValue({ id: sessionContext.user.id });
+    client.$queryRaw.mockResolvedValue([]);
     client.$transaction.mockImplementation(
       async (operation: (value: typeof transaction) => Promise<unknown>) => operation(transaction),
     );
     client.team.findFirst.mockResolvedValue(null);
     client.user.findUnique.mockResolvedValue(null);
+    client.user.update.mockResolvedValue({
+      avatarFileId: null,
+      displayName: '바뀐 사용자',
+      email: sessionContext.user.email,
+      id: sessionContext.user.id,
+    });
     client.user.updateMany.mockResolvedValue({ count: 1 });
     rateLimits.assertNotBlocked.mockResolvedValue(undefined);
     rateLimits.clear.mockResolvedValue(undefined);
@@ -121,6 +129,33 @@ describe('AuthService', () => {
     );
   });
 
+  it('normalizes and updates the current user display name', async () => {
+    await expect(
+      service.updateMe(sessionContext, { displayName: '  바뀐 사용자  ' }),
+    ).resolves.toEqual({
+      avatarFileId: null,
+      displayName: '바뀐 사용자',
+      email: sessionContext.user.email,
+      id: sessionContext.user.id,
+    });
+    expect(client.user.update).toHaveBeenCalledWith({
+      data: { displayName: '바뀐 사용자' },
+      select: { avatarFileId: true, displayName: true, email: true, id: true },
+      where: { id: sessionContext.user.id },
+    });
+  });
+
+  it('rejects an invalid current user display name without updating the account', async () => {
+    await expect(service.updateMe(sessionContext, { displayName: '   ' })).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'VALIDATION_ERROR',
+        fieldErrors: { displayName: ['표시 이름을 확인해 주세요.'] },
+      }),
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+    });
+    expect(client.user.update).not.toHaveBeenCalled();
+  });
+
   it('creates a new account, token, and email outbox atomically while preserving email casing', async () => {
     await expect(
       service.signUp(
@@ -131,7 +166,11 @@ describe('AuthService', () => {
         },
         '127.0.0.1',
       ),
-    ).resolves.toEqual({ accepted: true, emailMasked: 'Us***@Example.COM' });
+    ).resolves.toEqual({
+      accepted: true,
+      emailMasked: 'Us***@Example.COM',
+      nextStep: 'VERIFY_EMAIL',
+    });
 
     expect(transaction.user.create).toHaveBeenCalledWith({
       data: {
@@ -160,7 +199,11 @@ describe('AuthService', () => {
         },
         '127.0.0.1',
       ),
-    ).resolves.toEqual({ accepted: true, emailMasked: 'Us***@Example.com' });
+    ).resolves.toEqual({
+      accepted: true,
+      emailMasked: 'Us***@Example.com',
+      nextStep: 'VERIFY_EMAIL',
+    });
     expect(transaction.user.create).not.toHaveBeenCalled();
     expect(transaction.$executeRaw).not.toHaveBeenCalled();
   });
@@ -172,7 +215,11 @@ describe('AuthService', () => {
 
     await expect(
       service.resendEmailVerification({ email: 'User@Example.com' }, '127.0.0.1'),
-    ).resolves.toEqual({ accepted: true, emailMasked: 'Us***@Example.com' });
+    ).resolves.toEqual({
+      accepted: true,
+      emailMasked: 'Us***@Example.com',
+      nextStep: 'VERIFY_EMAIL',
+    });
 
     const statements = transaction.$executeRaw.mock.calls.map((call) =>
       (call[0] as readonly string[]).join('?'),
@@ -211,6 +258,49 @@ describe('AuthService', () => {
         '127.0.0.1',
       ),
     ).rejects.toMatchObject({ code: 'P2002' });
+  });
+
+  it('uses a matching invitation continuation as email proof without issuing verification mail', async () => {
+    transaction.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        id: '6f6b9772-f15c-4c5b-adac-706e60f477bb',
+        invitationEmail: 'user@example.com',
+        userId: null,
+      },
+    ]);
+
+    await expect(
+      service.signUp(
+        {
+          displayName: '초대 사용자',
+          email: 'User@Example.com',
+          password: 'another secure phrase',
+        },
+        '127.0.0.1',
+        'invitation-continuation-token',
+      ),
+    ).resolves.toEqual({
+      accepted: true,
+      emailMasked: 'Us***@Example.com',
+      nextStep: 'LOGIN',
+    });
+
+    const statements = transaction.$executeRaw.mock.calls.map((call) =>
+      (call[0] as readonly string[]).join('?'),
+    );
+    expect(statements).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('SET "email_verified_at" = COALESCE'),
+        expect.stringContaining('UPDATE "workspace_invitation_continuations"'),
+      ]),
+    );
+    expect(
+      statements.some(
+        (statement) =>
+          statement.includes('INSERT INTO "one_time_tokens"') ||
+          statement.includes('INSERT INTO "outbox_events"'),
+      ),
+    ).toBe(false);
   });
 
   it('uses a locked token once with DB time and invalidates other verification links', async () => {
@@ -362,6 +452,15 @@ describe('AuthService', () => {
     await expect(service.getSession('session-token')).resolves.toEqual(
       expect.objectContaining({ authenticated: true, onboardingStep: 'COMPLETE' }),
     );
+  });
+
+  it('prioritizes an active invitation continuation over workspace and team onboarding', async () => {
+    client.$queryRaw.mockResolvedValue([{ id: 'continuation-id' }]);
+
+    await expect(service.getSession('session-token', 'continuation-token')).resolves.toEqual(
+      expect.objectContaining({ authenticated: true, onboardingStep: 'ACCEPT_INVITATION' }),
+    );
+    expect(client.team.findFirst).not.toHaveBeenCalled();
   });
 
   it('issues a reset email only for a verified account with a generic empty result', async () => {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { expect, type Page, test, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 
 import {
   createPrismaClient,
@@ -19,6 +19,7 @@ type Session = {
 };
 type Team = { id: string; key: string };
 type TeamList = { items: Team[] };
+type MemberList = { items: Array<{ id: string; user: { displayName: string } }> };
 type Project = { id: string; name: string };
 type WorkflowState = { category: string; id: string; isDefault: boolean; name: string };
 type WorkflowStateList = { items: WorkflowState[] };
@@ -52,6 +53,15 @@ async function selectTeamWork(page: Page, identifier: string, isMobile: boolean)
     .getByRole('navigation', { name: '팀 작업 선택' })
     .getByText(identifier, { exact: true })
     .click();
+}
+
+async function fillWithSelfMention(page: Page, editor: Locator, body: string): Promise<void> {
+  await editor.fill(`${body}\n\n`);
+  await editor.pressSequentially('@M9');
+  const mentionList = page.getByRole('listbox', { name: '멤버 멘션' });
+  await expect(mentionList).toBeVisible();
+  await mentionList.getByRole('option', { name: 'M9 브라우저 사용자', exact: true }).click();
+  await editor.pressSequentially(' 확인 부탁드립니다.');
 }
 
 async function apiRequest<T>(
@@ -91,7 +101,7 @@ async function completeOnboarding(
   await page.getByLabel('비밀번호', { exact: true }).fill(input.password);
   await page.getByLabel('비밀번호 확인').fill(input.password);
   await page.getByRole('button', { name: '가입하기' }).click();
-  await expect(page.getByRole('heading', { name: '요청을 접수했습니다' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '이메일을 확인해 주세요' })).toBeVisible();
 
   const token = await getLatestM1Token(input.email, 'EMAIL_VERIFICATION');
   await page.goto(`/verify-email#token=${encodeURIComponent(token)}`);
@@ -115,18 +125,30 @@ async function createIssueFromDialog(
   page: Page,
   input: { initialBackend: boolean; projectName: string; title: string; withAttachment: boolean },
 ): Promise<void> {
+  const activeMembersResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === '/api/v1/members' && url.searchParams.get('status') === 'ACTIVE';
+  });
   await page.goto('/issues?create=1');
   const dialog = page.getByRole('dialog', { name: '이슈 만들기' });
   await expect(dialog).toBeVisible();
+  const membersResponse = await activeMembersResponse;
+  expect(membersResponse.ok()).toBe(true);
+  const members = (await membersResponse.json()) as MemberList;
+  expect(members.items.some((member) => member.user.displayName === 'M9 브라우저 사용자')).toBe(
+    true,
+  );
   await dialog.getByRole('textbox', { name: '제목', exact: true }).fill(input.title);
   await dialog.getByLabel('프로젝트').click();
   await page
     .locator('[data-slot="select-content"]')
     .getByRole('option', { name: input.projectName, exact: true })
     .click();
-  await dialog
-    .getByRole('textbox', { name: 'Markdown 본문 편집기' })
-    .fill('# 공유 설명\n\n모든 팀 작업이 같은 본문을 사용합니다.');
+  await fillWithSelfMention(
+    page,
+    dialog.getByRole('textbox', { name: 'Markdown 본문 편집기' }),
+    '# 공유 설명\n\n모든 팀 작업이 같은 본문을 사용합니다.',
+  );
   if (input.initialBackend) await dialog.getByRole('checkbox', { name: '백엔드' }).click();
   if (input.withAttachment) {
     await dialog.getByRole('button', { name: '파일 선택' }).setInputFiles({
@@ -211,7 +233,7 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     await captureIssueStep(page, testInfo, 'frontend-only-ready');
 
     const editor = page.getByRole('textbox', { name: 'Markdown 본문 편집기' }).first();
-    await editor.fill('공유 댓글도 이슈에 한 번만 남습니다.');
+    await fillWithSelfMention(page, editor, '공유 댓글도 이슈에 한 번만 남습니다.');
     await page.getByRole('button', { name: '댓글 남기기' }).click();
     await expect(page.getByText('공유 댓글도 이슈에 한 번만 남습니다.')).toBeVisible();
 
@@ -282,9 +304,11 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
 
     const workNoteRegion = page.getByRole('region', { name: '작업 노트' });
     await workNoteRegion.getByRole('button', { name: '작업 노트 편집' }).click();
-    await workNoteRegion
-      .getByRole('textbox', { name: 'Markdown 본문 편집기' })
-      .fill('웹 구현 시 응답 계약을 확인합니다.');
+    await fillWithSelfMention(
+      page,
+      workNoteRegion.getByRole('textbox', { name: 'Markdown 본문 편집기' }),
+      '웹 구현 시 응답 계약을 확인합니다.',
+    );
     const noteResponse = page.waitForResponse(
       (response) =>
         response.url().includes('/api/v1/team-works/') && response.request().method() === 'PATCH',
@@ -328,9 +352,11 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     const backendCompletionDialog = page.getByRole('dialog', { name: /완료$/u });
     await expect(backendCompletionDialog).toBeVisible();
     await backendCompletionDialog.getByText('프론트에 전달 후 완료').click();
-    await backendCompletionDialog
-      .getByRole('textbox', { name: 'Markdown 본문 편집기' })
-      .fill('## 변경 요약\n\n웹 구현에 필요한 API 응답을 배포했습니다.');
+    await fillWithSelfMention(
+      page,
+      backendCompletionDialog.getByRole('textbox', { name: 'Markdown 본문 편집기' }),
+      '## 변경 요약\n\n웹 구현에 필요한 API 응답을 배포했습니다.',
+    );
     await backendCompletionDialog.getByRole('button', { name: '전달하고 완료' }).click();
     await expect(backendCompletionDialog).toBeHidden();
     await expect(page.getByText('최초 전달 #1')).toBeVisible();

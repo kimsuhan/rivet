@@ -30,7 +30,7 @@ test('A2 개인 저장된 보기를 저장하고 기본 보기로 복원한다',
     await page.getByLabel('비밀번호', { exact: true }).fill(password);
     await page.getByLabel('비밀번호 확인').fill(password);
     await page.getByRole('button', { name: '가입하기' }).click();
-    await expect(page.getByRole('heading', { name: '요청을 접수했습니다' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '이메일을 확인해 주세요' })).toBeVisible();
 
     const token = await getLatestM1Token(email, 'EMAIL_VERIFICATION');
     await page.goto(`/verify-email#token=${encodeURIComponent(token)}`);

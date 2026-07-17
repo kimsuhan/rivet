@@ -8,7 +8,9 @@ import {
   setCsrfToken,
   useAuthControllerGetSession,
   useInvitationAuthControllerAccept,
-  useInvitationAuthControllerPreview,
+  useInvitationAuthControllerDismissContinuation,
+  useInvitationAuthControllerGetContinuation,
+  useInvitationAuthControllerStartContinuation,
 } from '@rivet/api-client';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -36,7 +38,7 @@ type InviteLabels = AuthFrameLabels & {
   loginLink: string;
   loginRequiredDescription: string;
   loginRequiredTitle: string;
-  reopenLinkDescription: string;
+  continuationDescription: string;
   retry: string;
   sessionErrorDescription: string;
   sessionErrorTitle: string;
@@ -101,12 +103,16 @@ export function InviteScreen({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const didPreview = useRef(false);
+  const didStart = useRef(false);
   const didRecoverUsedPreview = useRef(false);
-  const [token, setToken] = useState<string | null>(null);
-  const [tokenStatus, setTokenStatus] = useState<'loading' | 'missing' | 'submitted'>('loading');
+  const rawToken = useRef<string | null>(null);
+  const [previewSource, setPreviewSource] = useState<'loading' | 'start' | 'current'>('loading');
   const [isRecoveringSession, setIsRecoveringSession] = useState(false);
-  const preview = useInvitationAuthControllerPreview();
+  const startContinuation = useInvitationAuthControllerStartContinuation();
+  const currentContinuation = useInvitationAuthControllerGetContinuation({
+    query: { enabled: previewSource === 'current', retry: false },
+  });
+  const dismissContinuation = useInvitationAuthControllerDismissContinuation();
   const accept = useInvitationAuthControllerAccept();
   const session = useAuthControllerGetSession({ query: { retry: false } });
   const sessionCsrfToken = session.data?.authenticated ? session.data.csrfToken : null;
@@ -119,19 +125,32 @@ export function InviteScreen({
   }, [isSessionResolved, sessionCsrfToken]);
 
   useEffect(() => {
-    if (didPreview.current) {
+    if (didStart.current) {
       return;
     }
-    didPreview.current = true;
+    didStart.current = true;
     const invitationToken = readAndRemoveToken();
-    setToken(invitationToken);
-    if (invitationToken) {
-      preview.mutate({ data: { token: invitationToken } });
-    }
-    queueMicrotask(() => setTokenStatus(invitationToken ? 'submitted' : 'missing'));
-  }, [preview]);
+    queueMicrotask(() => {
+      if (invitationToken) {
+        rawToken.current = invitationToken;
+        setPreviewSource('start');
+        startContinuation.mutate(
+          { data: { token: invitationToken } },
+          { onSuccess: () => (rawToken.current = null) },
+        );
+        return;
+      }
+      setPreviewSource('current');
+    });
+  }, [startContinuation]);
 
-  const previewErrorCode = preview.error?.body?.code;
+  const preview =
+    previewSource === 'start'
+      ? startContinuation
+      : previewSource === 'current'
+        ? currentContinuation
+        : null;
+  const previewErrorCode = preview?.error?.body?.code;
   useEffect(() => {
     if (previewErrorCode !== 'TOKEN_ALREADY_USED' || didRecoverUsedPreview.current) {
       return;
@@ -148,13 +167,13 @@ export function InviteScreen({
   }, [previewErrorCode, router, session]);
 
   const acceptInvitation = () => {
-    if (!token || accept.isPending) {
+    if (accept.isPending) {
       return;
     }
 
     accept.reset();
     accept.mutate(
-      { data: { token } },
+      undefined,
       {
         onSuccess: async () => {
           await queryClient.invalidateQueries({
@@ -190,9 +209,21 @@ export function InviteScreen({
     }
   };
 
+  const continueInCurrentWorkspace = () => {
+    if (dismissContinuation.isPending) {
+      return;
+    }
+    dismissContinuation.mutate(undefined, {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: getAuthControllerGetSessionQueryKey() });
+        router.replace('/my-issues');
+      },
+    });
+  };
+
   if (
-    tokenStatus === 'loading' ||
-    (tokenStatus === 'submitted' && !preview.data && !preview.error)
+    previewSource === 'loading' ||
+    (preview && !preview.data && !preview.error)
   ) {
     return (
       <AuthFrame labels={labels}>
@@ -204,12 +235,13 @@ export function InviteScreen({
     );
   }
 
-  if (!preview.data) {
-    const code = preview.error?.body?.code;
+  if (!preview?.data) {
+    const code = preview?.error?.body?.code;
     const isUsed = code === 'TOKEN_ALREADY_USED';
     const isExpired = code === 'TOKEN_EXPIRED';
-    const isInvalid = code === 'TOKEN_INVALID' || tokenStatus === 'missing';
-    const isUnexpected = Boolean(preview.error && !isUsed && !isExpired && !isInvalid);
+    const isInvalid =
+      code === 'TOKEN_INVALID' || code === 'INVITATION_CONTINUATION_NOT_FOUND';
+    const isUnexpected = Boolean(preview?.error && !isUsed && !isExpired && !isInvalid);
 
     return (
       <AuthFrame labels={labels}>
@@ -239,21 +271,26 @@ export function InviteScreen({
             <Button
               type="button"
               variant="outline"
-              disabled={!token || preview.isPending}
+              disabled={preview?.isPending}
               onClick={() => {
-                if (token) {
-                  preview.reset();
-                  preview.mutate({ data: { token } });
+                if (previewSource === 'start' && rawToken.current) {
+                  startContinuation.reset();
+                  startContinuation.mutate(
+                    { data: { token: rawToken.current } },
+                    { onSuccess: () => (rawToken.current = null) },
+                  );
+                } else if (previewSource === 'current') {
+                  void currentContinuation.refetch();
                 }
               }}
             >
-              {preview.isPending ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
+              {preview?.isPending ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
               {labels.retry}
             </Button>
           ) : null}
 
           {isUsed && session.data?.authenticated && session.data.membership ? (
-            <Button type="button" size="lg" onClick={() => router.replace('/my-issues')}>
+            <Button type="button" size="lg" onClick={continueInCurrentWorkspace}>
               {labels.currentWorkspace}
             </Button>
           ) : (
@@ -323,7 +360,7 @@ export function InviteScreen({
               <AlertTitle>{labels.loginRequiredTitle}</AlertTitle>
               <AlertDescription className="flex flex-col gap-2">
                 <span>{labels.loginRequiredDescription}</span>
-                <span>{labels.reopenLinkDescription}</span>
+                <span>{labels.continuationDescription}</span>
               </AlertDescription>
             </Alert>
             <p className="text-muted-foreground flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm">
@@ -337,7 +374,15 @@ export function InviteScreen({
               <AlertTitle>{labels.workspaceLimitTitle}</AlertTitle>
               <AlertDescription>{labels.workspaceLimitDescription}</AlertDescription>
             </Alert>
-            <Button type="button" size="lg" onClick={() => router.replace('/my-issues')}>
+            <Button
+              type="button"
+              size="lg"
+              disabled={dismissContinuation.isPending}
+              onClick={continueInCurrentWorkspace}
+            >
+              {dismissContinuation.isPending ? (
+                <Spinner data-icon="inline-start" aria-hidden="true" />
+              ) : null}
               {labels.currentWorkspace}
             </Button>
           </>

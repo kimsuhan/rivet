@@ -31,15 +31,21 @@ model Mention {
   workspaceId           String   @map("workspace_id") @db.Uuid
   issueId               String   @map("issue_id") @db.Uuid
   commentId             String?  @map("comment_id") @db.Uuid
+  teamWorkId            String?  @map("team_work_id") @db.Uuid
+  apiHandoffId          String?  @map("api_handoff_id") @db.Uuid
   mentionedMembershipId String   @map("mentioned_membership_id") @db.Uuid
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   issue               Issue               @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
   comment             Comment?            @relation(fields: [workspaceId, issueId, commentId], references: [workspaceId, issueId, id], onDelete: Cascade)
+  teamWork            TeamWork?           @relation(fields: [workspaceId, issueId, teamWorkId], references: [workspaceId, issueId, id], onDelete: Cascade)
+  apiHandoff          ApiHandoff?         @relation(fields: [workspaceId, issueId, apiHandoffId], references: [workspaceId, issueId, id], onDelete: Cascade)
   mentionedMembership WorkspaceMembership @relation("MentionedMembership", fields: [workspaceId, mentionedMembershipId], references: [workspaceId, id], onDelete: Restrict)
 
   @@unique([commentId, mentionedMembershipId])
+  @@unique([teamWorkId, mentionedMembershipId])
+  @@unique([apiHandoffId, mentionedMembershipId])
   @@index([workspaceId, issueId, createdAt, id])
   @@index([workspaceId, mentionedMembershipId, createdAt, id], map: "mentions_workspace_id_mentioned_membership_id_created_idx")
   @@map("mentions")

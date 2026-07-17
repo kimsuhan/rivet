@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Patch,
   Post,
   Req,
   Res,
@@ -25,6 +26,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
+import { readInvitationContinuationCookie } from '../../common/auth/invitation-continuation-cookie';
 import {
   clearSessionCookie,
   readSessionCookie,
@@ -45,6 +47,7 @@ import {
 } from './dto/auth-response.dto';
 import { EmailDto } from './dto/email.dto';
 import { LoginDto } from './dto/login.dto';
+import { UpdateProfileDto } from './dto/profile.dto';
 import { SignUpDto } from './dto/sign-up.dto';
 import { ConfirmPasswordResetDto, TokenDto } from './dto/token.dto';
 import { PublicEndpoint } from './public.decorator';
@@ -101,9 +104,18 @@ export class AuthController {
   @Header('Cache-Control', 'no-store')
   @ApiOperation({ summary: '회원가입 요청' })
   @ApiAcceptedResponse({ type: AcceptedAuthRequestDto })
+  @ApiResponse({
+    description: 'INVITATION_EMAIL_MISMATCH: 초대 이메일과 가입 이메일 불일치',
+    status: HttpStatus.CONFLICT,
+    type: ApiErrorResponseDto,
+  })
   @ApiPublicMutationErrors()
   signUp(@Body() dto: SignUpDto, @Req() request: Request): Promise<AcceptedAuthRequestDto> {
-    return this.auth.signUp(dto, clientIp(request));
+    return this.auth.signUp(
+      dto,
+      clientIp(request),
+      readInvitationContinuationCookie(request, this.config),
+    );
   }
 
   @PublicEndpoint()
@@ -155,7 +167,11 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthenticatedSessionDto> {
-    const result = await this.auth.login(dto, clientIp(request));
+    const result = await this.auth.login(
+      dto,
+      clientIp(request),
+      readInvitationContinuationCookie(request, this.config),
+    );
     setSessionCookie(response, this.config, result.token, result.absoluteExpiresAt);
     return result.response;
   }
@@ -199,7 +215,10 @@ export class AuthController {
   getSession(
     @Req() request: Request,
   ): Promise<AuthenticatedSessionDto | UnauthenticatedSessionDto> {
-    return this.auth.getSession(readSessionCookie(request, this.config));
+    return this.auth.getSession(
+      readSessionCookie(request, this.config),
+      readInvitationContinuationCookie(request, this.config),
+    );
   }
 
   @PublicEndpoint()
@@ -254,5 +273,22 @@ export class AuthController {
   })
   getMe(@CurrentAuthentication() authentication: AuthenticatedRequestContext): SessionUserDto {
     return this.auth.getMe(authentication.session);
+  }
+
+  @Patch('me')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: '현재 사용자의 표시 이름 변경' })
+  @ApiCookieAuth('sessionCookie')
+  @ApiOkResponse({ type: SessionUserDto })
+  @ApiResponse({
+    description: 'VALIDATION_ERROR: 표시 이름이 유효하지 않음',
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    type: ApiErrorResponseDto,
+  })
+  updateMe(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<SessionUserDto> {
+    return this.auth.updateMe(authentication.session, dto);
   }
 }

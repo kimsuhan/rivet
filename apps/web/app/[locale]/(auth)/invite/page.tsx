@@ -22,7 +22,7 @@ export default async function InvitePage({ params }: { params: Promise<{ locale:
   return (
     <InviteScreen
       loginHref="/login"
-      signUpHref="/signup"
+      signUpHref="/signup?invitation=1"
       labels={{
         productName: t('productName'),
         title: t('title'),
@@ -37,7 +37,7 @@ export default async function InvitePage({ params }: { params: Promise<{ locale:
         sessionErrorDescription: t('sessionErrorDescription'),
         loginRequiredTitle: t('loginRequiredTitle'),
         loginRequiredDescription: t('loginRequiredDescription'),
-        reopenLinkDescription: t('reopenLinkDescription'),
+        continuationDescription: t('continuationDescription'),
         loginLink: t('loginLink'),
         signUpLink: t('signUpLink'),
         accept: t('accept'),

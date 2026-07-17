@@ -2,12 +2,13 @@
 
 import { CircleAlert } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import {
   type ApiError,
   type TeamWorkSummaryResponseDto,
   type UpdateTeamWorkDtoCompletionMode,
+  useMembersControllerList,
   useProjectsControllerGet,
   useTeamsControllerListWorkflowStates,
 } from '@rivet/api-client';
@@ -72,11 +73,23 @@ export function TeamWorkCompletionModal({
   const project = useProjectsControllerGet(work.issue.project.id, {
     query: { enabled: open && work.projectRole === 'BACKEND', retry: false },
   });
+  const members = useMembersControllerList(
+    { limit: 100, status: 'ACTIVE' },
+    { query: { enabled: open, retry: false } },
+  );
   const [completionMode, setCompletionMode] =
     useState<UpdateTeamWorkDtoCompletionMode>('COMPLETE_ONLY');
   const [handoffBody, setHandoffBody] = useState('');
   const [destinationRoles, setDestinationRoles] = useState<FrontendRole[]>([]);
   const [guideOpen, setGuideOpen] = useState(false);
+  const mentionOptions = useMemo(
+    () =>
+      (members.data?.items ?? []).map((member) => ({
+        displayName: member.user.displayName,
+        membershipId: member.id,
+      })),
+    [members.data?.items],
+  );
 
   const isBackend = work.projectRole === 'BACKEND';
   const frontRoles = (project.data?.roleTeams ?? []).flatMap(({ role }) =>
@@ -187,6 +200,7 @@ export function TeamWorkCompletionModal({
               <HandoffEditor
                 charLimit={50_000}
                 labels={editorLabels}
+                mentionOptions={mentionOptions}
                 onChange={setHandoffBody}
                 value={handoffBody}
               />

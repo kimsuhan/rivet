@@ -15,6 +15,44 @@ const UUID_V4 = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const FILE_REFERENCE = new RegExp(`^/files/(${UUID_V4})$`, 'i');
 const MEMBER_REFERENCE = new RegExp(`^rivet-member:(${UUID_V4})$`, 'i');
 
+interface MarkdownNode {
+  children?: MarkdownNode[];
+  type: string;
+  url?: string;
+  value?: string;
+}
+
+function hideMentionPrefixes(node: MarkdownNode) {
+  if (!node.children) return;
+
+  for (let index = 0; index < node.children.length - 1; index += 1) {
+    const prefix = node.children[index];
+    const mention = node.children[index + 1];
+
+    if (
+      prefix?.type !== 'text' ||
+      !prefix.value?.endsWith('@') ||
+      mention?.type !== 'link' ||
+      !mention.url ||
+      !MEMBER_REFERENCE.test(mention.url)
+    ) {
+      continue;
+    }
+
+    prefix.value = prefix.value.slice(0, -1);
+    if (!prefix.value) {
+      node.children.splice(index, 1);
+      index -= 1;
+    }
+  }
+
+  for (const child of node.children) hideMentionPrefixes(child);
+}
+
+function remarkHideMentionPrefixes() {
+  return (tree: MarkdownNode) => hideMentionPrefixes(tree);
+}
+
 const MARKDOWN_SCHEMA: Schema = {
   ...defaultSchema,
   attributes: {
@@ -174,7 +212,7 @@ export function MarkdownRenderer({
     >
       <ReactMarkdown
         components={components}
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkHideMentionPrefixes]}
         rehypePlugins={[[rehypeSanitize, MARKDOWN_SCHEMA]]}
         skipHtml
         urlTransform={safeMarkdownUrl}

@@ -31,8 +31,6 @@ export function markdownEditorLabels(t: Translate, raw: Translate): MarkdownEdit
     linkInvalid: t('linkInvalid'),
     linkPrompt: t('linkPrompt'),
     mention: t('mention'),
-    mentionDisabled: t('mentionDisabled'),
-    mentionPlaceholder: t('mentionPlaceholder'),
     numberedList: t('numberedList'),
     placeholder: t('placeholder'),
     preview: t('preview'),

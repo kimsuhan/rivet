@@ -29,6 +29,7 @@ import {
 
 import { RivetSymbol, RivetWordmark } from '@/components/layout/brand';
 import { UserAvatar } from '@/components/user-avatar';
+import { UserMenu, type UserMenuLabels } from '@/features/auth/user-menu';
 import {
   GlobalIssueCreate,
   type IssueCreateLabels,
@@ -63,7 +64,6 @@ type ShellLabels = {
   openIssueCreate: string;
   openSearch: string;
   openTeamSelector: string;
-  openProfile: string;
   skipToContent: string;
   inboxUnread: string;
   navigation: {
@@ -79,6 +79,7 @@ type ShellLabels = {
   search: GlobalSearchLabels;
   teamSelector: TeamSelectorLabels;
   profile: ProfileDialogLabels;
+  userMenu: UserMenuLabels;
 };
 
 type NavigationItem = {
@@ -128,6 +129,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
   const [teamSelectorOpen, setTeamSelectorOpen] = useState(false);
   const [issueCreateOpen, setIssueCreateOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState<'desktop' | 'mobile' | null>(null);
   const [issueCreateSeed, setIssueCreateSeed] = useState<IssueCreateSeed | null>(null);
   const storedTeamView = useSyncExternalStore(
     subscribeLastTeamView,
@@ -145,6 +147,8 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
   const lastProfileTrigger = useRef<HTMLElement | null>(null);
   const lastSearchTrigger = useRef<HTMLElement | null>(null);
   const lastTeamSelectorTrigger = useRef<HTMLElement | null>(null);
+  const desktopUserMenuTrigger = useRef<HTMLButtonElement>(null);
+  const mobileUserMenuTrigger = useRef<HTMLButtonElement>(null);
   const consumedIssueCreateRequest = useRef<string | null>(null);
   const navigationItems: NavigationItem[] = [
     { href: '/issues', label: labels.navigation.issues, icon: CircleDot },
@@ -206,7 +210,8 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
         !hasCommandModifier &&
         !issueCreateOpen &&
         !teamSelectorOpen &&
-        !profileOpen
+        !profileOpen &&
+        !userMenuOpen
       ) {
         event.preventDefault();
         lastSearchTrigger.current =
@@ -228,7 +233,8 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
         !issueCreateOpen &&
         !searchOpen &&
         !teamSelectorOpen &&
-        !profileOpen
+        !profileOpen &&
+        !userMenuOpen
       ) {
         event.preventDefault();
         lastIssueCreateTrigger.current =
@@ -242,7 +248,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
 
     window.addEventListener('keydown', openGlobalOverlay);
     return () => window.removeEventListener('keydown', openGlobalOverlay);
-  }, [issueCreateOpen, profileOpen, searchOpen, teamSelectorOpen]);
+  }, [issueCreateOpen, profileOpen, searchOpen, teamSelectorOpen, userMenuOpen]);
 
   useEffect(() => {
     if (searchParams.get('create') !== '1') return;
@@ -303,8 +309,8 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
     setTeamSelectorOpen(true);
   }
 
-  function openProfileFromTrigger(event: ReactMouseEvent<HTMLButtonElement>) {
-    lastProfileTrigger.current = event.currentTarget;
+  function openProfileFromUserMenu(trigger: HTMLButtonElement | null) {
+    lastProfileTrigger.current = trigger;
     setProfileOpen(true);
   }
 
@@ -431,13 +437,16 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
 
         {session.data?.authenticated ? (
           <div className="mt-auto flex flex-col gap-1 border-t p-2">
-            <button
-              type="button"
-              onClick={openProfileFromTrigger}
-              aria-label={labels.openProfile}
-              aria-pressed={profileOpen}
-              title={labels.profile.title}
-              className="text-sidebar-foreground hover:bg-surface-2 hover:text-foreground focus-visible:ring-sidebar-ring flex h-8 w-full items-center gap-2 rounded-md px-1 text-left text-sm transition-colors outline-none focus-visible:ring-2"
+            <UserMenu
+              align="start"
+              side="top"
+              labels={labels.userMenu}
+              open={userMenuOpen === 'desktop'}
+              onOpenChange={(open) => setUserMenuOpen(open ? 'desktop' : null)}
+              onOpenProfile={() => openProfileFromUserMenu(desktopUserMenuTrigger.current)}
+              triggerRef={desktopUserMenuTrigger}
+              user={session.data.user}
+              className="text-sidebar-foreground hover:bg-surface-2 hover:text-foreground focus-visible:ring-sidebar-ring aria-expanded:bg-surface-2 flex h-8 w-full items-center gap-2 rounded-md px-1 text-left text-sm transition-colors outline-none focus-visible:ring-2"
             >
               <UserAvatar
                 avatarFileId={session.data.user.avatarFileId}
@@ -447,7 +456,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
               <span className="hidden min-w-0 flex-1 truncate xl:inline">
                 {session.data.user.displayName}
               </span>
-            </button>
+            </UserMenu>
             {canManageWorkspace ? (
               <Link
                 href="/settings/members"
@@ -491,20 +500,23 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
             <Search aria-hidden="true" className="size-5" strokeWidth={1.75} />
           </button>
           {session.data?.authenticated ? (
-            <button
-              type="button"
-              onClick={openProfileFromTrigger}
-              aria-label={labels.openProfile}
-              aria-pressed={profileOpen}
-              title={labels.profile.title}
-              className="focus-visible:ring-ring flex size-10 items-center justify-center rounded-full outline-none focus-visible:ring-2"
+            <UserMenu
+              align="end"
+              side="bottom"
+              labels={labels.userMenu}
+              open={userMenuOpen === 'mobile'}
+              onOpenChange={(open) => setUserMenuOpen(open ? 'mobile' : null)}
+              onOpenProfile={() => openProfileFromUserMenu(mobileUserMenuTrigger.current)}
+              triggerRef={mobileUserMenuTrigger}
+              user={session.data.user}
+              className="focus-visible:ring-ring flex size-11 items-center justify-center rounded-full outline-none focus-visible:ring-2"
             >
               <UserAvatar
                 avatarFileId={session.data.user.avatarFileId}
                 displayName={session.data.user.displayName}
                 className="size-7"
               />
-            </button>
+            </UserMenu>
           ) : null}
         </div>
       </header>
