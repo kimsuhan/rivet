@@ -12,7 +12,7 @@ import { readSessionCookie } from '../../common/auth/session-cookie';
 import { ApiError } from '../../common/errors/api-error';
 import { apiConfig } from '../../config/api.config';
 import { AuthSessionService } from './auth-session.service';
-import type { RequestWithAuthentication } from './authenticated-request';
+import type { RequestWithAuthentication } from './authentication.context';
 import { IS_PUBLIC_ENDPOINT } from './public.decorator';
 
 @Injectable()

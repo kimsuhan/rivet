@@ -3,7 +3,7 @@ import {
   detectMimeType,
   isInlineDisplayable,
   sanitizeOriginalName,
-} from './file-content';
+} from './file-content.policy';
 
 describe('file content rules', () => {
   it.each([

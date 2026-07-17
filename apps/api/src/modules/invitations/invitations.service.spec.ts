@@ -4,6 +4,8 @@ import type { ConfigType } from '@nestjs/config';
 import { DatabaseService } from '../../common/database/database.service';
 import { apiConfig } from '../../config/api.config';
 import { AuthRateLimitService } from '../auth/auth-rate-limit.service';
+import { InvitationRepository } from './invitation.repository';
+import { InvitationQueryService } from './invitation-query.service';
 import { InvitationsService } from './invitations.service';
 
 const config: ConfigType<typeof apiConfig> = {
@@ -63,6 +65,7 @@ describe('InvitationsService', () => {
     consume: jest.fn(),
   };
   let service: InvitationsService;
+  let queries: InvitationQueryService;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -83,6 +86,9 @@ describe('InvitationsService', () => {
       rateLimits as unknown as AuthRateLimitService,
       config,
     );
+    queries = new InvitationQueryService(
+      new InvitationRepository(database as unknown as DatabaseService),
+    );
   });
 
   it('lists invitations with an opaque createdAt and id cursor', async () => {
@@ -92,7 +98,7 @@ describe('InvitationsService', () => {
       { ...row, createdAt: thirdCreatedAt, id: thirdInvitationId },
     ]);
 
-    const first = await service.list(workspaceId, { limit: 2 });
+    const first = await queries.list(workspaceId, { limit: 2 });
 
     expect(first.items.map(({ id }) => id)).toEqual([invitationId, secondInvitationId]);
     expect(first.nextCursor).toEqual(expect.any(String));
@@ -104,7 +110,7 @@ describe('InvitationsService', () => {
     database.client.$queryRaw.mockResolvedValue([
       { ...row, createdAt: thirdCreatedAt, id: thirdInvitationId },
     ]);
-    await service.list(workspaceId, { cursor: first.nextCursor, limit: 2 });
+    await queries.list(workspaceId, { cursor: first.nextCursor, limit: 2 });
 
     expect(database.client.$queryRaw.mock.calls[1]?.slice(1)).toEqual([
       workspaceId,
@@ -123,7 +129,7 @@ describe('InvitationsService', () => {
 
   it('rejects a malformed invitation cursor as INVALID_QUERY', async () => {
     await expect(
-      service.list(workspaceId, { cursor: 'not+a+cursor', limit: 50 }),
+      queries.list(workspaceId, { cursor: 'not+a+cursor', limit: 50 }),
     ).rejects.toMatchObject({
       response: { code: 'INVALID_QUERY' },
       status: HttpStatus.BAD_REQUEST,
@@ -134,7 +140,7 @@ describe('InvitationsService', () => {
   it('filters comma-separated invitation statuses in the derived SQL state', async () => {
     database.client.$queryRaw.mockResolvedValue([]);
 
-    await service.list(workspaceId, {
+    await queries.list(workspaceId, {
       limit: 50,
       status: ' PENDING,EXPIRED,PENDING ',
     });
@@ -156,7 +162,7 @@ describe('InvitationsService', () => {
 
   it('rejects an unknown invitation status as INVALID_QUERY', async () => {
     await expect(
-      service.list(workspaceId, { limit: 50, status: 'PENDING,UNKNOWN' }),
+      queries.list(workspaceId, { limit: 50, status: 'PENDING,UNKNOWN' }),
     ).rejects.toMatchObject({
       response: { code: 'INVALID_QUERY' },
       status: HttpStatus.BAD_REQUEST,

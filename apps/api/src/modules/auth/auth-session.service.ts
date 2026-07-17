@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 
 import { DatabaseService } from '../../common/database/database.service';
-import { createSessionToken, hashSessionToken } from './auth-token';
+import { createSessionToken, hashSessionToken } from './auth-token.crypto';
 
 export type AuthSessionContext = {
   sessionId: string;

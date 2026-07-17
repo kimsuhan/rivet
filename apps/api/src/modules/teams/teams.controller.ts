@@ -32,7 +32,7 @@ import {
 import { ApiError } from '../../common/errors/api-error';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
 import { AdminGuard } from '../../common/guards/admin.guard';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { TeamListQueryDto, UpdateTeamDto, VersionDto } from './dto/team-request.dto';
@@ -47,7 +47,9 @@ import {
   ReorderWorkflowStatesDto,
   UpdateWorkflowStateDto,
 } from './dto/workflow-state-request.dto';
+import { TeamQueryService } from './team-query.service';
 import { TeamsService } from './teams.service';
+import { WorkflowStatesService } from './workflow-states.service';
 
 function workspaceContext(authentication: AuthenticatedRequestContext): {
   membershipId: string;
@@ -75,7 +77,11 @@ function workspaceContext(authentication: AuthenticatedRequestContext): {
 @ApiCookieAuth('sessionCookie')
 @Controller()
 export class TeamsController {
-  constructor(private readonly teams: TeamsService) {}
+  constructor(
+    private readonly teamQueries: TeamQueryService,
+    private readonly teams: TeamsService,
+    private readonly workflowStates: WorkflowStatesService,
+  ) {}
 
   @Get('teams')
   @ApiOperation({ summary: '팀 목록 조회' })
@@ -91,7 +97,7 @@ export class TeamsController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Query() query: TeamListQueryDto,
   ): Promise<TeamListResponseDto> {
-    return this.teams.list(workspaceContext(authentication).workspaceId, query);
+    return this.teamQueries.list(workspaceContext(authentication).workspaceId, query);
   }
 
   @Post('teams')
@@ -130,7 +136,7 @@ export class TeamsController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
   ): Promise<TeamResponseDto> {
-    return this.teams.get(workspaceContext(authentication).workspaceId, teamId);
+    return this.teamQueries.get(workspaceContext(authentication).workspaceId, teamId);
   }
 
   @Patch('teams/:teamId')
@@ -237,7 +243,10 @@ export class TeamsController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
   ): Promise<WorkflowStateListResponseDto> {
-    return this.teams.listWorkflowStates(workspaceContext(authentication).workspaceId, teamId);
+    return this.teamQueries.listWorkflowStates(
+      workspaceContext(authentication).workspaceId,
+      teamId,
+    );
   }
 
   @Patch('workflow-states/:stateId')
@@ -257,7 +266,7 @@ export class TeamsController {
     @Param('stateId', new ParseUUIDPipe({ version: '4' })) stateId: string,
     @Body() dto: UpdateWorkflowStateDto,
   ): Promise<WorkflowStateResponseDto> {
-    return this.teams.updateWorkflowState(
+    return this.workflowStates.updateWorkflowState(
       workspaceContext(authentication).workspaceId,
       stateId,
       dto,
@@ -281,7 +290,7 @@ export class TeamsController {
     @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
     @Body() dto: ReorderWorkflowStatesDto,
   ): Promise<WorkflowStateListResponseDto> {
-    return this.teams.reorderWorkflowStates(
+    return this.workflowStates.reorderWorkflowStates(
       workspaceContext(authentication).workspaceId,
       teamId,
       dto,
@@ -312,6 +321,10 @@ export class TeamsController {
     @Param('stateId', new ParseUUIDPipe({ version: '4' })) stateId: string,
     @Query() query: DeleteWorkflowStateQueryDto,
   ): Promise<void> {
-    await this.teams.deleteWorkflowState(workspaceContext(authentication), stateId, query);
+    await this.workflowStates.deleteWorkflowState(
+      workspaceContext(authentication),
+      stateId,
+      query,
+    );
   }
 }

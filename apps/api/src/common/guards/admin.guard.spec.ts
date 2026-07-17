@@ -1,6 +1,6 @@
 import type { ExecutionContext } from '@nestjs/common';
 
-import type { RequestWithAuthentication } from '../../modules/auth/authenticated-request';
+import type { RequestWithAuthentication } from '../../modules/auth/authentication.context';
 import { AdminGuard } from './admin.guard';
 
 describe('AdminGuard', () => {

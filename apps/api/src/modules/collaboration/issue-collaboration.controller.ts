@@ -32,7 +32,7 @@ import {
 
 import { ApiError } from '../../common/errors/api-error';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import {
   CreateCommentDto,
@@ -49,7 +49,9 @@ import {
   HandoffTimelineItemResponseDto,
   TimelineResponseDto,
 } from './dto/issue-collaboration-response.dto';
-import { IssueCollaborationService } from './issue-collaboration.service';
+import { IssueCommentService } from './issue-comment.service';
+import { IssueHandoffService } from './issue-handoff.service';
+import { IssueTimelineQueryService } from './issue-timeline-query.service';
 
 function workspaceContext(authentication: AuthenticatedRequestContext): {
   membershipId: string;
@@ -85,7 +87,11 @@ function workspaceContext(authentication: AuthenticatedRequestContext): {
 )
 @Controller()
 export class IssueCollaborationController {
-  constructor(private readonly collaboration: IssueCollaborationService) {}
+  constructor(
+    private readonly comments: IssueCommentService,
+    private readonly handoffs: IssueHandoffService,
+    private readonly timelineQueries: IssueTimelineQueryService,
+  ) {}
 
   @Post('team-works/:teamWorkId/handoffs')
   @HttpCode(HttpStatus.CREATED)
@@ -117,7 +123,7 @@ export class IssueCollaborationController {
     @Param('teamWorkId', new ParseUUIDPipe({ version: '4' })) teamWorkId: string,
     @Body() dto: CreateIssueHandoffDto,
   ): Promise<HandoffResourceResponseDto> {
-    return this.collaboration.createHandoff(workspaceContext(authentication), teamWorkId, dto);
+    return this.handoffs.createHandoff(workspaceContext(authentication), teamWorkId, dto);
   }
 
   @Post('issues/:issueId/comments')
@@ -146,7 +152,7 @@ export class IssueCollaborationController {
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
     @Body() dto: CreateCommentDto,
   ): Promise<CommentResourceResponseDto> {
-    return this.collaboration.createComment(workspaceContext(authentication), issueId, dto);
+    return this.comments.createComment(workspaceContext(authentication), issueId, dto);
   }
 
   @Get('issues/:issueId/timeline')
@@ -166,7 +172,11 @@ export class IssueCollaborationController {
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
     @Query() dto: IssueTimelineQueryDto,
   ): Promise<TimelineResponseDto> {
-    return this.collaboration.timeline(workspaceContext(authentication).workspaceId, issueId, dto);
+    return this.timelineQueries.timeline(
+      workspaceContext(authentication).workspaceId,
+      issueId,
+      dto,
+    );
   }
 }
 
@@ -174,7 +184,7 @@ export class IssueCollaborationController {
 @ApiCookieAuth('sessionCookie')
 @Controller('comments')
 export class CommentsController {
-  constructor(private readonly collaboration: IssueCollaborationService) {}
+  constructor(private readonly comments: IssueCommentService) {}
 
   @Patch(':commentId')
   @ApiOperation({ summary: '자신의 댓글 수정' })
@@ -204,7 +214,7 @@ export class CommentsController {
     @Param('commentId', new ParseUUIDPipe({ version: '4' })) commentId: string,
     @Body() dto: UpdateCommentDto,
   ): Promise<CommentResourceResponseDto> {
-    return this.collaboration.updateComment(workspaceContext(authentication), commentId, dto);
+    return this.comments.updateComment(workspaceContext(authentication), commentId, dto);
   }
 
   @Delete(':commentId')
@@ -225,10 +235,6 @@ export class CommentsController {
     @Param('commentId', new ParseUUIDPipe({ version: '4' })) commentId: string,
     @Query() query: DeleteCommentQueryDto,
   ): Promise<void> {
-    return this.collaboration.deleteComment(
-      workspaceContext(authentication),
-      commentId,
-      query.version,
-    );
+    return this.comments.deleteComment(workspaceContext(authentication), commentId, query.version);
   }
 }

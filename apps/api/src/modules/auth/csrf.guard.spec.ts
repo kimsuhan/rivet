@@ -3,7 +3,7 @@ import type { ConfigType } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 
 import { apiConfig } from '../../config/api.config';
-import { createCsrfToken } from './auth-token';
+import { createCsrfToken } from './auth-token.crypto';
 import { CsrfGuard } from './csrf.guard';
 
 const config: ConfigType<typeof apiConfig> = {

@@ -2,7 +2,7 @@ import {
   parseResourceChangedSignal,
   type ResourceChangedSignal,
   serializeResourceChangedEvent,
-} from './resource-changed-signal';
+} from './resource-changed.signal';
 
 const validSignal: ResourceChangedSignal = {
   changeType: 'UPDATED',

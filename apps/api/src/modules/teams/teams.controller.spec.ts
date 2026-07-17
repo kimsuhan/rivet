@@ -3,9 +3,11 @@ import { GUARDS_METADATA, HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { Test, type TestingModule } from '@nestjs/testing';
 
 import { AdminGuard } from '../../common/guards/admin.guard';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
+import { TeamQueryService } from './team-query.service';
 import { TeamsController } from './teams.controller';
 import { TeamsService } from './teams.service';
+import { WorkflowStatesService } from './workflow-states.service';
 
 describe('TeamsController', () => {
   const membership = {
@@ -44,7 +46,9 @@ describe('TeamsController', () => {
     version: 1,
     workflowStates: [],
   };
+  const teamQueries = {};
   const teams = { create: jest.fn() };
+  const workflowStates = {};
   let moduleRef: TestingModule;
   let controller: TeamsController;
 
@@ -53,7 +57,11 @@ describe('TeamsController', () => {
     teams.create.mockResolvedValue(response);
     moduleRef = await Test.createTestingModule({
       controllers: [TeamsController],
-      providers: [{ provide: TeamsService, useValue: teams }],
+      providers: [
+        { provide: TeamQueryService, useValue: teamQueries },
+        { provide: TeamsService, useValue: teams },
+        { provide: WorkflowStatesService, useValue: workflowStates },
+      ],
     }).compile();
     controller = moduleRef.get(TeamsController);
   });

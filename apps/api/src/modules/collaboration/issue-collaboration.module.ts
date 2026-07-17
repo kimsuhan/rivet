@@ -2,12 +2,20 @@ import { Module } from '@nestjs/common';
 
 import { FilesModule } from '../files/files.module';
 import { CommentsController, IssueCollaborationController } from './issue-collaboration.controller';
-import { IssueCollaborationService } from './issue-collaboration.service';
+import { IssueCollaborationLockService } from './issue-collaboration-lock.service';
+import { IssueCommentService } from './issue-comment.service';
+import { IssueHandoffService } from './issue-handoff.service';
+import { IssueTimelineQueryService } from './issue-timeline-query.service';
 
 @Module({
   controllers: [CommentsController, IssueCollaborationController],
-  exports: [IssueCollaborationService],
+  exports: [IssueHandoffService],
   imports: [FilesModule],
-  providers: [IssueCollaborationService],
+  providers: [
+    IssueCollaborationLockService,
+    IssueCommentService,
+    IssueHandoffService,
+    IssueTimelineQueryService,
+  ],
 })
 export class IssueCollaborationModule {}

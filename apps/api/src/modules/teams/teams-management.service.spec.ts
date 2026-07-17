@@ -4,7 +4,10 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { Prisma } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
+import { TeamRepository } from './team.repository';
+import { TeamQueryService } from './team-query.service';
 import { TeamsService } from './teams.service';
+import { WorkflowStatesService } from './workflow-states.service';
 
 describe('TeamsService management', () => {
   const workspaceId = '3dc0b213-eafa-450c-ad12-49a7d927c7b8';
@@ -69,7 +72,9 @@ describe('TeamsService management', () => {
   };
   const database = { client };
   let moduleRef: TestingModule;
+  let queries: TeamQueryService;
   let service: TeamsService;
+  let workflowStates: WorkflowStatesService;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -78,9 +83,17 @@ describe('TeamsService management', () => {
     );
 
     moduleRef = await Test.createTestingModule({
-      providers: [TeamsService, { provide: DatabaseService, useValue: database }],
+      providers: [
+        TeamQueryService,
+        TeamRepository,
+        TeamsService,
+        WorkflowStatesService,
+        { provide: DatabaseService, useValue: database },
+      ],
     }).compile();
+    queries = moduleRef.get(TeamQueryService);
     service = moduleRef.get(TeamsService);
+    workflowStates = moduleRef.get(WorkflowStatesService);
   });
 
   afterEach(async () => {
@@ -99,7 +112,7 @@ describe('TeamsService management', () => {
       },
     ]);
 
-    await expect(service.list(workspaceId, { includeArchived: false })).resolves.toEqual({
+    await expect(queries.list(workspaceId, { includeArchived: false })).resolves.toEqual({
       items: [
         {
           archived: false,
@@ -259,7 +272,7 @@ describe('TeamsService management', () => {
     client.workflowState.findFirst.mockResolvedValue({ ...workflowState, version: 5 });
 
     await expect(
-      service.updateWorkflowState(workspaceId, stateId, { name: '접수', version: 4 }),
+      workflowStates.updateWorkflowState(workspaceId, stateId, { name: '접수', version: 4 }),
     ).rejects.toMatchObject({
       response: { code: 'VERSION_CONFLICT', currentVersion: 5 },
       status: HttpStatus.CONFLICT,
@@ -278,7 +291,7 @@ describe('TeamsService management', () => {
     );
 
     await expect(
-      service.updateWorkflowState(workspaceId, stateId, { name: '중복 상태', version: 1 }),
+      workflowStates.updateWorkflowState(workspaceId, stateId, { name: '중복 상태', version: 1 }),
     ).rejects.toMatchObject({
       response: {
         code: 'VALIDATION_ERROR',
@@ -300,7 +313,7 @@ describe('TeamsService management', () => {
       .mockResolvedValueOnce({ ...workflowState, id: replacementStateId, position: 0, version: 3 })
       .mockResolvedValueOnce({ ...workflowState, isDefault: true, position: 1, version: 2 });
 
-    const result = await service.reorderWorkflowStates(workspaceId, teamId, {
+    const result = await workflowStates.reorderWorkflowStates(workspaceId, teamId, {
       states: [
         { id: replacementStateId, version: 2 },
         { id: stateId, version: 1 },
@@ -327,7 +340,7 @@ describe('TeamsService management', () => {
     ]);
 
     await expect(
-      service.reorderWorkflowStates(workspaceId, teamId, {
+      workflowStates.reorderWorkflowStates(workspaceId, teamId, {
         states: [{ id: stateId, version: 1 }],
       }),
     ).rejects.toMatchObject({
@@ -349,7 +362,7 @@ describe('TeamsService management', () => {
     transaction.workflowState.delete.mockResolvedValue({});
 
     await expect(
-      service.deleteWorkflowState({ membershipId, workspaceId }, stateId, {
+      workflowStates.deleteWorkflowState({ membershipId, workspaceId }, stateId, {
         replacementStateId,
         version: 1,
       }),
@@ -381,7 +394,7 @@ describe('TeamsService management', () => {
       .mockResolvedValueOnce([issue]);
 
     await expect(
-      service.deleteWorkflowState({ membershipId, workspaceId }, stateId, { version: 1 }),
+      workflowStates.deleteWorkflowState({ membershipId, workspaceId }, stateId, { version: 1 }),
     ).rejects.toMatchObject({
       response: { code: 'WORKFLOW_STATE_IN_USE', details: { issues: [issue] } },
       status: HttpStatus.CONFLICT,
@@ -408,7 +421,7 @@ describe('TeamsService management', () => {
     transaction.workflowState.delete.mockResolvedValue({});
 
     await expect(
-      service.deleteWorkflowState({ membershipId, workspaceId }, stateId, {
+      workflowStates.deleteWorkflowState({ membershipId, workspaceId }, stateId, {
         replacementStateId,
         version: 1,
       }),

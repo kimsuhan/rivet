@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { isUUID } from 'class-validator';
 
 import { HandoffKind, MembershipStatus, Prisma, ProjectRole, StateCategory } from '@rivet/database';
 import {
@@ -18,72 +17,19 @@ import {
   assertActiveMentionMemberships,
   parseOptionalMarkdown,
 } from '../../common/validation/markdown';
-import { IssueCollaborationService } from '../collaboration/issue-collaboration.service';
+import { IssueHandoffService } from '../collaboration/issue-handoff.service';
 import { shouldAutoStartOnAssignment } from './domain/team-work-transition';
-import type {
-  RemoveTeamWorkDto,
-  TeamWorkListQueryDto,
-  UpdateTeamWorkDto,
-} from './dto/issue-request.dto';
-import type {
-  IssueDetailResponseDto,
-  TeamWorkDetailResponseDto,
-  TeamWorkListResponseDto,
-  UpdateTeamWorkResponseDto,
-} from './dto/issue-response.dto';
+import type { RemoveTeamWorkDto, UpdateTeamWorkDto } from './dto/issue-request.dto';
+import type { IssueDetailResponseDto, UpdateTeamWorkResponseDto } from './dto/issue-response.dto';
+import type { IssueMutationContext } from './issue.context';
+import { IssueRepository } from './issue.repository';
 import {
-  type IssueMutationContext,
-  IssuesService,
   toIssueDetail,
   toIssueSummary,
   toTeamWorkDetail,
   toTeamWorkSummary,
-} from './issues.service';
-
-function values(value: string | undefined): string[] {
-  return value
-    ? [
-        ...new Set(
-          value
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean),
-        ),
-      ]
-    : [];
-}
-
-const EXECUTION_CATEGORY_ORDER: Record<StateCategory, number> = {
-  STARTED: 0,
-  UNSTARTED: 1,
-  BACKLOG: 2,
-  COMPLETED: 3,
-  CANCELED: 4,
-};
-
-const PRIORITY_ORDER = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 } as const;
-
-function compareTextDescending(left: string, right: string): number {
-  return right.localeCompare(left);
-}
-
-function decodeCursor(cursor: string): string {
-  try {
-    const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-    return typeof parsed === 'object' &&
-      parsed !== null &&
-      'id' in parsed &&
-      typeof parsed.id === 'string'
-      ? parsed.id
-      : cursor;
-  } catch {
-    return cursor;
-  }
-}
-
-function encodeCursor(id: string): string {
-  return Buffer.from(JSON.stringify({ id }), 'utf8').toString('base64url');
-}
+} from './issue-response.mapper';
+import { IssueStatusService } from './issue-status.service';
 
 function notFound(): never {
   throw new ApiError({
@@ -97,139 +43,10 @@ function notFound(): never {
 export class TeamWorksService {
   constructor(
     private readonly database: DatabaseService,
-    private readonly issues: IssuesService,
-    private readonly collaboration: IssueCollaborationService,
+    private readonly repository: IssueRepository,
+    private readonly statuses: IssueStatusService,
+    private readonly handoffs: IssueHandoffService,
   ) {}
-
-  async list(
-    context: IssueMutationContext,
-    query: TeamWorkListQueryDto,
-  ): Promise<TeamWorkListResponseDto> {
-    const teamIds = values(query.teamId);
-    const projectIds = values(query.projectId);
-    const roles = values(query.projectRole);
-    const workflowStateIds = values(query.workflowStateId);
-    const categories = values(query.stateCategory);
-    const assignees = values(query.assigneeMembershipId).map((value) =>
-      value === 'me' ? context.membershipId : value,
-    );
-    if (
-      [...teamIds, ...projectIds, ...workflowStateIds, ...assignees].some((id) => !isUUID(id, '4'))
-    ) {
-      throw new ApiError({
-        code: 'INVALID_QUERY',
-        message: '팀 작업 필터가 올바르지 않습니다.',
-        status: HttpStatus.BAD_REQUEST,
-      });
-    }
-    if (
-      roles.some((role) => !Object.values(ProjectRole).includes(role as ProjectRole)) ||
-      categories.some(
-        (category) => !Object.values(StateCategory).includes(category as StateCategory),
-      )
-    ) {
-      throw new ApiError({
-        code: 'INVALID_QUERY',
-        message: '역할 또는 상태 범주 필터가 올바르지 않습니다.',
-        status: HttpStatus.BAD_REQUEST,
-      });
-    }
-    const where: Prisma.TeamWorkWhereInput = {
-      deletedAt: null,
-      issue: {
-        deletedAt: null,
-        ...(projectIds.length ? { projectId: { in: projectIds } } : {}),
-      },
-      workspaceId: context.workspaceId,
-      ...(query.query
-        ? {
-            OR: [
-              { identifier: { contains: query.query, mode: 'insensitive' } },
-              { issue: { identifier: { contains: query.query, mode: 'insensitive' } } },
-              { issue: { title: { contains: query.query, mode: 'insensitive' } } },
-              { issue: { project: { name: { contains: query.query, mode: 'insensitive' } } } },
-            ],
-          }
-        : {}),
-      ...(query.unassigned === 'true'
-        ? { assigneeMembershipId: null }
-        : assignees.length
-          ? { assigneeMembershipId: { in: assignees } }
-          : {}),
-      ...(roles.length ? { projectRole: { in: roles as ProjectRole[] } } : {}),
-      ...(teamIds.length ? { teamId: { in: teamIds } } : {}),
-      ...(categories.length
-        ? { workflowState: { category: { in: categories as StateCategory[] } } }
-        : {}),
-      ...(workflowStateIds.length ? { workflowStateId: { in: workflowStateIds } } : {}),
-    };
-    const rows = await this.database.client.teamWork.findMany({
-      select: {
-        createdAt: true,
-        id: true,
-        issue: { select: { priority: true } },
-        updatedAt: true,
-        workflowState: { select: { category: true, position: true } },
-      },
-      where,
-    });
-    const sort = query.sort ?? 'updatedAt';
-    const direction = query.sortDirection ?? 'desc';
-    rows.sort((left, right) => {
-      if (sort === 'executionOrder') {
-        const category =
-          EXECUTION_CATEGORY_ORDER[left.workflowState.category] -
-          EXECUTION_CATEGORY_ORDER[right.workflowState.category];
-        if (category) return category;
-        const priority = PRIORITY_ORDER[left.issue.priority] - PRIORITY_ORDER[right.issue.priority];
-        if (priority) return priority;
-        const position = left.workflowState.position - right.workflowState.position;
-        if (position) return position;
-        const updatedAt = right.updatedAt.getTime() - left.updatedAt.getTime();
-        return updatedAt || compareTextDescending(left.id, right.id);
-      }
-      const value =
-        sort === 'priority'
-          ? PRIORITY_ORDER[left.issue.priority] - PRIORITY_ORDER[right.issue.priority]
-          : sort === 'status'
-            ? left.workflowState.position - right.workflowState.position
-            : left[sort].getTime() - right[sort].getTime();
-      if (value) return direction === 'asc' ? value : -value;
-      return direction === 'asc'
-        ? left.id.localeCompare(right.id)
-        : compareTextDescending(left.id, right.id);
-    });
-    const cursorId = query.cursor ? decodeCursor(query.cursor) : null;
-    const start =
-      cursorId === null ? 0 : Math.max(0, rows.findIndex(({ id }) => id === cursorId) + 1);
-    const page = rows.slice(start, start + query.limit);
-    const detailed = await Promise.all(
-      page.map(({ id }) => this.issues.findTeamWork(this.database.client, context.workspaceId, id)),
-    );
-    return {
-      items: detailed.map(toTeamWorkSummary),
-      nextCursor:
-        start + page.length < rows.length && page.length ? encodeCursor(page.at(-1)!.id) : null,
-      totalCount: await this.database.client.teamWork.count({ where }),
-    };
-  }
-
-  async get(workspaceId: string, teamWorkRef: string): Promise<TeamWorkDetailResponseDto> {
-    const row = await this.database.client.teamWork.findFirst({
-      select: { id: true },
-      where: {
-        deletedAt: null,
-        workspaceId,
-        ...(isUUID(teamWorkRef, '4')
-          ? { id: teamWorkRef }
-          : { identifier: teamWorkRef.toUpperCase() }),
-      },
-    });
-    if (!row) notFound();
-    return toTeamWorkDetail(
-      await this.issues.findTeamWork(this.database.client, workspaceId, row.id),
-    );
-  }
 
   async update(
     context: IssueMutationContext,
@@ -264,7 +81,11 @@ export class TeamWorksService {
         ? undefined
         : parseOptionalMarkdown(dto.workNoteMarkdown, 10_000);
     return this.database.client.$transaction(async (transaction) => {
-      const current = await this.issues.findTeamWork(transaction, context.workspaceId, teamWorkId);
+      const current = await this.repository.findTeamWork(
+        transaction,
+        context.workspaceId,
+        teamWorkId,
+      );
       if (current.version !== dto.version) {
         throw new ApiError({
           code: 'TEAM_WORK_VERSION_CONFLICT',
@@ -360,7 +181,7 @@ export class TeamWorksService {
         dto.assigneeMembershipId &&
         shouldAutoStartOnAssignment(current.workflowState)
       ) {
-        autoStartStateId = await this.issues.firstUnstartedStateId(
+        autoStartStateId = await this.repository.firstUnstartedStateId(
           transaction,
           context.workspaceId,
           current.team.id,
@@ -536,7 +357,7 @@ export class TeamWorksService {
         },
       });
       const handoff = dto.handoff
-        ? await this.collaboration.createHandoffInTransaction(transaction, context, teamWorkId, {
+        ? await this.handoffs.createHandoffInTransaction(transaction, context, teamWorkId, {
             bodyMarkdown: dto.handoff.bodyMarkdown,
             ...(dto.handoff.destinationRoles
               ? { destinationRoles: dto.handoff.destinationRoles }
@@ -544,7 +365,7 @@ export class TeamWorksService {
             kind: HandoffKind.INITIAL,
           })
         : undefined;
-      await this.issues.recalculateIssueStatus(transaction, context.workspaceId, current.issue.id);
+      await this.statuses.recalculate(transaction, context.workspaceId, current.issue.id);
       const changedFields: TeamWorkChangedField[] = [
         ...(dto.workflowStateId || autoStartStateId ? ['WORKFLOW_STATE' as const] : []),
         ...(dto.assigneeMembershipId !== undefined ? ['ASSIGNEE' as const] : []),
@@ -590,8 +411,16 @@ export class TeamWorksService {
           },
         });
       }
-      const updated = await this.issues.findTeamWork(transaction, context.workspaceId, teamWorkId);
-      const issue = await this.issues.findIssue(transaction, context.workspaceId, current.issue.id);
+      const updated = await this.repository.findTeamWork(
+        transaction,
+        context.workspaceId,
+        teamWorkId,
+      );
+      const issue = await this.repository.findIssue(
+        transaction,
+        context.workspaceId,
+        current.issue.id,
+      );
       await notifyResourceChanged(transaction, {
         changeType: 'UPDATED',
         eventId,
@@ -610,7 +439,7 @@ export class TeamWorksService {
       const downstreamTeamWorks = handoff
         ? await Promise.all(
             handoff.targetTeamWorkIds.map((id) =>
-              this.issues.findTeamWork(transaction, context.workspaceId, id),
+              this.repository.findTeamWork(transaction, context.workspaceId, id),
             ),
           )
         : [];
@@ -631,7 +460,7 @@ export class TeamWorksService {
   ): Promise<IssueDetailResponseDto> {
     return this.database.client
       .$transaction(async (transaction) => {
-        const current = await this.issues.findTeamWork(
+        const current = await this.repository.findTeamWork(
           transaction,
           context.workspaceId,
           teamWorkId,
@@ -676,12 +505,8 @@ export class TeamWorksService {
             workspaceId: context.workspaceId,
           },
         });
-        await this.issues.recalculateIssueStatus(
-          transaction,
-          context.workspaceId,
-          current.issue.id,
-        );
-        const issue = await this.issues.findIssue(
+        await this.statuses.recalculate(transaction, context.workspaceId, current.issue.id);
+        const issue = await this.repository.findIssue(
           transaction,
           context.workspaceId,
           current.issue.id,

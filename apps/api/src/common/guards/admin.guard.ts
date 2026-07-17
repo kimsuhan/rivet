@@ -1,6 +1,6 @@
 import { type CanActivate, type ExecutionContext, HttpStatus, Injectable } from '@nestjs/common';
 
-import type { RequestWithAuthentication } from '../../modules/auth/authenticated-request';
+import type { RequestWithAuthentication } from '../../modules/auth/authentication.context';
 import { ApiError } from '../errors/api-error';
 
 @Injectable()

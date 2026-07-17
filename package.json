@@ -19,6 +19,7 @@
     "test:e2e": "pnpm db:generate && pnpm --filter @rivet/database migrate:test && pnpm --filter @rivet/web test:e2e",
     "api:contract:generate": "pnpm db:generate && turbo run build --filter=@rivet/api && pnpm --filter @rivet/api openapi:generate && pnpm --filter @rivet/api-client generate",
     "api:contract:check": "node scripts/check-api-contract.mjs",
+    "api:structure:check": "node scripts/check-api-structure.mjs",
     "observability:smoke": "node scripts/check-external-observability.mjs",
     "build": "pnpm db:generate && turbo run build",
     "db:format": "pnpm --filter @rivet/database format",

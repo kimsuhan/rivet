@@ -8,7 +8,7 @@ import {
   hashSessionToken,
   verifyCsrfToken,
   verifyOneTimeToken,
-} from './auth-token';
+} from './auth-token.crypto';
 
 const hmacKey = Buffer.alloc(32, 7);
 

@@ -5,7 +5,7 @@ import type { ConfigType } from '@nestjs/config';
 import type { Params } from 'nestjs-pino';
 
 import type { apiConfig } from '../../config/api.config';
-import type { AuthenticatedRequestContext } from '../../modules/auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../../modules/auth/authentication.context';
 
 type LoggedRequest = IncomingMessage & {
   authentication?: AuthenticatedRequestContext;

@@ -1,33 +1,71 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
-import { ApiConflictResponse, ApiCookieAuth, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags, ApiUnprocessableEntityResponse } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiConflictResponse,
+  ApiCookieAuth,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnprocessableEntityResponse,
+} from '@nestjs/swagger';
 
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
-import { RemoveTeamWorkDto, TeamWorkListQueryDto, UpdateTeamWorkDto } from './dto/issue-request.dto';
-import { IssueDetailResponseDto, TeamWorkDetailResponseDto, TeamWorkListResponseDto, UpdateTeamWorkResponseDto } from './dto/issue-response.dto';
+import {
+  RemoveTeamWorkDto,
+  TeamWorkListQueryDto,
+  UpdateTeamWorkDto,
+} from './dto/issue-request.dto';
+import {
+  IssueDetailResponseDto,
+  TeamWorkDetailResponseDto,
+  TeamWorkListResponseDto,
+  UpdateTeamWorkResponseDto,
+} from './dto/issue-response.dto';
 import { workspaceContext } from './issues.controller';
+import { TeamWorkQueryService } from './team-work-query.service';
 import { TeamWorksService } from './team-works.service';
 
 @ApiTags('team-works')
 @ApiCookieAuth('sessionCookie')
 @Controller('team-works')
 export class TeamWorksController {
-  constructor(private readonly teamWorks: TeamWorksService) {}
+  constructor(
+    private readonly teamWorks: TeamWorksService,
+    private readonly queries: TeamWorkQueryService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: '내 작업과 팀 작업 목록 조회' })
   @ApiOkResponse({ type: TeamWorkListResponseDto })
-  list(@CurrentAuthentication() authentication: AuthenticatedRequestContext, @Query() query: TeamWorkListQueryDto): Promise<TeamWorkListResponseDto> {
-    return this.teamWorks.list(workspaceContext(authentication), query);
+  list(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Query() query: TeamWorkListQueryDto,
+  ): Promise<TeamWorkListResponseDto> {
+    return this.queries.list(workspaceContext(authentication), query);
   }
 
   @Get(':teamWorkRef')
   @ApiOperation({ summary: 'UUID 또는 팀 표시 ID로 팀 작업과 상위 이슈 요약 조회' })
   @ApiOkResponse({ type: TeamWorkDetailResponseDto })
   @ApiNotFoundResponse({ type: ApiErrorResponseDto })
-  get(@CurrentAuthentication() authentication: AuthenticatedRequestContext, @Param('teamWorkRef') teamWorkRef: string): Promise<TeamWorkDetailResponseDto> {
-    return this.teamWorks.get(workspaceContext(authentication).workspaceId, teamWorkRef);
+  get(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('teamWorkRef') teamWorkRef: string,
+  ): Promise<TeamWorkDetailResponseDto> {
+    return this.queries.get(workspaceContext(authentication).workspaceId, teamWorkRef);
   }
 
   @Patch(':teamWorkId')

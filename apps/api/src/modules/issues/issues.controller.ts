@@ -1,4 +1,15 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -17,7 +28,7 @@ import {
 
 import { ApiError } from '../../common/errors/api-error';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import {
   AssignTeamWorksDto,
@@ -38,21 +49,43 @@ import {
   TeamWorkListResponseDto,
   UpdateIssueResponseDto,
 } from './dto/issue-response.dto';
-import { type IssueMutationContext,IssuesService } from './issues.service';
+import type { IssueMutationContext } from './issue.context';
+import { IssueAssignmentService } from './issue-assignment.service';
+import { IssueQueryService } from './issue-query.service';
+import { IssuesService } from './issues.service';
 
-export function workspaceContext(authentication: AuthenticatedRequestContext): IssueMutationContext {
+export function workspaceContext(
+  authentication: AuthenticatedRequestContext,
+): IssueMutationContext {
   const { membership, workspace } = authentication.session;
-  if (!membership || !workspace || membership.status !== 'ACTIVE' || membership.workspaceId !== workspace.id) {
-    throw new ApiError({ code: 'FORBIDDEN', message: '활성 워크스페이스가 필요합니다.', status: HttpStatus.FORBIDDEN });
+  if (
+    !membership ||
+    !workspace ||
+    membership.status !== 'ACTIVE' ||
+    membership.workspaceId !== workspace.id
+  ) {
+    throw new ApiError({
+      code: 'FORBIDDEN',
+      message: '활성 워크스페이스가 필요합니다.',
+      status: HttpStatus.FORBIDDEN,
+    });
   }
-  return { membershipId: membership.id, userId: authentication.session.user.id, workspaceId: workspace.id };
+  return {
+    membershipId: membership.id,
+    userId: authentication.session.user.id,
+    workspaceId: workspace.id,
+  };
 }
 
 @ApiTags('issues')
 @ApiCookieAuth('sessionCookie')
 @Controller('issues')
 export class IssuesController {
-  constructor(private readonly issues: IssuesService) {}
+  constructor(
+    private readonly assignments: IssueAssignmentService,
+    private readonly issues: IssuesService,
+    private readonly queries: IssueQueryService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: '이슈 콘텐츠 목록 조회' })
@@ -60,8 +93,11 @@ export class IssuesController {
   @ApiBadRequestResponse({ type: ApiErrorResponseDto })
   @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
   @ApiForbiddenResponse({ type: ApiErrorResponseDto })
-  list(@CurrentAuthentication() authentication: AuthenticatedRequestContext, @Query() query: IssueListQueryDto): Promise<IssueListResponseDto> {
-    return this.issues.list(workspaceContext(authentication), query);
+  list(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Query() query: IssueListQueryDto,
+  ): Promise<IssueListResponseDto> {
+    return this.queries.list(workspaceContext(authentication).workspaceId, query);
   }
 
   @Get(':issueId/team-works')
@@ -73,7 +109,7 @@ export class IssuesController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
   ): Promise<TeamWorkListResponseDto> {
-    return this.issues.listTeamWorks(workspaceContext(authentication).workspaceId, issueId);
+    return this.queries.listTeamWorks(workspaceContext(authentication).workspaceId, issueId);
   }
 
   @Post()
@@ -84,7 +120,10 @@ export class IssuesController {
   @ApiForbiddenResponse({ type: ApiErrorResponseDto })
   @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   @ApiUnprocessableEntityResponse({ type: ApiErrorResponseDto })
-  create(@CurrentAuthentication() authentication: AuthenticatedRequestContext, @Body() dto: CreateIssueDto): Promise<CreateIssueResponseDto> {
+  create(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Body() dto: CreateIssueDto,
+  ): Promise<CreateIssueResponseDto> {
     return this.issues.create(workspaceContext(authentication), dto);
   }
 
@@ -101,7 +140,7 @@ export class IssuesController {
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
     @Body() dto: StartIssueDto,
   ): Promise<StartIssueResponseDto> {
-    return this.issues.start(workspaceContext(authentication), issueId, dto);
+    return this.assignments.start(workspaceContext(authentication), issueId, dto);
   }
 
   @Post(':issueId/claim')
@@ -113,7 +152,7 @@ export class IssuesController {
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
     @Body() dto: ClaimTeamWorkDto,
   ): Promise<ClaimTeamWorkResponseDto> {
-    return this.issues.claim(workspaceContext(authentication), issueId, dto);
+    return this.assignments.claim(workspaceContext(authentication), issueId, dto);
   }
 
   @Post(':issueId/assign-team-works')
@@ -125,14 +164,17 @@ export class IssuesController {
     @Param('issueId', new ParseUUIDPipe({ version: '4' })) issueId: string,
     @Body() dto: AssignTeamWorksDto,
   ): Promise<AssignTeamWorksResponseDto> {
-    return this.issues.assignTeamWorks(workspaceContext(authentication), issueId, dto);
+    return this.assignments.assignTeamWorks(workspaceContext(authentication), issueId, dto);
   }
 
   @Get(':issueRef')
   @ApiOperation({ summary: 'UUID 또는 F-* 표시 ID로 이슈 통합 상세 조회' })
   @ApiOkResponse({ type: IssueDetailResponseDto })
-  get(@CurrentAuthentication() authentication: AuthenticatedRequestContext, @Param('issueRef') issueRef: string): Promise<IssueDetailResponseDto> {
-    return this.issues.get(workspaceContext(authentication).workspaceId, issueRef);
+  get(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('issueRef') issueRef: string,
+  ): Promise<IssueDetailResponseDto> {
+    return this.queries.get(workspaceContext(authentication).workspaceId, issueRef);
   }
 
   @Patch(':issueId')

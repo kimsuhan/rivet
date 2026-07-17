@@ -4,7 +4,7 @@ import {
   CSV_IMPORT_MAX_ROWS,
   isFormulaCell,
   parseCsvImportFile,
-} from './csv-import-parser';
+} from './csv-import.parser';
 
 function file(
   contents: Buffer | string,

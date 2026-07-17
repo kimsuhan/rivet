@@ -4,6 +4,8 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { ProjectRole, ProjectStatus } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
+import { ProjectRepository } from './project.repository';
+import { ProjectQueryService } from './project-query.service';
 import { ProjectsService } from './projects.service';
 
 describe('ProjectsService', () => {
@@ -74,6 +76,7 @@ describe('ProjectsService', () => {
     },
   };
   let moduleRef: TestingModule;
+  let queries: ProjectQueryService;
   let service: ProjectsService;
 
   beforeEach(async () => {
@@ -94,8 +97,14 @@ describe('ProjectsService', () => {
     transaction.outboxEvent.create.mockResolvedValue({ id: 'outbox-id' });
 
     moduleRef = await Test.createTestingModule({
-      providers: [ProjectsService, { provide: DatabaseService, useValue: database }],
+      providers: [
+        ProjectQueryService,
+        ProjectRepository,
+        ProjectsService,
+        { provide: DatabaseService, useValue: database },
+      ],
     }).compile();
+    queries = moduleRef.get(ProjectQueryService);
     service = moduleRef.get(ProjectsService);
   });
 
@@ -125,7 +134,7 @@ describe('ProjectsService', () => {
       { completed: 0n, projectId: secondProjectId, total: 0n },
     ]);
 
-    const result = await service.list(context.workspaceId, { includeArchived: false, limit: 2 });
+    const result = await queries.list(context.workspaceId, { includeArchived: false, limit: 2 });
 
     expect(result.items).toHaveLength(2);
     expect(result.items[0]?.progress).toEqual({ completed: 2, percentage: 67, total: 3 });
@@ -141,7 +150,7 @@ describe('ProjectsService', () => {
     if (!result.nextCursor) throw new Error('다음 페이지 커서가 필요합니다.');
     database.client.project.findMany.mockResolvedValue([]);
     database.client.$queryRaw.mockResolvedValue([]);
-    await service.list(context.workspaceId, {
+    await queries.list(context.workspaceId, {
       cursor: result.nextCursor,
       includeArchived: true,
       limit: 2,
@@ -173,7 +182,7 @@ describe('ProjectsService', () => {
     ]);
     database.client.$queryRaw.mockResolvedValue([]);
 
-    const first = await service.list(context.workspaceId, {
+    const first = await queries.list(context.workspaceId, {
       includeArchived: false,
       limit: 2,
       sort: 'targetDate',
@@ -182,7 +191,7 @@ describe('ProjectsService', () => {
     if (!first.nextCursor) throw new Error('다음 페이지 커서가 필요합니다.');
 
     database.client.project.findMany.mockResolvedValue([]);
-    await service.list(context.workspaceId, {
+    await queries.list(context.workspaceId, {
       cursor: first.nextCursor,
       includeArchived: false,
       limit: 2,

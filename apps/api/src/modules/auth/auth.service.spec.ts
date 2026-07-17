@@ -11,10 +11,12 @@ import {
 import { DatabaseService } from '../../common/database/database.service';
 import { apiConfig } from '../../config/api.config';
 import { AuthService } from './auth.service';
+import { AuthAccountTokenService } from './auth-account-token.service';
+import { AuthProfileService } from './auth-profile.service';
 import { AUTH_RATE_LIMITS, AuthRateLimitService } from './auth-rate-limit.service';
 import { type AuthSessionContext, AuthSessionService } from './auth-session.service';
-import { createCsrfToken, createOneTimeToken } from './auth-token';
-import { hashPassword } from './password';
+import { createCsrfToken, createOneTimeToken } from './auth-token.crypto';
+import { hashPassword } from './password.crypto';
 
 const config: ConfigType<typeof apiConfig> = {
   database: {
@@ -90,6 +92,8 @@ describe('AuthService', () => {
     resolve: jest.fn(),
     revoke: jest.fn(),
   };
+  let accountTokens: AuthAccountTokenService;
+  let profile: AuthProfileService;
   let service: AuthService;
 
   beforeEach(() => {
@@ -121,17 +125,24 @@ describe('AuthService', () => {
     sessions.resolve.mockResolvedValue(sessionContext);
     sessions.revoke.mockResolvedValue(undefined);
 
+    accountTokens = new AuthAccountTokenService(
+      { client } as unknown as DatabaseService,
+      rateLimits as unknown as AuthRateLimitService,
+      config,
+    );
     service = new AuthService(
+      accountTokens,
       { client } as unknown as DatabaseService,
       rateLimits as unknown as AuthRateLimitService,
       sessions as unknown as AuthSessionService,
       config,
     );
+    profile = new AuthProfileService({ client } as unknown as DatabaseService);
   });
 
   it('normalizes and updates the current user display name', async () => {
     await expect(
-      service.updateMe(sessionContext, { displayName: '  바뀐 사용자  ' }),
+      profile.update(sessionContext, { displayName: '  바뀐 사용자  ' }),
     ).resolves.toEqual({
       avatarFileId: null,
       displayName: '바뀐 사용자',
@@ -146,7 +157,7 @@ describe('AuthService', () => {
   });
 
   it('rejects an invalid current user display name without updating the account', async () => {
-    await expect(service.updateMe(sessionContext, { displayName: '   ' })).rejects.toMatchObject({
+    await expect(profile.update(sessionContext, { displayName: '   ' })).rejects.toMatchObject({
       response: expect.objectContaining({
         code: 'VALIDATION_ERROR',
         fieldErrors: { displayName: ['표시 이름을 확인해 주세요.'] },
@@ -214,7 +225,7 @@ describe('AuthService', () => {
     ]);
 
     await expect(
-      service.resendEmailVerification({ email: 'User@Example.com' }, '127.0.0.1'),
+      accountTokens.resendEmailVerification({ email: 'User@Example.com' }, '127.0.0.1'),
     ).resolves.toEqual({
       accepted: true,
       emailMasked: 'Us***@Example.com',
@@ -320,7 +331,7 @@ describe('AuthService', () => {
       },
     ]);
 
-    await expect(service.verifyEmail({ token: token.token }, '127.0.0.1')).resolves.toEqual({
+    await expect(accountTokens.verifyEmail({ token: token.token }, '127.0.0.1')).resolves.toEqual({
       verified: true,
     });
 
@@ -350,7 +361,9 @@ describe('AuthService', () => {
       },
     ]);
 
-    await expect(service.verifyEmail({ token: token.token }, '127.0.0.1')).rejects.toMatchObject({
+    await expect(
+      accountTokens.verifyEmail({ token: token.token }, '127.0.0.1'),
+    ).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'TOKEN_ALREADY_USED' }),
       status: HttpStatus.CONFLICT,
     });
@@ -367,7 +380,7 @@ describe('AuthService', () => {
 
     for (const submittedToken of [`${encodedId}.changed-mac`, `${encodedId}.another-mac`]) {
       await expect(
-        service.verifyEmail({ token: submittedToken }, '127.0.0.1'),
+        accountTokens.verifyEmail({ token: submittedToken }, '127.0.0.1'),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'TOKEN_INVALID' }),
       });
@@ -469,7 +482,7 @@ describe('AuthService', () => {
     ]);
 
     await expect(
-      service.requestPasswordReset({ email: 'User@Example.com' }, '127.0.0.1'),
+      accountTokens.requestPasswordReset({ email: 'User@Example.com' }, '127.0.0.1'),
     ).resolves.toBeUndefined();
     expect(transaction.$executeRaw.mock.calls.flat()).toContain(AUTH_PASSWORD_RESET_REQUESTED);
   });
@@ -493,7 +506,7 @@ describe('AuthService', () => {
     ]);
 
     await expect(
-      service.confirmPasswordReset(
+      accountTokens.confirmPasswordReset(
         { password: 'a new sufficiently long phrase', token: token.token },
         '127.0.0.1',
       ),
@@ -537,7 +550,7 @@ describe('AuthService', () => {
       ]);
 
       await expect(
-        service.confirmPasswordReset({ password: 'short', token: token.token }, '127.0.0.1'),
+        accountTokens.confirmPasswordReset({ password: 'short', token: token.token }, '127.0.0.1'),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code }),
         status,

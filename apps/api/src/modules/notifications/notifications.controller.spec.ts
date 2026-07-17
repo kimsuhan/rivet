@@ -1,5 +1,5 @@
 import type { ObservabilityService } from '../../common/observability/observability.service';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { NotificationsController } from './notifications.controller';
 import type { NotificationsService } from './notifications.service';
 import type { WebPushSubscriptionsService } from './web-push-subscriptions.service';

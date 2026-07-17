@@ -3,7 +3,7 @@ import { createParamDecorator, type ExecutionContext } from '@nestjs/common';
 import type {
   AuthenticatedRequestContext,
   RequestWithAuthentication,
-} from './authenticated-request';
+} from './authentication.context';
 
 export const CurrentAuthentication = createParamDecorator(
   (_data: unknown, context: ExecutionContext): AuthenticatedRequestContext => {

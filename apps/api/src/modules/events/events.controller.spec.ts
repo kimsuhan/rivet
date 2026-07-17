@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import type { Request, Response } from 'express';
 
 import { ApiError } from '../../common/errors/api-error';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { EventsController } from './events.controller';
 import type { EventsService, EventStreamConnection } from './events.service';
 

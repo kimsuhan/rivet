@@ -12,7 +12,7 @@ import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
 import { DatabaseService } from '../src/common/database/database.service';
 import { AuthSessionService } from '../src/modules/auth/auth-session.service';
-import { createCsrfToken } from '../src/modules/auth/auth-token';
+import { createCsrfToken } from '../src/modules/auth/auth-token.crypto';
 import { FilesService } from '../src/modules/files/files.service';
 
 const WEB_ORIGIN = 'http://localhost:3000';

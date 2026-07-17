@@ -1,5 +1,5 @@
 import type { ObservabilityService } from '../../common/observability/observability.service';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { SearchController } from './search.controller';
 import type { SearchService } from './search.service';
 

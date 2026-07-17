@@ -4,7 +4,9 @@ import type { Request, Response } from 'express';
 import { apiConfig } from '../../config/api.config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import type { AuthenticatedRequestContext } from './authenticated-request';
+import { AuthAccountTokenService } from './auth-account-token.service';
+import { AuthProfileService } from './auth-profile.service';
+import type { AuthenticatedRequestContext } from './authentication.context';
 
 const config: ConfigType<typeof apiConfig> = {
   database: {
@@ -41,15 +43,16 @@ describe('AuthController', () => {
     },
     workspace: null,
   };
-  const auth = {
+  const accountTokens = {
     confirmPasswordReset: jest.fn(),
-    getMe: jest.fn(),
+  };
+  const auth = {
     getSession: jest.fn(),
     login: jest.fn(),
     logout: jest.fn(),
     signUp: jest.fn(),
-    updateMe: jest.fn(),
   };
+  const profile = { get: jest.fn(), update: jest.fn() };
   const request = {
     headers: {},
     ip: '127.0.0.1',
@@ -59,7 +62,12 @@ describe('AuthController', () => {
     clearCookie: jest.fn(),
     cookie: jest.fn(),
   } as unknown as Response;
-  const controller = new AuthController(auth as unknown as AuthService, config);
+  const controller = new AuthController(
+    accountTokens as unknown as AuthAccountTokenService,
+    auth as unknown as AuthService,
+    profile as unknown as AuthProfileService,
+    config,
+  );
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -147,16 +155,16 @@ describe('AuthController', () => {
       sessionToken: 'session-token',
     } as AuthenticatedRequestContext;
     const updatedUser = { ...authenticatedResponse.user, displayName: '새 이름' };
-    auth.updateMe.mockResolvedValue(updatedUser);
+    profile.update.mockResolvedValue(updatedUser);
 
     await expect(controller.updateMe(authentication, { displayName: '새 이름' })).resolves.toBe(
       updatedUser,
     );
-    expect(auth.updateMe).toHaveBeenCalledWith(authentication.session, { displayName: '새 이름' });
+    expect(profile.update).toHaveBeenCalledWith(authentication.session, { displayName: '새 이름' });
   });
 
   it('clears any existing session cookie only after a successful password reset', async () => {
-    auth.confirmPasswordReset.mockResolvedValue({ reset: true });
+    accountTokens.confirmPasswordReset.mockResolvedValue({ reset: true });
 
     await expect(
       controller.confirmPasswordReset(

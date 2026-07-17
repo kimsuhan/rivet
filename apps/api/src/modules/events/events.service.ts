@@ -15,7 +15,7 @@ import {
   parseResourceChangedSignal,
   type ResourceChangedSignal,
   serializeResourceChangedEvent,
-} from './resource-changed-signal';
+} from './resource-changed.signal';
 
 const CHANNEL = 'rivet_resource_changed_v1';
 const HEARTBEAT_INTERVAL_MS = 20_000;

@@ -101,3 +101,9 @@ export function normalizePasswordForVerification(password: string): string {
 
   return normalizedPassword;
 }
+
+export function maskEmail(email: string): string {
+  const separator = email.lastIndexOf('@');
+  const localPart = email.slice(0, separator);
+  return `${localPart.slice(0, Math.min(2, localPart.length))}***${email.slice(separator)}`;
+}

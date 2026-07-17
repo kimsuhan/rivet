@@ -33,10 +33,11 @@ import { ApiError } from '../../common/errors/api-error';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { ALLOW_MULTIPART } from '../../common/guards/json-body.guard';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
+import { CSV_IMPORT_MAX_BYTES, type CsvImportUpload } from './csv-import.parser';
 import { CsvImportService } from './csv-import.service';
-import { CSV_IMPORT_MAX_BYTES, type CsvImportUpload } from './csv-import-parser';
+import { CsvImportQueryService } from './csv-import-query.service';
 import {
   CsvImportRunListQueryDto,
   ExecuteCsvImportDto,
@@ -85,7 +86,10 @@ function adminContext(authentication: AuthenticatedRequestContext): {
 @UseGuards(AdminGuard)
 @Controller('imports/csv')
 export class CsvImportController {
-  constructor(private readonly imports: CsvImportService) {}
+  constructor(
+    private readonly imports: CsvImportService,
+    private readonly queries: CsvImportQueryService,
+  ) {}
 
   @Get('mapping-options')
   @Header('Cache-Control', 'private, no-store')
@@ -211,7 +215,7 @@ export class CsvImportController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Query() query: CsvImportRunListQueryDto,
   ): Promise<CsvImportRunListResponseDto> {
-    return this.imports.listRuns(adminContext(authentication), query);
+    return this.queries.listRuns(adminContext(authentication), query);
   }
 
   @Get('runs/:executionId')
@@ -224,6 +228,6 @@ export class CsvImportController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('executionId', new ParseUUIDPipe({ version: '4' })) executionId: string,
   ): Promise<CsvImportRunResponseDto> {
-    return this.imports.getRun(adminContext(authentication), executionId);
+    return this.queries.getRun(adminContext(authentication), executionId);
   }
 }

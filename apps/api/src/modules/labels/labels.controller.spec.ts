@@ -3,7 +3,7 @@ import { GUARDS_METADATA, HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { Test, type TestingModule } from '@nestjs/testing';
 
 import { AdminGuard } from '../../common/guards/admin.guard';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { LabelsController } from './labels.controller';
 import { LabelsService } from './labels.service';
 

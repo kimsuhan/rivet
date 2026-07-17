@@ -43,7 +43,7 @@ import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto'
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { apiConfig } from '../../config/api.config';
 import { AuthSessionService } from '../auth/auth-session.service';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import { PublicEndpoint } from '../auth/public.decorator';
 import {
@@ -57,6 +57,8 @@ import {
   InvitationResponseDto,
   InvitationTokenDto,
 } from './dto/invitation.dto';
+import { InvitationContinuationService } from './invitation-continuation.service';
+import { InvitationQueryService } from './invitation-query.service';
 import { InvitationsService } from './invitations.service';
 
 function clientIp(request: Request): string {
@@ -67,7 +69,7 @@ function clientIp(request: Request): string {
 @Controller('auth/invitations')
 export class InvitationAuthController {
   constructor(
-    private readonly invitations: InvitationsService,
+    private readonly continuations: InvitationContinuationService,
     private readonly sessions: AuthSessionService,
     @Inject(apiConfig.KEY) private readonly config: ConfigType<typeof apiConfig>,
   ) {}
@@ -102,7 +104,7 @@ export class InvitationAuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<InvitationPreviewResponseDto> {
-    const result = await this.invitations.startContinuation(
+    const result = await this.continuations.startContinuation(
       dto.token,
       readInvitationContinuationCookie(request, this.config),
       clientIp(request),
@@ -130,7 +132,7 @@ export class InvitationAuthController {
   })
   @ApiUnprocessableEntityResponse({ description: 'TOKEN_INVALID', type: ApiErrorResponseDto })
   async getContinuation(@Req() request: Request): Promise<InvitationContinuationResponseDto> {
-    return this.invitations.getContinuation(
+    return this.continuations.getContinuation(
       readInvitationContinuationCookie(request, this.config),
       await this.optionalUserId(request),
     );
@@ -145,7 +147,7 @@ export class InvitationAuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
-    await this.invitations.dismissContinuation(
+    await this.continuations.dismissContinuation(
       readInvitationContinuationCookie(request, this.config),
       await this.optionalUserId(request),
     );
@@ -200,7 +202,7 @@ export class InvitationAuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AcceptInvitationResponseDto> {
-    const result = await this.invitations.accept(
+    const result = await this.continuations.accept(
       authentication.session.user.id,
       readInvitationContinuationCookie(request, this.config),
     );
@@ -223,7 +225,10 @@ export class InvitationAuthController {
 @UseGuards(AdminGuard)
 @Controller('invitations')
 export class InvitationsController {
-  constructor(private readonly invitations: InvitationsService) {}
+  constructor(
+    private readonly invitationQueries: InvitationQueryService,
+    private readonly invitations: InvitationsService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: '워크스페이스 초대 목록' })
@@ -239,7 +244,7 @@ export class InvitationsController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Query() query: InvitationListQueryDto,
   ): Promise<InvitationListResponseDto> {
-    return this.invitations.list(authentication.session.workspace!.id, query);
+    return this.invitationQueries.list(authentication.session.workspace!.id, query);
   }
 
   @Post()

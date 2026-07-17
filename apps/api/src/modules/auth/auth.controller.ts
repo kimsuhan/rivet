@@ -35,7 +35,9 @@ import {
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
 import { apiConfig } from '../../config/api.config';
 import { AuthService } from './auth.service';
-import type { AuthenticatedRequestContext } from './authenticated-request';
+import { AuthAccountTokenService } from './auth-account-token.service';
+import { AuthProfileService } from './auth-profile.service';
+import type { AuthenticatedRequestContext } from './authentication.context';
 import { CurrentAuthentication } from './current-authentication.decorator';
 import {
   AcceptedAuthRequestDto,
@@ -94,7 +96,9 @@ function ApiPublicMutationErrors(
 @Controller()
 export class AuthController {
   constructor(
+    private readonly accountTokens: AuthAccountTokenService,
     private readonly auth: AuthService,
+    private readonly profile: AuthProfileService,
     @Inject(apiConfig.KEY) private readonly config: ConfigType<typeof apiConfig>,
   ) {}
 
@@ -133,7 +137,7 @@ export class AuthController {
   @ApiResponse({ description: '토큰이 만료됨', status: HttpStatus.GONE, type: ApiErrorResponseDto })
   @ApiPublicMutationErrors()
   verifyEmail(@Body() dto: TokenDto, @Req() request: Request): Promise<VerifiedEmailDto> {
-    return this.auth.verifyEmail(dto, clientIp(request));
+    return this.accountTokens.verifyEmail(dto, clientIp(request));
   }
 
   @PublicEndpoint()
@@ -147,7 +151,7 @@ export class AuthController {
     @Body() dto: EmailDto,
     @Req() request: Request,
   ): Promise<AcceptedAuthRequestDto> {
-    return this.auth.resendEmailVerification(dto, clientIp(request));
+    return this.accountTokens.resendEmailVerification(dto, clientIp(request));
   }
 
   @PublicEndpoint()
@@ -229,7 +233,7 @@ export class AuthController {
   @ApiNoContentResponse()
   @ApiPublicMutationErrors()
   requestPasswordReset(@Body() dto: EmailDto, @Req() request: Request): Promise<void> {
-    return this.auth.requestPasswordReset(dto, clientIp(request));
+    return this.accountTokens.requestPasswordReset(dto, clientIp(request));
   }
 
   @PublicEndpoint()
@@ -251,7 +255,7 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<ResetPasswordDto> {
-    const result = await this.auth.confirmPasswordReset(dto, clientIp(request));
+    const result = await this.accountTokens.confirmPasswordReset(dto, clientIp(request));
     clearSessionCookie(response, this.config);
     return result;
   }
@@ -272,7 +276,7 @@ export class AuthController {
     type: ApiErrorResponseDto,
   })
   getMe(@CurrentAuthentication() authentication: AuthenticatedRequestContext): SessionUserDto {
-    return this.auth.getMe(authentication.session);
+    return this.profile.get(authentication.session);
   }
 
   @Patch('me')
@@ -289,6 +293,6 @@ export class AuthController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Body() dto: UpdateProfileDto,
   ): Promise<SessionUserDto> {
-    return this.auth.updateMe(authentication.session, dto);
+    return this.profile.update(authentication.session, dto);
   }
 }
