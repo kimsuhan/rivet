@@ -5,7 +5,7 @@ import { Reflector } from '@nestjs/core';
 import { apiConfig } from '../../config/api.config';
 import type { AuthSessionContext } from './auth-session.service';
 import { AuthSessionService } from './auth-session.service';
-import type { RequestWithAuthentication } from './authenticated-request';
+import type { RequestWithAuthentication } from './authentication.context';
 import { SessionAuthGuard } from './session-auth.guard';
 
 const config: ConfigType<typeof apiConfig> = {

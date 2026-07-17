@@ -13,7 +13,7 @@ import {
   AuthRateLimitService,
 } from '../src/modules/auth/auth-rate-limit.service';
 import { AuthSessionService } from '../src/modules/auth/auth-session.service';
-import { createCsrfToken } from '../src/modules/auth/auth-token';
+import { createCsrfToken } from '../src/modules/auth/auth-token.crypto';
 
 const WEB_ORIGIN = 'http://localhost:3000';
 const CSRF_HMAC_KEY = 'test-csrf-hmac-key-with-at-least-32-bytes';

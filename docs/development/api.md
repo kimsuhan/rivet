@@ -45,11 +45,32 @@ modules/issues/
 │   └── update-issue.dto.ts
 ├── domain/
 │   └── issue-transition.ts
+├── issue-input.policy.ts
+├── issue-list.cursor.ts
+├── issue-response.mapper.ts
 ├── issues.controller.ts
 ├── issues.module.ts
 ├── issues.service.ts
 └── issues.repository.ts   # 복잡하거나 재사용되는 Prisma 쿼리가 있을 때만
 ```
+
+모듈 루트의 TypeScript 파일은 `<대상>.<역할>.ts`로 이름을 짓는다. 파일명은 구현 세부가 아니라 아래 책임 중 하나를 드러내야 한다.
+
+| 역할 접미사 | 사용하는 경우 |
+| --- | --- |
+| `controller`, `module`, `service` | NestJS HTTP 경계, 모듈 조립과 사용 사례 provider |
+| `repository` | 복잡하거나 재사용되는 조회, 잠금과 데이터 접근 |
+| `mapper` | Prisma 조회 결과를 응답 DTO나 명시적 내부 모델로 변환 |
+| `policy`, `parser`, `cursor` | 순수 입력 규칙, 외부 형식 해석과 페이지 커서 계약 |
+| `guard`, `interceptor`, `decorator` | NestJS 요청 생명주기 확장 |
+| `context`, `signal`, `errors`, `crypto` | 요청 문맥, 프로세스 신호, 오류 생성과 암호화 경계 |
+
+- 모듈 루트에 `password.ts`, `helper.ts`, `utils.ts`, `types.ts`처럼 책임을 알 수 없는 파일을 만들지 않는다.
+- `helper`, `helpers`, `util`, `utils`, `type`, `types`, `interface`, `interfaces`, `__test__`, `__tests__` 폴더를 만들지 않는다.
+- 요청·응답 계약은 `dto/*.dto.ts`, 프레임워크와 데이터베이스에 의존하지 않는 도메인 규칙은 `domain/`에 둔다.
+- 특정 정책·Mapper·Repository에만 필요한 type과 interface는 소유 파일 가까이에 선언한다. 여러 계층이 공유하고 독립적인 의미가 있을 때만 `context` 같은 구체적 역할 파일로 승격한다.
+- 단위 `*.spec.ts`는 대상 소스 옆에 두고, 실제 HTTP·PostgreSQL 경계를 검증하는 통합·E2E spec만 `apps/api/test`에 둔다.
+- 모듈 루트의 역할 접미사와 금지 폴더는 `pnpm api:structure:check`로 검사한다.
 
 - `common`에는 요청 컨텍스트, 공통 guard·filter·logging처럼 실제 횡단 관심사만 둔다.
 - 제품 규칙, 도메인 enum과 기능별 helper를 `common`으로 올리지 않는다.
@@ -74,6 +95,9 @@ modules/issues/
 - 같은 워크스페이스 조건이 반복되거나 쿼리가 복잡·재사용될 때만 구체적인 repository를 만든다.
 - 제네릭 CRUD repository, service locator와 하나의 구현체만 있는 DI interface를 만들지 않는다.
 - provider는 constructor injection을 사용하고 의존성을 숨겨 조회하지 않는다.
+- 하나의 Service가 목록 필터·커서, 복잡한 Prisma 조회·잠금, 응답 변환과 변경 트랜잭션을 함께 소유하면 읽기 사용 사례와 데이터 접근을 먼저 분리한다.
+- 행 수만으로 Service를 쪼개지 않는다. 트랜잭션을 함께 바꿔야 하는 명령 흐름은 하나의 Service에 유지하고, 독립적으로 테스트·재사용할 수 있는 조회·변환·순수 규칙만 분리한다.
+- Repository는 숨은 트랜잭션을 열지 않는다. 여러 데이터 접근이 같은 트랜잭션에 참여하면 Service가 연 트랜잭션 client를 명시적으로 전달한다.
 
 ## 3. 요청과 DTO
 
@@ -112,14 +136,20 @@ modules/issues/
 - Prisma·Resend·파일시스템의 원본 오류와 stack을 응답에 노출하지 않는다.
 - 예상하지 못한 오류는 전역 filter 한 곳에서 정제하고 한 번만 기록한다.
 
-## 6. OpenAPI
+## 6. 설명 주석
+
+- 함수 이름과 타입으로 드러나는 동작을 한 줄 주석이나 JSDoc으로 반복하지 않는다.
+- 잠금 순서, 권한·workspace 격리 이유, 외부 계약의 제약, 의도적인 성능 절충처럼 코드만으로 알기 어려운 이유를 설명한다.
+- 주석이 없으면 이해할 수 없는 긴 흐름은 먼저 책임 분리와 이름 개선을 검토한다.
+
+## 7. OpenAPI
 
 - NestJS 요청·응답 DTO를 기준으로 OpenAPI를 생성한다.
 - 엔드포인트에는 성공 응답과 주요 오류 응답 예시를 포함한다.
 - nullable, optional, enum과 판별 가능한 union을 실제 동작과 같게 표현한다.
 - 생성 클라이언트와 계약 파일은 [공통 개발 지침](./common.md)의 API 클라이언트 규칙을 따른다.
 
-## 7. 인증, 권한과 입력 보안
+## 8. 인증, 권한과 입력 보안
 
 - 인증과 활성 membership context를 controller 진입 전에 guard로 확정한다.
 - Admin 여부, 리소스 소유권과 팀 membership은 서버에서 검증한다.
@@ -132,7 +162,7 @@ modules/issues/
 - 인증·세션·일회용 토큰은 원문을 데이터베이스와 로그에 저장하지 않는다.
 - CSRF, Origin, 속도 제한과 보안 헤더를 우회하는 개발용 분기를 운영 build에 남기지 않는다.
 
-## 8. 환경 설정과 로그
+## 9. 환경 설정과 로그
 
 - `@nestjs/config`의 custom `validate()`에서 class-validator와 class-transformer로 환경 변수를 시작 시 한 번 검증한다.
 - API가 사용하는 환경 변수 클래스와 typed config만 소유하고 워커 설정을 합친 공통 환경 클래스를 만들지 않는다.

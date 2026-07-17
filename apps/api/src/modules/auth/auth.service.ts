@@ -1,65 +1,35 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
-
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 
 import { Prisma, TokenPurpose } from '@rivet/database';
-import {
-  ACCOUNT_EMAIL_SCHEMA_VERSION,
-  type AccountEmailEventType,
-  type AccountEmailOutboxPayload,
-  AUTH_EMAIL_VERIFICATION_REQUESTED,
-  AUTH_PASSWORD_RESET_REQUESTED,
-} from '@rivet/event-contracts';
+import { AUTH_EMAIL_VERIFICATION_REQUESTED } from '@rivet/event-contracts';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
 import { apiConfig } from '../../config/api.config';
+import { throwAuthInputError } from './auth.errors';
+import { AuthAccountTokenService } from './auth-account-token.service';
 import {
-  AuthInputValidationError,
+  maskEmail,
   normalizeDisplayName,
   normalizeEmail,
   normalizePasswordForVerification,
   validatePassword,
-} from './auth-input';
+} from './auth-input.policy';
 import { AUTH_RATE_LIMITS, AuthRateLimitService } from './auth-rate-limit.service';
 import { type AuthSessionContext, AuthSessionService } from './auth-session.service';
-import {
-  createCsrfToken,
-  createOneTimeToken,
-  getOneTimeTokenRateLimitKey,
-  hashOpaqueToken,
-  verifyOneTimeToken,
-} from './auth-token';
+import { createCsrfToken, hashOpaqueToken } from './auth-token.crypto';
 import type {
   AcceptedAuthRequestDto,
   AuthenticatedSessionDto,
-  ResetPasswordDto,
-  SessionUserDto,
   UnauthenticatedSessionDto,
-  VerifiedEmailDto,
 } from './dto/auth-response.dto';
-import type { EmailDto } from './dto/email.dto';
 import type { LoginDto } from './dto/login.dto';
-import type { UpdateProfileDto } from './dto/profile.dto';
 import type { SignUpDto } from './dto/sign-up.dto';
-import type { ConfirmPasswordResetDto, TokenDto } from './dto/token.dto';
-import { hashPassword, passwordHashNeedsRehash, verifyPassword } from './password';
+import { hashPassword, passwordHashNeedsRehash, verifyPassword } from './password.crypto';
 
 const DUMMY_PASSWORD_HASH =
   '$argon2id$v=19$m=19456,t=2,p=1$u5oksZN2qlFVAyszxdWrug$xmy/xfzl6zj7sfdlIBgb2F6zHrOnBcsxDzJEO7QyG0A';
-
-type TokenUseOutcome = 'EXPIRED' | 'INVALID' | 'SUCCESS' | 'USED';
-
-type LockedPasswordResetToken = {
-  isExpired: boolean;
-  normalizedEmail: string;
-  purpose: TokenPurpose;
-  revokedAt: Date | null;
-  tokenHash: Uint8Array;
-  usedAt: Date | null;
-  userId: string;
-};
 
 function isNormalizedEmailConflict(error: Prisma.PrismaClientKnownRequestError): boolean {
   const target = error.meta?.target;
@@ -77,6 +47,7 @@ function isNormalizedEmailConflict(error: Prisma.PrismaClientKnownRequestError):
 @Injectable()
 export class AuthService {
   constructor(
+    private readonly accountTokens: AuthAccountTokenService,
     private readonly database: DatabaseService,
     private readonly rateLimits: AuthRateLimitService,
     private readonly sessions: AuthSessionService,
@@ -123,13 +94,7 @@ export class AuthService {
             if (hasInvitationProof && !existingUser.emailVerifiedAt) {
               await this.verifyEmailFromInvitation(transaction, existingUser.id);
             } else if (!existingUser.emailVerifiedAt) {
-              await this.issueAccountEmail(
-                transaction,
-                existingUser.id,
-                TokenPurpose.EMAIL_VERIFICATION,
-                AUTH_EMAIL_VERIFICATION_REQUESTED,
-                24 * 60 * 60,
-              );
+              await this.accountTokens.issueEmailVerification(transaction, existingUser.id);
             }
             return hasInvitationProof;
           }
@@ -153,13 +118,7 @@ export class AuthService {
           if (hasInvitationProof) {
             await this.verifyEmailFromInvitation(transaction, user.id);
           } else {
-            await this.issueAccountEmail(
-              transaction,
-              user.id,
-              TokenPurpose.EMAIL_VERIFICATION,
-              AUTH_EMAIL_VERIFICATION_REQUESTED,
-              24 * 60 * 60,
-            );
+            await this.accountTokens.issueEmailVerification(transaction, user.id);
           }
           return hasInvitationProof;
         },
@@ -199,111 +158,7 @@ export class AuthService {
       nextStep = invitationVerifiedEmail ? 'LOGIN' : 'VERIFY_EMAIL';
     }
 
-    return { accepted: true, emailMasked: this.maskEmail(email), nextStep };
-  }
-
-  async verifyEmail(dto: TokenDto, clientIp: string): Promise<VerifiedEmailDto> {
-    await this.assertTokenLimits(dto.token, clientIp);
-    const parsed = verifyOneTimeToken(
-      dto.token,
-      'EMAIL_VERIFICATION',
-      this.config.security.oneTimeTokenHmacKey,
-    );
-
-    if (!parsed) {
-      return this.rejectToken('INVALID', dto.token, clientIp);
-    }
-
-    const outcome = await this.database.client.$transaction(async (transaction) => {
-      const [token] = await transaction.$queryRaw<
-        Array<{
-          isExpired: boolean;
-          purpose: TokenPurpose;
-          revokedAt: Date | null;
-          tokenHash: Uint8Array;
-          usedAt: Date | null;
-          userId: string;
-        }>
-      >`
-        SELECT token."token_hash" AS "tokenHash",
-               token."purpose",
-               token."user_id" AS "userId",
-               token."used_at" AS "usedAt",
-               token."revoked_at" AS "revokedAt",
-               token."expires_at" <= NOW() AS "isExpired"
-        FROM "one_time_tokens" AS token
-        INNER JOIN "users" AS account ON account."id" = token."user_id"
-        WHERE token."id" = ${parsed.tokenId}::uuid
-        FOR UPDATE OF token, account
-      `;
-
-      const status = this.tokenStatus(token, parsed.tokenHash, TokenPurpose.EMAIL_VERIFICATION);
-      if (status !== 'SUCCESS' || !token) {
-        return status;
-      }
-
-      await transaction.$executeRaw`
-        UPDATE "one_time_tokens"
-        SET "used_at" = NOW()
-        WHERE "id" = ${parsed.tokenId}::uuid
-      `;
-      await transaction.$executeRaw`
-        UPDATE "users"
-        SET "email_verified_at" = COALESCE("email_verified_at", NOW()),
-            "updated_at" = NOW()
-        WHERE "id" = ${token.userId}::uuid
-      `;
-      await this.revokeOtherTokensAndOutbox(
-        transaction,
-        token.userId,
-        parsed.tokenId,
-        TokenPurpose.EMAIL_VERIFICATION,
-        AUTH_EMAIL_VERIFICATION_REQUESTED,
-      );
-      return 'SUCCESS' as const;
-    });
-
-    if (outcome !== 'SUCCESS') {
-      return this.rejectToken(outcome, dto.token, clientIp);
-    }
-
-    return { verified: true };
-  }
-
-  async resendEmailVerification(dto: EmailDto, clientIp: string): Promise<AcceptedAuthRequestDto> {
-    const email = dto.email.trim();
-    const normalizedEmail = this.normalizeEmail(dto.email);
-
-    await Promise.all([
-      this.rateLimits.consume(AUTH_RATE_LIMITS.emailVerificationIp, clientIp),
-      this.rateLimits.consume(AUTH_RATE_LIMITS.emailVerificationEmail, normalizedEmail),
-    ]);
-    await this.database.client.$transaction(async (transaction) => {
-      const [user] = await transaction.$queryRaw<
-        Array<{ emailVerifiedAt: Date | null; id: string }>
-      >`
-        SELECT "id", "email_verified_at" AS "emailVerifiedAt"
-        FROM "users"
-        WHERE "normalized_email" = ${normalizedEmail}
-        FOR UPDATE
-      `;
-
-      if (user && !user.emailVerifiedAt) {
-        await this.issueAccountEmail(
-          transaction,
-          user.id,
-          TokenPurpose.EMAIL_VERIFICATION,
-          AUTH_EMAIL_VERIFICATION_REQUESTED,
-          24 * 60 * 60,
-        );
-      }
-    });
-
-    return {
-      accepted: true,
-      emailMasked: this.maskEmail(email),
-      nextStep: 'VERIFY_EMAIL',
-    };
+    return { accepted: true, emailMasked: maskEmail(email), nextStep };
   }
 
   async login(
@@ -422,239 +277,6 @@ export class AuthService {
     return this.toAuthenticatedSession(session, sessionToken, invitationContinuationToken);
   }
 
-  async requestPasswordReset(dto: EmailDto, clientIp: string): Promise<void> {
-    const email = this.normalizeEmail(dto.email);
-
-    await Promise.all([
-      this.rateLimits.consume(AUTH_RATE_LIMITS.passwordResetIp, clientIp),
-      this.rateLimits.consume(AUTH_RATE_LIMITS.passwordResetEmail, email),
-    ]);
-    await this.database.client.$transaction(async (transaction) => {
-      const [user] = await transaction.$queryRaw<
-        Array<{ emailVerifiedAt: Date | null; id: string }>
-      >`
-        SELECT "id", "email_verified_at" AS "emailVerifiedAt"
-        FROM "users"
-        WHERE "normalized_email" = ${email}
-        FOR UPDATE
-      `;
-
-      if (user?.emailVerifiedAt) {
-        await this.issueAccountEmail(
-          transaction,
-          user.id,
-          TokenPurpose.PASSWORD_RESET,
-          AUTH_PASSWORD_RESET_REQUESTED,
-          30 * 60,
-        );
-      }
-    });
-  }
-
-  async confirmPasswordReset(
-    dto: ConfirmPasswordResetDto,
-    clientIp: string,
-  ): Promise<ResetPasswordDto> {
-    await this.assertTokenLimits(dto.token, clientIp);
-    const parsed = verifyOneTimeToken(
-      dto.token,
-      'PASSWORD_RESET',
-      this.config.security.oneTimeTokenHmacKey,
-    );
-
-    if (!parsed) {
-      return this.rejectToken('INVALID', dto.token, clientIp);
-    }
-
-    const preflight = await this.database.client.$transaction((transaction) =>
-      this.lockPasswordResetToken(transaction, parsed.tokenId, parsed.tokenHash),
-    );
-    if (preflight.status !== 'SUCCESS') {
-      return this.rejectToken(preflight.status, dto.token, clientIp);
-    }
-    if (!preflight.token) {
-      return this.rejectToken('INVALID', dto.token, clientIp);
-    }
-
-    const password = this.validatePassword(dto.password, preflight.token.normalizedEmail);
-    const passwordHash = await hashPassword(password);
-    const outcome = await this.database.client.$transaction(async (transaction) => {
-      const { status, token: lockedToken } = await this.lockPasswordResetToken(
-        transaction,
-        parsed.tokenId,
-        parsed.tokenHash,
-      );
-
-      if (status !== 'SUCCESS' || !lockedToken) {
-        return status;
-      }
-
-      await transaction.$executeRaw`
-        UPDATE "users"
-        SET "password_hash" = ${passwordHash},
-            "updated_at" = NOW()
-        WHERE "id" = ${lockedToken.userId}::uuid
-      `;
-      await transaction.$executeRaw`
-        UPDATE "one_time_tokens"
-        SET "used_at" = NOW()
-        WHERE "id" = ${parsed.tokenId}::uuid
-      `;
-      await transaction.$executeRaw`
-        UPDATE "sessions"
-        SET "revoked_at" = NOW()
-        WHERE "user_id" = ${lockedToken.userId}::uuid
-          AND "revoked_at" IS NULL
-      `;
-      await this.revokeOtherTokensAndOutbox(
-        transaction,
-        lockedToken.userId,
-        parsed.tokenId,
-        TokenPurpose.PASSWORD_RESET,
-        AUTH_PASSWORD_RESET_REQUESTED,
-      );
-      return 'SUCCESS' as const;
-    });
-
-    if (outcome !== 'SUCCESS') {
-      return this.rejectToken(outcome, dto.token, clientIp);
-    }
-
-    return { reset: true };
-  }
-
-  private async lockPasswordResetToken(
-    transaction: Prisma.TransactionClient,
-    tokenId: string,
-    tokenHash: Uint8Array,
-  ): Promise<{ status: TokenUseOutcome; token: LockedPasswordResetToken | undefined }> {
-    const [token] = await transaction.$queryRaw<Array<LockedPasswordResetToken>>`
-      SELECT token."token_hash" AS "tokenHash",
-             token."purpose",
-             token."user_id" AS "userId",
-             token."used_at" AS "usedAt",
-             token."revoked_at" AS "revokedAt",
-             token."expires_at" <= NOW() AS "isExpired",
-             account."normalized_email" AS "normalizedEmail"
-      FROM "one_time_tokens" AS token
-      INNER JOIN "users" AS account ON account."id" = token."user_id"
-      WHERE token."id" = ${tokenId}::uuid
-      FOR UPDATE OF token, account
-    `;
-
-    return {
-      status: this.tokenStatus(token, tokenHash, TokenPurpose.PASSWORD_RESET),
-      token,
-    };
-  }
-
-  getMe(session: AuthSessionContext): SessionUserDto {
-    return {
-      avatarFileId: session.user.avatarFileId,
-      displayName: session.user.displayName,
-      email: session.user.email,
-      id: session.user.id,
-    };
-  }
-
-  async updateMe(session: AuthSessionContext, dto: UpdateProfileDto): Promise<SessionUserDto> {
-    let displayName: string;
-    try {
-      displayName = normalizeDisplayName(dto.displayName);
-    } catch (error) {
-      return this.throwInputError(error);
-    }
-
-    return this.database.client.user.update({
-      data: { displayName },
-      select: { avatarFileId: true, displayName: true, email: true, id: true },
-      where: { id: session.user.id },
-    });
-  }
-
-  private async issueAccountEmail(
-    transaction: Prisma.TransactionClient,
-    userId: string,
-    purpose: TokenPurpose,
-    eventType: AccountEmailEventType,
-    lifetimeSeconds: number,
-  ): Promise<void> {
-    const token = createOneTimeToken(purpose, this.config.security.oneTimeTokenHmacKey);
-    const outboxEventId = randomUUID();
-    const payload = {
-      schemaVersion: ACCOUNT_EMAIL_SCHEMA_VERSION,
-      tokenId: token.tokenId,
-      userId,
-    } satisfies AccountEmailOutboxPayload;
-
-    await transaction.$executeRaw`
-      UPDATE "one_time_tokens"
-      SET "revoked_at" = NOW()
-      WHERE "user_id" = ${userId}::uuid
-        AND "purpose" = ${purpose}::"TokenPurpose"
-        AND "used_at" IS NULL
-        AND "revoked_at" IS NULL
-    `;
-    await transaction.$executeRaw`
-      UPDATE "outbox_events"
-      SET "canceled_at" = NOW()
-      WHERE "aggregate_type" = 'USER'
-        AND "aggregate_id" = ${userId}::uuid
-        AND "event_type" = ${eventType}
-        AND "processed_at" IS NULL
-        AND "canceled_at" IS NULL
-    `;
-    await transaction.$executeRaw`
-      INSERT INTO "one_time_tokens" (
-        "id", "purpose", "user_id", "token_hash", "expires_at"
-      ) VALUES (
-        ${token.tokenId}::uuid,
-        ${purpose}::"TokenPurpose",
-        ${userId}::uuid,
-        ${token.tokenHash},
-        NOW() + ${lifetimeSeconds} * INTERVAL '1 second'
-      )
-    `;
-    await transaction.$executeRaw`
-      INSERT INTO "outbox_events" (
-        "id", "event_type", "aggregate_type", "aggregate_id", "payload"
-      ) VALUES (
-        ${outboxEventId}::uuid,
-        ${eventType},
-        'USER',
-        ${userId}::uuid,
-        ${JSON.stringify(payload)}::jsonb
-      )
-    `;
-  }
-
-  private async revokeOtherTokensAndOutbox(
-    transaction: Prisma.TransactionClient,
-    userId: string,
-    usedTokenId: string,
-    purpose: TokenPurpose,
-    eventType: AccountEmailEventType,
-  ): Promise<void> {
-    await transaction.$executeRaw`
-      UPDATE "one_time_tokens"
-      SET "revoked_at" = NOW()
-      WHERE "user_id" = ${userId}::uuid
-        AND "purpose" = ${purpose}::"TokenPurpose"
-        AND "id" <> ${usedTokenId}::uuid
-        AND "used_at" IS NULL
-        AND "revoked_at" IS NULL
-    `;
-    await transaction.$executeRaw`
-      UPDATE "outbox_events"
-      SET "canceled_at" = NOW()
-      WHERE "aggregate_type" = 'USER'
-        AND "aggregate_id" = ${userId}::uuid
-        AND "event_type" = ${eventType}
-        AND "processed_at" IS NULL
-        AND "canceled_at" IS NULL
-    `;
-  }
-
   private async verifyEmailFromInvitation(
     transaction: Prisma.TransactionClient,
     userId: string,
@@ -720,7 +342,12 @@ export class AuthService {
           : hasTeam
             ? 'COMPLETE'
             : 'CREATE_TEAM',
-      user: this.getMe(session),
+      user: {
+        avatarFileId: session.user.avatarFileId,
+        displayName: session.user.displayName,
+        email: session.user.email,
+        id: session.user.id,
+      },
       workspace: session.workspace,
     };
   }
@@ -849,15 +476,7 @@ export class AuthService {
         password: validatePassword(dto.password, normalizedEmail),
       };
     } catch (error) {
-      return this.throwInputError(error);
-    }
-  }
-
-  private normalizeEmail(email: string): string {
-    try {
-      return normalizeEmail(email);
-    } catch (error) {
-      return this.throwInputError(error);
+      return throwAuthInputError(error);
     }
   }
 
@@ -865,120 +484,15 @@ export class AuthService {
     try {
       return normalizePasswordForVerification(password);
     } catch (error) {
-      return this.throwInputError(error);
+      return throwAuthInputError(error);
     }
   }
 
-  private validatePassword(password: string, email: string): string {
+  private normalizeEmail(email: string): string {
     try {
-      return validatePassword(password, email);
+      return normalizeEmail(email);
     } catch (error) {
-      return this.throwInputError(error);
+      return throwAuthInputError(error);
     }
-  }
-
-  private throwInputError(error: unknown): never {
-    if (!(error instanceof AuthInputValidationError)) {
-      throw error;
-    }
-
-    const messages = {
-      DISPLAY_NAME_INVALID: '표시 이름을 확인해 주세요.',
-      EMAIL_INVALID: '올바른 이메일 주소를 입력해 주세요.',
-      PASSWORD_INVALID: '사용할 수 없는 문자가 비밀번호에 포함되어 있습니다.',
-      PASSWORD_TOO_COMMON: '더 길고 예측하기 어려운 비밀번호를 사용해 주세요.',
-      PASSWORD_TOO_LONG: '비밀번호는 128자 이하여야 합니다.',
-      PASSWORD_TOO_SHORT: '비밀번호는 12자 이상이어야 합니다.',
-    } as const;
-
-    throw new ApiError({
-      code: 'VALIDATION_ERROR',
-      fieldErrors: { [error.field]: [messages[error.code]] },
-      message: '입력값을 확인해 주세요.',
-      status: HttpStatus.UNPROCESSABLE_ENTITY,
-    });
-  }
-
-  private async assertTokenLimits(token: string, clientIp: string): Promise<void> {
-    const tokenRateLimitKey = getOneTimeTokenRateLimitKey(token);
-
-    await Promise.all([
-      this.rateLimits.assertNotBlocked(AUTH_RATE_LIMITS.tokenIp, clientIp),
-      this.rateLimits.assertNotBlocked(AUTH_RATE_LIMITS.tokenValue, tokenRateLimitKey),
-    ]);
-  }
-
-  private async rejectToken(
-    outcome: Exclude<TokenUseOutcome, 'SUCCESS'>,
-    token: string,
-    clientIp: string,
-  ): Promise<never> {
-    const tokenRateLimitKey = getOneTimeTokenRateLimitKey(token);
-
-    await Promise.all([
-      this.rateLimits.consume(AUTH_RATE_LIMITS.tokenIp, clientIp),
-      this.rateLimits.consume(AUTH_RATE_LIMITS.tokenValue, tokenRateLimitKey),
-    ]);
-
-    if (outcome === 'EXPIRED') {
-      throw new ApiError({
-        code: 'TOKEN_EXPIRED',
-        message: '인증 링크가 만료되었습니다.',
-        status: HttpStatus.GONE,
-      });
-    }
-
-    if (outcome === 'USED') {
-      throw new ApiError({
-        code: 'TOKEN_ALREADY_USED',
-        message: '이미 사용한 인증 링크입니다.',
-        status: HttpStatus.CONFLICT,
-      });
-    }
-
-    throw new ApiError({
-      code: 'TOKEN_INVALID',
-      message: '인증 링크를 확인할 수 없습니다.',
-      status: HttpStatus.UNPROCESSABLE_ENTITY,
-    });
-  }
-
-  private tokenStatus(
-    token:
-      | {
-          isExpired: boolean;
-          purpose: TokenPurpose;
-          revokedAt: Date | null;
-          tokenHash: Uint8Array;
-          usedAt: Date | null;
-        }
-      | undefined,
-    expectedHash: Uint8Array,
-    purpose: TokenPurpose,
-  ): TokenUseOutcome {
-    if (
-      !token ||
-      token.purpose !== purpose ||
-      !this.tokenHashMatches(token.tokenHash, expectedHash)
-    ) {
-      return 'INVALID';
-    }
-    if (token.usedAt) {
-      return 'USED';
-    }
-    if (token.revokedAt) {
-      return 'INVALID';
-    }
-    return token.isExpired ? 'EXPIRED' : 'SUCCESS';
-  }
-
-  private tokenHashMatches(storedHash: Uint8Array, expectedHash: Uint8Array): boolean {
-    return storedHash.length === expectedHash.length && timingSafeEqual(storedHash, expectedHash);
-  }
-
-  private maskEmail(email: string): string {
-    const separator = email.lastIndexOf('@');
-    const localPart = email.slice(0, separator);
-    return `${localPart.slice(0, Math.min(2, localPart.length))}***${email.slice(separator)}`;
   }
 }

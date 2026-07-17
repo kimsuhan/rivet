@@ -10,8 +10,8 @@ import { Reflector } from '@nestjs/core';
 
 import { ApiError } from '../../common/errors/api-error';
 import { apiConfig } from '../../config/api.config';
-import { verifyCsrfToken } from './auth-token';
-import type { RequestWithAuthentication } from './authenticated-request';
+import { verifyCsrfToken } from './auth-token.crypto';
+import type { RequestWithAuthentication } from './authentication.context';
 import { IS_PUBLIC_ENDPOINT } from './public.decorator';
 
 @Injectable()

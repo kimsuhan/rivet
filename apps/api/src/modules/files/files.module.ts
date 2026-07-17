@@ -5,6 +5,9 @@ import type { ConfigType } from '@nestjs/config';
 import { MulterModule } from '@nestjs/platform-express';
 
 import { apiConfig } from '../../config/api.config';
+import { FileRepository } from './file.repository';
+import { FileQueryService } from './file-query.service';
+import { FileStorageService } from './file-storage.service';
 import { AvatarController, FilesController, IssueAttachmentsController } from './files.controller';
 import { FilesService } from './files.service';
 import { UploadedFileCleanupInterceptor } from './uploaded-file-cleanup.interceptor';
@@ -21,6 +24,12 @@ import { UploadedFileCleanupInterceptor } from './uploaded-file-cleanup.intercep
       }),
     }),
   ],
-  providers: [FilesService, UploadedFileCleanupInterceptor],
+  providers: [
+    FileQueryService,
+    FileRepository,
+    FilesService,
+    FileStorageService,
+    UploadedFileCleanupInterceptor,
+  ],
 })
 export class FilesModule {}

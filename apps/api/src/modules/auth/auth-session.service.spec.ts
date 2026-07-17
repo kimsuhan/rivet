@@ -1,6 +1,6 @@
 import { DatabaseService } from '../../common/database/database.service';
 import { type AuthSessionContext, AuthSessionService } from './auth-session.service';
-import { hashSessionToken } from './auth-token';
+import { hashSessionToken } from './auth-token.crypto';
 
 const sessionContext = {
   membership: {

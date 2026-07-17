@@ -4,7 +4,7 @@ import {
   normalizeEmail,
   normalizePasswordForVerification,
   validatePassword,
-} from './auth-input';
+} from './auth-input.policy';
 
 describe('auth input', () => {
   describe('normalizeEmail', () => {

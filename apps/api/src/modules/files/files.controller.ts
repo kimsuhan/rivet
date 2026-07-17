@@ -40,7 +40,7 @@ import type { Response } from 'express';
 import { ApiError } from '../../common/errors/api-error';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
 import { ALLOW_MULTIPART } from '../../common/guards/json-body.guard';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import { FileIdDto, UploadFileDto } from './dto/file-request.dto';
 import {
@@ -49,7 +49,8 @@ import {
   IssueAttachmentListResponseDto,
   IssueAttachmentResponseDto,
 } from './dto/file-response.dto';
-import { contentDisposition } from './file-content';
+import { contentDisposition } from './file-content.policy';
+import { FileQueryService } from './file-query.service';
 import { FilesService, type UploadedTemporaryFile } from './files.service';
 import { UploadedFileCleanupInterceptor } from './uploaded-file-cleanup.interceptor';
 
@@ -80,7 +81,10 @@ function workspaceContext(authentication: AuthenticatedRequestContext): {
 @ApiCookieAuth('sessionCookie')
 @Controller('files')
 export class FilesController {
-  constructor(private readonly files: FilesService) {}
+  constructor(
+    private readonly fileQueries: FileQueryService,
+    private readonly files: FilesService,
+  ) {}
 
   @Post()
   @SetMetadata(ALLOW_MULTIPART, true)
@@ -133,7 +137,7 @@ export class FilesController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('fileId', UUID_PIPE) fileId: string,
   ): Promise<FileResourceResponseDto> {
-    return this.files.get(
+    return this.fileQueries.get(
       {
         userId: authentication.session.user.id,
         workspaceId: authentication.session.workspace?.id ?? null,
@@ -162,7 +166,7 @@ export class FilesController {
     @Param('fileId', UUID_PIPE) fileId: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
-    const file = await this.files.getBinary(
+    const file = await this.fileQueries.getBinary(
       {
         userId: authentication.session.user.id,
         workspaceId: authentication.session.workspace?.id ?? null,
@@ -196,7 +200,7 @@ export class FilesController {
     @Param('fileId', UUID_PIPE) fileId: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
-    const file = await this.files.getBinary(
+    const file = await this.fileQueries.getBinary(
       {
         userId: authentication.session.user.id,
         workspaceId: authentication.session.workspace?.id ?? null,
@@ -270,7 +274,10 @@ export class AvatarController {
 @ApiCookieAuth('sessionCookie')
 @Controller('issues/:issueId/attachments')
 export class IssueAttachmentsController {
-  constructor(private readonly files: FilesService) {}
+  constructor(
+    private readonly fileQueries: FileQueryService,
+    private readonly files: FilesService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: '이슈 일반 첨부 목록' })
@@ -281,7 +288,7 @@ export class IssueAttachmentsController {
     @Param('issueId', UUID_PIPE) issueId: string,
   ): Promise<IssueAttachmentListResponseDto> {
     const context = workspaceContext(authentication);
-    return this.files.listIssueAttachments({ workspaceId: context.workspaceId }, issueId);
+    return this.fileQueries.listIssueAttachments(context.workspaceId, issueId);
   }
 
   @Post()

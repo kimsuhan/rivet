@@ -1,6 +1,6 @@
 import { argon2id, hash as argon2Hash } from 'argon2';
 
-import { hashPassword, passwordHashNeedsRehash, verifyPassword } from './password';
+import { hashPassword, passwordHashNeedsRehash, verifyPassword } from './password.crypto';
 
 describe('password hashing', () => {
   it('uses the required Argon2id parameters and verifies the whole password', async () => {

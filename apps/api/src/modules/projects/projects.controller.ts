@@ -28,7 +28,7 @@ import {
 
 import { ApiError } from '../../common/errors/api-error';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import {
   ArchiveProjectDto,
@@ -37,6 +37,7 @@ import {
   UpdateProjectDto,
 } from './dto/project-request.dto';
 import { ProjectListResponseDto, ProjectResponseDto } from './dto/project-response.dto';
+import { ProjectQueryService } from './project-query.service';
 import { ProjectsService } from './projects.service';
 
 function workspaceContext(authentication: AuthenticatedRequestContext): {
@@ -65,7 +66,10 @@ function workspaceContext(authentication: AuthenticatedRequestContext): {
 @ApiCookieAuth('sessionCookie')
 @Controller('projects')
 export class ProjectsController {
-  constructor(private readonly projects: ProjectsService) {}
+  constructor(
+    private readonly projectQueries: ProjectQueryService,
+    private readonly projects: ProjectsService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: '현재 워크스페이스 프로젝트 목록 조회' })
@@ -81,7 +85,7 @@ export class ProjectsController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Query() query: ProjectListQueryDto,
   ): Promise<ProjectListResponseDto> {
-    return this.projects.list(workspaceContext(authentication).workspaceId, query);
+    return this.projectQueries.list(workspaceContext(authentication).workspaceId, query);
   }
 
   @Post()
@@ -119,7 +123,7 @@ export class ProjectsController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('projectId', new ParseUUIDPipe({ version: '4' })) projectId: string,
   ): Promise<ProjectResponseDto> {
-    return this.projects.get(workspaceContext(authentication).workspaceId, projectId);
+    return this.projectQueries.get(workspaceContext(authentication).workspaceId, projectId);
   }
 
   @Patch(':projectId')

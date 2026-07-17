@@ -13,7 +13,7 @@ import {
 import { ApiError } from '../../common/errors/api-error';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
 import { ObservabilityService } from '../../common/observability/observability.service';
-import type { AuthenticatedRequestContext } from '../auth/authenticated-request';
+import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import { SearchIssueListResponseDto, SearchIssuesQueryDto } from './dto/search-issues.dto';
 import { SearchService } from './search.service';
