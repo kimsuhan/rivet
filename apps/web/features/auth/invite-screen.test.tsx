@@ -127,7 +127,12 @@ function renderScreen(token = 'invite-token') {
 
   const rendered = render(
     <QueryClientProvider client={queryClient}>
-      <InviteScreen labels={labels} loginHref="/login" signUpHref="/signup?invitation=1" />
+      <InviteScreen
+        invitationSignUpHref="/signup?invitation=1"
+        labels={labels}
+        loginHref="/login"
+        signUpHref="/signup"
+      />
     </QueryClientProvider>,
   );
   return { invalidate, unmount: rendered.unmount };
@@ -312,7 +317,7 @@ describe('InviteScreen', () => {
     await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/my-issues'));
   });
 
-  it('이메일 불일치와 만료 상태에서 수락 동작을 숨긴다', async () => {
+  it('이메일 불일치와 만료 상태에서 수락을 숨기고 만료 초대는 일반 가입으로 연결한다', async () => {
     mockSession({
       authenticated: true,
       csrfToken: 'csrf-token',
@@ -332,6 +337,10 @@ describe('InviteScreen', () => {
     mockPreview({ data: undefined, error: { body: { code: 'TOKEN_EXPIRED' } } });
     renderScreen('expired-token');
     expect(await screen.findByText(labels.expiredTitle)).toBeVisible();
+    expect(screen.getByRole('link', { name: labels.signUpLink })).toHaveAttribute(
+      'href',
+      '/signup',
+    );
     expect(screen.queryByRole('button', { name: labels.accept })).not.toBeInTheDocument();
   });
 });

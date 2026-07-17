@@ -93,10 +93,12 @@ function InvitationSummary({
 }
 
 export function InviteScreen({
+  invitationSignUpHref,
   labels,
   loginHref,
   signUpHref,
 }: {
+  invitationSignUpHref: string;
   labels: InviteLabels;
   loginHref: string;
   signUpHref: string;
@@ -365,7 +367,7 @@ export function InviteScreen({
             </Alert>
             <p className="text-muted-foreground flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm">
               <AuthLink href={loginHref}>{labels.loginLink}</AuthLink>
-              <AuthLink href={signUpHref}>{labels.signUpLink}</AuthLink>
+              <AuthLink href={invitationSignUpHref}>{labels.signUpLink}</AuthLink>
             </p>
           </>
         ) : hasWorkspace ? (

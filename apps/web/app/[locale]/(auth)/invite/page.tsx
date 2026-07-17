@@ -21,8 +21,9 @@ export default async function InvitePage({ params }: { params: Promise<{ locale:
 
   return (
     <InviteScreen
+      invitationSignUpHref="/signup?invitation=1"
       loginHref="/login"
-      signUpHref="/signup?invitation=1"
+      signUpHref="/signup"
       labels={{
         productName: t('productName'),
         title: t('title'),
