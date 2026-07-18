@@ -121,11 +121,18 @@ describe('MarkdownEditor image lifecycle', () => {
       </Harness>,
     );
 
-    expect(screen.getByRole('textbox', { name: labels.editorLabel })).toHaveClass(
+    const editor = screen.getByRole('textbox', { name: labels.editorLabel });
+    expect(editor).toHaveClass(
       'max-h-64',
       'min-h-44',
       'resize-none',
       'overflow-auto',
+    );
+    expect(editor).not.toHaveClass('focus-visible:ring-2');
+    expect(editor.parentElement).toHaveClass(
+      'focus-within:after:ring-2',
+      'focus-within:after:ring-ring',
+      'focus-within:after:ring-inset',
     );
   });
 

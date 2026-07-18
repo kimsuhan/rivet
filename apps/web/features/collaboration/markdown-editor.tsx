@@ -892,14 +892,14 @@ export function MarkdownEditor({
             >
               <div className="bg-background overflow-hidden rounded-lg border">
                 <Toolbar disabled={disabled} imagesEnabled={imagesEnabled} labels={labels} />
-                <div className="relative">
+                <div className="relative after:pointer-events-none after:absolute after:inset-0 after:content-[''] focus-within:after:ring-2 focus-within:after:ring-ring focus-within:after:ring-inset">
                   <RichTextPlugin
                     contentEditable={
                       <ContentEditable
                         aria-label={labels.editorLabel}
                         id={editorId}
                         className={cn(
-                          'focus-visible:ring-ring min-h-36 overflow-auto px-3 py-3 text-[15px] leading-6 outline-none focus-visible:ring-2 focus-visible:ring-inset [&>*:first-child]:mt-0',
+                          'min-h-36 overflow-auto px-3 py-3 text-[15px] leading-6 outline-none [&>*:first-child]:mt-0',
                           boundedHeight ? 'max-h-64 min-h-44 resize-none' : 'resize-y',
                         )}
                       />
