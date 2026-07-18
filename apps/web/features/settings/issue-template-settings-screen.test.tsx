@@ -283,6 +283,25 @@ describe('IssueTemplateSettingsScreen', () => {
     expect(priority.querySelector('svg')).toHaveClass('text-warning');
   });
 
+  it('생성 폼을 우선순위, 라벨, 프로젝트, 최초 역할 순으로 읽는다', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: labels.createTemplate }));
+    const dialog = screen.getByRole('dialog', { name: labels.createTitle });
+    const fields = [
+      within(dialog).getByRole('combobox', { name: labels.priorityLabel }),
+      within(dialog).getByText(labels.labelsLabel),
+      within(dialog).getByRole('combobox', { name: labels.projectLabel }),
+      within(dialog).getByRole('combobox', { name: labels.initialRoleLabel }),
+    ];
+
+    for (const [index, field] of fields.entries()) {
+      const next = fields[index + 1];
+      if (!next) continue;
+      expect(field.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
   it('cursor 뒤 101번째 라벨·프로젝트·활성 팀 역할을 편집 시 보존한다', async () => {
     const user = userEvent.setup();
     const lateLabel = {

@@ -541,6 +541,42 @@ function TemplateFormDialog({
                         </SelectContent>
                       </Select>
                     </Field>
+                  </div>
+                  <FieldSet>
+                    <FieldLegend variant="label">{labels.labelsLabel}</FieldLegend>
+                    <div className="flex flex-wrap gap-3">
+                      {activeLabels.length === 0 ? (
+                        <span className="text-muted-foreground text-sm">{labels.noLabels}</span>
+                      ) : (
+                        activeLabels.map((label) => (
+                          <Field key={label.id} orientation="horizontal" className="w-auto">
+                            <Checkbox
+                              id={`issue-template-label-${label.id}`}
+                              checked={labelIds.includes(label.id)}
+                              onCheckedChange={(checked) =>
+                                form.setValue(
+                                  'labelIds',
+                                  checked
+                                    ? [...labelIds, label.id]
+                                    : labelIds.filter((id) => id !== label.id),
+                                  { shouldDirty: true },
+                                )
+                              }
+                            />
+                            <FieldLabel htmlFor={`issue-template-label-${label.id}`}>
+                              <span
+                                aria-hidden="true"
+                                className="size-1.5 rounded-full"
+                                style={{ backgroundColor: label.color }}
+                              />
+                              {label.name}
+                            </FieldLabel>
+                          </Field>
+                        ))
+                      )}
+                    </div>
+                  </FieldSet>
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <Field>
                       <FieldLabel id="issue-template-project-label">
                         {labels.projectLabel}
@@ -579,81 +615,51 @@ function TemplateFormDialog({
                         </SelectContent>
                       </Select>
                     </Field>
-                  </div>
-                  <Field>
-                    <FieldLabel id="issue-template-role-label">
-                      {labels.initialRoleLabel}
-                    </FieldLabel>
-                    <Select
-                      items={[
-                        { label: labels.initialRoleNone, value: NO_ROLE },
-                        ...PROJECT_ROLES.filter((role) => availableRoles.has(role)).map((role) => ({
-                          label: labels.projectRoles[role],
-                          value: role,
-                        })),
-                      ]}
-                      value={initialRole}
-                      disabled={projectId === NO_PROJECT}
-                      onValueChange={(next) =>
-                        next &&
-                        form.setValue('initialRole', next as TemplateFormValues['initialRole'], {
-                          shouldDirty: true,
-                        })
-                      }
-                    >
-                      <SelectTrigger
-                        id="issue-template-role"
-                        aria-labelledby="issue-template-role-label"
-                        className="w-full"
+                    <Field>
+                      <FieldLabel id="issue-template-role-label">
+                        {labels.initialRoleLabel}
+                      </FieldLabel>
+                      <Select
+                        items={[
+                          { label: labels.initialRoleNone, value: NO_ROLE },
+                          ...PROJECT_ROLES.filter((role) => availableRoles.has(role)).map(
+                            (role) => ({
+                              label: labels.projectRoles[role],
+                              value: role,
+                            }),
+                          ),
+                        ]}
+                        value={initialRole}
+                        disabled={projectId === NO_PROJECT}
+                        onValueChange={(next) =>
+                          next &&
+                          form.setValue('initialRole', next as TemplateFormValues['initialRole'], {
+                            shouldDirty: true,
+                          })
+                        }
                       >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value={NO_ROLE}>{labels.initialRoleNone}</SelectItem>
-                          {PROJECT_ROLES.filter((role) => availableRoles.has(role)).map((role) => (
-                            <SelectItem key={role} value={role}>
-                              {labels.projectRoles[role]}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <FieldSet>
-                    <FieldLegend variant="label">{labels.labelsLabel}</FieldLegend>
-                    <div className="flex flex-wrap gap-3">
-                      {activeLabels.length === 0 ? (
-                        <span className="text-muted-foreground text-sm">{labels.noLabels}</span>
-                      ) : (
-                        activeLabels.map((label) => (
-                          <Field key={label.id} orientation="horizontal" className="w-auto">
-                            <Checkbox
-                              id={`issue-template-label-${label.id}`}
-                              checked={labelIds.includes(label.id)}
-                              onCheckedChange={(checked) =>
-                                form.setValue(
-                                  'labelIds',
-                                  checked
-                                    ? [...labelIds, label.id]
-                                    : labelIds.filter((id) => id !== label.id),
-                                  { shouldDirty: true },
-                                )
-                              }
-                            />
-                            <FieldLabel htmlFor={`issue-template-label-${label.id}`}>
-                              <span
-                                aria-hidden="true"
-                                className="size-1.5 rounded-full"
-                                style={{ backgroundColor: label.color }}
-                              />
-                              {label.name}
-                            </FieldLabel>
-                          </Field>
-                        ))
-                      )}
-                    </div>
-                  </FieldSet>
+                        <SelectTrigger
+                          id="issue-template-role"
+                          aria-labelledby="issue-template-role-label"
+                          className="w-full"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value={NO_ROLE}>{labels.initialRoleNone}</SelectItem>
+                            {PROJECT_ROLES.filter((role) => availableRoles.has(role)).map(
+                              (role) => (
+                                <SelectItem key={role} value={role}>
+                                  {labels.projectRoles[role]}
+                                </SelectItem>
+                              ),
+                            )}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
                 </FieldGroup>
               </div>
             </div>

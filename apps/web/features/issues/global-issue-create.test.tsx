@@ -222,6 +222,17 @@ describe('GlobalIssueCreate issue template', () => {
     } as never);
   });
 
+  it('템플릿 선택기를 제목보다 먼저 읽는다', () => {
+    renderCreate();
+
+    const templateTrigger = getToolbarButton(labels.templateTrigger);
+    const titleInput = screen.getByLabelText(labels.titleLabel);
+
+    expect(
+      templateTrigger.compareDocumentPosition(titleInput) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it('최신 version을 검증한 스냅샷을 적용하고 이후 수정값과 출처만 이슈 생성에 보낸다', async () => {
     const user = userEvent.setup();
     renderCreate();
@@ -597,6 +608,32 @@ describe('GlobalIssueCreate issue template', () => {
     expect(getToolbarButton(labels.templateTrigger)).toHaveAccessibleName(labels.templateTrigger);
   });
 
+  it('최종 생성에서 템플릿이 stale이면 명시적인 선택 전 재제출을 막는다', async () => {
+    const user = userEvent.setup();
+    mocks.create.mockRejectedValueOnce({ body: { code: 'VERSION_CONFLICT' }, status: 409 });
+    renderCreate();
+
+    await chooseTemplate(user);
+    await waitFor(() => expect(mocks.apply).toHaveBeenCalledTimes(1));
+    await user.type(screen.getByLabelText(labels.titleLabel), 'stale 재제출 차단');
+    const submit = screen.getByRole('button', { name: labels.submit });
+    await user.click(submit);
+
+    expect(await screen.findByText(labels.templateNoticeTitle)).toBeVisible();
+    expect(submit).toBeDisabled();
+    await user.click(submit);
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: labels.templateNone }));
+    await waitFor(() => expect(submit).toBeEnabled());
+    await user.click(submit);
+
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+    expect(mocks.create.mock.calls[1]?.[0]).toEqual({
+      data: expect.not.objectContaining({ appliedTemplate: expect.anything() }),
+    });
+  });
+
   it('템플릿이 없으면 관련 UI를 숨기고 첨부는 compact 트리거로 렌더링한다', () => {
     vi.mocked(useIssueTemplatesControllerList).mockReturnValue({
       data: { items: [] },
@@ -729,10 +766,7 @@ describe('GlobalIssueCreate issue template', () => {
 
     const projectTrigger = getToolbarButton(labels.projectLabel);
     expect(projectTrigger).toHaveAttribute('aria-invalid', 'true');
-    expect(projectTrigger).toHaveAttribute(
-      'aria-describedby',
-      'issue-create-project-error',
-    );
+    expect(projectTrigger).toHaveAttribute('aria-describedby', 'issue-create-project-error');
     const projectField = projectTrigger.parentElement;
     expect(projectField).not.toBeNull();
     const projectError = within(projectField as HTMLElement).getByText(labels.projectRequired);

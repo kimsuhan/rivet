@@ -217,6 +217,7 @@ export function GlobalIssueCreate({
   const [pendingTemplate, setPendingTemplate] = useState<IssueTemplateSnapshot | null>(null);
   const [overwriteFields, setOverwriteFields] = useState<TemplateTargetField[]>([]);
   const [templateNotice, setTemplateNotice] = useState(false);
+  const [templateSelectionRequired, setTemplateSelectionRequired] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [templateApplyError, setTemplateApplyError] = useState(false);
   const [openPopover, setOpenPopover] = useState<
@@ -285,7 +286,7 @@ export function GlobalIssueCreate({
     setAppliedTemplate(null);
     setPendingTemplate(null);
     setOverwriteFields([]);
-    requestAnimationFrame(() => templateTriggerRef.current?.focus());
+    requestAnimationFrame(() => (templateTriggerRef.current ?? titleInputRef.current)?.focus());
   }
 
   const cancelTemplateOverwrite = useCallback(() => {
@@ -313,6 +314,7 @@ export function GlobalIssueCreate({
   async function preserveInputsAndRequestReselection() {
     clearTemplateMetadata();
     setTemplateNotice(true);
+    setTemplateSelectionRequired(true);
     setTemplateApplyError(false);
     setOpenPopover(null);
     setApplyingTemplate(true);
@@ -344,6 +346,7 @@ export function GlobalIssueCreate({
     setPendingTemplate(null);
     setOverwriteFields([]);
     setTemplateNotice(false);
+    setTemplateSelectionRequired(false);
     setTemplateApplyError(false);
     dirtyTemplateFields.current.clear();
     if (seed?.projectId) dirtyTemplateFields.current.add('project');
@@ -397,6 +400,7 @@ export function GlobalIssueCreate({
       setSelectedTemplateId(result.id);
       setAppliedTemplate({ id: result.id, version: result.version });
       setTemplateNotice(false);
+      setTemplateSelectionRequired(false);
       setPendingTemplate(null);
       setOverwriteFields([]);
     } catch (error) {
@@ -418,6 +422,7 @@ export function GlobalIssueCreate({
     if (!next || next === NO_TEMPLATE) {
       clearTemplateMetadata();
       setTemplateNotice(false);
+      setTemplateSelectionRequired(false);
       return;
     }
 
@@ -458,6 +463,7 @@ export function GlobalIssueCreate({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (templateSelectionRequired) return;
     if (!title.trim() || !projectId || !filesReady) {
       setShowErrors(true);
       return;
@@ -586,53 +592,25 @@ export function GlobalIssueCreate({
                         ? labels.templateUnavailableNoticeTitle
                         : labels.templateNoticeTitle}
                     </AlertTitle>
-                    <AlertDescription>
-                      {templateSelectionUnavailable
-                        ? labels.templateUnavailableNoticeDescription
-                        : labels.templateNoticeDescription}
+                    <AlertDescription className="flex flex-col items-start gap-2">
+                      <span>
+                        {templateSelectionUnavailable
+                          ? labels.templateUnavailableNoticeDescription
+                          : labels.templateNoticeDescription}
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={templateApplyPending}
+                        onClick={() => selectTemplate(NO_TEMPLATE)}
+                      >
+                        {labels.templateNone}
+                      </Button>
                     </AlertDescription>
                   </Alert>
                 ) : null}
-                <div className="flex flex-col gap-1">
-                  <label className="sr-only" htmlFor="issue-create-title">
-                    {labels.titleLabel}
-                  </label>
-                  <Input
-                    ref={titleInputRef}
-                    id="issue-create-title"
-                    autoFocus
-                    className="h-12 border-transparent bg-transparent px-2 text-xl font-semibold shadow-none md:text-xl lg:h-12"
-                    maxLength={500}
-                    value={title}
-                    placeholder={labels.titlePlaceholder}
-                    aria-invalid={showErrors && !title.trim()}
-                    aria-describedby={
-                      showErrors && !title.trim() ? 'issue-create-title-error' : undefined
-                    }
-                    onChange={(event) => setTitle(event.target.value)}
-                  />
-                  {showErrors && !title.trim() ? (
-                    <span id="issue-create-title-error" className="text-destructive text-xs">
-                      {labels.titleRequired}
-                    </span>
-                  ) : null}
-                </div>
-                <div className="grid gap-2 text-sm font-medium">
-                  <span id="issue-create-description-label">{labels.descriptionLabel}</span>
-                  <IssueDescriptionEditor
-                    boundedHeight
-                    charLimit={100_000}
-                    disabled={templateApplyPending}
-                    labels={editorLabels}
-                    mentionOptions={mentionOptions}
-                    onChange={(next) => {
-                      markTemplateFieldDirty('description');
-                      setDescriptionMarkdown(next);
-                    }}
-                    value={descriptionMarkdown}
-                  />
-                </div>
-                <div className="flex flex-wrap items-start gap-2">
+                <div className="flex flex-col gap-2">
                   {hasTemplates ? (
                     <>
                       <span id="issue-create-template-label" className="sr-only">
@@ -648,7 +626,7 @@ export function GlobalIssueCreate({
                           id="issue-create-template"
                           aria-labelledby="issue-create-template-label"
                           aria-busy={templateApplyPending || undefined}
-                          className={cn(toolbarTriggerClassName, 'max-w-full')}
+                          className={cn(toolbarTriggerClassName, 'w-fit max-w-full')}
                           disabled={templateApplyPending}
                         >
                           {templateApplyPending ? (
@@ -730,7 +708,47 @@ export function GlobalIssueCreate({
                       </Popover>
                     </>
                   ) : null}
-
+                  <div className="flex flex-col gap-1">
+                    <label className="sr-only" htmlFor="issue-create-title">
+                      {labels.titleLabel}
+                    </label>
+                    <Input
+                      ref={titleInputRef}
+                      id="issue-create-title"
+                      autoFocus
+                      className="h-12 border-transparent bg-transparent px-2 text-xl font-semibold shadow-none md:text-xl lg:h-12"
+                      maxLength={500}
+                      value={title}
+                      placeholder={labels.titlePlaceholder}
+                      aria-invalid={showErrors && !title.trim()}
+                      aria-describedby={
+                        showErrors && !title.trim() ? 'issue-create-title-error' : undefined
+                      }
+                      onChange={(event) => setTitle(event.target.value)}
+                    />
+                    {showErrors && !title.trim() ? (
+                      <span id="issue-create-title-error" className="text-destructive text-xs">
+                        {labels.titleRequired}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="grid gap-2 text-sm font-medium">
+                  <span id="issue-create-description-label">{labels.descriptionLabel}</span>
+                  <IssueDescriptionEditor
+                    boundedHeight
+                    charLimit={100_000}
+                    disabled={templateApplyPending}
+                    labels={editorLabels}
+                    mentionOptions={mentionOptions}
+                    onChange={(next) => {
+                      markTemplateFieldDirty('description');
+                      setDescriptionMarkdown(next);
+                    }}
+                    value={descriptionMarkdown}
+                  />
+                </div>
+                <div className="flex flex-wrap items-start gap-2">
                   <span id="issue-create-priority-label" className="sr-only">
                     {priorityTriggerText}
                   </span>
@@ -1077,7 +1095,12 @@ export function GlobalIssueCreate({
               </Button>
               <Button
                 type="submit"
-                disabled={create.isPending || templateApplyPending || !filesReady}
+                disabled={
+                  create.isPending ||
+                  templateApplyPending ||
+                  templateSelectionRequired ||
+                  !filesReady
+                }
               >
                 {create.isPending ? (
                   <>
