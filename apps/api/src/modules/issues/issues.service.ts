@@ -21,6 +21,8 @@ import {
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
+import { ObservabilityService } from '../../common/observability/observability.service';
+import { productEvent } from '../../common/observability/product-event';
 import { notifyResourceChanged } from '../../common/realtime/notify-resource-changed';
 import {
   assertActiveMentionMemberships,
@@ -53,6 +55,7 @@ export class IssuesService {
     private readonly repository: IssueRepository,
     private readonly statuses: IssueStatusService,
     private readonly templates: IssueTemplatesService,
+    private readonly observability: ObservabilityService,
   ) {}
 
   async create(
@@ -60,7 +63,7 @@ export class IssuesService {
     dto: CreateIssueDto,
   ): Promise<CreateIssueResponseDto> {
     const description = parseOptionalMarkdown(dto.descriptionMarkdown, 100_000);
-    return this.database.client.$transaction(async (transaction) => {
+    const response = await this.database.client.$transaction(async (transaction) => {
       const workspace = await transaction.workspace.findUnique({
         select: { nextIssueNumber: true },
         where: { id: context.workspaceId },
@@ -177,6 +180,17 @@ export class IssuesService {
         issue: toIssueDetail(row),
       };
     });
+    if (dto.appliedTemplate) {
+      this.observability.capture(
+        productEvent(
+          context,
+          'template_issue_created',
+          { templateId: dto.appliedTemplate.id },
+          { eventId: response.issue.id, occurredAt: response.issue.createdAt },
+        ),
+      );
+    }
+    return response;
   }
 
   async update(

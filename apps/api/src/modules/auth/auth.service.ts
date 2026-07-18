@@ -6,6 +6,8 @@ import { AUTH_EMAIL_VERIFICATION_REQUESTED } from '@rivet/event-contracts';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
+import { ObservabilityService } from '../../common/observability/observability.service';
+import { productEvent } from '../../common/observability/product-event';
 import { apiConfig } from '../../config/api.config';
 import { throwAuthInputError } from './auth.errors';
 import { AuthAccountTokenService } from './auth-account-token.service';
@@ -51,6 +53,7 @@ export class AuthService {
     private readonly database: DatabaseService,
     private readonly rateLimits: AuthRateLimitService,
     private readonly sessions: AuthSessionService,
+    private readonly observability: ObservabilityService,
     @Inject(apiConfig.KEY) private readonly config: ConfigType<typeof apiConfig>,
   ) {}
 
@@ -246,13 +249,27 @@ export class AuthService {
     await this.rateLimits.clear(AUTH_RATE_LIMITS.loginEmail, email);
     const session = await this.sessions.create(user.id);
 
+    const response = await this.toAuthenticatedSession(
+      session.context,
+      session.token,
+      invitationContinuationToken,
+    );
+    if (session.context.membership && session.context.workspace) {
+      this.observability.capture(
+        productEvent(
+          {
+            membershipId: session.context.membership.id,
+            workspaceId: session.context.workspace.id,
+          },
+          'login_completed',
+          {},
+          { eventId: session.context.sessionId },
+        ),
+      );
+    }
     return {
       absoluteExpiresAt: session.absoluteExpiresAt,
-      response: await this.toAuthenticatedSession(
-        session.context,
-        session.token,
-        invitationContinuationToken,
-      ),
+      response,
       token: session.token,
     };
   }

@@ -12,6 +12,7 @@ export type RetentionCleanupResult = {
   deactivatedPushSubscriptions: number;
   deletedEmailDeliveries: number;
   deletedExportAudits: number;
+  deletedFeedback: number;
   deletedOutboxEvents: number;
   deletedRateLimitBuckets: number;
   deletedSessions: number;
@@ -34,6 +35,7 @@ export class RetentionService {
       deactivatedPushSubscriptions: 0,
       deletedEmailDeliveries: 0,
       deletedExportAudits: 0,
+      deletedFeedback: 0,
       deletedOutboxEvents: 0,
       deletedRateLimitBuckets: 0,
       deletedSessions: 0,
@@ -74,6 +76,11 @@ export class RetentionService {
         counter: 'deletedExportAudits',
         deleteBatch: () => this.deleteExportAuditBatch(),
         name: 'export_audit',
+      },
+      {
+        counter: 'deletedFeedback',
+        deleteBatch: () => this.deleteFeedbackBatch(),
+        name: 'product_feedback',
       },
       {
         counter: 'deletedOutboxEvents',
@@ -124,6 +131,23 @@ export class RetentionService {
         FOR UPDATE SKIP LOCKED
       )
       DELETE FROM "email_deliveries" AS target
+      USING candidates
+      WHERE target."id" = candidates."id"
+      RETURNING target."id"
+    `;
+  }
+
+  private deleteFeedbackBatch(): Promise<DeletedRow[]> {
+    return this.database.client.$queryRaw<DeletedRow[]>`
+      WITH candidates AS (
+        SELECT "id"
+        FROM "product_feedback"
+        WHERE "retention_expires_at" < NOW()
+        ORDER BY "retention_expires_at", "id"
+        LIMIT ${BATCH_SIZE}
+        FOR UPDATE SKIP LOCKED
+      )
+      DELETE FROM "product_feedback" AS target
       USING candidates
       WHERE target."id" = candidates."id"
       RETURNING target."id"

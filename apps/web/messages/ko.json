@@ -276,6 +276,7 @@
     "desktopNavigation": "주 탐색",
     "mobileNavigation": "모바일 주 탐색",
     "openIssueCreate": "이슈 만들기 열기",
+    "openFeedback": "피드백 보내기",
     "openSearch": "검색 열기",
     "openTeamSelector": "팀 선택 열기",
     "inboxUnread": "알림함, 읽지 않은 알림 {count}개",
@@ -287,6 +288,29 @@
     "logout": "로그아웃",
     "loggingOut": "로그아웃 중",
     "logoutError": "로그아웃하지 못했습니다. 잠시 후 다시 시도해 주세요."
+  },
+  "Feedback": {
+    "title": "제품 피드백 보내기",
+    "description": "Alpha를 사용하며 불편했던 점이나 개선 아이디어를 알려 주세요.",
+    "categoryLabel": "카테고리",
+    "categories": {
+      "BUG": "오류",
+      "USABILITY": "사용성",
+      "IDEA": "개선 아이디어",
+      "OTHER": "기타"
+    },
+    "bodyLabel": "내용",
+    "bodyPlaceholder": "어떤 상황에서 무엇이 불편했는지 적어 주세요.",
+    "privacyDescription": "화면, 콘솔 로그, 업무 본문과 첨부파일은 자동으로 수집하지 않습니다.",
+    "bodyError": "피드백을 10자 이상 4,000자 이하로 입력해 주세요.",
+    "submit": "피드백 보내기",
+    "submitting": "보내는 중",
+    "submitError": "피드백을 보내지 못했습니다. 입력은 그대로 유지했습니다. 다시 시도해 주세요.",
+    "successTitle": "피드백을 접수했습니다",
+    "successDescription": "운영자가 확인할 수 있도록 안전하게 저장했습니다.",
+    "cancel": "취소",
+    "done": "닫기",
+    "close": "피드백 창 닫기"
   },
   "Profile": {
     "open": "프로필 설정 열기",
@@ -626,6 +650,7 @@
       "labels": "라벨",
       "templates": "이슈 템플릿",
       "export": "데이터 내보내기",
+      "feedback": "제품 피드백",
       "import": "CSV 가져오기",
       "trash": "휴지통",
       "loading": "관리자 권한을 확인하는 중입니다.",
@@ -637,6 +662,37 @@
       "desktopTitle": "설정은 데스크톱에서 사용할 수 있습니다",
       "desktopDescription": "넓은 화면에서 워크스페이스 설정과 데이터 복구를 안전하게 관리해 주세요.",
       "backToWork": "내 작업으로 돌아가기"
+    },
+    "feedback": {
+      "title": "제품 피드백",
+      "description": "현재 워크스페이스에서 접수된 Alpha 피드백을 검토하고 상태를 관리합니다.",
+      "allCategories": "모든 카테고리",
+      "allStatuses": "모든 상태",
+      "categoryFilter": "피드백 카테고리 필터",
+      "statusFilter": "피드백 상태 필터",
+      "categories": {
+        "BUG": "오류",
+        "USABILITY": "사용성",
+        "IDEA": "개선 아이디어",
+        "OTHER": "기타"
+      },
+      "statuses": {
+        "RECEIVED": "접수",
+        "IN_REVIEW": "검토 중",
+        "IMPLEMENTED": "반영",
+        "DEFERRED": "보류"
+      },
+      "loading": "피드백을 불러오는 중입니다.",
+      "errorTitle": "피드백을 불러오지 못했습니다",
+      "errorDescription": "권한과 네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
+      "retry": "다시 시도",
+      "emptyTitle": "조건에 맞는 피드백이 없습니다",
+      "emptyDescription": "새 피드백이 접수되면 이곳에서 확인할 수 있습니다.",
+      "submittedAt": "접수",
+      "path": "경로",
+      "release": "릴리스",
+      "statusError": "상태를 변경하지 못했습니다. 목록을 새로 불러온 뒤 다시 시도해 주세요.",
+      "loadMore": "피드백 더 불러오기"
     },
     "templates": {
       "title": "이슈 템플릿",

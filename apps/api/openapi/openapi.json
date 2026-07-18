@@ -2058,6 +2058,202 @@
         ]
       }
     },
+    "/api/v1/feedback": {
+      "post": {
+        "operationId": "FeedbackController_submit",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitFeedbackDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackSubmissionReceiptDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "FEEDBACK_SUBMISSION_CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "현재 워크스페이스에 제품 피드백 제출",
+        "tags": [
+          "feedback"
+        ]
+      },
+      "get": {
+        "operationId": "FeedbackController_list",
+        "parameters": [
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BUG",
+                "USABILITY",
+                "IDEA",
+                "OTHER"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "RECEIVED",
+                "IN_REVIEW",
+                "IMPLEMENTED",
+                "DEFERRED"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "관리자용 현재 워크스페이스 피드백 목록",
+        "tags": [
+          "feedback"
+        ]
+      }
+    },
+    "/api/v1/feedback/{feedbackId}/status": {
+      "patch": {
+        "operationId": "FeedbackController_updateStatus",
+        "parameters": [
+          {
+            "name": "feedbackId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFeedbackStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "FEEDBACK_VERSION_CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "관리자용 피드백 상태 변경",
+        "tags": [
+          "feedback"
+        ]
+      }
+    },
     "/api/v1/health/live": {
       "get": {
         "operationId": "HealthController_live",
@@ -6576,6 +6772,53 @@
         ]
       }
     },
+    "/api/v1/product-events": {
+      "post": {
+        "operationId": "ProductEventsController_capture",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureProductEventDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureProductEventResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "PRODUCT_EVENT_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "허용된 클라이언트 제품 이벤트 수집",
+        "tags": [
+          "product-events"
+        ]
+      }
+    },
     "/api/v1/search": {
       "get": {
         "operationId": "SearchController_issues",
@@ -9265,6 +9508,198 @@
         "required": [
           "items",
           "nextCursor"
+        ]
+      },
+      "SubmitFeedbackDto": {
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "category": {
+            "enum": [
+              "BUG",
+              "USABILITY",
+              "IDEA",
+              "OTHER"
+            ],
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 4000,
+            "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]*$"
+          },
+          "currentPath": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^\\/(?!\\/)[^\\u0000-\\u001f\\u007f?#]*$"
+          }
+        },
+        "required": [
+          "submissionId",
+          "category",
+          "body",
+          "currentPath"
+        ]
+      },
+      "FeedbackSubmissionReceiptDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "submissionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "enum": [
+              "RECEIVED",
+              "IN_REVIEW",
+              "IMPLEMENTED",
+              "DEFERRED"
+            ],
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "submissionId",
+          "status",
+          "createdAt"
+        ]
+      },
+      "FeedbackResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "submissionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "submittedByMembershipId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "category": {
+            "enum": [
+              "BUG",
+              "USABILITY",
+              "IDEA",
+              "OTHER"
+            ],
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "currentPath": {
+            "type": "string"
+          },
+          "releaseId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "RECEIVED",
+              "IN_REVIEW",
+              "IMPLEMENTED",
+              "DEFERRED"
+            ],
+            "type": "string"
+          },
+          "statusChangedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "statusChangedByMembershipId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "submissionId",
+          "workspaceId",
+          "submittedByMembershipId",
+          "category",
+          "body",
+          "currentPath",
+          "releaseId",
+          "status",
+          "statusChangedAt",
+          "statusChangedByMembershipId",
+          "createdAt",
+          "updatedAt",
+          "version"
+        ]
+      },
+      "FeedbackListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeedbackResponseDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "UpdateFeedbackStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "RECEIVED",
+              "IN_REVIEW",
+              "IMPLEMENTED",
+              "DEFERRED"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "status",
+          "version"
         ]
       },
       "HealthResponseDto": {
@@ -12809,6 +13244,43 @@
         },
         "required": [
           "version"
+        ]
+      },
+      "CaptureProductEventDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "enum": [
+              "saved_view_opened",
+              "issue_template_applied",
+              "push_permission_result",
+              "push_notification_clicked",
+              "search_result_selected"
+            ],
+            "type": "string"
+          },
+          "properties": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "name",
+          "properties"
+        ]
+      },
+      "CaptureProductEventResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACCEPTED"
+            ]
+          }
+        },
+        "required": [
+          "status"
         ]
       },
       "SearchIssueResultResponseDto": {

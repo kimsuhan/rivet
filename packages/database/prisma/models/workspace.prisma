@@ -16,6 +16,20 @@ enum StateCategory {
   CANCELED
 }
 
+enum FeedbackCategory {
+  BUG
+  USABILITY
+  IDEA
+  OTHER
+}
+
+enum FeedbackStatus {
+  RECEIVED
+  IN_REVIEW
+  IMPLEMENTED
+  DEFERRED
+}
+
 model Workspace {
   id              String   @id @default(uuid()) @db.Uuid
   name            String   @db.VarChar(100)
@@ -54,6 +68,8 @@ model Workspace {
   importSourceRows     ImportSourceRow[]
   savedViews           SavedView[]
   webPushSubscriptions WebPushSubscription[]
+  productFeedback      ProductFeedback[]
+  productEventStates   ProductEventState[]
 
   @@map("workspaces")
 }
@@ -93,6 +109,9 @@ model WorkspaceMembership {
   requestedImportRuns    ImportRun[]           @relation("ImportRequesterMembership")
   savedViews             SavedView[]
   webPushSubscriptions   WebPushSubscription[]
+  submittedFeedback      ProductFeedback[]     @relation("FeedbackSubmitterMembership")
+  changedFeedbackStatus  ProductFeedback[]     @relation("FeedbackStatusChangerMembership")
+  productEventStates     ProductEventState[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, status])
@@ -124,6 +143,52 @@ model SavedView {
   @@unique([membershipId, resourceType, normalizedName])
   @@index([workspaceId, membershipId, resourceType, updatedAt, id], map: "saved_views_workspace_id_membership_id_resource_type_updated_at")
   @@map("saved_views")
+}
+
+model ProductFeedback {
+  id                          String           @id @default(uuid()) @db.Uuid
+  submissionId                String           @map("submission_id") @db.Uuid
+  workspaceId                 String           @map("workspace_id") @db.Uuid
+  submittedByMembershipId     String           @map("submitted_by_membership_id") @db.Uuid
+  category                    FeedbackCategory
+  body                        String           @db.Text
+  currentPath                 String           @map("current_path") @db.VarChar(2048)
+  releaseId                   String           @map("release_id") @db.VarChar(100)
+  status                      FeedbackStatus   @default(RECEIVED)
+  statusChangedAt             DateTime         @default(now()) @map("status_changed_at") @db.Timestamptz(3)
+  statusChangedByMembershipId String?          @map("status_changed_by_membership_id") @db.Uuid
+  retentionExpiresAt          DateTime         @map("retention_expires_at") @db.Timestamptz(3)
+  version                     Int              @default(1)
+  createdAt                   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace                 Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  submittedByMembership     WorkspaceMembership  @relation("FeedbackSubmitterMembership", fields: [workspaceId, submittedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  statusChangedByMembership WorkspaceMembership? @relation("FeedbackStatusChangerMembership", fields: [workspaceId, statusChangedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, submittedByMembershipId, submissionId], map: "product_feedback_workspace_submitter_submission_key")
+  @@index([workspaceId, status, createdAt, id], map: "product_feedback_workspace_status_created_at_idx")
+  @@index([retentionExpiresAt, id], map: "product_feedback_retention_expires_at_idx")
+  @@map("product_feedback")
+}
+
+model ProductEventState {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  semanticKey  String   @map("semantic_key") @db.VarChar(100)
+  stateValue   String   @map("state_value") @db.VarChar(100)
+  version      Int      @default(1)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  membership WorkspaceMembership @relation(fields: [workspaceId, membershipId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, membershipId, semanticKey], map: "product_event_states_workspace_membership_semantic_key")
+  @@index([workspaceId, membershipId, updatedAt, id], map: "product_event_states_workspace_membership_updated_at_idx")
+  @@map("product_event_states")
 }
 
 model WorkspaceInvitation {

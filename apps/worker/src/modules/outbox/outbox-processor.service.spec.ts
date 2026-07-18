@@ -90,6 +90,7 @@ describe('OutboxProcessorService', () => {
   const database = {
     client: {
       issue: { count: jest.fn() },
+      notification: { findMany: jest.fn() },
       project: { findFirst: jest.fn() },
       workspace: { findUnique: jest.fn() },
       teamWork: { count: jest.fn() },
@@ -108,6 +109,7 @@ describe('OutboxProcessorService', () => {
     jest.resetAllMocks();
     outbox.renewLock.mockResolvedValue(true);
     database.client.issue.count.mockResolvedValue(2);
+    database.client.notification.findMany.mockResolvedValue([]);
     database.client.teamWork.count.mockResolvedValue(2);
     database.client.project.findFirst.mockResolvedValue({ id: event.id });
     database.client.workspace.findUnique.mockResolvedValue({ id: event.workspaceId });
@@ -137,6 +139,35 @@ describe('OutboxProcessorService', () => {
       ],
     }).compile();
     processor = module.get(OutboxProcessorService);
+  });
+
+  it('uses the same product event ID when an Outbox event is reprocessed', async () => {
+    const issueEvent: ClaimedOutboxEvent = {
+      ...event,
+      actorMembershipId: '607629d0-53e6-469d-bbc8-eb86c50a0288',
+      aggregateId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
+      aggregateType: 'ISSUE',
+      eventType: ISSUE_CREATED,
+      payload: {
+        issueId: 'f57fa7be-1fe9-4744-a8db-704bf989a3cd',
+        mentionedMembershipIds: [],
+        schemaVersion: 1,
+      },
+      workspaceId: '77a49ce9-f158-4f4d-b898-bb5b309e461f',
+    };
+    outbox.complete.mockResolvedValue(true);
+
+    await processor.processBatch([issueEvent], 'worker-test');
+    await processor.processBatch([{ ...issueEvent, attemptCount: 2 }], 'worker-test');
+
+    const captures = observability.capture.mock.calls
+      .map(([captured]) => captured)
+      .filter((captured) => captured.name === 'issue_created');
+    expect(captures).toHaveLength(2);
+    expect(captures[0]).toMatchObject({
+      properties: { hasMention: false, issueId: issueEvent.aggregateId },
+    });
+    expect(captures[1].eventId).toBe(captures[0].eventId);
   });
 
   it('logs lock_lost when a permanent failure no longer owns the row', async () => {
@@ -222,11 +253,14 @@ describe('OutboxProcessorService', () => {
       invitationEvent,
       invitationEvent.payload,
     );
-    expect(observability.capture).toHaveBeenCalledWith({
-      distinctId: invitationEvent.actorMembershipId,
-      name: 'member_invited',
-      properties: { currentMemberCount: 2, workspaceId: invitationEvent.workspaceId },
-    });
+    expect(observability.capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        membershipId: invitationEvent.actorMembershipId,
+        name: 'member_invited',
+        properties: { currentMemberCount: 2 },
+        workspaceId: invitationEvent.workspaceId,
+      }),
+    );
   });
 
   it.each([
@@ -242,7 +276,7 @@ describe('OutboxProcessorService', () => {
       },
       expected: {
         name: 'team_work_created',
-        properties: { hasAssignee: true, workspaceId: event.workspaceId },
+        properties: { hasAssignee: true },
       },
     },
     {
@@ -251,7 +285,7 @@ describe('OutboxProcessorService', () => {
       payload: { acquisitionSource: 'direct', schemaVersion: 1 },
       expected: {
         name: 'workspace_created',
-        properties: { acquisitionSource: 'direct', workspaceId: event.workspaceId },
+        properties: { acquisitionSource: 'direct' },
       },
     },
     {
@@ -269,7 +303,6 @@ describe('OutboxProcessorService', () => {
           hasTargetDate: true,
           roleCount: 2,
           roles: ['BACKEND', 'WEB_FRONTEND'],
-          workspaceId: event.workspaceId,
         },
       },
     },
@@ -288,7 +321,6 @@ describe('OutboxProcessorService', () => {
           fromStatus: 'PLANNED',
           progress: 50,
           toStatus: 'IN_PROGRESS',
-          workspaceId: event.workspaceId,
         },
       },
     },
@@ -313,11 +345,15 @@ describe('OutboxProcessorService', () => {
     await processor.processBatch([analyticsEvent], 'worker-test');
 
     expect(outbox.complete).toHaveBeenCalledWith(analyticsEvent.id, 'worker-test');
-    expect(observability.capture).toHaveBeenCalledWith({
-      distinctId: analyticsEvent.actorMembershipId,
-      ...input.expected,
-      properties: { ...input.expected.properties, workspaceId: analyticsEvent.workspaceId },
-    });
+    expect(observability.capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        membershipId: analyticsEvent.actorMembershipId,
+        name: input.expected.name,
+        payloadVersion: 1,
+        properties: input.expected.properties,
+        workspaceId: analyticsEvent.workspaceId,
+      }),
+    );
     expect(info).toHaveBeenCalledWith(
       { duration: expect.any(Number), result: 'processed' },
       'Outbox 처리 완료',
@@ -403,15 +439,17 @@ describe('OutboxProcessorService', () => {
       handoffEvent,
       handoffEvent.payload,
     );
-    expect(observability.capture).toHaveBeenCalledWith({
-      distinctId: handoffEvent.actorMembershipId,
-      name: 'api_handoff_created',
-      properties: {
-        isFollowUp: false,
-        targetTeamWorkCount: 1,
+    expect(observability.capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        membershipId: handoffEvent.actorMembershipId,
+        name: 'api_handoff_created',
+        properties: {
+          isFollowUp: false,
+          targetTeamWorkCount: 1,
+        },
         workspaceId: handoffEvent.workspaceId,
-      },
-    });
+      }),
+    );
   });
 
   it.each([

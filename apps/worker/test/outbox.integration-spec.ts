@@ -6,6 +6,8 @@ import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { LoggerModule } from 'nestjs-pino';
 
+import { ISSUE_CREATED } from '@rivet/event-contracts';
+
 import { DatabaseModule } from '../src/common/database/database.module';
 import { DatabaseService } from '../src/common/database/database.service';
 import { ObservabilityService } from '../src/common/observability/observability.service';
@@ -18,13 +20,14 @@ import { WorkspaceInvitationEmailHandler } from '../src/modules/outbox/handlers/
 import { OutboxService } from '../src/modules/outbox/outbox.service';
 import { OutboxProcessorService } from '../src/modules/outbox/outbox-processor.service';
 import { WebPushDeliveryService } from '../src/modules/web-push/web-push-delivery.service';
-import { createTransactionalOutbox } from './outbox-test-helpers';
+import { claimIsolatedOutboxEvent, createTransactionalOutbox } from './outbox-test-helpers';
 
 describe('outbox integration', () => {
   let context: INestApplicationContext;
   let database: DatabaseService;
   let outbox: OutboxService;
   let processor: OutboxProcessorService;
+  const capture = jest.fn();
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -36,7 +39,10 @@ describe('outbox integration', () => {
       providers: [
         { provide: AccountEmailHandler, useValue: { handle: jest.fn() } },
         { provide: ApiHandoffNotificationHandler, useValue: { handle: jest.fn() } },
-        { provide: IssueCollaborationNotificationHandler, useValue: {} },
+        {
+          provide: IssueCollaborationNotificationHandler,
+          useValue: { handleIssueCreated: jest.fn() },
+        },
         ResourcePurgeHandler,
         { provide: WorkspaceInvitationEmailHandler, useValue: { handle: jest.fn() } },
         {
@@ -47,7 +53,7 @@ describe('outbox integration', () => {
         OutboxService,
         {
           provide: ObservabilityService,
-          useValue: { alert: jest.fn(), capture: jest.fn(), captureException: jest.fn() },
+          useValue: { alert: jest.fn(), capture, captureException: jest.fn() },
         },
       ],
     }).compile();
@@ -59,9 +65,78 @@ describe('outbox integration', () => {
   });
 
   beforeEach(async () => {
+    capture.mockClear();
     await database.client.outboxEvent.deleteMany({
       where: { eventType: { startsWith: 'M0_TEST_' } },
     });
+  });
+
+  it('keeps the same product event identity across PostgreSQL Outbox reprocessing', async () => {
+    const userId = randomUUID();
+    const workspaceId = randomUUID();
+    const membershipId = randomUUID();
+    const issueId = randomUUID();
+    const eventId = randomUUID();
+    try {
+      await database.client.user.create({
+        data: {
+          displayName: 'A5 outbox integration',
+          email: `a5-outbox-${userId}@example.com`,
+          emailVerifiedAt: new Date(),
+          id: userId,
+          normalizedEmail: `a5-outbox-${userId}@example.com`,
+          passwordHash: 'not-used-by-test',
+        },
+      });
+      await database.client.workspace.create({
+        data: {
+          createdByUserId: userId,
+          id: workspaceId,
+          name: 'A5 Outbox',
+          normalizedSlug: `a5-outbox-${userId}`,
+          slug: `a5-outbox-${userId}`,
+        },
+      });
+      await database.client.workspaceMembership.create({
+        data: { id: membershipId, role: 'ADMIN', userId, workspaceId },
+      });
+      await database.client.outboxEvent.create({
+        data: {
+          actorMembershipId: membershipId,
+          aggregateId: issueId,
+          aggregateType: 'ISSUE',
+          eventType: ISSUE_CREATED,
+          id: eventId,
+          payload: { issueId, mentionedMembershipIds: [], schemaVersion: 1 },
+          workspaceId,
+        },
+      });
+
+      const first = await claimIsolatedOutboxEvent(database, eventId, 'a5-outbox-first');
+      await processor.processBatch([first], 'a5-outbox-first');
+      await database.client.$executeRaw`
+        UPDATE "outbox_events"
+        SET "processed_at" = NULL,
+            "locked_at" = NULL,
+            "locked_by" = NULL,
+            "available_at" = NOW() - INTERVAL '1 second'
+        WHERE "id" = ${eventId}::uuid
+      `;
+      const second = await claimIsolatedOutboxEvent(database, eventId, 'a5-outbox-second');
+      await processor.processBatch([second], 'a5-outbox-second');
+
+      const productEvents = capture.mock.calls
+        .map(([event]) => event)
+        .filter((event) => event.name === 'issue_created');
+      expect(productEvents).toHaveLength(2);
+      expect(productEvents[1].eventId).toBe(productEvents[0].eventId);
+      expect(productEvents[0].properties).toEqual({ hasMention: false, issueId });
+    } finally {
+      await database.client.outboxEvent.deleteMany({ where: { id: eventId } });
+      await database.client.workspaceMembership.deleteMany({ where: { id: membershipId } });
+      await database.client.workspace.deleteMany({ where: { id: workspaceId } });
+      await database.client.user.deleteMany({ where: { id: userId } });
+    }
   });
 
   afterAll(async () => {

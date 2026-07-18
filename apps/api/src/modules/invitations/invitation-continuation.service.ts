@@ -5,6 +5,8 @@ import type { ConfigType } from '@nestjs/config';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
+import { ObservabilityService } from '../../common/observability/observability.service';
+import { productEvent } from '../../common/observability/product-event';
 import { notifyResourceChanged } from '../../common/realtime/notify-resource-changed';
 import { apiConfig } from '../../config/api.config';
 import { AUTH_RATE_LIMITS, AuthRateLimitService } from '../auth/auth-rate-limit.service';
@@ -63,6 +65,7 @@ export class InvitationContinuationService {
   constructor(
     private readonly database: DatabaseService,
     private readonly rateLimits: AuthRateLimitService,
+    private readonly observability: ObservabilityService,
     @Inject(apiConfig.KEY) private readonly config: ConfigType<typeof apiConfig>,
   ) {}
 
@@ -306,6 +309,7 @@ export class InvitationContinuationService {
       }
 
       return {
+        invitationId: invitation.id,
         membershipId,
         success: true as const,
         workspaceId: invitation.workspaceId,
@@ -317,6 +321,15 @@ export class InvitationContinuationService {
     if (!result.success) {
       return this.throwTokenOutcome(result.outcome);
     }
+
+    this.observability.capture(
+      productEvent(
+        { membershipId: result.membershipId, workspaceId: result.workspaceId },
+        'invitation_accepted',
+        { invitationId: result.invitationId },
+        { eventId: result.invitationId },
+      ),
+    );
 
     return {
       accepted: true,

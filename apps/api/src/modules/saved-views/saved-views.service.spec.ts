@@ -1,6 +1,7 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 
 import { DatabaseService } from '../../common/database/database.service';
+import { ObservabilityService } from '../../common/observability/observability.service';
 import { SavedViewsService } from './saved-views.service';
 
 const context = {
@@ -50,7 +51,11 @@ describe('SavedViewsService', () => {
       async (operation: (client: typeof transaction) => Promise<unknown>) => operation(transaction),
     );
     moduleRef = await Test.createTestingModule({
-      providers: [SavedViewsService, { provide: DatabaseService, useValue: database }],
+      providers: [
+        SavedViewsService,
+        { provide: DatabaseService, useValue: database },
+        { provide: ObservabilityService, useValue: { capture: jest.fn() } },
+      ],
     }).compile();
     service = moduleRef.get(SavedViewsService);
   });

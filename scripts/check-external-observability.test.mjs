@@ -103,6 +103,13 @@ test('확인된 전송은 공식 예외 계약을 포함한 네 요청만 보낸
       value: 'ObservabilitySmokeTest',
     },
   ]);
+  assert.equal(requests[0].body.event, 'search_performed');
+  assert.equal(requests[0].body.properties.payloadVersion, 1);
+  assert.equal(requests[0].body.properties.distinct_id, requests[0].body.properties.membershipId);
+  assert.equal(requests[0].body.uuid, requests[0].body.properties.eventId);
+  assert.match(requests[0].body.uuid, /^[0-9a-f-]{36}$/);
+  assert.equal(new Date(requests[0].body.timestamp).toISOString(), requests[0].body.timestamp);
+  assert.doesNotMatch(JSON.stringify(requests[0].body), /body|email|token|fileName|endpoint/);
   assert.equal(requests[1].body.properties.$exception_level, 'error');
   assert.deepEqual(
     requests.slice(2).map((request) => request.body.text.split('\n')[0]),

@@ -11,6 +11,11 @@ import {
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
+import { ObservabilityService } from '../../common/observability/observability.service';
+import {
+  deterministicProductEventId,
+  productEvent,
+} from '../../common/observability/product-event';
 import { apiConfig } from '../../config/api.config';
 import { AUTH_RATE_LIMITS, AuthRateLimitService } from '../auth/auth-rate-limit.service';
 import type {
@@ -74,6 +79,7 @@ export class WebPushSubscriptionsService {
   constructor(
     private readonly database: DatabaseService,
     private readonly rateLimits: AuthRateLimitService,
+    private readonly observability: ObservabilityService,
     @Inject(apiConfig.KEY) private readonly config: ConfigType<typeof apiConfig>,
   ) {}
 
@@ -244,6 +250,15 @@ export class WebPushSubscriptionsService {
       },
       select: { id: true },
     });
+
+    this.observability.capture(
+      productEvent(
+        context,
+        'push_test_requested',
+        {},
+        { eventId: deterministicProductEventId(eventId, 'push_test_requested') },
+      ),
+    );
 
     return { accepted: true, eventId };
   }

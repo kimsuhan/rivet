@@ -8,6 +8,7 @@ export {
   isAccountEmailEventType,
   validateAccountEmailOutboxPayload,
 } from './account-email';
+export { type AlphaObservation, calculateAlphaObservation } from './alpha-observation';
 export {
   API_HANDOFF_CREATED,
   API_HANDOFF_CREATED_SCHEMA_VERSION,
@@ -57,6 +58,14 @@ export {
   WORKSPACE_CREATED_SCHEMA_VERSION,
   type WorkspaceCreatedOutboxPayload,
 } from './product-analytics';
+export {
+  PRODUCT_EVENT_NAMES,
+  PRODUCT_EVENT_PAYLOAD_VERSION,
+  type ProductEvent,
+  type ProductEventName,
+  type ProductEventValidationResult,
+  validateProductEvent,
+} from './product-events';
 export {
   ISSUE_PURGE_SCHEDULED,
   ISSUE_PURGE_SCHEDULED_SCHEMA_VERSION,

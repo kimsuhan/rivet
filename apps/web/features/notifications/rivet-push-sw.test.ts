@@ -58,7 +58,7 @@ describe('rivet-push-sw', () => {
 
     expect(showNotification).toHaveBeenCalledWith('Rivet 알림', {
       body: '새 작업 전달 알림이 있습니다.',
-      data: { sourceId: notificationId, targetPath },
+      data: { sourceId: notificationId, targetPath, type: 'API_HANDOFF_CREATED' },
       icon: '/brand/symbol.png',
       renotify: false,
       tag: `rivet:${notificationId}`,

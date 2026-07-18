@@ -6,6 +6,7 @@ import {
   FolderKanban,
   ListTodo,
   type LucideIcon,
+  MessageSquarePlus,
   Plus,
   Search,
   Settings,
@@ -30,6 +31,7 @@ import {
 import { RivetSymbol, RivetWordmark } from '@/components/layout/brand';
 import { UserAvatar } from '@/components/user-avatar';
 import { UserMenu, type UserMenuLabels } from '@/features/auth/user-menu';
+import { FeedbackDialog } from '@/features/feedback/feedback-dialog';
 import {
   GlobalIssueCreate,
   type IssueCreateLabels,
@@ -40,6 +42,7 @@ import {
   savedViewNavigationHref,
 } from '@/features/issues/saved-view-navigation';
 import { SavedViewSidebarNavigation } from '@/features/issues/saved-view-sidebar-navigation';
+import { captureProductEvent } from '@/features/product-events/capture-product-event';
 import { ProfileDialog, type ProfileDialogLabels } from '@/features/profile/profile-dialog';
 import { GlobalSearch, type GlobalSearchLabels } from '@/features/search/global-search';
 import {
@@ -62,6 +65,7 @@ type ShellLabels = {
   desktopNavigation: string;
   mobileNavigation: string;
   openIssueCreate: string;
+  openFeedback: string;
   openSearch: string;
   openTeamSelector: string;
   skipToContent: string;
@@ -126,6 +130,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
   const router = useRouter();
   const searchParams = useSearchParams();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [teamSelectorOpen, setTeamSelectorOpen] = useState(false);
   const [issueCreateOpen, setIssueCreateOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -275,6 +280,18 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
       scroll: false,
     });
   }, [issueCreateOpen, pathname, router, searchParams]);
+
+  useEffect(() => {
+    const notificationId = searchParams.get('rivetPushClick');
+    if (!notificationId || !/^[0-9a-f-]{36}$/i.test(notificationId)) return;
+    captureProductEvent('push_notification_clicked', { notificationId });
+    const nextSearchParams = new URLSearchParams(searchParams.toString());
+    nextSearchParams.delete('rivetPushClick');
+    const nextSearch = nextSearchParams.toString();
+    router.replace(`${pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`, {
+      scroll: false,
+    });
+  }, [pathname, router, searchParams]);
 
   function openSearchFromTrigger(event: ReactMouseEvent<HTMLButtonElement>) {
     lastSearchTrigger.current = event.currentTarget;
@@ -437,6 +454,21 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
 
         {session.data?.authenticated ? (
           <div className="mt-auto flex flex-col gap-1 border-t p-2">
+            <button
+              type="button"
+              onClick={() => setFeedbackOpen(true)}
+              aria-label={labels.openFeedback}
+              aria-pressed={feedbackOpen}
+              title={labels.openFeedback}
+              className="text-sidebar-foreground hover:bg-surface-2 hover:text-foreground focus-visible:ring-sidebar-ring flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors outline-none focus-visible:ring-2"
+            >
+              <MessageSquarePlus
+                aria-hidden="true"
+                className="size-4 shrink-0"
+                strokeWidth={1.75}
+              />
+              <span className="hidden truncate xl:inline">{labels.openFeedback}</span>
+            </button>
             <UserMenu
               align="start"
               side="top"
@@ -487,6 +519,20 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
           <RivetWordmark />
         </Link>
         <div className="flex items-center gap-1">
+          {session.data?.authenticated ? (
+            <button
+              type="button"
+              onClick={() => setFeedbackOpen(true)}
+              aria-label={labels.openFeedback}
+              aria-pressed={feedbackOpen}
+              className={cn(
+                'focus-visible:ring-ring flex size-10 items-center justify-center rounded-md outline-none focus-visible:ring-2',
+                feedbackOpen ? 'text-primary' : 'text-muted-foreground',
+              )}
+            >
+              <MessageSquarePlus aria-hidden="true" className="size-5" strokeWidth={1.75} />
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={openSearchFromTrigger}
@@ -596,6 +642,9 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
       </nav>
 
       <GlobalSearch open={searchOpen} onOpenChange={changeSearchOpen} labels={labels.search} />
+      {session.data?.authenticated ? (
+        <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+      ) : null}
       <GlobalIssueCreate
         key={issueCreateOpen ? (issueCreateSeed?.projectId ?? 'new') : 'closed'}
         currentTeamKey={selectedTeamKey}

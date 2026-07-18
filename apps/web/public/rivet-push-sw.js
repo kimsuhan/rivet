@@ -47,7 +47,7 @@ self.addEventListener('push', (event) => {
       payload.type === 'WEB_PUSH_TEST' ? 'Rivet Web Push' : 'Rivet 알림',
       {
         body: BODY_BY_TYPE[payload.type],
-        data: { sourceId: payload.sourceId, targetPath: payload.targetPath },
+        data: { sourceId: payload.sourceId, targetPath: payload.targetPath, type: payload.type },
         icon: '/brand/symbol.png',
         renotify: false,
         tag: `rivet:${payload.sourceId}`,
@@ -63,6 +63,15 @@ self.addEventListener('notificationclick', (event) => {
 
   const target = new URL(targetPath, self.location.origin);
   if (target.origin !== self.location.origin) return;
+  const sourceId = event.notification.data?.sourceId;
+  if (
+    event.notification.data?.type &&
+    event.notification.data.type !== 'WEB_PUSH_TEST' &&
+    typeof sourceId === 'string' &&
+    /^[0-9a-f-]{36}$/i.test(sourceId)
+  ) {
+    target.searchParams.set('rivetPushClick', sourceId);
+  }
 
   event.waitUntil(
     self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then(async (windows) => {

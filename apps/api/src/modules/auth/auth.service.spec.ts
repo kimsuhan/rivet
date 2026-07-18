@@ -135,6 +135,7 @@ describe('AuthService', () => {
       { client } as unknown as DatabaseService,
       rateLimits as unknown as AuthRateLimitService,
       sessions as unknown as AuthSessionService,
+      { capture: jest.fn() } as never,
       config,
     );
     profile = new AuthProfileService({ client } as unknown as DatabaseService);

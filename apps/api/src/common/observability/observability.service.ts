@@ -2,37 +2,14 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { PinoLogger } from 'nestjs-pino';
 
+import type { ProductEvent } from '@rivet/event-contracts';
+import { validateProductEvent } from '@rivet/event-contracts';
+
 import { apiConfig } from '../../config/api.config';
 
 const ALERT_COOLDOWN_MS = 5 * 60_000;
 const HTTP_TIMEOUT_MS = 2_000;
 const POSTHOG_CAPTURE_URL = 'https://us.i.posthog.com/capture/';
-
-type ApiProductEvent =
-  | {
-      distinctId: string;
-      name: 'search_performed';
-      properties: {
-        resultCount: number;
-        searchType: 'IDENTIFIER' | 'TITLE';
-        workspaceId: string;
-      };
-    }
-  | {
-      distinctId: string;
-      name: 'inbox_opened';
-      properties: { unreadCount: number; workspaceId: string };
-    }
-  | {
-      distinctId: string;
-      name: 'notification_read';
-      properties: { notificationType: string; workspaceId: string };
-    }
-  | {
-      distinctId: string;
-      name: 'csv_exported';
-      properties: { exportType: 'ISSUES' | 'PROJECTS'; itemCount: number; workspaceId: string };
-    };
 
 type ApiAlert = {
   errorCode: string;
@@ -95,12 +72,29 @@ export class ObservabilityService {
     this.logger.setContext(ObservabilityService.name);
   }
 
-  capture(event: ApiProductEvent): void {
+  capture(event: ProductEvent): void {
+    const validatedEvent = this.validateProductEvent(event);
+    if (!validatedEvent) return;
     if (this.config.environment !== 'production' || !this.config.observability.posthogApiKey) {
       return;
     }
 
-    void this.postPostHog(event.name, event.distinctId, event.properties);
+    void this.postProductEvent(validatedEvent);
+  }
+
+  captureMany(events: ProductEvent[]): void {
+    const validatedEvents = events
+      .map((event) => this.validateProductEvent(event))
+      .filter((event): event is ProductEvent => event !== null);
+    if (
+      validatedEvents.length === 0 ||
+      this.config.environment !== 'production' ||
+      !this.config.observability.posthogApiKey
+    ) {
+      return;
+    }
+
+    void this.postProductEvents(validatedEvents);
   }
 
   isProductAnalyticsEnabled(): boolean {
@@ -175,6 +169,44 @@ export class ObservabilityService {
     }
   }
 
+  private async postProductEvent(event: ProductEvent): Promise<void> {
+    try {
+      const response = await fetch(POSTHOG_CAPTURE_URL, {
+        body: JSON.stringify({
+          api_key: this.config.observability.posthogApiKey,
+          event: event.name,
+          properties: {
+            distinct_id: event.membershipId,
+            environment: this.config.environment,
+            eventId: event.eventId,
+            membershipId: event.membershipId,
+            payloadVersion: event.payloadVersion,
+            releaseId: this.config.releaseId,
+            workspaceId: event.workspaceId,
+            ...event.properties,
+          },
+          timestamp: event.occurredAt,
+          uuid: event.eventId,
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+      });
+      if (!response.ok) throw new Error('POSTHOG_REQUEST_FAILED');
+    } catch {
+      this.logger.warn(
+        { errorCode: 'POSTHOG_DELIVERY_FAILED', event: event.name },
+        'PostHog 전송 실패',
+      );
+    }
+  }
+
+  private async postProductEvents(events: ProductEvent[]): Promise<void> {
+    for (const event of events) {
+      await this.postProductEvent(event);
+    }
+  }
+
   private async postSlack(
     webhookUrl: string,
     alertType: ApiAlert['type'],
@@ -204,5 +236,19 @@ export class ObservabilityService {
         });
       }
     }
+  }
+
+  private validateProductEvent(event: ProductEvent): ProductEvent | null {
+    const validation = validateProductEvent(event);
+    if (validation.success) return validation.event;
+
+    this.logger.warn(
+      {
+        errorCode: 'PRODUCT_EVENT_REJECTED',
+        eventName: typeof event.name === 'string' ? event.name : 'unknown',
+      },
+      '제품 이벤트 계약 거부',
+    );
+    return null;
   }
 }

@@ -158,11 +158,14 @@ describe('ExportsController', () => {
     expect(httpResponse.chunks).toEqual(['\uFEFF"헤더"\r\n', '"행1"\r\n', '"행2"\r\n']);
     expect(markCompleted).toHaveBeenCalledWith(context, AUDIT_ID, 2);
     expect(markDownloaded).toHaveBeenCalledWith(context, AUDIT_ID);
-    expect(capture).toHaveBeenCalledWith({
-      distinctId: MEMBERSHIP_ID,
-      name: 'csv_exported',
-      properties: { exportType: 'ISSUES', itemCount: 2, workspaceId: WORKSPACE_ID },
-    });
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        membershipId: MEMBERSHIP_ID,
+        name: 'csv_exported',
+        properties: { exportType: 'ISSUES', itemCount: 2 },
+        workspaceId: WORKSPACE_ID,
+      }),
+    );
     expect(markFailed).not.toHaveBeenCalled();
     expect(markCompleted.mock.invocationCallOrder[0]).toBeLessThan(
       markDownloaded.mock.invocationCallOrder[0] ?? 0,

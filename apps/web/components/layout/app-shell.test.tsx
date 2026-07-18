@@ -136,6 +136,11 @@ vi.mock('@/features/teams/team-selector', () => ({
   TeamSelector: () => null,
 }));
 
+vi.mock('@/features/feedback/feedback-dialog', () => ({
+  FeedbackDialog: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog" aria-label="피드백 모달" /> : null,
+}));
+
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ children, href, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
     <a href={typeof href === 'string' ? href : '#'} {...props}>
@@ -161,6 +166,7 @@ const labels = {
   inboxUnread: '알림함, 읽지 않은 알림 {count}개',
   mobileNavigation: '모바일 주 탐색',
   openIssueCreate: '이슈 만들기 열기',
+  openFeedback: '피드백 보내기',
   navigation: {
     inbox: '알림함',
     issues: '이슈',

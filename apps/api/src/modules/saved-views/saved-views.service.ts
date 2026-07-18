@@ -5,6 +5,8 @@ import { Prisma } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
+import { ObservabilityService } from '../../common/observability/observability.service';
+import { productEvent } from '../../common/observability/product-event';
 import type {
   CreateSavedViewDto,
   SavedViewResponseDto,
@@ -129,7 +131,10 @@ function normalizeConfiguration(
 
 @Injectable()
 export class SavedViewsService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly observability: ObservabilityService,
+  ) {}
 
   async list(
     context: SavedViewContext,
@@ -151,7 +156,7 @@ export class SavedViewsService {
     const { name, normalizedName } = normalizeName(dto.name);
     const configuration = normalizeConfiguration(dto.resourceType, dto.configuration);
     try {
-      return await this.database.client.$transaction(async (transaction) => {
+      const response = await this.database.client.$transaction(async (transaction) => {
         const row = await transaction.savedView.create({
           data: {
             configuration: configuration as Prisma.InputJsonValue,
@@ -165,6 +170,15 @@ export class SavedViewsService {
         if (!dto.isDefault) return this.response(row);
         return this.setDefaultInTransaction(transaction, context, row.id, row.version);
       });
+      this.observability.capture(
+        productEvent(
+          context,
+          'saved_view_created',
+          { resourceType: response.resourceType },
+          { eventId: response.id, occurredAt: response.createdAt },
+        ),
+      );
+      return response;
     } catch (error) {
       this.handleWriteError(error);
     }
@@ -312,9 +326,7 @@ export class SavedViewsService {
     };
   }
 
-  private handleWriteError(
-    error: unknown,
-  ): never {
+  private handleWriteError(error: unknown): never {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       const target = Array.isArray(error.meta?.target)
         ? error.meta.target.join(',')

@@ -6,9 +6,14 @@ import { PinoLogger } from 'nestjs-pino';
 import * as webPush from 'web-push';
 
 import { WebPushDeliveryStatus, WebPushSubscriptionStatus } from '@rivet/database';
-import type { WebPushTestRequestedOutboxPayload } from '@rivet/event-contracts';
+import {
+  PRODUCT_EVENT_PAYLOAD_VERSION,
+  type ProductEventName,
+  type WebPushTestRequestedOutboxPayload,
+} from '@rivet/event-contracts';
 
 import { DatabaseService } from '../../common/database/database.service';
+import { ObservabilityService } from '../../common/observability/observability.service';
 import { workerConfig } from '../../config/worker.config';
 import type { ClaimedOutboxEvent } from '../outbox/outbox.types';
 import { PermanentOutboxError, RetryableOutboxError } from '../outbox/outbox-errors';
@@ -68,6 +73,14 @@ function isRetryableStatus(code: number): boolean {
   return code === 408 || code === 425 || code === 429 || code >= 500;
 }
 
+function productEventId(sourceId: string, name: ProductEventName): string {
+  const bytes = createHash('sha256').update(`${name}:${sourceId}`).digest().subarray(0, 16);
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function isSessionActive(
   session: {
     absoluteExpiresAt: Date;
@@ -92,6 +105,7 @@ export class WebPushDeliveryService {
     private readonly database: DatabaseService,
     @Inject(workerConfig.KEY) private readonly config: ConfigType<typeof workerConfig>,
     private readonly logger: PinoLogger,
+    private readonly observability: ObservabilityService,
   ) {
     this.logger.setContext(WebPushDeliveryService.name);
   }
@@ -226,6 +240,7 @@ export class WebPushDeliveryService {
             auth: true,
             endpoint: true,
             id: true,
+            membershipId: true,
             p256dh: true,
             session: {
               select: {
@@ -235,6 +250,7 @@ export class WebPushDeliveryService {
               },
             },
             status: true,
+            workspaceId: true,
           },
         },
       },
@@ -306,6 +322,10 @@ export class WebPushDeliveryService {
         'WEB_PUSH_SUBSCRIPTION_INVALID',
         WebPushSubscriptionStatus.EXPIRED,
       );
+      this.captureDelivery(delivery, 'push_delivery_failed', {
+        errorCode: 'WEB_PUSH_SUBSCRIPTION_INVALID',
+        notificationId: delivery.notification?.id,
+      });
       return null;
     }
     if (!isSessionActive(delivery.subscription.session, new Date())) {
@@ -315,6 +335,10 @@ export class WebPushDeliveryService {
         'WEB_PUSH_SESSION_INACTIVE',
         WebPushSubscriptionStatus.EXPIRED,
       );
+      this.captureDelivery(delivery, 'push_delivery_failed', {
+        errorCode: 'WEB_PUSH_SESSION_INACTIVE',
+        notificationId: delivery.notification?.id,
+      });
       return null;
     }
 
@@ -354,6 +378,10 @@ export class WebPushDeliveryService {
       if (providerStatus === null && networkCode === null) {
         const code = 'WEB_PUSH_PROVIDER_INTERNAL_ERROR';
         await this.failDeliveryOnly(delivery.id, code);
+        this.captureDelivery(delivery, 'push_delivery_failed', {
+          errorCode: code,
+          notificationId: delivery.notification?.id,
+        });
         return { code, kind: 'permanent' };
       }
 
@@ -383,11 +411,48 @@ export class WebPushDeliveryService {
           ? WebPushSubscriptionStatus.EXPIRED
           : WebPushSubscriptionStatus.INACTIVE,
       );
+      this.captureDelivery(delivery, 'push_delivery_failed', {
+        errorCode: code,
+        notificationId: delivery.notification?.id,
+      });
       return null;
     }
 
-    await this.recordSuccess(delivery.id, delivery.subscription.id);
+    try {
+      await this.recordSuccess(delivery.id, delivery.subscription.id);
+    } catch (error) {
+      if (error instanceof PermanentOutboxError) {
+        this.captureDelivery(delivery, 'push_delivery_failed', {
+          errorCode: error.code,
+          notificationId: delivery.notification?.id,
+        });
+      }
+      throw error;
+    }
+    this.captureDelivery(delivery, 'push_delivery_succeeded', {
+      notificationId: delivery.notification?.id,
+    });
     return null;
+  }
+
+  private captureDelivery(
+    delivery: DeliveryRow,
+    name: 'push_delivery_succeeded' | 'push_delivery_failed',
+    properties: { errorCode?: string; notificationId: string | undefined },
+  ): void {
+    if (!delivery.notification || !properties.notificationId) return;
+    this.observability.capture({
+      eventId: productEventId(delivery.id, name),
+      membershipId: delivery.subscription.membershipId,
+      name,
+      occurredAt: new Date().toISOString(),
+      payloadVersion: PRODUCT_EVENT_PAYLOAD_VERSION,
+      properties:
+        name === 'push_delivery_failed'
+          ? { errorCode: properties.errorCode, notificationId: properties.notificationId }
+          : { notificationId: properties.notificationId },
+      workspaceId: delivery.subscription.workspaceId,
+    });
   }
 
   private async recordSuccess(deliveryId: string, subscriptionId: string): Promise<void> {

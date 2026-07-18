@@ -3,6 +3,8 @@ export { Prisma, PrismaClient } from './generated/prisma/client';
 export {
   EmailTemplateType,
   ExportType,
+  FeedbackCategory,
+  FeedbackStatus,
   FileScope,
   HandoffKind,
   ImportRunStatus,

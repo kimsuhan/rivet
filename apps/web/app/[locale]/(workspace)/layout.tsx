@@ -43,6 +43,7 @@ export default async function WorkspaceLayout({
     <NextIntlClientProvider
       messages={{
         Files: messages.Files,
+        Feedback: messages.Feedback,
         IssueCreate: messages.IssueCreate,
         Markdown: messages.Markdown,
         States: messages.States,
@@ -69,6 +70,7 @@ export default async function WorkspaceLayout({
               desktopNavigation: shell('desktopNavigation'),
               mobileNavigation: shell('mobileNavigation'),
               openIssueCreate: shell('openIssueCreate'),
+              openFeedback: shell('openFeedback'),
               openSearch: shell('openSearch'),
               openTeamSelector: shell('openTeamSelector'),
               inboxUnread: shell.raw('inboxUnread') as string,
