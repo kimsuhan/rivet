@@ -52,6 +52,7 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/compone
 import { Spinner } from '@/components/ui/spinner';
 import { IssueDescriptionEditor } from '@/features/collaboration/markdown-editor';
 import { FileUploadQueue } from '@/features/files/file-upload-queue';
+import { captureProductEvent } from '@/features/product-events/capture-product-event';
 import { useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
@@ -399,6 +400,7 @@ export function GlobalIssueCreate({
       }
       setSelectedTemplateId(result.id);
       setAppliedTemplate({ id: result.id, version: result.version });
+      captureProductEvent('issue_template_applied', { templateId: result.id });
       setTemplateNotice(false);
       setTemplateSelectionRequired(false);
       setPendingTemplate(null);

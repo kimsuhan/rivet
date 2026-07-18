@@ -5,6 +5,7 @@ import {
   FileUp,
   GitBranch,
   LayoutTemplate,
+  MessageSquareText,
   Tags,
   Trash2,
   UsersRound,
@@ -16,6 +17,7 @@ import { cn } from '@/lib/utils';
 
 type SettingsShellLabels = {
   export: string;
+  feedback: string;
   import: string;
   labels: string;
   members: string;
@@ -37,6 +39,7 @@ const links = [
   },
   { href: '/settings/export' as const, icon: FileDown, label: 'export' as const },
   { href: '/settings/import' as const, icon: FileUp, label: 'import' as const },
+  { href: '/settings/feedback' as const, icon: MessageSquareText, label: 'feedback' as const },
   { href: '/settings/trash' as const, icon: Trash2, label: 'trash' as const },
 ];
 

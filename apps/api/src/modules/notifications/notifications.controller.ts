@@ -32,6 +32,7 @@ import {
 import { ApiError } from '../../common/errors/api-error';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
 import { ObservabilityService } from '../../common/observability/observability.service';
+import { productEvent } from '../../common/observability/product-event';
 import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import {
@@ -194,14 +195,9 @@ export class NotificationsController {
       void this.notifications
         .unreadCount(context)
         .then((unread) =>
-          this.observability.capture({
-            distinctId: context.membershipId,
-            name: 'inbox_opened',
-            properties: {
-              unreadCount: unread.count,
-              workspaceId: context.workspaceId,
-            },
-          }),
+          this.observability.capture(
+            productEvent(context, 'inbox_opened', { unreadCount: unread.count }),
+          ),
         )
         .catch(() =>
           this.logger.warn(
@@ -240,15 +236,7 @@ export class NotificationsController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
   ): Promise<NotificationReadAllResponseDto> {
     const context = activeWorkspace(authentication);
-    const result = await this.notifications.readAll(context);
-    if (result.updatedCount > 0) {
-      this.observability.capture({
-        distinctId: context.membershipId,
-        name: 'notification_read',
-        properties: { notificationType: 'ALL', workspaceId: context.workspaceId },
-      });
-    }
-    return result;
+    return this.notifications.readAll(context);
   }
 
   @Patch(':notificationId')

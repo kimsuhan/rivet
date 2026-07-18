@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 
@@ -9,6 +11,9 @@ import {
   ISSUE_CHANGED,
   ISSUE_CREATED,
   ISSUE_PURGE_SCHEDULED,
+  PRODUCT_EVENT_PAYLOAD_VERSION,
+  type ProductEvent,
+  type ProductEventName,
   PROJECT_CREATED,
   PROJECT_PURGE_SCHEDULED,
   PROJECT_STATUS_CHANGED,
@@ -49,6 +54,31 @@ import { CanceledOutboxError, PermanentOutboxError, RetryableOutboxError } from 
 import { calculateRetryDelayMs } from './outbox-retry';
 
 const MAX_CONCURRENT_EVENTS = 5;
+
+function eventId(sourceId: string, name: ProductEventName): string {
+  const bytes = createHash('sha256').update(`${name}:${sourceId}`).digest().subarray(0, 16);
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function productEvent(
+  event: ClaimedOutboxEvent,
+  name: ProductEventName,
+  properties: Record<string, unknown>,
+): ProductEvent | null {
+  if (!event.workspaceId || !event.actorMembershipId) return null;
+  return {
+    eventId: eventId(event.id, name),
+    membershipId: event.actorMembershipId,
+    name,
+    occurredAt: event.createdAt.toISOString(),
+    payloadVersion: PRODUCT_EVENT_PAYLOAD_VERSION,
+    properties,
+    workspaceId: event.workspaceId,
+  };
+}
 
 @Injectable()
 export class OutboxProcessorService {
@@ -586,9 +616,7 @@ export class OutboxProcessorService {
     throw new PermanentOutboxError('OUTBOX_EVENT_TYPE_UNSUPPORTED');
   }
 
-  private async assertAnalyticsEventReferences(
-    event: ClaimedOutboxEvent,
-  ): Promise<void> {
+  private async assertAnalyticsEventReferences(event: ClaimedOutboxEvent): Promise<void> {
     if (event.workspaceId === null) {
       throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
     }
@@ -621,34 +649,32 @@ export class OutboxProcessorService {
   }
 
   private captureCompletedEvent(event: ClaimedOutboxEvent): void {
-    if (event.workspaceId === null || event.actorMembershipId === null) return;
+    if (event.workspaceId === null) return;
+
+    void this.captureCreatedNotifications(event);
+
+    if (event.actorMembershipId === null) return;
+
+    const capture = (name: ProductEventName, properties: Record<string, unknown>) => {
+      const analyticsEvent = productEvent(event, name, properties);
+      if (analyticsEvent) this.observability.capture(analyticsEvent);
+    };
 
     if (event.eventType === WORKSPACE_CREATED) {
       const validation = validateWorkspaceCreatedOutboxPayload(event.payload);
       if (!validation.success) return;
-      this.observability.capture({
-        distinctId: event.actorMembershipId,
-        name: 'workspace_created',
-        properties: {
-          acquisitionSource: validation.payload.acquisitionSource,
-          workspaceId: event.workspaceId,
-        },
-      });
+      capture('workspace_created', { acquisitionSource: validation.payload.acquisitionSource });
+      capture('signup_completed', { method: 'DIRECT_WORKSPACE' });
       return;
     }
 
     if (event.eventType === PROJECT_CREATED) {
       const validation = validateProjectCreatedOutboxPayload(event.payload);
       if (!validation.success) return;
-      this.observability.capture({
-        distinctId: event.actorMembershipId,
-        name: 'project_created',
-        properties: {
-          hasTargetDate: validation.payload.hasTargetDate,
-          roleCount: validation.payload.roleCount,
-          roles: validation.payload.roles,
-          workspaceId: event.workspaceId,
-        },
+      capture('project_created', {
+        hasTargetDate: validation.payload.hasTargetDate,
+        roleCount: validation.payload.roleCount,
+        roles: validation.payload.roles,
       });
       return;
     }
@@ -656,15 +682,10 @@ export class OutboxProcessorService {
     if (event.eventType === PROJECT_STATUS_CHANGED) {
       const validation = validateProjectStatusChangedOutboxPayload(event.payload);
       if (!validation.success) return;
-      this.observability.capture({
-        distinctId: event.actorMembershipId,
-        name: 'project_status_changed',
-        properties: {
-          fromStatus: validation.payload.fromStatus,
-          progress: validation.payload.progress,
-          toStatus: validation.payload.toStatus,
-          workspaceId: event.workspaceId,
-        },
+      capture('project_status_changed', {
+        fromStatus: validation.payload.fromStatus,
+        progress: validation.payload.progress,
+        toStatus: validation.payload.toStatus,
       });
       return;
     }
@@ -672,13 +693,8 @@ export class OutboxProcessorService {
     if (event.eventType === TEAM_WORK_CREATED) {
       const validation = validateTeamWorkCreatedOutboxPayload(event.payload);
       if (!validation.success) return;
-      this.observability.capture({
-        distinctId: event.actorMembershipId,
-        name: 'team_work_created',
-        properties: {
-          hasAssignee: validation.payload.assigneeMembershipId !== null,
-          workspaceId: event.workspaceId,
-        },
+      capture('team_work_created', {
+        hasAssignee: validation.payload.assigneeMembershipId !== null,
       });
       return;
     }
@@ -686,13 +702,8 @@ export class OutboxProcessorService {
     if (event.eventType === WORKSPACE_INVITATION_REQUESTED) {
       const validation = validateWorkspaceInvitationEmailOutboxPayload(event.payload);
       if (!validation.success) return;
-      this.observability.capture({
-        distinctId: event.actorMembershipId,
-        name: 'member_invited',
-        properties: {
-          currentMemberCount: validation.payload.currentMemberCount,
-          workspaceId: event.workspaceId,
-        },
+      capture('member_invited', {
+        currentMemberCount: validation.payload.currentMemberCount,
       });
       return;
     }
@@ -700,13 +711,9 @@ export class OutboxProcessorService {
     if (event.eventType === ISSUE_CREATED) {
       const validation = validateIssueCreatedOutboxPayload(event.payload);
       if (!validation.success) return;
-      this.observability.capture({
-        distinctId: event.actorMembershipId,
-        name: 'issue_created',
-        properties: {
-          hasMention: validation.payload.mentionedMembershipIds.length > 0,
-          workspaceId: event.workspaceId,
-        },
+      capture('issue_created', {
+        hasMention: validation.payload.mentionedMembershipIds.length > 0,
+        issueId: event.aggregateId,
       });
       return;
     }
@@ -714,20 +721,11 @@ export class OutboxProcessorService {
     if (event.eventType === ISSUE_CHANGED) {
       const validation = validateIssueChangedOutboxPayload(event.payload);
       if (!validation.success) return;
-      this.observability.capture({
-        distinctId: event.actorMembershipId,
-        name: 'issue_property_changed',
-        properties: {
-          propertyTypes: [...validation.payload.changedFields],
-          workspaceId: event.workspaceId,
-        },
+      capture('issue_property_changed', {
+        propertyTypes: [...validation.payload.changedFields],
       });
       if (validation.payload.terminalCategory === 'COMPLETED') {
-        this.observability.capture({
-          distinctId: event.actorMembershipId,
-          name: 'issue_completed',
-          properties: { workspaceId: event.workspaceId },
-        });
+        capture('issue_completed', {});
       }
       return;
     }
@@ -735,27 +733,23 @@ export class OutboxProcessorService {
     if (event.eventType === TEAM_WORK_CHANGED) {
       const validation = validateTeamWorkChangedOutboxPayload(event.payload);
       if (!validation.success) return;
-      this.observability.capture({
-        distinctId: event.actorMembershipId,
-        name: 'team_work_property_changed',
-        properties: {
-          propertyTypes: [...validation.payload.changedFields],
-          workspaceId: event.workspaceId,
-        },
+      capture('team_work_property_changed', {
+        propertyTypes: [...validation.payload.changedFields],
       });
+      if (validation.payload.terminalCategory === 'COMPLETED') {
+        capture('team_work_completed', {
+          issueId: validation.payload.issueId,
+          teamWorkId: event.aggregateId,
+        });
+      }
       return;
     }
 
     if (event.eventType === COMMENT_CREATED) {
       const validation = validateCommentCreatedOutboxPayload(event.payload);
       if (!validation.success) return;
-      this.observability.capture({
-        distinctId: event.actorMembershipId,
-        name: 'comment_created',
-        properties: {
-          hasMention: validation.payload.hasMention,
-          workspaceId: event.workspaceId,
-        },
+      capture('comment_created', {
+        hasMention: validation.payload.hasMention,
       });
       return;
     }
@@ -763,15 +757,38 @@ export class OutboxProcessorService {
     if (event.eventType === API_HANDOFF_CREATED) {
       const validation = validateApiHandoffCreatedOutboxPayload(event.payload);
       if (!validation.success) return;
-      this.observability.capture({
-        distinctId: event.actorMembershipId,
-        name: 'api_handoff_created',
-        properties: {
-          targetTeamWorkCount: validation.payload.targetTeamWorkIds.length,
-          isFollowUp: validation.payload.kind === 'FOLLOW_UP',
-          workspaceId: event.workspaceId,
-        },
+      capture('api_handoff_created', {
+        targetTeamWorkCount: validation.payload.targetTeamWorkIds.length,
+        isFollowUp: validation.payload.kind === 'FOLLOW_UP',
       });
+    }
+  }
+
+  private async captureCreatedNotifications(event: ClaimedOutboxEvent): Promise<void> {
+    if (!event.workspaceId) return;
+    try {
+      const notifications = await this.database.client.notification.findMany({
+        select: { createdAt: true, id: true, recipientMembershipId: true, type: true },
+        where: { eventId: event.id, workspaceId: event.workspaceId },
+      });
+      for (const notification of notifications) {
+        this.observability.capture({
+          eventId: eventId(notification.id, 'notification_created'),
+          membershipId: notification.recipientMembershipId,
+          name: 'notification_created',
+          occurredAt: notification.createdAt.toISOString(),
+          payloadVersion: PRODUCT_EVENT_PAYLOAD_VERSION,
+          properties: { notificationId: notification.id, notificationType: notification.type },
+          workspaceId: event.workspaceId,
+        });
+      }
+    } catch {
+      if (typeof this.logger.warn === 'function') {
+        this.logger.warn(
+          { errorCode: 'NOTIFICATION_ANALYTICS_QUERY_FAILED', eventId: event.id },
+          '알림 생성 계측 조회 실패',
+        );
+      }
     }
   }
 }

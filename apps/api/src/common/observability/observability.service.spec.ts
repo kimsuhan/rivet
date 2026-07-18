@@ -4,6 +4,25 @@ import type { PinoLogger } from 'nestjs-pino';
 import { apiConfig } from '../../config/api.config';
 import { ObservabilityService } from './observability.service';
 
+const eventId = '11111111-1111-4111-8111-111111111111';
+const membershipId = '22222222-2222-4222-8222-222222222222';
+const workspaceId = '33333333-3333-4333-8333-333333333333';
+
+function productEvent(
+  name: 'search_performed' | 'inbox_opened',
+  properties: Record<string, unknown>,
+) {
+  return {
+    eventId,
+    membershipId,
+    name,
+    occurredAt: '2026-07-18T00:00:00.000Z',
+    payloadVersion: 1 as const,
+    properties,
+    workspaceId,
+  };
+}
+
 const productionConfig: ConfigType<typeof apiConfig> = {
   database: {
     connectionTimeoutMs: 5_000,
@@ -59,11 +78,7 @@ describe('API ObservabilityService', () => {
       logger,
     );
 
-    service.capture({
-      distinctId: 'membership-id',
-      name: 'search_performed',
-      properties: { resultCount: 1, searchType: 'TITLE', workspaceId: 'workspace-id' },
-    });
+    service.capture(productEvent('search_performed', { resultCount: 1, searchType: 'TITLE' }));
     service.alert({
       errorCode: 'POSTGRES_LISTENER_DISCONNECTED',
       type: 'POSTGRES_LISTENER_DISCONNECTED',
@@ -75,11 +90,7 @@ describe('API ObservabilityService', () => {
   it('sends only the typed product properties with a short timeout', async () => {
     const service = new ObservabilityService(productionConfig, logger);
 
-    service.capture({
-      distinctId: 'membership-id',
-      name: 'search_performed',
-      properties: { resultCount: 2, searchType: 'IDENTIFIER', workspaceId: 'workspace-id' },
-    });
+    service.capture(productEvent('search_performed', { resultCount: 2, searchType: 'IDENTIFIER' }));
     await flushRequests();
 
     const request = fetchMock.mock.calls[0]?.[1];
@@ -92,13 +103,18 @@ describe('API ObservabilityService', () => {
       api_key: 'phc_test12345678',
       event: 'search_performed',
       properties: {
-        distinct_id: 'membership-id',
+        distinct_id: membershipId,
         environment: 'production',
+        eventId,
+        membershipId,
+        payloadVersion: 1,
         releaseId: 'release-test',
         resultCount: 2,
         searchType: 'IDENTIFIER',
-        workspaceId: 'workspace-id',
+        workspaceId,
       },
+      timestamp: '2026-07-18T00:00:00.000Z',
+      uuid: eventId,
     });
     expect(timeout).toHaveBeenCalledWith(2_000);
   });
@@ -236,13 +252,7 @@ describe('API ObservabilityService', () => {
     fetchMock.mockRejectedValue(new Error('provider body with secret'));
     const service = new ObservabilityService(productionConfig, logger);
 
-    expect(() =>
-      service.capture({
-        distinctId: 'membership-id',
-        name: 'inbox_opened',
-        properties: { unreadCount: 3, workspaceId: 'workspace-id' },
-      }),
-    ).not.toThrow();
+    expect(() => service.capture(productEvent('inbox_opened', { unreadCount: 3 }))).not.toThrow();
     await flushRequests();
 
     expect(warn).toHaveBeenCalledWith(

@@ -44,6 +44,7 @@ describe('RetentionService', () => {
       deactivatedPushSubscriptions: 0,
       deletedEmailDeliveries: 0,
       deletedExportAudits: 0,
+      deletedFeedback: 0,
       deletedOutboxEvents: 0,
       deletedRateLimitBuckets: 0,
       deletedSessions: 101,
@@ -59,6 +60,7 @@ describe('RetentionService', () => {
       '"sessions"',
       '"auth_rate_limit_buckets"',
       '"export_audits"',
+      '"product_feedback"',
       '"outbox_events"',
     ]) {
       expect(tables.some((sql) => sql.includes(table))).toBe(true);
@@ -94,6 +96,9 @@ describe('RetentionService', () => {
     );
     expect(sql.find((value) => value.includes('"email_deliveries"'))).toContain(
       '"sent_at" IS NOT NULL OR "failed_at" IS NOT NULL',
+    );
+    expect(sql.find((value) => value.includes('"product_feedback"'))).toContain(
+      '"retention_expires_at" < NOW()',
     );
     expect(sql.find((value) => value.includes('"web_push_subscriptions"'))).toEqual(
       expect.stringContaining('session."idle_expires_at" <= NOW()'),

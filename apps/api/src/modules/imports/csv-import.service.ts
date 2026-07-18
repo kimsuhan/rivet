@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { HttpStatus, Injectable } from '@nestjs/common';
 
@@ -6,6 +6,11 @@ import { ImportRunStatus, IssuePriority } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
+import { ObservabilityService } from '../../common/observability/observability.service';
+import {
+  deterministicProductEventId,
+  productEvent,
+} from '../../common/observability/product-event';
 import type { CsvImportContext as ImportContext } from './csv-import.context';
 import { csvImportError as importError } from './csv-import.errors';
 import {
@@ -50,6 +55,7 @@ export class CsvImportService {
     private readonly queries: CsvImportQueryService,
     private readonly runs: CsvImportRunRepository,
     private readonly targets: CsvImportTargetRepository,
+    private readonly observability: ObservabilityService,
   ) {}
 
   async inspect(
@@ -57,6 +63,7 @@ export class CsvImportService {
     executionId: string,
     file: CsvImportUpload | undefined,
   ): Promise<CsvImportInspectionResponseDto> {
+    const attemptId = randomUUID();
     try {
       const parsed = parseCsvImportFile(file);
       await this.runs.save(context, executionId, parsed.fingerprint, {
@@ -69,6 +76,14 @@ export class CsvImportService {
             ? ImportRunStatus.VALIDATION_FAILED
             : ImportRunStatus.PREVIEWED,
       });
+      this.observability.capture(
+        productEvent(
+          context,
+          'csv_import_started',
+          { executionId },
+          { eventId: deterministicProductEventId(executionId, 'csv_import_started') },
+        ),
+      );
       return {
         columnValues: parsed.columns.map((column) => {
           const values = [
@@ -102,6 +117,16 @@ export class CsvImportService {
           lastErrorCode: error.code,
           status: ImportRunStatus.VALIDATION_FAILED,
         });
+        this.observability.capture(
+          productEvent(
+            context,
+            'csv_import_failed',
+            { attemptId, errorCode: error.code, executionId, phase: 'VALIDATION' },
+            {
+              eventId: deterministicProductEventId(attemptId, 'csv_import_failed'),
+            },
+          ),
+        );
         return importError(error.code, 'CSV 파일 형식과 제한을 확인해 주세요.');
       }
       throw error;
@@ -128,6 +153,7 @@ export class CsvImportService {
     rawMapping: string,
     allowDuplicateFile: boolean,
   ): Promise<CsvImportValidationResponseDto> {
+    const attemptId = randomUUID();
     const parsed = this.parseFile(file);
     const mapping = parseMapping(rawMapping, parsed.columns);
     const targets = await this.targets.load(this.database.client, context.workspaceId);
@@ -171,6 +197,36 @@ export class CsvImportService {
       validatedTargetFingerprint: canExecute ? targets.fingerprint : null,
       validationSignature: canExecute ? validationSignature : null,
     });
+    this.observability.capture(
+      productEvent(
+        context,
+        'csv_import_validated',
+        {
+          attemptId,
+          canExecute,
+          errorCodes: [...new Set(analysis.errors.map((error) => error.code))],
+          executionId,
+        },
+        { eventId: deterministicProductEventId(attemptId, 'csv_import_validated') },
+      ),
+    );
+    if (!canExecute) {
+      this.observability.capture(
+        productEvent(
+          context,
+          'csv_import_failed',
+          {
+            errorCode: analysis.errors[0]?.code ?? 'IMPORT_VALIDATION_FAILED',
+            attemptId,
+            executionId,
+            phase: 'VALIDATION',
+          },
+          {
+            eventId: deterministicProductEventId(attemptId, 'csv_import_failed'),
+          },
+        ),
+      );
+    }
     return {
       canExecute,
       duplicateCompletedRun: Boolean(duplicateCompletedRun),
@@ -190,6 +246,7 @@ export class CsvImportService {
     allowDuplicateFile: boolean,
     validationSignature: string,
   ): Promise<CsvImportRunResponseDto> {
+    const attemptId = randomUUID();
     const parsed = this.parseFile(file);
     const mapping = parseMapping(rawMapping, parsed.columns);
     try {
@@ -294,6 +351,14 @@ export class CsvImportService {
           workspaceId: context.workspaceId,
         },
       });
+      this.observability.capture(
+        productEvent(
+          context,
+          'csv_import_failed',
+          { attemptId, errorCode: code, executionId, phase: 'EXECUTION' },
+          { eventId: deterministicProductEventId(attemptId, 'csv_import_failed') },
+        ),
+      );
       if (error instanceof ApiError) throw error;
       if (code === 'IMPORT_DUPLICATE_CONFLICT') {
         return importError(
@@ -308,7 +373,20 @@ export class CsvImportService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-    return this.queries.getRun(context, executionId);
+    const result = await this.queries.getRun(context, executionId);
+    this.observability.capture(
+      productEvent(
+        context,
+        'csv_import_completed',
+        {
+          executionId,
+          issueCreatedCount: result.issueCreatedCount,
+          projectCreatedCount: result.projectCreatedCount,
+        },
+        { eventId: deterministicProductEventId(executionId, 'csv_import_completed') },
+      ),
+    );
+    return result;
   }
 
   private parseFile(file: CsvImportUpload | undefined): ParsedCsvImport {

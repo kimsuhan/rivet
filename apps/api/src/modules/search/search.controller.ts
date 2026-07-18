@@ -13,6 +13,7 @@ import {
 import { ApiError } from '../../common/errors/api-error';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
 import { ObservabilityService } from '../../common/observability/observability.service';
+import { productEvent } from '../../common/observability/product-event';
 import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import { SearchIssueListResponseDto, SearchIssuesQueryDto } from './dto/search-issues.dto';
@@ -66,17 +67,15 @@ export class SearchController {
     const context = activeWorkspace(authentication);
     const result = await this.search.issues(context.workspaceId, query);
     if (query.cursor === undefined) {
-      this.observability.capture({
-        distinctId: context.membershipId,
-        name: 'search_performed',
-        properties: {
-          resultCount: result.items.length,
-          searchType: /^(?:F|[A-Z]{2,5})-[1-9][0-9]*$/i.test(query.query?.trim() ?? '')
-            ? 'IDENTIFIER'
-            : 'TITLE',
-          workspaceId: context.workspaceId,
-        },
-      });
+      const searchType = /^(?:F|[A-Z]{2,5})-[1-9][0-9]*$/i.test(query.query?.trim() ?? '')
+        ? 'IDENTIFIER'
+        : 'TITLE';
+      this.observability.capture(
+        productEvent(context, 'search_performed', { resultCount: result.items.length, searchType }),
+      );
+      if (result.items.length === 0) {
+        this.observability.capture(productEvent(context, 'search_no_results', { searchType }));
+      }
     }
     return result;
   }

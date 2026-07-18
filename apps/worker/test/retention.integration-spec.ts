@@ -8,6 +8,7 @@ import { PinoLogger } from 'nestjs-pino';
 import {
   EmailTemplateType,
   ExportType,
+  FeedbackCategory,
   MembershipRole,
   TokenPurpose,
   WebPushBrowser,
@@ -40,6 +41,10 @@ describe('retention cleanup integration', () => {
   let activeTokenId: string;
   let expiredSessionId: string;
   let expiredSubscriptionId: string;
+  let activeFeedbackId: string;
+  let activeBucketId: string;
+  let expiredFeedbackId: string;
+  let expiredBucketId: string;
   let unfinishedAuditId: string;
   let fixtureReady = false;
 
@@ -83,6 +88,32 @@ describe('retention cleanup integration', () => {
       const membership = await transaction.workspaceMembership.create({
         data: { role: MembershipRole.ADMIN, userId: user.id, workspaceId: workspace.id },
       });
+      const [expiredFeedback, activeFeedback] = await Promise.all([
+        transaction.productFeedback.create({
+          data: {
+            body: '보존 기간이 지난 피드백',
+            category: FeedbackCategory.BUG,
+            currentPath: '/ko/issues',
+            releaseId: 'retention-test',
+            retentionExpiresAt: old,
+            submissionId: randomUUID(),
+            submittedByMembershipId: membership.id,
+            workspaceId: workspace.id,
+          },
+        }),
+        transaction.productFeedback.create({
+          data: {
+            body: '보존 기간 안의 피드백',
+            category: FeedbackCategory.IDEA,
+            currentPath: '/ko/settings',
+            releaseId: 'retention-test',
+            retentionExpiresAt: future,
+            submissionId: randomUUID(),
+            submittedByMembershipId: membership.id,
+            workspaceId: workspace.id,
+          },
+        }),
+      ]);
 
       const [expiredSession, activeSession] = await Promise.all([
         transaction.session.create({
@@ -231,11 +262,13 @@ describe('retention cleanup integration', () => {
       ]);
 
       return {
+        activeFeedbackId: activeFeedback.id,
         activeSessionId: activeSession.id,
         activeSubscriptionId: activeSubscription.id,
         activeTokenId: activeToken.id,
         completedAuditId: completedAudit.id,
         expiredBucketId: expiredBucket.id,
+        expiredFeedbackId: expiredFeedback.id,
         expiredSessionId: expiredSession.id,
         expiredSubscriptionId: expiredSubscription.id,
         expiredTokenId: expiredToken.id,
@@ -256,9 +289,13 @@ describe('retention cleanup integration', () => {
     failedOutboxId = fixture.failedOutboxId;
     recentOutboxId = fixture.recentOutboxId;
     activeSessionId = fixture.activeSessionId;
+    activeFeedbackId = fixture.activeFeedbackId;
+    activeBucketId = fixture.rateLimitIds[1]!;
     activeSubscriptionId = fixture.activeSubscriptionId;
     activeTokenId = fixture.activeTokenId;
     expiredSessionId = fixture.expiredSessionId;
+    expiredFeedbackId = fixture.expiredFeedbackId;
+    expiredBucketId = fixture.expiredBucketId;
     expiredSubscriptionId = fixture.expiredSubscriptionId;
     unfinishedAuditId = fixture.unfinishedAuditId;
     outboxIds.push(...fixture.outboxIds);
@@ -268,6 +305,7 @@ describe('retention cleanup integration', () => {
 
   afterAll(async () => {
     if (database && fixtureReady) {
+      await database.client.productFeedback.deleteMany({ where: { workspaceId } });
       await database.client.exportAudit.deleteMany({ where: { workspaceId } });
       await database.client.emailDelivery.deleteMany({
         where: { outboxEventId: { in: outboxIds } },
@@ -285,16 +323,19 @@ describe('retention cleanup integration', () => {
   });
 
   it('deletes only expired terminal rows and is idempotent', async () => {
-    await expect(service.cleanup(`retention-${runId}`)).resolves.toEqual({
+    const result = await service.cleanup(`retention-${runId}`);
+    expect(result).toEqual({
       deactivatedPushSubscriptions: 1,
       deletedEmailDeliveries: 1,
       deletedExportAudits: 1,
+      deletedFeedback: 1,
       deletedOutboxEvents: 3,
-      deletedRateLimitBuckets: 1,
+      deletedRateLimitBuckets: expect.any(Number),
       deletedSessions: 1,
       deletedTokens: 1,
       failedSteps: 0,
     });
+    expect(result.deletedRateLimitBuckets).toBeGreaterThanOrEqual(1);
 
     await expect(
       Promise.all([
@@ -306,6 +347,10 @@ describe('retention cleanup integration', () => {
         database.client.outboxEvent.findUnique({ where: { id: failedOutboxId } }),
         database.client.outboxEvent.findUnique({ where: { id: recentOutboxId } }),
         database.client.exportAudit.findUnique({ where: { id: unfinishedAuditId } }),
+        database.client.productFeedback.findUnique({ where: { id: activeFeedbackId } }),
+        database.client.productFeedback.findUnique({ where: { id: expiredFeedbackId } }),
+        database.client.authRateLimitBucket.findUnique({ where: { id: activeBucketId } }),
+        database.client.authRateLimitBucket.findUnique({ where: { id: expiredBucketId } }),
       ]),
     ).resolves.toEqual([
       expect.objectContaining({ id: activeSessionId }),
@@ -328,12 +373,17 @@ describe('retention cleanup integration', () => {
       expect.objectContaining({ id: failedOutboxId }),
       expect.objectContaining({ id: recentOutboxId }),
       expect.objectContaining({ id: unfinishedAuditId }),
+      expect.objectContaining({ id: activeFeedbackId }),
+      null,
+      expect.objectContaining({ id: activeBucketId }),
+      null,
     ]);
 
     await expect(service.cleanup(`retention-${runId}-again`)).resolves.toEqual({
       deactivatedPushSubscriptions: 0,
       deletedEmailDeliveries: 0,
       deletedExportAudits: 0,
+      deletedFeedback: 0,
       deletedOutboxEvents: 0,
       deletedRateLimitBuckets: 0,
       deletedSessions: 0,

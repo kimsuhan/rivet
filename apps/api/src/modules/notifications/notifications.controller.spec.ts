@@ -35,14 +35,14 @@ describe('NotificationsController analytics', () => {
 
     expect(unreadCount).toHaveBeenCalledTimes(1);
     expect(capture).toHaveBeenCalledTimes(1);
-    expect(capture).toHaveBeenCalledWith({
-      distinctId: authentication.session.membership?.id,
-      name: 'inbox_opened',
-      properties: {
-        unreadCount: 75,
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        membershipId: authentication.session.membership?.id,
+        name: 'inbox_opened',
+        properties: { unreadCount: 75 },
         workspaceId: authentication.session.workspace?.id,
-      },
-    });
+      }),
+    );
   });
 
   it('does not add the unread count query when analytics is disabled', async () => {

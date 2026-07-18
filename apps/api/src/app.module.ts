@@ -15,6 +15,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { IssueCollaborationModule } from './modules/collaboration/issue-collaboration.module';
 import { EventsModule } from './modules/events/events.module';
 import { ExportsModule } from './modules/exports/exports.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
 import { FilesModule } from './modules/files/files.module';
 import { HealthModule } from './modules/health/health.module';
 import { CsvImportModule } from './modules/imports/csv-import.module';
@@ -24,6 +25,7 @@ import { IssuesModule } from './modules/issues/issues.module';
 import { LabelsModule } from './modules/labels/labels.module';
 import { MembersModule } from './modules/members/members.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ProductEventsModule } from './modules/product-events/product-events.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { SavedViewsModule } from './modules/saved-views/saved-views.module';
 import { SearchModule } from './modules/search/search.module';
@@ -53,6 +55,7 @@ const environmentFiles =
     IssueCollaborationModule,
     EventsModule,
     ExportsModule,
+    FeedbackModule,
     FilesModule,
     HealthModule,
     InvitationsModule,
@@ -63,6 +66,7 @@ const environmentFiles =
     MembersModule,
     NotificationsModule,
     ProjectsModule,
+    ProductEventsModule,
     SearchModule,
     SavedViewsModule,
     WorkspacesModule,

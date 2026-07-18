@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 
 import { useSavedViewsControllerList } from '@rivet/api-client';
 
+import { captureProductEvent } from '@/features/product-events/capture-product-event';
 import { Link, usePathname } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
@@ -36,6 +37,12 @@ export function SavedViewSidebarNavigation({
           <Link
             key={view.id}
             href={savedViewHref(viewPathname, view)}
+            onClick={() =>
+              captureProductEvent('saved_view_opened', {
+                resourceType,
+                savedViewId: view.id,
+              })
+            }
             aria-current={active ? 'location' : undefined}
             title={`${view.name} · ${resourceLabel} 개인 보기`}
             className={cn(

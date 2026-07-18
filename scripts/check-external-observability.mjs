@@ -58,6 +58,8 @@ export async function runExternalObservabilitySmoke({
   const smokeId = randomUUID().replaceAll('-', '');
   const timestamp = new Date().toISOString();
   const workspaceId = randomUUID();
+  const membershipId = randomUUID();
+  const productEventId = randomUUID();
   const requestId = `req_external_smoke_${smokeId}`;
   const operations = [
     {
@@ -65,13 +67,18 @@ export async function runExternalObservabilitySmoke({
         api_key: posthogApiKey,
         event: 'search_performed',
         properties: {
-          distinct_id: `rivet_external_smoke_${smokeId}`,
+          distinct_id: membershipId,
           environment: 'production',
+          eventId: productEventId,
+          membershipId,
+          payloadVersion: 1,
           releaseId,
           resultCount: 0,
           searchType: 'TITLE',
           workspaceId,
         },
+        timestamp,
+        uuid: productEventId,
       },
       name: 'posthog.product',
       url: POSTHOG_CAPTURE_URL,

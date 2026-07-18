@@ -35,6 +35,8 @@ import type {
   AssignTeamWorksDto,
   AssignTeamWorksResponseDto,
   AuthenticatedSessionDto,
+  CaptureProductEventDto,
+  CaptureProductEventResponseDto,
   ClaimTeamWorkDto,
   ClaimTeamWorkResponseDto,
   CommentResourceResponseDto,
@@ -62,6 +64,10 @@ import type {
   CsvImportRunResponseDto,
   CsvImportValidationResponseDto,
   EmailDto,
+  FeedbackControllerListParams,
+  FeedbackListResponseDto,
+  FeedbackResponseDto,
+  FeedbackSubmissionReceiptDto,
   FileIdDto,
   FileResourceResponseDto,
   FileUserSummaryResponseDto,
@@ -115,6 +121,7 @@ import type {
   SignUpDto,
   StartIssueDto,
   StartIssueResponseDto,
+  SubmitFeedbackDto,
   TeamListResponseDto,
   TeamResponseDto,
   TeamWorkDetailResponseDto,
@@ -130,6 +137,7 @@ import type {
   TrashRestoreResponseDto,
   UnauthenticatedSessionDto,
   UpdateCommentDto,
+  UpdateFeedbackStatusDto,
   UpdateIssueDto,
   UpdateIssueResponseDto,
   UpdateIssueTemplateDto,
@@ -2494,6 +2502,257 @@ export function useExportsControllerProjects<TData = Awaited<ReturnType<typeof e
 
 
 
+
+export const getFeedbackControllerSubmitUrl = () => {
+
+
+
+
+  return `/api/v1/feedback`
+}
+
+/**
+ * @summary 현재 워크스페이스에 제품 피드백 제출
+ */
+export const feedbackControllerSubmit = async (submitFeedbackDto: SubmitFeedbackDto, options?: RequestInit): Promise<FeedbackSubmissionReceiptDto> => {
+
+  return rivetFetch<FeedbackSubmissionReceiptDto>(getFeedbackControllerSubmitUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(submitFeedbackDto)
+  }
+);}
+
+
+
+
+
+export const getFeedbackControllerSubmitMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof feedbackControllerSubmit>>, TError,{data: BodyType<SubmitFeedbackDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof feedbackControllerSubmit>>, TError,{data: BodyType<SubmitFeedbackDto>}, TContext> => {
+
+const mutationKey = ['feedbackControllerSubmit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof feedbackControllerSubmit>>, {data: BodyType<SubmitFeedbackDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  feedbackControllerSubmit(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FeedbackControllerSubmitMutationResult = NonNullable<Awaited<ReturnType<typeof feedbackControllerSubmit>>>
+    export type FeedbackControllerSubmitMutationBody = BodyType<SubmitFeedbackDto>
+    export type FeedbackControllerSubmitMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 현재 워크스페이스에 제품 피드백 제출
+ */
+export const useFeedbackControllerSubmit = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof feedbackControllerSubmit>>, TError,{data: BodyType<SubmitFeedbackDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof feedbackControllerSubmit>>,
+        TError,
+        {data: BodyType<SubmitFeedbackDto>},
+        TContext
+      > => {
+      return useMutation(getFeedbackControllerSubmitMutationOptions(options), queryClient);
+    }
+
+export const getFeedbackControllerListUrl = (params?: FeedbackControllerListParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/feedback?${stringifiedParams}` : `/api/v1/feedback`
+}
+
+/**
+ * @summary 관리자용 현재 워크스페이스 피드백 목록
+ */
+export const feedbackControllerList = async (params?: FeedbackControllerListParams, options?: RequestInit): Promise<FeedbackListResponseDto> => {
+
+  return rivetFetch<FeedbackListResponseDto>(getFeedbackControllerListUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getFeedbackControllerListQueryKey = (params?: FeedbackControllerListParams,) => {
+    return [
+    `/api/v1/feedback`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getFeedbackControllerListQueryOptions = <TData = Awaited<ReturnType<typeof feedbackControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(params?: FeedbackControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof feedbackControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getFeedbackControllerListQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof feedbackControllerList>>> = ({ signal }) => feedbackControllerList(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof feedbackControllerList>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type FeedbackControllerListQueryResult = NonNullable<Awaited<ReturnType<typeof feedbackControllerList>>>
+export type FeedbackControllerListQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useFeedbackControllerList<TData = Awaited<ReturnType<typeof feedbackControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: undefined |  FeedbackControllerListParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof feedbackControllerList>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof feedbackControllerList>>,
+          TError,
+          Awaited<ReturnType<typeof feedbackControllerList>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useFeedbackControllerList<TData = Awaited<ReturnType<typeof feedbackControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: FeedbackControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof feedbackControllerList>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof feedbackControllerList>>,
+          TError,
+          Awaited<ReturnType<typeof feedbackControllerList>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useFeedbackControllerList<TData = Awaited<ReturnType<typeof feedbackControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: FeedbackControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof feedbackControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 관리자용 현재 워크스페이스 피드백 목록
+ */
+
+export function useFeedbackControllerList<TData = Awaited<ReturnType<typeof feedbackControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: FeedbackControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof feedbackControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getFeedbackControllerListQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getFeedbackControllerUpdateStatusUrl = (feedbackId: string,) => {
+
+
+
+
+  return `/api/v1/feedback/${feedbackId}/status`
+}
+
+/**
+ * @summary 관리자용 피드백 상태 변경
+ */
+export const feedbackControllerUpdateStatus = async (feedbackId: string,
+    updateFeedbackStatusDto: UpdateFeedbackStatusDto, options?: RequestInit): Promise<FeedbackResponseDto> => {
+
+  return rivetFetch<FeedbackResponseDto>(getFeedbackControllerUpdateStatusUrl(feedbackId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateFeedbackStatusDto)
+  }
+);}
+
+
+
+
+
+export const getFeedbackControllerUpdateStatusMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof feedbackControllerUpdateStatus>>, TError,{feedbackId: string;data: BodyType<UpdateFeedbackStatusDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof feedbackControllerUpdateStatus>>, TError,{feedbackId: string;data: BodyType<UpdateFeedbackStatusDto>}, TContext> => {
+
+const mutationKey = ['feedbackControllerUpdateStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof feedbackControllerUpdateStatus>>, {feedbackId: string;data: BodyType<UpdateFeedbackStatusDto>}> = (props) => {
+          const {feedbackId,data} = props ?? {};
+
+          return  feedbackControllerUpdateStatus(feedbackId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FeedbackControllerUpdateStatusMutationResult = NonNullable<Awaited<ReturnType<typeof feedbackControllerUpdateStatus>>>
+    export type FeedbackControllerUpdateStatusMutationBody = BodyType<UpdateFeedbackStatusDto>
+    export type FeedbackControllerUpdateStatusMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 관리자용 피드백 상태 변경
+ */
+export const useFeedbackControllerUpdateStatus = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof feedbackControllerUpdateStatus>>, TError,{feedbackId: string;data: BodyType<UpdateFeedbackStatusDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof feedbackControllerUpdateStatus>>,
+        TError,
+        {feedbackId: string;data: BodyType<UpdateFeedbackStatusDto>},
+        TContext
+      > => {
+      return useMutation(getFeedbackControllerUpdateStatusMutationOptions(options), queryClient);
+    }
 
 export const getHealthControllerLiveUrl = () => {
 
@@ -7312,6 +7571,77 @@ export const useProjectsControllerTrash = <TError = ErrorType<ApiErrorResponseDt
         TContext
       > => {
       return useMutation(getProjectsControllerTrashMutationOptions(options), queryClient);
+    }
+
+export const getProductEventsControllerCaptureUrl = () => {
+
+
+
+
+  return `/api/v1/product-events`
+}
+
+/**
+ * @summary 허용된 클라이언트 제품 이벤트 수집
+ */
+export const productEventsControllerCapture = async (captureProductEventDto: CaptureProductEventDto, options?: RequestInit): Promise<CaptureProductEventResponseDto> => {
+
+  return rivetFetch<CaptureProductEventResponseDto>(getProductEventsControllerCaptureUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(captureProductEventDto)
+  }
+);}
+
+
+
+
+
+export const getProductEventsControllerCaptureMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof productEventsControllerCapture>>, TError,{data: BodyType<CaptureProductEventDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof productEventsControllerCapture>>, TError,{data: BodyType<CaptureProductEventDto>}, TContext> => {
+
+const mutationKey = ['productEventsControllerCapture'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof productEventsControllerCapture>>, {data: BodyType<CaptureProductEventDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  productEventsControllerCapture(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ProductEventsControllerCaptureMutationResult = NonNullable<Awaited<ReturnType<typeof productEventsControllerCapture>>>
+    export type ProductEventsControllerCaptureMutationBody = BodyType<CaptureProductEventDto>
+    export type ProductEventsControllerCaptureMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 허용된 클라이언트 제품 이벤트 수집
+ */
+export const useProductEventsControllerCapture = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof productEventsControllerCapture>>, TError,{data: BodyType<CaptureProductEventDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof productEventsControllerCapture>>,
+        TError,
+        {data: BodyType<CaptureProductEventDto>},
+        TContext
+      > => {
+      return useMutation(getProductEventsControllerCaptureMutationOptions(options), queryClient);
     }
 
 export const getSearchControllerIssuesUrl = (params?: SearchControllerIssuesParams,) => {

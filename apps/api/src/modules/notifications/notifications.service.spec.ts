@@ -2,6 +2,7 @@ import { NotificationType } from '@rivet/database';
 
 import type { DatabaseService } from '../../common/database/database.service';
 import type { ObservabilityService } from '../../common/observability/observability.service';
+import { deterministicProductEventId } from '../../common/observability/product-event';
 import { NotificationsService } from './notifications.service';
 
 const ACTOR_USER_ID = '9a6ce41c-e921-4acd-90f1-692bb8e839fe';
@@ -173,11 +174,18 @@ describe('NotificationsService', () => {
       },
     });
     expect(result.readAt).toEqual(expect.any(String));
-    expect(capture).toHaveBeenCalledWith({
-      distinctId: MEMBERSHIP_ID,
-      name: 'notification_read',
-      properties: { notificationType: NotificationType.MENTIONED, workspaceId: WORKSPACE_ID },
-    });
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: deterministicProductEventId(NOTIFICATION_ID, 'notification_read'),
+        membershipId: MEMBERSHIP_ID,
+        name: 'notification_read',
+        properties: {
+          notificationId: NOTIFICATION_ID,
+          notificationType: NotificationType.MENTIONED,
+        },
+        workspaceId: WORKSPACE_ID,
+      }),
+    );
     expect(executeRaw).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(executeRaw.mock.calls[0]?.[1] as string) as Record<string, unknown>;
     expect(payload).toEqual({

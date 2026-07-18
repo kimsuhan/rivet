@@ -54,7 +54,12 @@ describe('WebPushSubscriptionsService', () => {
     },
   } as ConfigType<typeof apiConfig>;
   const rateLimits = { consume: consumeRateLimit };
-  const service = new WebPushSubscriptionsService(database, rateLimits as never, config);
+  const service = new WebPushSubscriptionsService(
+    database,
+    rateLimits as never,
+    { capture: jest.fn() } as never,
+    config,
+  );
 
   beforeEach(() => {
     jest.clearAllMocks();

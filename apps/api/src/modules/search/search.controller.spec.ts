@@ -29,16 +29,24 @@ describe('SearchController analytics', () => {
     await controller.issues(authentication, { limit: 20, query: 'API-42' });
     await controller.issues(authentication, { cursor: 'next', limit: 20, query: 'API-42' });
 
-    expect(capture).toHaveBeenCalledTimes(1);
-    expect(capture).toHaveBeenCalledWith({
-      distinctId: authentication.session.membership?.id,
-      name: 'search_performed',
-      properties: {
-        resultCount: 0,
-        searchType: 'IDENTIFIER',
+    expect(capture).toHaveBeenCalledTimes(2);
+    expect(capture).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        membershipId: authentication.session.membership?.id,
+        name: 'search_performed',
+        payloadVersion: 1,
+        properties: { resultCount: 0, searchType: 'IDENTIFIER' },
         workspaceId: authentication.session.workspace?.id,
-      },
-    });
+      }),
+    );
+    expect(capture).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        name: 'search_no_results',
+        properties: { searchType: 'IDENTIFIER' },
+      }),
+    );
     expect(JSON.stringify(capture.mock.calls)).not.toContain('API-42');
   });
 });

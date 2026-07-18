@@ -90,6 +90,10 @@ export class ApiExceptionFilter implements ExceptionFilter {
       response.setHeader('Retry-After', String(exception.retryAfterSeconds));
     }
 
+    if (request.path === '/api/v1/feedback' || request.path.startsWith('/api/v1/feedback/')) {
+      response.setHeader('Cache-Control', 'private, no-store');
+    }
+
     if (!(exception instanceof HttpException)) {
       this.observability.captureException(exception, requestId);
       this.logger.error(

@@ -14,6 +14,7 @@ import { ApiError } from '../../common/errors/api-error';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { ObservabilityService } from '../../common/observability/observability.service';
+import { productEvent } from '../../common/observability/product-event';
 import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import {
@@ -246,11 +247,14 @@ export class ExportsController {
       if (outcome === 'FINISHED') {
         try {
           await this.exportsService.markDownloaded(context, run.auditId);
-          this.observability.capture({
-            distinctId: context.membershipId,
-            name: 'csv_exported',
-            properties: { exportType, itemCount, workspaceId: context.workspaceId },
-          });
+          this.observability.capture(
+            productEvent(
+              context,
+              'csv_exported',
+              { exportType, itemCount },
+              { eventId: run.auditId },
+            ),
+          );
         } catch {
           this.logger.error(
             {

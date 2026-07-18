@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
+import { captureProductEvent } from '@/features/product-events/capture-product-event';
 
 type BrowserPermissionState = 'default' | 'denied' | 'expired' | 'granted' | 'unsupported';
 
@@ -89,11 +90,24 @@ export function WebPushSettings({
     useState<WebPushSubscriptionResponseDto | null>(null);
   const [testedSubscriptionId, setTestedSubscriptionId] = useState<string | null>(null);
   const backgroundSyncAttempted = useRef(false);
+  const unsupportedCaptured = useRef(false);
 
   const membershipId =
     session.data?.authenticated === true ? (session.data.membership?.id ?? null) : null;
   const currentSubscription = subscriptions.data?.items.find((item) => item.isCurrentSession);
   const currentActive = currentSubscription?.status === 'ACTIVE' ? currentSubscription : undefined;
+
+  useEffect(() => {
+    if (
+      unsupportedCaptured.current ||
+      !membershipId ||
+      ('Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window)
+    ) {
+      return;
+    }
+    unsupportedCaptured.current = true;
+    captureProductEvent('push_permission_result', { result: 'UNSUPPORTED' });
+  }, [membershipId]);
 
   const refreshList = useCallback(async (): Promise<void> => {
     await queryClient.invalidateQueries({
@@ -200,6 +214,10 @@ export function WebPushSettings({
       if (permission === 'default') {
         permission = await Notification.requestPermission();
         setBrowserPermission(permission);
+        captureProductEvent('push_permission_result', {
+          result:
+            permission === 'granted' ? 'GRANTED' : permission === 'denied' ? 'DENIED' : 'DISMISSED',
+        });
       }
       if (permission !== 'granted' || !config.data?.publicKey || !membershipId) return;
 

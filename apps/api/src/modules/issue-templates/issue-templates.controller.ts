@@ -29,6 +29,8 @@ import {
 import { ApiError } from '../../common/errors/api-error';
 import { ApiErrorResponseDto } from '../../common/errors/api-error-response.dto';
 import { AdminGuard } from '../../common/guards/admin.guard';
+import { ObservabilityService } from '../../common/observability/observability.service';
+import { productEvent } from '../../common/observability/product-event';
 import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import {
@@ -44,6 +46,7 @@ import {
 import { IssueTemplatesService } from './issue-templates.service';
 
 function workspaceContext(authentication: AuthenticatedRequestContext): {
+  membershipId: string;
   membershipRole: 'ADMIN' | 'MEMBER';
   workspaceId: string;
 } {
@@ -60,14 +63,21 @@ function workspaceContext(authentication: AuthenticatedRequestContext): {
       status: HttpStatus.FORBIDDEN,
     });
   }
-  return { membershipRole: membership.role, workspaceId: workspace.id };
+  return {
+    membershipId: membership.id,
+    membershipRole: membership.role,
+    workspaceId: workspace.id,
+  };
 }
 
 @ApiTags('issue-templates')
 @ApiCookieAuth('sessionCookie')
 @Controller('issue-templates')
 export class IssueTemplatesController {
-  constructor(private readonly issueTemplates: IssueTemplatesService) {}
+  constructor(
+    private readonly issueTemplates: IssueTemplatesService,
+    private readonly observability: ObservabilityService,
+  ) {}
 
   @Get()
   @Header('Cache-Control', 'private, no-store')
@@ -102,11 +112,21 @@ export class IssueTemplatesController {
     description: 'VALIDATION_ERROR, MARKDOWN_INVALID 또는 ISSUE_TEMPLATE_TARGET_UNAVAILABLE',
     type: ApiErrorResponseDto,
   })
-  create(
+  async create(
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Body() dto: CreateIssueTemplateDto,
   ): Promise<IssueTemplateResponseDto> {
-    return this.issueTemplates.create(workspaceContext(authentication).workspaceId, dto);
+    const context = workspaceContext(authentication);
+    const result = await this.issueTemplates.create(context.workspaceId, dto);
+    this.observability.capture(
+      productEvent(
+        context,
+        'issue_template_created',
+        { templateId: result.id },
+        { eventId: result.id },
+      ),
+    );
+    return result;
   }
 
   @Patch(':issueTemplateId')

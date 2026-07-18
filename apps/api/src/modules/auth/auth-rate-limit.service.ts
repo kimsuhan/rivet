@@ -20,6 +20,7 @@ export const AUTH_RATE_LIMITS = {
   loginIp: { limit: 60, scope: 'LOGIN_IP', windowSeconds: 900 },
   passwordResetEmail: { limit: 3, scope: 'PASSWORD_RESET_EMAIL', windowSeconds: 3_600 },
   passwordResetIp: { limit: 10, scope: 'PASSWORD_RESET_IP', windowSeconds: 3_600 },
+  productEventMembership: { limit: 60, scope: 'PRODUCT_EVENT_MEMBERSHIP', windowSeconds: 60 },
   signUpEmail: { limit: 3, scope: 'SIGN_UP_EMAIL', windowSeconds: 86_400 },
   signUpIp: { limit: 10, scope: 'SIGN_UP_IP', windowSeconds: 3_600 },
   tokenIp: { limit: 30, scope: 'TOKEN_IP', windowSeconds: 900 },

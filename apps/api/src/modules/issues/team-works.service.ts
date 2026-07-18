@@ -12,6 +12,11 @@ import {
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
+import { ObservabilityService } from '../../common/observability/observability.service';
+import {
+  deterministicProductEventId,
+  productEvent,
+} from '../../common/observability/product-event';
 import { notifyResourceChanged } from '../../common/realtime/notify-resource-changed';
 import {
   assertActiveMentionMemberships,
@@ -46,6 +51,7 @@ export class TeamWorksService {
     private readonly repository: IssueRepository,
     private readonly statuses: IssueStatusService,
     private readonly handoffs: IssueHandoffService,
+    private readonly observability: ObservabilityService,
   ) {}
 
   async update(
@@ -80,7 +86,7 @@ export class TeamWorksService {
       dto.workNoteMarkdown === undefined
         ? undefined
         : parseOptionalMarkdown(dto.workNoteMarkdown, 10_000);
-    return this.database.client.$transaction(async (transaction) => {
+    const outcome = await this.database.client.$transaction(async (transaction) => {
       const current = await this.repository.findTeamWork(
         transaction,
         context.workspaceId,
@@ -444,13 +450,31 @@ export class TeamWorksService {
           )
         : [];
       return {
-        ...(handoff
-          ? { downstreamTeamWorks: downstreamTeamWorks.map(toTeamWorkSummary), handoff }
-          : {}),
-        issue: toIssueSummary(issue),
-        teamWork: toTeamWorkDetail(updated),
+        didStart:
+          current.workflowState.category !== StateCategory.STARTED &&
+          nextCategory === StateCategory.STARTED,
+        eventId,
+        issueId: current.issue.id,
+        response: {
+          ...(handoff
+            ? { downstreamTeamWorks: downstreamTeamWorks.map(toTeamWorkSummary), handoff }
+            : {}),
+          issue: toIssueSummary(issue),
+          teamWork: toTeamWorkDetail(updated),
+        },
       };
     });
+    if (outcome.didStart) {
+      this.observability.capture(
+        productEvent(
+          context,
+          'team_work_started',
+          { issueId: outcome.issueId, teamWorkId },
+          { eventId: deterministicProductEventId(outcome.eventId, 'team_work_started') },
+        ),
+      );
+    }
+    return outcome.response;
   }
 
   async remove(

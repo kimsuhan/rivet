@@ -3,6 +3,7 @@ import type { PinoLogger } from 'nestjs-pino';
 import * as webPush from 'web-push';
 
 import type { DatabaseService } from '../../common/database/database.service';
+import type { ObservabilityService } from '../../common/observability/observability.service';
 import { workerConfig } from '../../config/worker.config';
 import type { ClaimedOutboxEvent } from '../outbox/outbox.types';
 import { PermanentOutboxError, RetryableOutboxError } from '../outbox/outbox-errors';
@@ -43,6 +44,7 @@ const delivery = {
     auth,
     endpoint: 'https://push.example.test/secret-endpoint',
     id: subscriptionId,
+    membershipId: event.actorMembershipId!,
     p256dh,
     session: {
       absoluteExpiresAt: new Date('2099-01-01T00:00:00.000Z'),
@@ -50,6 +52,7 @@ const delivery = {
       revokedAt: null,
     },
     status: 'ACTIVE' as const,
+    workspaceId: event.workspaceId!,
   },
 };
 
@@ -86,6 +89,7 @@ describe('WebPushDeliveryService', () => {
     setContext: jest.fn(),
     warn: jest.fn(),
   } as unknown as PinoLogger;
+  const observability = { capture: jest.fn() } as unknown as ObservabilityService;
   const config = {
     webPush: {
       privateKey: Buffer.alloc(32, 3).toString('base64url'),
@@ -93,7 +97,7 @@ describe('WebPushDeliveryService', () => {
       subject: 'mailto:push@example.test',
     },
   } as ConfigType<typeof workerConfig>;
-  const service = new WebPushDeliveryService(database, config, logger);
+  const service = new WebPushDeliveryService(database, config, logger, observability);
   const sendNotification = jest.mocked(webPush.sendNotification);
 
   beforeEach(() => {
@@ -135,6 +139,14 @@ describe('WebPushDeliveryService', () => {
     expect(JSON.stringify(payload)).not.toContain('title');
     expect(JSON.stringify(payload)).not.toContain('email');
     expect(JSON.stringify(payload)).not.toContain('filename');
+    expect(observability.capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        membershipId: event.actorMembershipId,
+        name: 'push_delivery_succeeded',
+        properties: { notificationId },
+        workspaceId: event.workspaceId,
+      }),
+    );
   });
 
   it.each([
@@ -296,6 +308,12 @@ describe('WebPushDeliveryService', () => {
       }),
       where: { id: deliveryId },
     });
+    expect(observability.capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'push_delivery_failed',
+        properties: { errorCode: 'WEB_PUSH_PROVIDER_410', notificationId },
+      }),
+    );
   });
 
   it('does not deliver through an expired session and scrubs its subscription', async () => {
@@ -346,6 +364,7 @@ describe('WebPushDeliveryService', () => {
       where: { id: deliveryId },
     });
     expect(database.client.notification).not.toHaveProperty('update');
+    expect(observability.capture).not.toHaveBeenCalled();
   });
 
   it('retries only recognized network failures without exposing provider details', async () => {
@@ -474,6 +493,7 @@ describe('WebPushDeliveryService', () => {
       database,
       { ...config, webPush: { privateKey: null, publicKey: null, subject: null } },
       logger,
+      observability,
     );
 
     await unconfigured.deliverNotifications(event);

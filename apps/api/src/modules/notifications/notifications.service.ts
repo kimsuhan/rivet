@@ -8,6 +8,10 @@ import { NotificationType, Prisma } from '@rivet/database';
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
 import { ObservabilityService } from '../../common/observability/observability.service';
+import {
+  deterministicProductEventId,
+  productEvent,
+} from '../../common/observability/product-event';
 import type {
   NotificationListQueryDto,
   NotificationListResponseDto,
@@ -240,14 +244,14 @@ export class NotificationsService {
       return { didRead: dto.read, response: toResponse({ ...current, readAt }) };
     });
     if (outcome.didRead) {
-      this.observability.capture({
-        distinctId: context.membershipId,
-        name: 'notification_read',
-        properties: {
-          notificationType: outcome.response.type,
-          workspaceId: context.workspaceId,
-        },
-      });
+      this.observability.capture(
+        productEvent(
+          context,
+          'notification_read',
+          { notificationId, notificationType: outcome.response.type },
+          { eventId: deterministicProductEventId(notificationId, 'notification_read') },
+        ),
+      );
     }
     return outcome.response;
   }
@@ -256,9 +260,11 @@ export class NotificationsService {
     membershipId: string;
     workspaceId: string;
   }): Promise<NotificationReadAllResponseDto> {
-    return this.database.client.$transaction(async (transaction) => {
-      const notifications = await transaction.$queryRaw<Array<{ id: string }>>`
-        SELECT notification."id"
+    const outcome = await this.database.client.$transaction(async (transaction) => {
+      const notifications = await transaction.$queryRaw<
+        Array<{ id: string; type: NotificationType }>
+      >`
+        SELECT notification."id", notification."type"
         FROM "notifications" AS notification
         INNER JOIN "issues" AS issue
           ON issue."workspace_id" = notification."workspace_id"
@@ -270,7 +276,7 @@ export class NotificationsService {
         ORDER BY notification."created_at" DESC, notification."id" DESC
         FOR UPDATE
       `;
-      if (notifications.length === 0) return { updatedCount: 0 };
+      if (notifications.length === 0) return { notifications, updatedCount: 0 };
 
       const notificationIds = notifications.map(({ id }) => id);
       const updated = await transaction.notification.updateMany({
@@ -286,8 +292,19 @@ export class NotificationsService {
         await this.notifyChanged(transaction, context, notificationId, randomUUID());
       }
 
-      return { updatedCount: updated.count };
+      return { notifications, updatedCount: updated.count };
     });
+    for (const notification of outcome.notifications) {
+      this.observability.capture(
+        productEvent(
+          context,
+          'notification_read',
+          { notificationId: notification.id, notificationType: notification.type },
+          { eventId: deterministicProductEventId(notification.id, 'notification_read') },
+        ),
+      );
+    }
+    return { updatedCount: outcome.updatedCount };
   }
 
   private async notifyChanged(

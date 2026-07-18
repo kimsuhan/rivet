@@ -61,6 +61,7 @@ describe('FileCleanupService', () => {
         deactivatedPushSubscriptions: 0,
         deletedEmailDeliveries: 0,
         deletedExportAudits: 0,
+        deletedFeedback: 0,
         deletedOutboxEvents: 0,
         deletedRateLimitBuckets: 0,
         deletedSessions: 0,

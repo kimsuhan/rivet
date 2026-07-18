@@ -4,6 +4,25 @@ import type { PinoLogger } from 'nestjs-pino';
 import { workerConfig } from '../../config/worker.config';
 import { ObservabilityService } from './observability.service';
 
+const eventId = '11111111-1111-4111-8111-111111111111';
+const membershipId = '22222222-2222-4222-8222-222222222222';
+const workspaceId = '33333333-3333-4333-8333-333333333333';
+
+function productEvent(
+  name: 'comment_created' | 'issue_property_changed',
+  properties: Record<string, unknown>,
+) {
+  return {
+    eventId,
+    membershipId,
+    name,
+    occurredAt: '2026-07-18T00:00:00.000Z',
+    payloadVersion: 1 as const,
+    properties,
+    workspaceId,
+  };
+}
+
 const productionConfig: ConfigType<typeof workerConfig> = {
   database: {
     connectionTimeoutMs: 5_000,
@@ -57,11 +76,7 @@ describe('Worker ObservabilityService', () => {
       logger,
     );
 
-    service.capture({
-      distinctId: 'membership-id',
-      name: 'comment_created',
-      properties: { hasMention: false, workspaceId: 'workspace-id' },
-    });
+    service.capture(productEvent('comment_created', { hasMention: false }));
     service.alert({
       errorCode: 'OUTBOX_MAX_ATTEMPTS_REACHED',
       jobId: 'job_id',
@@ -74,21 +89,20 @@ describe('Worker ObservabilityService', () => {
   it('sends only the typed worker product properties', async () => {
     const service = new ObservabilityService(productionConfig, logger);
 
-    service.capture({
-      distinctId: 'membership-id',
-      name: 'issue_property_changed',
-      properties: { propertyTypes: ['PRIORITY'], workspaceId: 'workspace-id' },
-    });
+    service.capture(productEvent('issue_property_changed', { propertyTypes: ['PRIORITY'] }));
     await flushRequests();
 
     const request = fetchMock.mock.calls[0]?.[1];
     const body = JSON.parse(String(request?.body)) as { properties: Record<string, unknown> };
     expect(body.properties).toEqual({
-      distinct_id: 'membership-id',
+      distinct_id: membershipId,
       environment: 'production',
+      eventId,
+      membershipId,
+      payloadVersion: 1,
       propertyTypes: ['PRIORITY'],
       releaseId: 'release-test',
-      workspaceId: 'workspace-id',
+      workspaceId,
     });
   });
 
