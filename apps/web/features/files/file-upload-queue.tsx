@@ -1,10 +1,11 @@
 'use client';
 
-import { FileIcon, RotateCwIcon, Trash2Icon, UploadIcon } from 'lucide-react';
+import { FileIcon, PaperclipIcon, RotateCwIcon, Trash2Icon, UploadIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Progress, ProgressLabel } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
 
 import {
   type DeleteUploadedFile,
@@ -44,6 +45,7 @@ function formatBytes(bytes: number): string {
 
 export function FileUploadQueue({
   accept,
+  compactTrigger = false,
   disabled = false,
   labels,
   onFileIdsChange,
@@ -52,6 +54,7 @@ export function FileUploadQueue({
   sendFile = uploadFile,
 }: {
   accept?: string;
+  compactTrigger?: boolean;
   disabled?: boolean;
   labels: FileUploadQueueLabels;
   onFileIdsChange: (fileIds: string[]) => void;
@@ -62,6 +65,7 @@ export function FileUploadQueue({
   const [tasks, setTasks] = useState<UploadTask[]>([]);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const removedTaskIds = useRef(new Set<string>());
+  const compactInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     onFileIdsChange(
@@ -156,24 +160,62 @@ export function FileUploadQueue({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <label className="w-fit">
-        <input
-          type="file"
-          multiple
-          accept={accept}
-          className="sr-only"
-          disabled={disabled}
-          onChange={(event) => {
-            selectFiles(event.currentTarget.files);
-            event.currentTarget.value = '';
-          }}
-        />
-        <span className="border-border bg-background hover:bg-muted focus-within:ring-ring inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border px-3 text-sm font-medium focus-within:ring-2">
-          <UploadIcon aria-hidden="true" className="size-4" />
-          {labels.chooseFiles}
-        </span>
-      </label>
+    <div
+      className={cn(
+        'flex flex-col gap-3',
+        compactTrigger && (tasks.length > 0 || selectionError ? 'w-full' : 'w-fit'),
+      )}
+    >
+      {compactTrigger ? (
+        <>
+          <input
+            ref={compactInputRef}
+            type="file"
+            multiple
+            accept={accept}
+            aria-hidden="true"
+            className="sr-only"
+            data-slot="file-upload-input"
+            disabled={disabled}
+            tabIndex={-1}
+            onChange={(event) => {
+              selectFiles(event.currentTarget.files);
+              event.currentTarget.value = '';
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-fit px-2"
+            aria-label={labels.chooseFiles}
+            title={labels.chooseFiles}
+            disabled={disabled}
+            onClick={() => compactInputRef.current?.click()}
+          >
+            <PaperclipIcon data-icon="inline-start" />
+          </Button>
+        </>
+      ) : (
+        <label className="w-fit">
+          <input
+            type="file"
+            multiple
+            accept={accept}
+            className="sr-only"
+            data-slot="file-upload-input"
+            disabled={disabled}
+            onChange={(event) => {
+              selectFiles(event.currentTarget.files);
+              event.currentTarget.value = '';
+            }}
+          />
+          <span className="border-border bg-background hover:bg-muted focus-within:ring-ring inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border px-3 text-sm font-medium focus-within:ring-2">
+            <UploadIcon aria-hidden="true" className="size-4" />
+            <span>{labels.chooseFiles}</span>
+          </span>
+        </label>
+      )}
 
       {selectionError ? (
         <p className="text-destructive text-sm" role="alert">

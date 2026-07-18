@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 
-import { createOneTimeToken } from '../../apps/api/src/modules/auth/auth-token';
+import { createOneTimeToken } from '../../apps/api/src/modules/auth/auth-token.crypto';
 
 const m1RateLimitScopes = [
   'EMAIL_VERIFICATION_EMAIL',
@@ -219,6 +219,13 @@ export async function cleanupM2Users(emails: string[]): Promise<void> {
       await database.query('DELETE FROM issues WHERE workspace_id = ANY($1::uuid[])', [
         workspaceIds,
       ]);
+      await database.query(
+        'DELETE FROM issue_template_labels WHERE workspace_id = ANY($1::uuid[])',
+        [workspaceIds],
+      );
+      await database.query('DELETE FROM issue_templates WHERE workspace_id = ANY($1::uuid[])', [
+        workspaceIds,
+      ]);
       await database.query('DELETE FROM project_role_teams WHERE workspace_id = ANY($1::uuid[])', [
         workspaceIds,
       ]);
@@ -318,6 +325,8 @@ export async function cleanupM1User(email: string): Promise<void> {
         [userId],
       );
       for (const table of [
+        'issue_template_labels',
+        'issue_templates',
         'saved_views',
         'workflow_states',
         'team_members',

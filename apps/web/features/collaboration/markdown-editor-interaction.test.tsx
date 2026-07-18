@@ -12,6 +12,7 @@ import {
   IssueDescriptionEditor,
   MarkdownEditor,
   type MarkdownEditorLabels,
+  TemplateDescriptionEditor,
   WorkNoteEditor,
 } from './markdown-editor';
 
@@ -85,6 +86,47 @@ describe('MarkdownEditor image lifecycle', () => {
     cleanup();
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('템플릿 설명 에디터는 이미지 업로드 입력을 노출하지 않는다', () => {
+    render(
+      <Harness>
+        {(value, onChange) => (
+          <TemplateDescriptionEditor
+            charLimit={50_000}
+            labels={labels}
+            value={value}
+            onChange={onChange}
+          />
+        )}
+      </Harness>,
+    );
+
+    expect(screen.getByRole('textbox', { name: labels.editorLabel })).toBeVisible();
+    expect(screen.queryByLabelText(labels.image.choose)).not.toBeInTheDocument();
+  });
+
+  it('모달용 설명 에디터는 높이를 제한하고 긴 본문을 내부에서 스크롤한다', () => {
+    render(
+      <Harness>
+        {(value, onChange) => (
+          <TemplateDescriptionEditor
+            boundedHeight
+            charLimit={50_000}
+            labels={labels}
+            value={value}
+            onChange={onChange}
+          />
+        )}
+      </Harness>,
+    );
+
+    expect(screen.getByRole('textbox', { name: labels.editorLabel })).toHaveClass(
+      'max-h-64',
+      'min-h-44',
+      'resize-none',
+      'overflow-auto',
+    );
   });
 
   it('label 객체가 바뀌어도 진행 중 preview를 정리하지 않고 성공 뒤 canSubmit을 복구한다', async () => {
@@ -316,6 +358,41 @@ describe('MarkdownEditor @ mention typeahead', () => {
 
 describe('MarkdownEditor density and character count', () => {
   afterEach(() => cleanup());
+
+  it.each([
+    {
+      classes: ['text-xl', 'font-semibold'],
+      level: 1,
+      markdown: '# 큰 제목',
+      title: '큰 제목',
+    },
+    {
+      classes: ['text-lg', 'font-semibold'],
+      level: 2,
+      markdown: '## 중간 제목',
+      title: '중간 제목',
+    },
+    {
+      classes: ['font-semibold'],
+      level: 3,
+      markdown: '### 작은 제목',
+      title: '작은 제목',
+    },
+  ])(
+    '$markdown을 편집 화면에서 $level단계 제목으로 표시한다',
+    ({ classes, level, markdown, title }) => {
+      render(
+        <MarkdownEditor
+          charLimit={100}
+          labels={labels}
+          onChange={() => undefined}
+          value={markdown}
+        />,
+      );
+
+      expect(screen.getByRole('heading', { level, name: title })).toHaveClass(...classes);
+    },
+  );
 
   it('빈 편집기의 본문 높이는 120~160px 범위(min-h-36)를 사용한다', () => {
     render(

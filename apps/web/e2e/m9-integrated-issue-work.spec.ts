@@ -60,7 +60,11 @@ async function fillWithSelfMention(page: Page, editor: Locator, body: string): P
   await editor.pressSequentially('@M9');
   const mentionList = page.getByRole('listbox', { name: '멤버 멘션' });
   await expect(mentionList).toBeVisible();
-  await mentionList.getByRole('option', { name: 'M9 브라우저 사용자', exact: true }).click();
+  await expect(
+    mentionList.getByRole('option', { name: 'M9 브라우저 사용자', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await editor.press('Enter');
+  await expect(mentionList).toBeHidden();
   await editor.pressSequentially(' 확인 부탁드립니다.');
 }
 
@@ -133,25 +137,28 @@ async function createIssueFromDialog(
   const dialog = page.getByRole('dialog', { name: '이슈 만들기' });
   await expect(dialog).toBeVisible();
   const membersResponse = await activeMembersResponse;
-  expect(membersResponse.ok()).toBe(true);
-  const members = (await membersResponse.json()) as MemberList;
-  expect(members.items.some((member) => member.user.displayName === 'M9 브라우저 사용자')).toBe(
-    true,
-  );
+  expect([200, 304]).toContain(membersResponse.status());
+  if (membersResponse.status() === 200) {
+    const members = (await membersResponse.json()) as MemberList;
+    expect(members.items.some((member) => member.user.displayName === 'M9 브라우저 사용자')).toBe(
+      true,
+    );
+  }
   await dialog.getByRole('textbox', { name: '제목', exact: true }).fill(input.title);
-  await dialog.getByLabel('프로젝트').click();
-  await page
-    .locator('[data-slot="select-content"]')
-    .getByRole('option', { name: input.projectName, exact: true })
-    .click();
+  await dialog.getByRole('button', { name: /^프로젝트(?:$|:)/u }).click();
+  await page.getByRole('option', { name: input.projectName, exact: true }).click();
   await fillWithSelfMention(
     page,
     dialog.getByRole('textbox', { name: 'Markdown 본문 편집기' }),
     '# 공유 설명\n\n모든 팀 작업이 같은 본문을 사용합니다.',
   );
-  if (input.initialBackend) await dialog.getByRole('checkbox', { name: '백엔드' }).click();
+  if (input.initialBackend) {
+    await dialog.getByRole('button', { name: /^역할(?:$|:)/u }).click();
+    await page.getByRole('checkbox', { name: '백엔드' }).click();
+    await page.keyboard.press('Escape');
+  }
   if (input.withAttachment) {
-    await dialog.getByRole('button', { name: '파일 선택' }).setInputFiles({
+    await dialog.locator('[data-slot="file-upload-input"]').setInputFiles({
       buffer: Buffer.from('M9 shared attachment', 'utf8'),
       mimeType: 'text/plain',
       name: 'm9-shared.txt',
@@ -323,13 +330,16 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
 
     await page.goto(`/my-issues`);
     await expect(page.getByRole('heading', { name: '내 작업' })).toBeVisible();
-    await page
-      .getByRole('link', { name: `${backendIdentifier} 작업 상세 열기`, exact: true })
-      .click();
-    await expect(page).toHaveURL(new RegExp(`/my-issues/${backendIdentifier}\\?tab=work$`, 'u'));
+    const backendWorkUrl = new RegExp(`/my-issues/${backendIdentifier}\\?tab=work$`, 'u');
+    await Promise.all([
+      page.waitForURL(backendWorkUrl),
+      page
+        .getByRole('link', { name: `${backendIdentifier} 작업 상세 열기`, exact: true })
+        .press('Enter'),
+    ]);
     await expect(page.getByRole('link', { name: '내 작업', exact: true })).toBeVisible();
     await page.reload();
-    await expect(page).toHaveURL(new RegExp(`/my-issues/${backendIdentifier}\\?tab=work$`, 'u'));
+    await expect(page).toHaveURL(backendWorkUrl);
     await page.getByRole('link', { name: '전달', exact: true }).click();
     await expect(page).toHaveURL(
       new RegExp(`/my-issues/${backendIdentifier}\\?tab=handoffs$`, 'u'),

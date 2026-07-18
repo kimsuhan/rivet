@@ -769,13 +769,14 @@ function MentionMenuPortalHost({
   return (
     <div
       ref={onParentChange}
-      className="pointer-events-none fixed top-0 left-0 z-50 h-screen w-screen"
+      className="app-floating-layer pointer-events-none fixed top-0 left-0 h-screen w-screen"
       style={{ transform: `translate(${-pageOffset.x}px, ${-pageOffset.y}px)` }}
     />
   );
 }
 
 export type MarkdownEditorProps = {
+  boundedHeight?: boolean;
   charLimit: number;
   className?: string;
   disabled?: boolean;
@@ -794,6 +795,7 @@ export type MarkdownEditorProps = {
 };
 
 export function MarkdownEditor({
+  boundedHeight = false,
   charLimit,
   className,
   disabled = false,
@@ -866,7 +868,9 @@ export function MarkdownEditor({
                 theme: {
                   code: 'bg-surface-1 my-3 block overflow-x-auto rounded-lg border p-3 font-mono text-xs',
                   heading: {
-                    h2: 'mt-5 mb-2 text-lg font-semibold',
+                    h1: 'mt-6 mb-2 text-xl font-semibold',
+                    h2: 'mt-6 mb-2 text-lg font-semibold',
+                    h3: 'mt-5 mb-2 font-semibold',
                   },
                   link: 'text-primary underline underline-offset-4',
                   list: {
@@ -894,7 +898,10 @@ export function MarkdownEditor({
                       <ContentEditable
                         aria-label={labels.editorLabel}
                         id={editorId}
-                        className="focus-visible:ring-ring min-h-36 resize-y overflow-auto px-3 py-3 text-[15px] leading-6 outline-none focus-visible:ring-2 focus-visible:ring-inset [&>*:first-child]:mt-0"
+                        className={cn(
+                          'focus-visible:ring-ring min-h-36 overflow-auto px-3 py-3 text-[15px] leading-6 outline-none focus-visible:ring-2 focus-visible:ring-inset [&>*:first-child]:mt-0',
+                          boundedHeight ? 'max-h-64 min-h-44 resize-none' : 'resize-y',
+                        )}
                       />
                     }
                     placeholder={
@@ -930,7 +937,12 @@ export function MarkdownEditor({
           </MarkdownImageLabelsContext.Provider>
         </TabsContent>
         <TabsContent value="preview">
-          <div className="bg-background min-h-36 rounded-lg border p-3">
+          <div
+            className={cn(
+              'bg-background min-h-36 rounded-lg border p-3',
+              boundedHeight && 'max-h-64 min-h-44 overflow-y-auto',
+            )}
+          >
             <MarkdownRenderer imageUnavailableLabel={labels.imageUnavailable} markdown={value} />
           </div>
         </TabsContent>
@@ -965,6 +977,10 @@ export function MarkdownEditor({
 
 export function IssueDescriptionEditor(props: MarkdownEditorProps) {
   return <MarkdownEditor {...props} imagesEnabled />;
+}
+
+export function TemplateDescriptionEditor(props: MarkdownEditorProps) {
+  return <MarkdownEditor {...props} imagesEnabled={false} />;
 }
 
 export function WorkNoteEditor(props: Omit<MarkdownEditorProps, 'imagesEnabled'>) {

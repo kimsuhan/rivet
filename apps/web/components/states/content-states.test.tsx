@@ -36,10 +36,9 @@ describe('공통 콘텐츠 상태', () => {
     ).toBeVisible();
   });
 
-  it('요청한 화면에서는 빈 상태 내용을 가운데로 정렬한다', () => {
+  it('빈 상태 내용을 기본으로 가운데 정렬한다', () => {
     const { container } = render(
       <ContentEmpty
-        align="center"
         icon={Inbox}
         title="읽지 않은 알림이 없습니다"
         description="확인한 알림은 모든 알림 탭에서 다시 볼 수 있습니다."
@@ -50,6 +49,19 @@ describe('공통 콘텐츠 상태', () => {
       'items-center',
       'text-center',
     );
+  });
+
+  it('조밀한 인라인 문맥에서는 시작선 정렬을 명시할 수 있다', () => {
+    const { container } = render(
+      <ContentEmpty
+        align="start"
+        icon={Inbox}
+        title="표시할 항목이 없습니다"
+        description="상위 화면에서 항목을 추가해 주세요."
+      />,
+    );
+
+    expect(container.querySelector('[data-slot="empty"]')).toHaveClass('items-start', 'text-left');
   });
 
   it('로딩 상태를 보조 기술에 한 번만 알린다', () => {

@@ -116,6 +116,10 @@ export class IssuesController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: '이슈 생성 및 선택적인 최초 팀 작업 시작' })
   @ApiCreatedResponse({ type: CreateIssueResponseDto })
+  @ApiConflictResponse({
+    description: 'VERSION_CONFLICT 또는 ISSUE_TEMPLATE_UNAVAILABLE',
+    type: ApiErrorResponseDto,
+  })
   @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
   @ApiForbiddenResponse({ type: ApiErrorResponseDto })
   @ApiNotFoundResponse({ type: ApiErrorResponseDto })

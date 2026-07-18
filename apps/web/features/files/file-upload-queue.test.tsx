@@ -38,6 +38,33 @@ function uploaded(id: string, file: File) {
 describe('FileUploadQueue', () => {
   afterEach(cleanup);
 
+  it('compact 모드는 기본 상태에서 아이콘 트리거만 보이고 파일 선택 뒤 큐를 펼친다', async () => {
+    const user = userEvent.setup();
+    const sendFile = vi.fn(async (file: File) => uploaded('compact-file', file));
+    const { container } = render(
+      <FileUploadQueue
+        compactTrigger
+        labels={labels}
+        onFileIdsChange={() => undefined}
+        sendFile={sendFile}
+      />,
+    );
+
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    if (!input) return;
+    const root = input.closest('div');
+    expect(screen.getByRole('button', { name: labels.chooseFiles })).toBeVisible();
+    expect(root).toHaveClass('w-fit');
+    expect(screen.queryByRole('list', { name: labels.selectedFiles })).not.toBeInTheDocument();
+
+    await user.upload(input, new File(['attached'], 'attached.txt', { type: 'text/plain' }));
+
+    expect(await screen.findByRole('list', { name: labels.selectedFiles })).toBeVisible();
+    expect(root).toHaveClass('w-full');
+    await waitFor(() => expect(sendFile).toHaveBeenCalledTimes(1));
+  });
+
   it('일부 실패가 성공 ID를 잃지 않으며 재시도와 제거 상태를 독립 처리한다', async () => {
     const user = userEvent.setup();
     const onFileIdsChange = vi.fn();

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { IssueCollaborationModule } from '../collaboration/issue-collaboration.module';
 import { FilesModule } from '../files/files.module';
+import { IssueTemplatesModule } from '../issue-templates/issue-templates.module';
 import { IssueRepository } from './issue.repository';
 import { IssueAssignmentService } from './issue-assignment.service';
 import { IssueQueryService } from './issue-query.service';
@@ -14,7 +15,7 @@ import { TeamWorksService } from './team-works.service';
 
 @Module({
   controllers: [IssuesController, TeamWorksController],
-  imports: [FilesModule, IssueCollaborationModule],
+  imports: [FilesModule, IssueCollaborationModule, IssueTemplatesModule],
   providers: [
     IssueAssignmentService,
     IssueQueryService,

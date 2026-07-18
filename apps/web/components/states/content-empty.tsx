@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils';
 
 export function ContentEmpty({
-  align = 'start',
+  align = 'center',
   icon: Icon,
   title,
   description,

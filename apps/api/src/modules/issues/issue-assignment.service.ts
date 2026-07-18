@@ -527,7 +527,13 @@ export class IssueAssignmentService {
   ): Promise<void> {
     const member = await transaction.teamMember.findFirst({
       select: { membershipId: true },
-      where: { membership: { status: MembershipStatus.ACTIVE }, membershipId, teamId, workspaceId },
+      where: {
+        membership: { status: MembershipStatus.ACTIVE },
+        membershipId,
+        removedAt: null,
+        teamId,
+        workspaceId,
+      },
     });
     if (!member)
       throw new ApiError({

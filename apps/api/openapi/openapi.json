@@ -3246,6 +3246,516 @@
         ]
       }
     },
+    "/api/v1/issue-templates": {
+      "get": {
+        "operationId": "IssueTemplatesController_list",
+        "parameters": [
+          {
+            "name": "includeArchived",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueTemplateListResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "MEMBERSHIP_INACTIVE 또는 보관 템플릿 조회 권한 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "워크스페이스 이슈 템플릿 목록 조회",
+        "tags": [
+          "issue-templates"
+        ]
+      },
+      "post": {
+        "operationId": "IssueTemplatesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIssueTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueTemplateResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN 또는 CSRF_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ISSUE_TEMPLATE_NAME_IN_USE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "VALIDATION_ERROR, MARKDOWN_INVALID 또는 ISSUE_TEMPLATE_TARGET_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "워크스페이스 이슈 템플릿 생성",
+        "tags": [
+          "issue-templates"
+        ]
+      }
+    },
+    "/api/v1/issue-templates/{issueTemplateId}": {
+      "patch": {
+        "operationId": "IssueTemplatesController_update",
+        "parameters": [
+          {
+            "name": "issueTemplateId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateIssueTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueTemplateResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN 또는 CSRF_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "VERSION_CONFLICT, ISSUE_TEMPLATE_NAME_IN_USE 또는 ISSUE_TEMPLATE_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "VALIDATION_ERROR, MARKDOWN_INVALID 또는 ISSUE_TEMPLATE_TARGET_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "워크스페이스 이슈 템플릿 수정",
+        "tags": [
+          "issue-templates"
+        ]
+      }
+    },
+    "/api/v1/issue-templates/{issueTemplateId}/archive": {
+      "post": {
+        "operationId": "IssueTemplatesController_archive",
+        "parameters": [
+          {
+            "name": "issueTemplateId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveIssueTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueTemplateResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN 또는 CSRF_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "VERSION_CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "워크스페이스 이슈 템플릿 보관",
+        "tags": [
+          "issue-templates"
+        ]
+      }
+    },
+    "/api/v1/issue-templates/{issueTemplateId}/restore": {
+      "post": {
+        "operationId": "IssueTemplatesController_restore",
+        "parameters": [
+          {
+            "name": "issueTemplateId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreIssueTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueTemplateResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN 또는 CSRF_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "VERSION_CONFLICT 또는 ISSUE_TEMPLATE_NAME_IN_USE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ISSUE_TEMPLATE_TARGET_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "보관된 워크스페이스 이슈 템플릿 복구",
+        "tags": [
+          "issue-templates"
+        ]
+      }
+    },
+    "/api/v1/issue-templates/{issueTemplateId}/apply": {
+      "post": {
+        "operationId": "IssueTemplatesController_apply",
+        "parameters": [
+          {
+            "name": "issueTemplateId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyIssueTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueTemplateResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "MEMBERSHIP_INACTIVE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "VERSION_CONFLICT 또는 ISSUE_TEMPLATE_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ISSUE_TEMPLATE_TARGET_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "이슈 생성 입력에 적용할 템플릿 복사본 조회",
+        "tags": [
+          "issue-templates"
+        ]
+      }
+    },
     "/api/v1/issues": {
       "get": {
         "operationId": "IssuesController_list",
@@ -3504,6 +4014,16 @@
           },
           "404": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "VERSION_CONFLICT 또는 ISSUE_TEMPLATE_UNAVAILABLE",
             "content": {
               "application/json": {
                 "schema": {
@@ -9603,6 +10123,244 @@
           "nextCursor"
         ]
       },
+      "IssueTemplateResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "descriptionMarkdown": {
+            "type": "string"
+          },
+          "priority": {
+            "enum": [
+              "NONE",
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "URGENT"
+            ],
+            "type": "string"
+          },
+          "labelIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "projectId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "initialRole": {
+            "nullable": true,
+            "enum": [
+              "BACKEND",
+              "WEB_FRONTEND",
+              "APP_FRONTEND"
+            ],
+            "type": "string"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "unavailableReason": {
+            "nullable": true,
+            "enum": [
+              "ARCHIVED",
+              "LABEL_UNAVAILABLE",
+              "PROJECT_UNAVAILABLE",
+              "ROLE_UNAVAILABLE",
+              "TEAM_UNAVAILABLE"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "descriptionMarkdown",
+          "priority",
+          "labelIds",
+          "projectId",
+          "initialRole",
+          "archived",
+          "version",
+          "available",
+          "unavailableReason"
+        ]
+      },
+      "IssueTemplateListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueTemplateResponseDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "CreateIssueTemplateDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "descriptionMarkdown": {
+            "type": "string",
+            "maxLength": 100000,
+            "minLength": 1
+          },
+          "priority": {
+            "enum": [
+              "NONE",
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "URGENT"
+            ],
+            "type": "string",
+            "default": "NONE"
+          },
+          "labelIds": {
+            "uniqueItems": true,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "projectId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "initialRole": {
+            "nullable": true,
+            "enum": [
+              "BACKEND",
+              "WEB_FRONTEND",
+              "APP_FRONTEND"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "descriptionMarkdown"
+        ]
+      },
+      "UpdateIssueTemplateDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "descriptionMarkdown": {
+            "type": "string",
+            "maxLength": 100000,
+            "minLength": 1
+          },
+          "priority": {
+            "enum": [
+              "NONE",
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "URGENT"
+            ],
+            "type": "string"
+          },
+          "labelIds": {
+            "uniqueItems": true,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "projectId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "initialRole": {
+            "nullable": true,
+            "enum": [
+              "BACKEND",
+              "WEB_FRONTEND",
+              "APP_FRONTEND"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ]
+      },
+      "ArchiveIssueTemplateDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "version"
+        ]
+      },
+      "RestoreIssueTemplateDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "version"
+        ]
+      },
+      "ApplyIssueTemplateDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "version"
+        ]
+      },
       "IssueProjectSummaryResponseDto": {
         "type": "object",
         "properties": {
@@ -10130,6 +10888,23 @@
           "projectRole"
         ]
       },
+      "AppliedIssueTemplateDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ]
+      },
       "CreateIssueDto": {
         "type": "object",
         "properties": {
@@ -10184,6 +10959,14 @@
             "items": {
               "$ref": "#/components/schemas/InitialRoleAssignmentDto"
             }
+          },
+          "appliedTemplate": {
+            "description": "생성 입력을 채운 이슈 템플릿과 적용 당시 version",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AppliedIssueTemplateDto"
+              }
+            ]
           }
         },
         "required": [

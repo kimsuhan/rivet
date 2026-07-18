@@ -28,15 +28,9 @@ import {
   parseOptionalMarkdown,
 } from '../../common/validation/markdown';
 import { FilesService } from '../files/files.service';
-import type {
-  CreateIssueDto,
-  IssueStatusAction,
-  UpdateIssueDto,
-} from './dto/issue-request.dto';
-import type {
-  CreateIssueResponseDto,
-  UpdateIssueResponseDto,
-} from './dto/issue-response.dto';
+import { IssueTemplatesService } from '../issue-templates/issue-templates.service';
+import type { CreateIssueDto, IssueStatusAction, UpdateIssueDto } from './dto/issue-request.dto';
+import type { CreateIssueResponseDto, UpdateIssueResponseDto } from './dto/issue-response.dto';
 import type { IssueMutationContext } from './issue.context';
 import {
   issueConflict as conflict,
@@ -58,6 +52,7 @@ export class IssuesService {
     private readonly files: FilesService,
     private readonly repository: IssueRepository,
     private readonly statuses: IssueStatusService,
+    private readonly templates: IssueTemplatesService,
   ) {}
 
   async create(
@@ -71,6 +66,14 @@ export class IssuesService {
         where: { id: context.workspaceId },
       });
       if (!workspace) resourceNotFound('워크스페이스를 찾을 수 없습니다.');
+      if (dto.appliedTemplate) {
+        await this.templates.assertApplicableInTransaction(
+          transaction,
+          context.workspaceId,
+          dto.appliedTemplate.id,
+          dto.appliedTemplate.version,
+        );
+      }
       await this.assertProject(transaction, context.workspaceId, dto.projectId);
       await this.assertActor(transaction, context.workspaceId, context.membershipId);
       await this.assertLabels(transaction, context.workspaceId, dto.labelIds ?? []);
@@ -129,7 +132,16 @@ export class IssuesService {
       await transaction.activityEvent.create({
         data: {
           actorMembershipId: context.membershipId,
-          afterData: { identifier: `F-${workspace.nextIssueNumber}`, title: dto.title },
+          afterData: {
+            identifier: `F-${workspace.nextIssueNumber}`,
+            ...(dto.appliedTemplate
+              ? {
+                  templateId: dto.appliedTemplate.id,
+                  templateVersion: dto.appliedTemplate.version,
+                }
+              : {}),
+            title: dto.title,
+          },
           eventType: 'ISSUE_CREATED',
           issueId: issue.id,
           workspaceId: context.workspaceId,

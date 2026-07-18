@@ -35,6 +35,8 @@ model Workspace {
   outboxEvents         OutboxEvent[]
   projects             Project[]
   projectRoles         ProjectRoleTeam[]
+  issueTemplates       IssueTemplate[]
+  issueTemplateLabels  IssueTemplateLabel[]
   issues               Issue[]
   teamWorks            TeamWork[]
   issueLabels          IssueLabel[]
@@ -223,8 +225,9 @@ model Label {
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  issueLabels IssueLabel[]
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  issueLabels         IssueLabel[]
+  issueTemplateLabels IssueTemplateLabel[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, archivedAt, updatedAt, id])
