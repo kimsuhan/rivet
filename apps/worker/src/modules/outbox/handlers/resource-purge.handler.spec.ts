@@ -48,6 +48,7 @@ describe('ResourcePurgeHandler', () => {
     issueFileAttachment: { deleteMany: jest.fn(), findMany: jest.fn() },
     issueLabel: { deleteMany: jest.fn() },
     issueSubscription: { deleteMany: jest.fn() },
+    issueTemplate: { updateMany: jest.fn() },
     mention: { deleteMany: jest.fn() },
     notification: { deleteMany: jest.fn() },
     project: { deleteMany: jest.fn() },
@@ -74,6 +75,7 @@ describe('ResourcePurgeHandler', () => {
     transaction.issue.deleteMany.mockResolvedValue({ count: 1 });
     transaction.project.deleteMany.mockResolvedValue({ count: 1 });
     transaction.issue.findFirst.mockResolvedValue(null);
+    transaction.issueTemplate.updateMany.mockResolvedValue({ count: 0 });
 
     const module = await Test.createTestingModule({
       providers: [ResourcePurgeHandler, { provide: DatabaseService, useValue: database }],
@@ -145,15 +147,71 @@ describe('ResourcePurgeHandler', () => {
         projectPayload,
       ),
     ).rejects.toEqual(new RetryableOutboxError('PROJECT_PURGE_BLOCKED'));
+    expect(transaction.issueTemplate.updateMany).not.toHaveBeenCalled();
     expect(transaction.projectRoleTeam.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('removes project relations and emits its own deletion signal', async () => {
+  it('cancels project purge when the project is restored after the due snapshot', async () => {
+    transaction.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          databaseNow: new Date('2026-08-10T00:00:01.000Z'),
+          deletedAt: new Date('2026-07-11T00:00:00.000Z'),
+          purgeAt: new Date(purgeAt),
+        },
+      ])
+      .mockResolvedValueOnce([{ id: 'e24340c4-ddf6-4ae6-9168-c24094bb0271' }])
+      .mockResolvedValueOnce([
+        {
+          databaseNow: new Date('2026-08-10T00:00:01.000Z'),
+          deletedAt: null,
+          purgeAt: null,
+        },
+      ]);
+
+    await expect(
+      handler.handleProject(
+        { ...event, aggregateId: projectId, aggregateType: 'PROJECT' },
+        projectPayload,
+      ),
+    ).rejects.toEqual(new CanceledOutboxError('RESOURCE_PURGE_CANCELED'));
+    expect(transaction.$queryRaw).toHaveBeenCalledTimes(3);
+    expect(transaction.issue.findFirst).not.toHaveBeenCalled();
+    expect(transaction.issueTemplate.updateMany).not.toHaveBeenCalled();
+    expect(transaction.project.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('detaches template defaults before removing project relations and emits deletion signal', async () => {
     await handler.handleProject(
       { ...event, aggregateId: projectId, aggregateType: 'PROJECT' },
       projectPayload,
     );
+    expect(transaction.issueTemplate.updateMany).toHaveBeenCalledWith({
+      data: {
+        initialRole: null,
+        projectId: null,
+        version: { increment: 1 },
+      },
+      where: { projectId, workspaceId },
+    });
+    const sqlStatements = transaction.$queryRaw.mock.calls.map(([strings]) =>
+      (strings as TemplateStringsArray).join(' '),
+    );
+    expect(sqlStatements).toHaveLength(3);
+    expect(sqlStatements[0]).toContain('FROM "projects"');
+    expect(sqlStatements[0]).not.toContain('FOR UPDATE');
+    expect(sqlStatements[1]).toContain('FROM "issue_templates"');
+    expect(sqlStatements[1]).toContain('ORDER BY "id"');
+    expect(sqlStatements[1]).toContain('FOR UPDATE');
+    expect(sqlStatements[2]).toContain('FROM "projects"');
+    expect(sqlStatements[2]).toContain('FOR UPDATE');
+    expect(transaction.$queryRaw.mock.invocationCallOrder[2] ?? Infinity).toBeLessThan(
+      transaction.issueTemplate.updateMany.mock.invocationCallOrder[0] ?? -Infinity,
+    );
     expect(transaction.projectRoleTeam.deleteMany).toHaveBeenCalled();
+    expect(
+      transaction.issueTemplate.updateMany.mock.invocationCallOrder[0] ?? Infinity,
+    ).toBeLessThan(transaction.projectRoleTeam.deleteMany.mock.invocationCallOrder[0] ?? -Infinity);
     expect(transaction.activityEvent.deleteMany).toHaveBeenCalled();
     expect(transaction.project.deleteMany).toHaveBeenCalled();
     const signal = JSON.parse(transaction.$executeRaw.mock.calls[0]?.[1] as string) as Record<

@@ -20,14 +20,14 @@ describe('database integration', () => {
     await prisma.$disconnect();
   });
 
-  it('connects only to the rivet public test schema', async () => {
+  it('connects only to the rivet_test public test schema', async () => {
     const rows = await prisma.$queryRaw<
       Array<{ databaseName: string; schemaName: string; timezone: string }>
     >`SELECT current_database() AS "databaseName",
              current_schema() AS "schemaName",
              current_setting('TimeZone') AS timezone`;
 
-    expect(rows).toEqual([{ databaseName: 'rivet', schemaName: 'public', timezone: 'UTC' }]);
+    expect(rows).toEqual([{ databaseName: 'rivet_test', schemaName: 'public', timezone: 'UTC' }]);
   });
 
   it('stores the minimum outbox event contract', async () => {

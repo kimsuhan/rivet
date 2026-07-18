@@ -19,6 +19,7 @@ import { FilesModule } from './modules/files/files.module';
 import { HealthModule } from './modules/health/health.module';
 import { CsvImportModule } from './modules/imports/csv-import.module';
 import { InvitationsModule } from './modules/invitations/invitations.module';
+import { IssueTemplatesModule } from './modules/issue-templates/issue-templates.module';
 import { IssuesModule } from './modules/issues/issues.module';
 import { LabelsModule } from './modules/labels/labels.module';
 import { MembersModule } from './modules/members/members.module';
@@ -56,6 +57,7 @@ const environmentFiles =
     HealthModule,
     InvitationsModule,
     CsvImportModule,
+    IssueTemplatesModule,
     IssuesModule,
     LabelsModule,
     MembersModule,

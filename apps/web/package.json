@@ -11,7 +11,8 @@
     "start": "next start --hostname 127.0.0.1 --port ${WEB_PORT:-3000}",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "tsx node_modules/@playwright/test/cli.js test",
+    "test:e2e": "tsx node_modules/@playwright/test/cli.js test --project=desktop-chromium",
+    "test:e2e:full": "tsx node_modules/@playwright/test/cli.js test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

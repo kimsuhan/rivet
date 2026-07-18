@@ -13,9 +13,9 @@ export function assertSafeTestDatabaseUrl(value: string): void {
   if (
     !isLocalHost ||
     !isPostgres ||
-    databaseUrl.pathname !== '/rivet' ||
+    databaseUrl.pathname !== '/rivet_test' ||
     databaseUrl.searchParams.get('schema') !== 'public'
   ) {
-    throw new Error('테스트는 로컬 rivet 데이터베이스의 public 스키마에서만 실행할 수 있습니다.');
+    throw new Error('테스트는 로컬 rivet_test 데이터베이스의 public 스키마에서만 실행할 수 있습니다.');
   }
 }

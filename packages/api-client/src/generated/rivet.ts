@@ -28,6 +28,8 @@ import type {
   AcceptInvitationResponseDto,
   AcceptedAuthRequestDto,
   ApiErrorResponseDto,
+  ApplyIssueTemplateDto,
+  ArchiveIssueTemplateDto,
   ArchiveLabelDto,
   ArchiveProjectDto,
   AssignTeamWorksDto,
@@ -44,6 +46,7 @@ import type {
   CreateIssueDto,
   CreateIssueHandoffDto,
   CreateIssueResponseDto,
+  CreateIssueTemplateDto,
   CreateLabelDto,
   CreateProjectDto,
   CreateSavedViewDto,
@@ -76,6 +79,9 @@ import type {
   IssueCollaborationControllerTimelineParams,
   IssueDetailResponseDto,
   IssueListResponseDto,
+  IssueTemplateListResponseDto,
+  IssueTemplateResponseDto,
+  IssueTemplatesControllerListParams,
   IssuesControllerListParams,
   LabelListResponseDto,
   LabelResponseDto,
@@ -96,6 +102,7 @@ import type {
   RemoveTeamWorkDto,
   ReorderWorkflowStatesDto,
   ResetPasswordDto,
+  RestoreIssueTemplateDto,
   RestoreTrashResourceDto,
   SavedViewListResponseDto,
   SavedViewResponseDto,
@@ -125,6 +132,7 @@ import type {
   UpdateCommentDto,
   UpdateIssueDto,
   UpdateIssueResponseDto,
+  UpdateIssueTemplateDto,
   UpdateLabelDto,
   UpdateNotificationReadDto,
   UpdateProfileDto,
@@ -3878,6 +3886,473 @@ export function useCsvImportControllerGetRun<TData = Awaited<ReturnType<typeof c
 
 
 
+
+export const getIssueTemplatesControllerListUrl = (params?: IssueTemplatesControllerListParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/issue-templates?${stringifiedParams}` : `/api/v1/issue-templates`
+}
+
+/**
+ * @summary 워크스페이스 이슈 템플릿 목록 조회
+ */
+export const issueTemplatesControllerList = async (params?: IssueTemplatesControllerListParams, options?: RequestInit): Promise<IssueTemplateListResponseDto> => {
+
+  return rivetFetch<IssueTemplateListResponseDto>(getIssueTemplatesControllerListUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getIssueTemplatesControllerListQueryKey = (params?: IssueTemplatesControllerListParams,) => {
+    return [
+    `/api/v1/issue-templates`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getIssueTemplatesControllerListQueryOptions = <TData = Awaited<ReturnType<typeof issueTemplatesControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(params?: IssueTemplatesControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof issueTemplatesControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getIssueTemplatesControllerListQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof issueTemplatesControllerList>>> = ({ signal }) => issueTemplatesControllerList(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof issueTemplatesControllerList>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type IssueTemplatesControllerListQueryResult = NonNullable<Awaited<ReturnType<typeof issueTemplatesControllerList>>>
+export type IssueTemplatesControllerListQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useIssueTemplatesControllerList<TData = Awaited<ReturnType<typeof issueTemplatesControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: undefined |  IssueTemplatesControllerListParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof issueTemplatesControllerList>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof issueTemplatesControllerList>>,
+          TError,
+          Awaited<ReturnType<typeof issueTemplatesControllerList>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useIssueTemplatesControllerList<TData = Awaited<ReturnType<typeof issueTemplatesControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: IssueTemplatesControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof issueTemplatesControllerList>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof issueTemplatesControllerList>>,
+          TError,
+          Awaited<ReturnType<typeof issueTemplatesControllerList>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useIssueTemplatesControllerList<TData = Awaited<ReturnType<typeof issueTemplatesControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: IssueTemplatesControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof issueTemplatesControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 워크스페이스 이슈 템플릿 목록 조회
+ */
+
+export function useIssueTemplatesControllerList<TData = Awaited<ReturnType<typeof issueTemplatesControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: IssueTemplatesControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof issueTemplatesControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getIssueTemplatesControllerListQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getIssueTemplatesControllerCreateUrl = () => {
+
+
+
+
+  return `/api/v1/issue-templates`
+}
+
+/**
+ * @summary 워크스페이스 이슈 템플릿 생성
+ */
+export const issueTemplatesControllerCreate = async (createIssueTemplateDto: CreateIssueTemplateDto, options?: RequestInit): Promise<IssueTemplateResponseDto> => {
+
+  return rivetFetch<IssueTemplateResponseDto>(getIssueTemplatesControllerCreateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createIssueTemplateDto)
+  }
+);}
+
+
+
+
+
+export const getIssueTemplatesControllerCreateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerCreate>>, TError,{data: BodyType<CreateIssueTemplateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerCreate>>, TError,{data: BodyType<CreateIssueTemplateDto>}, TContext> => {
+
+const mutationKey = ['issueTemplatesControllerCreate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof issueTemplatesControllerCreate>>, {data: BodyType<CreateIssueTemplateDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  issueTemplatesControllerCreate(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type IssueTemplatesControllerCreateMutationResult = NonNullable<Awaited<ReturnType<typeof issueTemplatesControllerCreate>>>
+    export type IssueTemplatesControllerCreateMutationBody = BodyType<CreateIssueTemplateDto>
+    export type IssueTemplatesControllerCreateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 워크스페이스 이슈 템플릿 생성
+ */
+export const useIssueTemplatesControllerCreate = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerCreate>>, TError,{data: BodyType<CreateIssueTemplateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof issueTemplatesControllerCreate>>,
+        TError,
+        {data: BodyType<CreateIssueTemplateDto>},
+        TContext
+      > => {
+      return useMutation(getIssueTemplatesControllerCreateMutationOptions(options), queryClient);
+    }
+
+export const getIssueTemplatesControllerUpdateUrl = (issueTemplateId: string,) => {
+
+
+
+
+  return `/api/v1/issue-templates/${issueTemplateId}`
+}
+
+/**
+ * @summary 워크스페이스 이슈 템플릿 수정
+ */
+export const issueTemplatesControllerUpdate = async (issueTemplateId: string,
+    updateIssueTemplateDto: UpdateIssueTemplateDto, options?: RequestInit): Promise<IssueTemplateResponseDto> => {
+
+  return rivetFetch<IssueTemplateResponseDto>(getIssueTemplatesControllerUpdateUrl(issueTemplateId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateIssueTemplateDto)
+  }
+);}
+
+
+
+
+
+export const getIssueTemplatesControllerUpdateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerUpdate>>, TError,{issueTemplateId: string;data: BodyType<UpdateIssueTemplateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerUpdate>>, TError,{issueTemplateId: string;data: BodyType<UpdateIssueTemplateDto>}, TContext> => {
+
+const mutationKey = ['issueTemplatesControllerUpdate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof issueTemplatesControllerUpdate>>, {issueTemplateId: string;data: BodyType<UpdateIssueTemplateDto>}> = (props) => {
+          const {issueTemplateId,data} = props ?? {};
+
+          return  issueTemplatesControllerUpdate(issueTemplateId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type IssueTemplatesControllerUpdateMutationResult = NonNullable<Awaited<ReturnType<typeof issueTemplatesControllerUpdate>>>
+    export type IssueTemplatesControllerUpdateMutationBody = BodyType<UpdateIssueTemplateDto>
+    export type IssueTemplatesControllerUpdateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 워크스페이스 이슈 템플릿 수정
+ */
+export const useIssueTemplatesControllerUpdate = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerUpdate>>, TError,{issueTemplateId: string;data: BodyType<UpdateIssueTemplateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof issueTemplatesControllerUpdate>>,
+        TError,
+        {issueTemplateId: string;data: BodyType<UpdateIssueTemplateDto>},
+        TContext
+      > => {
+      return useMutation(getIssueTemplatesControllerUpdateMutationOptions(options), queryClient);
+    }
+
+export const getIssueTemplatesControllerArchiveUrl = (issueTemplateId: string,) => {
+
+
+
+
+  return `/api/v1/issue-templates/${issueTemplateId}/archive`
+}
+
+/**
+ * @summary 워크스페이스 이슈 템플릿 보관
+ */
+export const issueTemplatesControllerArchive = async (issueTemplateId: string,
+    archiveIssueTemplateDto: ArchiveIssueTemplateDto, options?: RequestInit): Promise<IssueTemplateResponseDto> => {
+
+  return rivetFetch<IssueTemplateResponseDto>(getIssueTemplatesControllerArchiveUrl(issueTemplateId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(archiveIssueTemplateDto)
+  }
+);}
+
+
+
+
+
+export const getIssueTemplatesControllerArchiveMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerArchive>>, TError,{issueTemplateId: string;data: BodyType<ArchiveIssueTemplateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerArchive>>, TError,{issueTemplateId: string;data: BodyType<ArchiveIssueTemplateDto>}, TContext> => {
+
+const mutationKey = ['issueTemplatesControllerArchive'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof issueTemplatesControllerArchive>>, {issueTemplateId: string;data: BodyType<ArchiveIssueTemplateDto>}> = (props) => {
+          const {issueTemplateId,data} = props ?? {};
+
+          return  issueTemplatesControllerArchive(issueTemplateId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type IssueTemplatesControllerArchiveMutationResult = NonNullable<Awaited<ReturnType<typeof issueTemplatesControllerArchive>>>
+    export type IssueTemplatesControllerArchiveMutationBody = BodyType<ArchiveIssueTemplateDto>
+    export type IssueTemplatesControllerArchiveMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 워크스페이스 이슈 템플릿 보관
+ */
+export const useIssueTemplatesControllerArchive = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerArchive>>, TError,{issueTemplateId: string;data: BodyType<ArchiveIssueTemplateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof issueTemplatesControllerArchive>>,
+        TError,
+        {issueTemplateId: string;data: BodyType<ArchiveIssueTemplateDto>},
+        TContext
+      > => {
+      return useMutation(getIssueTemplatesControllerArchiveMutationOptions(options), queryClient);
+    }
+
+export const getIssueTemplatesControllerRestoreUrl = (issueTemplateId: string,) => {
+
+
+
+
+  return `/api/v1/issue-templates/${issueTemplateId}/restore`
+}
+
+/**
+ * @summary 보관된 워크스페이스 이슈 템플릿 복구
+ */
+export const issueTemplatesControllerRestore = async (issueTemplateId: string,
+    restoreIssueTemplateDto: RestoreIssueTemplateDto, options?: RequestInit): Promise<IssueTemplateResponseDto> => {
+
+  return rivetFetch<IssueTemplateResponseDto>(getIssueTemplatesControllerRestoreUrl(issueTemplateId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(restoreIssueTemplateDto)
+  }
+);}
+
+
+
+
+
+export const getIssueTemplatesControllerRestoreMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerRestore>>, TError,{issueTemplateId: string;data: BodyType<RestoreIssueTemplateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerRestore>>, TError,{issueTemplateId: string;data: BodyType<RestoreIssueTemplateDto>}, TContext> => {
+
+const mutationKey = ['issueTemplatesControllerRestore'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof issueTemplatesControllerRestore>>, {issueTemplateId: string;data: BodyType<RestoreIssueTemplateDto>}> = (props) => {
+          const {issueTemplateId,data} = props ?? {};
+
+          return  issueTemplatesControllerRestore(issueTemplateId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type IssueTemplatesControllerRestoreMutationResult = NonNullable<Awaited<ReturnType<typeof issueTemplatesControllerRestore>>>
+    export type IssueTemplatesControllerRestoreMutationBody = BodyType<RestoreIssueTemplateDto>
+    export type IssueTemplatesControllerRestoreMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 보관된 워크스페이스 이슈 템플릿 복구
+ */
+export const useIssueTemplatesControllerRestore = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerRestore>>, TError,{issueTemplateId: string;data: BodyType<RestoreIssueTemplateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof issueTemplatesControllerRestore>>,
+        TError,
+        {issueTemplateId: string;data: BodyType<RestoreIssueTemplateDto>},
+        TContext
+      > => {
+      return useMutation(getIssueTemplatesControllerRestoreMutationOptions(options), queryClient);
+    }
+
+export const getIssueTemplatesControllerApplyUrl = (issueTemplateId: string,) => {
+
+
+
+
+  return `/api/v1/issue-templates/${issueTemplateId}/apply`
+}
+
+/**
+ * @summary 이슈 생성 입력에 적용할 템플릿 복사본 조회
+ */
+export const issueTemplatesControllerApply = async (issueTemplateId: string,
+    applyIssueTemplateDto: ApplyIssueTemplateDto, options?: RequestInit): Promise<IssueTemplateResponseDto> => {
+
+  return rivetFetch<IssueTemplateResponseDto>(getIssueTemplatesControllerApplyUrl(issueTemplateId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(applyIssueTemplateDto)
+  }
+);}
+
+
+
+
+
+export const getIssueTemplatesControllerApplyMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerApply>>, TError,{issueTemplateId: string;data: BodyType<ApplyIssueTemplateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerApply>>, TError,{issueTemplateId: string;data: BodyType<ApplyIssueTemplateDto>}, TContext> => {
+
+const mutationKey = ['issueTemplatesControllerApply'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof issueTemplatesControllerApply>>, {issueTemplateId: string;data: BodyType<ApplyIssueTemplateDto>}> = (props) => {
+          const {issueTemplateId,data} = props ?? {};
+
+          return  issueTemplatesControllerApply(issueTemplateId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type IssueTemplatesControllerApplyMutationResult = NonNullable<Awaited<ReturnType<typeof issueTemplatesControllerApply>>>
+    export type IssueTemplatesControllerApplyMutationBody = BodyType<ApplyIssueTemplateDto>
+    export type IssueTemplatesControllerApplyMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 이슈 생성 입력에 적용할 템플릿 복사본 조회
+ */
+export const useIssueTemplatesControllerApply = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof issueTemplatesControllerApply>>, TError,{issueTemplateId: string;data: BodyType<ApplyIssueTemplateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof issueTemplatesControllerApply>>,
+        TError,
+        {issueTemplateId: string;data: BodyType<ApplyIssueTemplateDto>},
+        TContext
+      > => {
+      return useMutation(getIssueTemplatesControllerApplyMutationOptions(options), queryClient);
+    }
 
 export const getIssuesControllerListUrl = (params?: IssuesControllerListParams,) => {
   const normalizedParams = new URLSearchParams();

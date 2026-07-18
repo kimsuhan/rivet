@@ -87,6 +87,7 @@ model Project {
   deletedByMembership WorkspaceMembership? @relation("ProjectDeletedByMembership", fields: [workspaceId, deletedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
   roleTeams           ProjectRoleTeam[]
   issues              Issue[]
+  issueTemplates      IssueTemplate[]
   activityEvents      ActivityEvent[]
   importSourceRows    ImportSourceRow[]
 
@@ -116,6 +117,44 @@ model ProjectRoleTeam {
   @@unique([workspaceId, projectId, role, teamId])
   @@index([workspaceId, teamId, projectId, role])
   @@map("project_role_teams")
+}
+
+model IssueTemplate {
+  id                  String        @id @default(uuid()) @db.Uuid
+  workspaceId         String        @map("workspace_id") @db.Uuid
+  name                String        @db.VarChar(100)
+  normalizedName      String        @map("normalized_name") @db.VarChar(100)
+  descriptionMarkdown String        @map("description_markdown") @db.Text
+  priority            IssuePriority @default(NONE)
+  projectId           String?       @map("project_id") @db.Uuid
+  initialRole         ProjectRole?  @map("initial_role")
+  archivedAt          DateTime?     @map("archived_at") @db.Timestamptz(3)
+  version             Int           @default(1)
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  project   Project?             @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
+  labels    IssueTemplateLabel[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, archivedAt, updatedAt, id])
+  @@index([workspaceId, projectId])
+  @@map("issue_templates")
+}
+
+model IssueTemplateLabel {
+  workspaceId     String @map("workspace_id") @db.Uuid
+  issueTemplateId String @map("issue_template_id") @db.Uuid
+  labelId         String @map("label_id") @db.Uuid
+
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  issueTemplate IssueTemplate @relation(fields: [workspaceId, issueTemplateId], references: [workspaceId, id], onDelete: Cascade)
+  label         Label         @relation(fields: [workspaceId, labelId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@id([issueTemplateId, labelId])
+  @@index([workspaceId, labelId, issueTemplateId], map: "issue_template_labels_workspace_label_template_idx")
+  @@map("issue_template_labels")
 }
 
 model Issue {

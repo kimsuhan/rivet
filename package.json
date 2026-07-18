@@ -17,6 +17,7 @@
     "test:coverage": "pnpm db:generate && turbo run test:coverage",
     "test:integration": "pnpm db:generate && turbo run test:integration --concurrency=1",
     "test:e2e": "pnpm db:generate && pnpm --filter @rivet/database migrate:test && pnpm --filter @rivet/web test:e2e",
+    "test:e2e:full": "pnpm db:generate && pnpm --filter @rivet/database migrate:test && pnpm --filter @rivet/web test:e2e:full",
     "api:contract:generate": "pnpm db:generate && turbo run build --filter=@rivet/api && pnpm --filter @rivet/api openapi:generate && pnpm --filter @rivet/api-client generate",
     "api:contract:check": "node scripts/check-api-contract.mjs",
     "api:structure:check": "node scripts/check-api-structure.mjs",

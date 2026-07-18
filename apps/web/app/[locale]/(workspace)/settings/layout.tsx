@@ -52,6 +52,7 @@ export default async function SettingsLayout({
             members: t('members'),
             navigation: t('navigation'),
             teams: t('teams'),
+            templates: t('templates'),
             title: t('title'),
             trash: t('trash'),
           }}

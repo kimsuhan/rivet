@@ -99,6 +99,25 @@ export class ResourcePurgeHandler {
   ): Promise<void> {
     const workspaceId = this.workspaceId(event);
     await this.database.client.$transaction(async (transaction) => {
+      const [projectSnapshot] = await transaction.$queryRaw<PurgeLockRow[]>`
+        SELECT "deleted_at" AS "deletedAt",
+               "purge_at" AS "purgeAt",
+               CURRENT_TIMESTAMP AS "databaseNow"
+        FROM "projects"
+        WHERE "workspace_id" = ${workspaceId}::uuid
+          AND "id" = ${payload.projectId}::uuid
+      `;
+      if (!projectSnapshot) return;
+      this.assertDue(event, payload.purgeAt, projectSnapshot);
+
+      await transaction.$queryRaw`
+        SELECT "id"
+        FROM "issue_templates"
+        WHERE "workspace_id" = ${workspaceId}::uuid
+          AND "project_id" = ${payload.projectId}::uuid
+        ORDER BY "id"
+        FOR UPDATE
+      `;
       const [project] = await transaction.$queryRaw<PurgeLockRow[]>`
         SELECT "deleted_at" AS "deletedAt",
                "purge_at" AS "purgeAt",
@@ -119,6 +138,14 @@ export class ResourcePurgeHandler {
         throw new RetryableOutboxError('PROJECT_PURGE_BLOCKED');
       }
 
+      await transaction.issueTemplate.updateMany({
+        data: {
+          initialRole: null,
+          projectId: null,
+          version: { increment: 1 },
+        },
+        where: { projectId: payload.projectId, workspaceId },
+      });
       await transaction.projectRoleTeam.deleteMany({
         where: { projectId: payload.projectId, workspaceId },
       });

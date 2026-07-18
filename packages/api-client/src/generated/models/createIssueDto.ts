@@ -5,6 +5,7 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
+import type { AppliedIssueTemplateDto } from './appliedIssueTemplateDto';
 import type { CreateIssueDtoPriority } from './createIssueDtoPriority';
 import type { InitialRoleAssignmentDto } from './initialRoleAssignmentDto';
 
@@ -30,4 +31,6 @@ export interface CreateIssueDto {
      * @maxItems 3
      */
   initialRoles?: InitialRoleAssignmentDto[];
+  /** 생성 입력을 채운 이슈 템플릿과 적용 당시 version */
+  appliedTemplate?: AppliedIssueTemplateDto;
 }

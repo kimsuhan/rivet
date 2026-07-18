@@ -136,6 +136,18 @@ export class InitialRoleAssignmentDto {
   assigneeMembershipId?: string | null;
 }
 
+export class AppliedIssueTemplateDto {
+  @ApiProperty({ format: 'uuid' })
+  @Transform(({ value }) => normalizeUuid(value))
+  @IsUUID('4')
+  id!: string;
+
+  @ApiProperty({ minimum: 1 })
+  @IsInt()
+  @Min(1)
+  version!: number;
+}
+
 export class CreateIssueDto {
   @ApiProperty({ maxLength: 500, minLength: 1 })
   @Transform(({ value }) => normalizeString(value))
@@ -192,6 +204,15 @@ export class CreateIssueDto {
   @ValidateNested({ each: true })
   @Type(() => InitialRoleAssignmentDto)
   initialRoles?: InitialRoleAssignmentDto[];
+
+  @ApiPropertyOptional({
+    description: '생성 입력을 채운 이슈 템플릿과 적용 당시 version',
+    type: AppliedIssueTemplateDto,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AppliedIssueTemplateDto)
+  appliedTemplate?: AppliedIssueTemplateDto;
 }
 
 export class StartIssueDto {

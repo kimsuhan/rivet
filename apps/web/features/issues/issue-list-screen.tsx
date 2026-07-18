@@ -409,7 +409,6 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
       ) : null}
       {works?.length === 0 ? (
         <ContentEmpty
-          align={mode === 'my' ? 'center' : 'start'}
           icon={ListTodo}
           title={
             mode === 'my'
