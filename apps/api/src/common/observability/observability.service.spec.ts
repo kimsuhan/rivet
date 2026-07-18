@@ -5,6 +5,7 @@ import { apiConfig } from '../../config/api.config';
 import { ObservabilityService } from './observability.service';
 
 const eventId = '11111111-1111-4111-8111-111111111111';
+const otherEventId = '44444444-4444-4444-8444-444444444444';
 const membershipId = '22222222-2222-4222-8222-222222222222';
 const workspaceId = '33333333-3333-4333-8333-333333333333';
 
@@ -117,6 +118,37 @@ describe('API ObservabilityService', () => {
       uuid: eventId,
     });
     expect(timeout).toHaveBeenCalledWith(2_000);
+  });
+
+  it('sends a product event collection sequentially without concurrent outbound requests', async () => {
+    let resolveFirstRequest!: (response: Response) => void;
+    fetchMock
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveFirstRequest = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ ok: true } as Response);
+    const service = new ObservabilityService(productionConfig, logger);
+
+    service.captureMany([
+      productEvent('search_performed', { resultCount: 1, searchType: 'TITLE' }),
+      {
+        ...productEvent('search_performed', { resultCount: 0, searchType: 'IDENTIFIER' }),
+        eventId: otherEventId,
+      },
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    resolveFirstRequest({ ok: true } as Response);
+    await flushRequests();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as {
+      uuid: string;
+    };
+    expect(secondBody.uuid).toBe(otherEventId);
   });
 
   it('removes the exception message and limits exception metadata', async () => {

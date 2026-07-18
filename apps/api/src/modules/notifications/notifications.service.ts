@@ -294,13 +294,15 @@ export class NotificationsService {
 
       return { notifications, updatedCount: updated.count };
     });
-    for (const notification of outcome.notifications) {
-      this.observability.capture(
-        productEvent(
-          context,
-          'notification_read',
-          { notificationId: notification.id, notificationType: notification.type },
-          { eventId: deterministicProductEventId(notification.id, 'notification_read') },
+    if (outcome.notifications.length > 0) {
+      this.observability.captureMany(
+        outcome.notifications.map((notification) =>
+          productEvent(
+            context,
+            'notification_read',
+            { notificationId: notification.id, notificationType: notification.type },
+            { eventId: deterministicProductEventId(notification.id, 'notification_read') },
+          ),
         ),
       );
     }

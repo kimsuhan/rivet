@@ -62,8 +62,10 @@ describe('NotificationsService', () => {
     },
   } as unknown as DatabaseService;
   const capture = jest.fn();
+  const captureMany = jest.fn();
   const service = new NotificationsService(database, {
     capture,
+    captureMany,
   } as unknown as ObservabilityService);
 
   beforeEach(() => {
@@ -225,7 +227,10 @@ describe('NotificationsService', () => {
   });
 
   it('locks and reads all current notifications with one signal per changed row', async () => {
-    queryRaw.mockResolvedValue([{ id: NOTIFICATION_ID }, { id: OTHER_NOTIFICATION_ID }]);
+    queryRaw.mockResolvedValue([
+      { id: NOTIFICATION_ID, type: NotificationType.MENTIONED },
+      { id: OTHER_NOTIFICATION_ID, type: NotificationType.COMMENT_ADDED },
+    ]);
     updateMany.mockResolvedValue({ count: 2 });
 
     await expect(service.readAll(context)).resolves.toEqual({ updatedCount: 2 });
@@ -248,6 +253,26 @@ describe('NotificationsService', () => {
       OTHER_NOTIFICATION_ID,
     ]);
     expect(payloads[0]?.eventId).not.toBe(payloads[1]?.eventId);
+    expect(captureMany).toHaveBeenCalledTimes(1);
+    expect(captureMany).toHaveBeenCalledWith([
+      expect.objectContaining({
+        eventId: deterministicProductEventId(NOTIFICATION_ID, 'notification_read'),
+        name: 'notification_read',
+        properties: {
+          notificationId: NOTIFICATION_ID,
+          notificationType: NotificationType.MENTIONED,
+        },
+      }),
+      expect.objectContaining({
+        eventId: deterministicProductEventId(OTHER_NOTIFICATION_ID, 'notification_read'),
+        name: 'notification_read',
+        properties: {
+          notificationId: OTHER_NOTIFICATION_ID,
+          notificationType: NotificationType.COMMENT_ADDED,
+        },
+      }),
+    ]);
+    expect(capture).not.toHaveBeenCalled();
   });
 
   it('does not emit a read-all signal when every notification is already read', async () => {
@@ -256,5 +281,6 @@ describe('NotificationsService', () => {
     await expect(service.readAll(context)).resolves.toEqual({ updatedCount: 0 });
     expect(updateMany).not.toHaveBeenCalled();
     expect(executeRaw).not.toHaveBeenCalled();
+    expect(captureMany).not.toHaveBeenCalled();
   });
 });

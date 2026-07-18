@@ -73,22 +73,28 @@ export class ObservabilityService {
   }
 
   capture(event: ProductEvent): void {
-    const validation = validateProductEvent(event);
-    if (!validation.success) {
-      this.logger.warn(
-        {
-          errorCode: 'PRODUCT_EVENT_REJECTED',
-          eventName: typeof event.name === 'string' ? event.name : 'unknown',
-        },
-        '제품 이벤트 계약 거부',
-      );
-      return;
-    }
+    const validatedEvent = this.validateProductEvent(event);
+    if (!validatedEvent) return;
     if (this.config.environment !== 'production' || !this.config.observability.posthogApiKey) {
       return;
     }
 
-    void this.postProductEvent(validation.event);
+    void this.postProductEvent(validatedEvent);
+  }
+
+  captureMany(events: ProductEvent[]): void {
+    const validatedEvents = events
+      .map((event) => this.validateProductEvent(event))
+      .filter((event): event is ProductEvent => event !== null);
+    if (
+      validatedEvents.length === 0 ||
+      this.config.environment !== 'production' ||
+      !this.config.observability.posthogApiKey
+    ) {
+      return;
+    }
+
+    void this.postProductEvents(validatedEvents);
   }
 
   isProductAnalyticsEnabled(): boolean {
@@ -195,6 +201,12 @@ export class ObservabilityService {
     }
   }
 
+  private async postProductEvents(events: ProductEvent[]): Promise<void> {
+    for (const event of events) {
+      await this.postProductEvent(event);
+    }
+  }
+
   private async postSlack(
     webhookUrl: string,
     alertType: ApiAlert['type'],
@@ -224,5 +236,19 @@ export class ObservabilityService {
         });
       }
     }
+  }
+
+  private validateProductEvent(event: ProductEvent): ProductEvent | null {
+    const validation = validateProductEvent(event);
+    if (validation.success) return validation.event;
+
+    this.logger.warn(
+      {
+        errorCode: 'PRODUCT_EVENT_REJECTED',
+        eventName: typeof event.name === 'string' ? event.name : 'unknown',
+      },
+      '제품 이벤트 계약 거부',
+    );
+    return null;
   }
 }
