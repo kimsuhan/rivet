@@ -15,6 +15,9 @@ import {
 
 export const SAVED_VIEW_RESOURCE_TYPES = ['ISSUES', 'MY_WORK'] as const;
 
+export type SavedViewConfigurationValue =
+  boolean | string | Array<{ direction: 'asc' | 'desc'; field: string }>;
+
 function normalizeString(value: unknown): unknown {
   return typeof value === 'string' ? value.normalize('NFC').trim() : value;
 }
@@ -93,8 +96,12 @@ export class SavedViewResponseDto {
   @ApiProperty()
   name!: string;
 
-  @ApiProperty({ additionalProperties: true, type: 'object' })
-  configuration!: Record<string, string | boolean>;
+  @ApiProperty({
+    additionalProperties: true,
+    description: 'ISSUES 보기의 sorts는 { field, direction } 객체 배열입니다.',
+    type: 'object',
+  })
+  configuration!: Record<string, SavedViewConfigurationValue>;
 
   @ApiProperty()
   isDefault!: boolean;

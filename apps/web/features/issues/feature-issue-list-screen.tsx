@@ -4,7 +4,7 @@ import { CircleDot, Filter, Plus, Search, X } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
-import { useIssuesControllerList, useProjectsControllerList } from '@rivet/api-client';
+import { useProjectsControllerList } from '@rivet/api-client';
 
 import { ContentEmpty } from '@/components/states/content-empty';
 import { ContentError } from '@/components/states/content-error';
@@ -23,8 +23,10 @@ import {
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
-import { IssueListDisplayControls } from './issue-list-display-controls';
+import { getIssuePagesQueryKey, useIssuePages } from './issue-list-queries';
 import { ISSUE_LIST_GRID_COLUMNS, IssueListRow } from './issue-list-row';
+import { issueSortsFromSearchParams, serializeIssueSorts } from './issue-multi-sort';
+import { IssueMultiSortControls } from './issue-multi-sort-controls';
 import { SavedViewControls } from './saved-view-controls';
 
 const STATUS_LABELS = {
@@ -44,32 +46,30 @@ export function FeatureIssueListScreen() {
   const query = searchParams.get('query') ?? '';
   const projectId = searchParams.get('projectId') ?? '';
   const status = searchParams.get('status') ?? '';
-  const sort = searchParams.get('sort') ?? 'updatedAt';
-  const sortDirection = searchParams.get('sortDirection') ?? 'desc';
+  const sorts = issueSortsFromSearchParams(searchParams);
+  const serializedSorts = serializeIssueSorts(sorts);
   const density = searchParams.get('density') ?? 'comfortable';
   const defaultConfiguration = {
     density: 'comfortable',
-    sort: 'updatedAt',
-    sortDirection: 'desc',
+    sorts: [{ direction: 'desc', field: 'updatedAt' }],
   };
   const viewConfiguration = {
     ...(query ? { query } : {}),
     ...(projectId ? { projectId } : {}),
     ...(status ? { status } : {}),
-    sort,
-    sortDirection,
+    sorts,
     density,
   };
-  const issues = useIssuesControllerList(
-    {
-      ...(projectId ? { projectId } : {}),
-      ...(query ? { query } : {}),
-      ...(status ? { status: status as never } : {}),
-      sort: sort as 'updatedAt' | 'createdAt' | 'priority',
-      sortDirection: sortDirection as 'asc' | 'desc',
-    },
-    { query: { retry: false } },
-  );
+  const issueParams = {
+    ...(projectId ? { projectId } : {}),
+    ...(query ? { query } : {}),
+    ...(status ? { status: status as never } : {}),
+    sorts: serializedSorts,
+  };
+  const issues = useIssuePages(issueParams);
+  const issueQueryKey = getIssuePagesQueryKey(issueParams);
+  const issueItems = issues.data?.pages.flatMap((page) => page.items) ?? [];
+  const totalCount = issues.data?.pages[0]?.totalCount;
   const projects = useProjectsControllerList(
     { includeArchived: false, sort: 'updatedAt', sortDirection: 'desc' },
     { query: { retry: false } },
@@ -241,23 +241,21 @@ export function FeatureIssueListScreen() {
             ) : null}
           </PopoverContent>
         </Popover>
-        <IssueListDisplayControls
+        <IssueMultiSortControls
           density={density}
-          sort={sort}
-          sortDirection={sortDirection}
-          sortLabel="이슈 정렬 기준"
-          sortOptions={[
-            { label: '최근 수정일', value: 'updatedAt' },
-            { label: '생성일', value: 'createdAt' },
-            { label: '우선순위', value: 'priority' },
-          ]}
-          onSortChange={(value) => replace('sort', value)}
-          onSortDirectionChange={(value) => replace('sortDirection', value)}
+          sorts={sorts}
+          onSortsChange={(value) =>
+            replaceMany({
+              sort: '',
+              sortDirection: '',
+              sorts: serializeIssueSorts(value),
+            })
+          }
           onDensityChange={(value) => replace('density', value)}
         />
       </SavedViewControls>
       {issues.isPending ? <ContentLoading label="이슈를 불러오는 중입니다" /> : null}
-      {issues.isError ? (
+      {issues.isError && !issues.data ? (
         <ContentError
           title="이슈를 불러오지 못했습니다"
           description="입력한 필터는 유지했습니다."
@@ -265,7 +263,7 @@ export function FeatureIssueListScreen() {
           onRetry={() => void issues.refetch()}
         />
       ) : null}
-      {issues.data?.items.length === 0 ? (
+      {issues.data && issueItems.length === 0 ? (
         <ContentEmpty
           align="center"
           icon={CircleDot}
@@ -273,7 +271,7 @@ export function FeatureIssueListScreen() {
           description="필터를 바꾸거나 새 이슈를 만들어 보세요."
         />
       ) : null}
-      {issues.data?.items.length ? (
+      {issueItems.length ? (
         <div>
           <div
             className={cn(
@@ -290,20 +288,39 @@ export function FeatureIssueListScreen() {
             <span className="max-lg:hidden">다음 행동</span>
           </div>
           <ul>
-            {issues.data.items.map((issue) => (
+            {issueItems.map((issue) => (
               <IssueListRow
                 key={issue.id}
                 issue={issue}
-                queryKey={issues.queryKey}
+                queryKey={issueQueryKey}
                 density={density as 'compact' | 'comfortable'}
               />
             ))}
           </ul>
         </div>
       ) : null}
-      {issues.data ? (
+      {issues.isFetchNextPageError ? (
+        <ContentError
+          title="다음 이슈를 불러오지 못했습니다"
+          description="이미 불러온 이슈는 유지했습니다."
+          retryLabel="다시 시도"
+          onRetry={() => void issues.fetchNextPage()}
+        />
+      ) : null}
+      {issues.hasNextPage ? (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            disabled={issues.isFetchingNextPage}
+            onClick={() => void issues.fetchNextPage()}
+          >
+            {issues.isFetchingNextPage ? '불러오는 중…' : '이슈 더 보기'}
+          </Button>
+        </div>
+      ) : null}
+      {totalCount !== undefined ? (
         <p className="text-muted-foreground text-right text-xs">
-          총 {issues.data.totalCount.toLocaleString('ko-KR')}개
+          총 {totalCount.toLocaleString('ko-KR')}개
         </p>
       ) : null}
     </section>

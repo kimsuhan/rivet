@@ -167,18 +167,6 @@ export type TeamWorkOrderRow = Prisma.TeamWorkGetPayload<{
 export class IssueRepository {
   constructor(private readonly database: DatabaseService) {}
 
-  listIssues(
-    where: Prisma.IssueWhereInput,
-    orderBy: Prisma.IssueOrderByWithRelationInput[],
-    take: number,
-  ): Promise<IssueRow[]> {
-    return this.database.client.issue.findMany({ orderBy, select: ISSUE_SELECT, take, where });
-  }
-
-  countIssues(where: Prisma.IssueWhereInput): Promise<number> {
-    return this.database.client.issue.count({ where });
-  }
-
   listTeamWorkOrderRows(where: Prisma.TeamWorkWhereInput): Promise<TeamWorkOrderRow[]> {
     return this.database.client.teamWork.findMany({ select: TEAM_WORK_ORDER_SELECT, where });
   }

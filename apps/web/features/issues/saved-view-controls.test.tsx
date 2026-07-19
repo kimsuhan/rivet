@@ -139,6 +139,24 @@ describe('SavedViewControls', () => {
     });
   });
 
+  it('기존 단일 정렬 URL은 명시 설정으로 유지해 기본 보기가 덮어쓰지 않는다', () => {
+    vi.mocked(useSavedViewsControllerList).mockReturnValue({
+      data: { items: [defaultView, view], nextCursor: null },
+      isSuccess: true,
+      refetch: mocks.refetch,
+    } as never);
+    mocks.search = 'sort=priority&sortDirection=asc';
+
+    render(
+      <SavedViewControls
+        configuration={{ sorts: [{ direction: 'asc', field: 'priority' }] }}
+        resourceType="ISSUES"
+      />,
+    );
+
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
   it('보관되었거나 권한을 잃은 필터 값을 alert로 안내한다', () => {
     render(
       <SavedViewControls

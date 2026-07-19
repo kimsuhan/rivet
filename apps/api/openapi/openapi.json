@@ -4091,6 +4091,17 @@
             }
           },
           {
+            "name": "sorts",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 정렬 조건(field:direction). 최대 3개이며 sort/sortDirection과 함께 사용할 수 없습니다.",
+            "schema": {
+              "maxLength": 200,
+              "example": "priority:desc,status:asc,updatedAt:desc",
+              "type": "string"
+            }
+          },
+          {
             "name": "limit",
             "required": false,
             "in": "query",
@@ -13351,7 +13362,8 @@
           },
           "configuration": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "ISSUES 보기의 sorts는 { field, direction } 객체 배열입니다."
           },
           "isDefault": {
             "type": "boolean"

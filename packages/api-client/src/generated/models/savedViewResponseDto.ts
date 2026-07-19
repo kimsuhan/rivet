@@ -12,6 +12,7 @@ export interface SavedViewResponseDto {
   id: string;
   resourceType: SavedViewResponseDtoResourceType;
   name: string;
+  /** ISSUES 보기의 sorts는 { field, direction } 객체 배열입니다. */
   configuration: SavedViewResponseDtoConfiguration;
   isDefault: boolean;
   version: number;

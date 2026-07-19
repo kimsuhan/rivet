@@ -1,6 +1,11 @@
 'use client';
 
-import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  type InfiniteData,
+  type QueryKey,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { ArrowRight, CircleAlert } from 'lucide-react';
 
 import {
@@ -16,6 +21,25 @@ import { cn } from '@/lib/utils';
 
 import { IssueStatusDisplay, PriorityTrigger } from './issue-attribute-presentation';
 import { IssueLabelChips } from './issue-label-chips';
+
+type IssueListQueryData = IssueListResponseDto | InfiniteData<IssueListResponseDto>;
+
+function updateIssueListData(
+  current: IssueListQueryData | undefined,
+  update: (item: IssueSummaryResponseDto) => IssueSummaryResponseDto,
+): IssueListQueryData | undefined {
+  if (!current) return current;
+  if ('pages' in current) {
+    return {
+      ...current,
+      pages: current.pages.map((page) => ({
+        ...page,
+        items: page.items.map(update),
+      })),
+    };
+  }
+  return { ...current, items: current.items.map(update) };
+}
 
 export const ISSUE_LIST_GRID_COLUMNS =
   'grid-cols-[minmax(18rem,32rem)_8.5rem_7.5rem_10rem_6.5rem_5rem_7rem] max-xl:grid-cols-[minmax(18rem,26rem)_8.5rem_7.5rem_9rem_6.5rem_6rem] max-lg:grid-cols-[minmax(18rem,22rem)_8.5rem_7.5rem_6rem] max-md:grid-cols-1 max-md:gap-1 max-md:px-3';
@@ -44,28 +68,18 @@ export function IssueListRow({
       issuesControllerUpdate(issue.id, { priority, version: issue.version }),
     onMutate: async (priority) => {
       await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<IssueListResponseDto>(queryKey);
-      queryClient.setQueryData<IssueListResponseDto>(queryKey, (current) =>
-        current
-          ? {
-              ...current,
-              items: current.items.map((item) =>
-                item.id === issue.id ? { ...item, priority } : item,
-              ),
-            }
-          : current,
+      const previous = queryClient.getQueryData<IssueListQueryData>(queryKey);
+      queryClient.setQueryData<IssueListQueryData>(queryKey, (current) =>
+        updateIssueListData(current, (item) =>
+          item.id === issue.id ? { ...item, priority } : item,
+        ),
       );
       return { previous };
     },
     onError: (_error, _priority, context) => queryClient.setQueryData(queryKey, context?.previous),
     onSuccess: (updated) =>
-      queryClient.setQueryData<IssueListResponseDto>(queryKey, (current) =>
-        current
-          ? {
-              ...current,
-              items: current.items.map((item) => (item.id === issue.id ? updated : item)),
-            }
-          : current,
+      queryClient.setQueryData<IssueListQueryData>(queryKey, (current) =>
+        updateIssueListData(current, (item) => (item.id === issue.id ? updated : item)),
       ),
     onSettled: () => void queryClient.invalidateQueries({ queryKey }),
   });

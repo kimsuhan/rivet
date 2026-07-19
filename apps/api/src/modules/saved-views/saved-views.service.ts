@@ -9,6 +9,7 @@ import { ObservabilityService } from '../../common/observability/observability.s
 import { productEvent } from '../../common/observability/product-event';
 import type {
   CreateSavedViewDto,
+  SavedViewConfigurationValue,
   SavedViewResponseDto,
   UpdateSavedViewDto,
 } from './dto/saved-view.dto';
@@ -26,8 +27,12 @@ const ISSUE_STATUSES = new Set([
   'CANCELED',
 ]);
 const STATE_CATEGORIES = new Set(['BACKLOG', 'UNSTARTED', 'STARTED', 'COMPLETED', 'CANCELED']);
-const ISSUE_SORTS = new Set(['updatedAt', 'createdAt', 'priority']);
+const ISSUE_SORTS = new Set(['updatedAt', 'createdAt', 'priority', 'status', 'progress']);
 const MY_WORK_SORTS = new Set(['executionOrder', 'priority', 'createdAt', 'updatedAt', 'status']);
+const SORT_DIRECTIONS = new Set(['asc', 'desc']);
+const MAX_ISSUE_SORTS = 3;
+
+type NormalizedConfiguration = Record<string, SavedViewConfigurationValue>;
 
 function notFound(): never {
   throw new ApiError({
@@ -62,16 +67,16 @@ function normalizeName(value: string): { name: string; normalizedName: string } 
 function normalizeConfiguration(
   resourceType: ResourceType,
   value: Record<string, unknown>,
-): Record<string, string | boolean> {
+): NormalizedConfiguration {
   const allowed =
     resourceType === 'ISSUES'
-      ? new Set(['query', 'projectId', 'status', 'sort', 'sortDirection', 'density'])
+      ? new Set(['query', 'projectId', 'status', 'sort', 'sortDirection', 'sorts', 'density'])
       : new Set(['query', 'projectId', 'stateCategory', 'sort', 'sortDirection', 'density']);
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) invalidConfiguration('지원하지 않는 보기 설정이 포함되어 있습니다.');
   }
 
-  const configuration: Record<string, string | boolean> = {};
+  const configuration: NormalizedConfiguration = {};
   if (value.query !== undefined) {
     if (typeof value.query !== 'string' || value.query.normalize('NFC').trim().length > 200) {
       invalidConfiguration('검색어 형식이 올바르지 않습니다.');
@@ -110,16 +115,69 @@ function normalizeConfiguration(
     }
     configuration.stateCategory = categories.join(',');
   }
-  if (value.sort !== undefined) {
-    const sorts = resourceType === 'ISSUES' ? ISSUE_SORTS : MY_WORK_SORTS;
-    if (typeof value.sort !== 'string' || !sorts.has(value.sort))
-      invalidConfiguration('정렬 기준을 저장할 수 없습니다.');
-    configuration.sort = value.sort;
-  }
-  if (value.sortDirection !== undefined) {
-    if (value.sortDirection !== 'asc' && value.sortDirection !== 'desc')
-      invalidConfiguration('정렬 방향을 저장할 수 없습니다.');
-    configuration.sortDirection = value.sortDirection;
+  if (resourceType === 'ISSUES') {
+    if (
+      value.sorts !== undefined &&
+      (value.sort !== undefined || value.sortDirection !== undefined)
+    ) {
+      invalidConfiguration('다중 정렬과 기존 단일 정렬 조건을 함께 저장할 수 없습니다.');
+    }
+    if (value.sorts !== undefined) {
+      if (
+        !Array.isArray(value.sorts) ||
+        value.sorts.length < 1 ||
+        value.sorts.length > MAX_ISSUE_SORTS
+      ) {
+        invalidConfiguration(`정렬 조건은 1개 이상 ${MAX_ISSUE_SORTS}개 이하여야 합니다.`);
+      }
+      const fields = new Set<string>();
+      const sorts = value.sorts.map((sort) => {
+        if (
+          typeof sort !== 'object' ||
+          sort === null ||
+          Array.isArray(sort) ||
+          Object.keys(sort).some((key) => key !== 'field' && key !== 'direction') ||
+          !('field' in sort) ||
+          typeof sort.field !== 'string' ||
+          !ISSUE_SORTS.has(sort.field) ||
+          !('direction' in sort) ||
+          typeof sort.direction !== 'string' ||
+          !SORT_DIRECTIONS.has(sort.direction) ||
+          fields.has(sort.field)
+        ) {
+          invalidConfiguration('정렬 조건을 저장할 수 없습니다.');
+        }
+        fields.add(sort.field);
+        return {
+          direction: sort.direction as 'asc' | 'desc',
+          field: sort.field,
+        };
+      });
+      configuration.sorts = sorts;
+    } else if (value.sort !== undefined || value.sortDirection !== undefined) {
+      const field = value.sort ?? 'updatedAt';
+      const direction = value.sortDirection ?? 'desc';
+      if (
+        typeof field !== 'string' ||
+        !ISSUE_SORTS.has(field) ||
+        typeof direction !== 'string' ||
+        !SORT_DIRECTIONS.has(direction)
+      ) {
+        invalidConfiguration('정렬 조건을 저장할 수 없습니다.');
+      }
+      configuration.sorts = [{ direction: direction as 'asc' | 'desc', field }];
+    }
+  } else {
+    if (value.sort !== undefined) {
+      if (typeof value.sort !== 'string' || !MY_WORK_SORTS.has(value.sort))
+        invalidConfiguration('정렬 기준을 저장할 수 없습니다.');
+      configuration.sort = value.sort;
+    }
+    if (value.sortDirection !== undefined) {
+      if (value.sortDirection !== 'asc' && value.sortDirection !== 'desc')
+        invalidConfiguration('정렬 방향을 저장할 수 없습니다.');
+      configuration.sortDirection = value.sortDirection;
+    }
   }
   if (value.density !== undefined) {
     if (value.density !== 'comfortable' && value.density !== 'compact')
@@ -315,7 +373,10 @@ export class SavedViewsService {
     version: number;
   }): SavedViewResponseDto {
     return {
-      configuration: row.configuration as Record<string, string | boolean>,
+      configuration: normalizeConfiguration(
+        row.resourceType,
+        row.configuration as Record<string, unknown>,
+      ),
       createdAt: row.createdAt,
       id: row.id,
       isDefault: row.isDefault,

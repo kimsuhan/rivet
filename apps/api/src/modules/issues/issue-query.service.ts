@@ -13,6 +13,14 @@ import type {
   TeamWorkSummaryResponseDto,
 } from './dto/issue-response.dto';
 import { IssueRepository } from './issue.repository';
+import {
+  encodeIssueListCursor,
+  issueListFilterFingerprint,
+  parseIssueListCursor,
+} from './issue-list.cursor';
+import type { IssueListFilters } from './issue-list.policy';
+import { IssueListRepository } from './issue-list.repository';
+import { parseIssueSorts } from './issue-list-sort.parser';
 import { toIssueDetail, toIssueSummary, toTeamWorkSummary } from './issue-response.mapper';
 
 function csvValues(value: string | undefined): string[] {
@@ -29,7 +37,10 @@ function csvValues(value: string | undefined): string[] {
 
 @Injectable()
 export class IssueQueryService {
-  constructor(private readonly repository: IssueRepository) {}
+  constructor(
+    private readonly repository: IssueRepository,
+    private readonly listRepository: IssueListRepository,
+  ) {}
 
   async list(workspaceId: string, query: IssueListQueryDto): Promise<IssueListResponseDto> {
     const projectIds = csvValues(query.projectId);
@@ -58,21 +69,31 @@ export class IssueQueryService {
         status: HttpStatus.BAD_REQUEST,
       });
     }
+    const filters: IssueListFilters = {
+      ...(query.createdFrom ? { createdFrom: new Date(query.createdFrom) } : {}),
+      ...(query.createdTo ? { createdTo: new Date(query.createdTo) } : {}),
+      creatorIds,
+      labelIds,
+      priorities: priorities as IssuePriority[],
+      projectIds,
+      ...(query.query ? { query: query.query } : {}),
+      statuses: statuses as IssueStatus[],
+      ...(query.updatedFrom ? { updatedFrom: new Date(query.updatedFrom) } : {}),
+      ...(query.updatedTo ? { updatedTo: new Date(query.updatedTo) } : {}),
+      workspaceId,
+    };
     const where: Prisma.IssueWhereInput = {
       createdAt: {
-        ...(query.createdFrom ? { gte: new Date(query.createdFrom) } : {}),
-        ...(query.createdTo ? { lte: new Date(query.createdTo) } : {}),
+        ...(filters.createdFrom ? { gte: filters.createdFrom } : {}),
+        ...(filters.createdTo ? { lte: filters.createdTo } : {}),
       },
       deletedAt: null,
       updatedAt: {
-        ...(query.updatedFrom ? { gte: new Date(query.updatedFrom) } : {}),
-        ...(query.updatedTo ? { lte: new Date(query.updatedTo) } : {}),
+        ...(filters.updatedFrom ? { gte: filters.updatedFrom } : {}),
+        ...(filters.updatedTo ? { lte: filters.updatedTo } : {}),
       },
       workspaceId,
       ...(creatorIds.length ? { createdByMembershipId: { in: creatorIds } } : {}),
-      ...(query.cursor
-        ? { id: { [query.sortDirection === 'asc' ? 'gt' : 'lt']: query.cursor } }
-        : {}),
       ...(labelIds.length ? { labels: { some: { labelId: { in: labelIds } } } } : {}),
       ...(priorities.length ? { priority: { in: priorities as IssuePriority[] } } : {}),
       ...(projectIds.length ? { projectId: { in: projectIds } } : {}),
@@ -86,20 +107,29 @@ export class IssueQueryService {
           }
         : {}),
     };
-    const rows = await this.repository.listIssues(
-      where,
-      [
-        { [query.sort ?? 'updatedAt']: query.sortDirection ?? 'desc' },
-        { id: query.sortDirection ?? 'desc' },
-      ],
-      query.limit + 1,
+    const sorts = parseIssueSorts(query);
+    const filterFingerprint = issueListFilterFingerprint(filters);
+    const cursor = parseIssueListCursor(query.cursor, sorts, filterFingerprint);
+    const [orderRows, totalCount] = await Promise.all([
+      this.listRepository.listOrderRows(filters, sorts, cursor, query.limit + 1),
+      this.listRepository.count(where),
+    ]);
+    const hasNext = orderRows.length > query.limit;
+    const pageOrderRows = hasNext ? orderRows.slice(0, query.limit) : orderRows;
+    const rows = await this.repository.findIssues(
+      workspaceId,
+      pageOrderRows.map(({ id }) => id),
     );
-    const hasNext = rows.length > query.limit;
-    const page = hasNext ? rows.slice(0, query.limit) : rows;
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
     return {
-      items: page.map(toIssueSummary),
-      nextCursor: hasNext ? page.at(-1)!.id : null,
-      totalCount: await this.repository.countIssues(where),
+      items: pageOrderRows.flatMap(({ id }) => {
+        const row = rowsById.get(id);
+        return row ? [toIssueSummary(row)] : [];
+      }),
+      nextCursor: hasNext
+        ? encodeIssueListCursor(pageOrderRows.at(-1)!, sorts, filterFingerprint)
+        : null,
+      totalCount,
     };
   }
 
