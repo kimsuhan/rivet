@@ -293,16 +293,14 @@ describe('OutboxProcessorService', () => {
       eventType: PROJECT_CREATED,
       payload: {
         hasTargetDate: true,
-        roleCount: 2,
-        roles: ['BACKEND', 'WEB_FRONTEND'],
-        schemaVersion: 1,
+        schemaVersion: 2,
+        teamCount: 2,
       },
       expected: {
         name: 'project_created',
         properties: {
           hasTargetDate: true,
-          roleCount: 2,
-          roles: ['BACKEND', 'WEB_FRONTEND'],
+          teamCount: 2,
         },
       },
     },

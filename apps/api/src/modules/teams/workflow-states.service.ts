@@ -286,7 +286,7 @@ export class WorkflowStatesService {
         if ((usage?.activeRoleCount ?? 0) > 0 && (usage?.unstartedCount ?? 0) <= 1) {
           throw new ApiError({
             code: 'TEAM_UNSTARTED_STATE_REQUIRED',
-            message: '활성 프로젝트 역할에 연결된 팀은 시작 전 상태를 하나 이상 유지해야 합니다.',
+            message: '활성 프로젝트에 참여 중인 팀은 시작 전 상태를 하나 이상 유지해야 합니다.',
             status: HttpStatus.CONFLICT,
           });
         }

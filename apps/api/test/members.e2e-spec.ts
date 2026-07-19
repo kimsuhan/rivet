@@ -443,6 +443,7 @@ describe('M2 member management API', () => {
 
     await database.client.teamWork.deleteMany({ where: { issueId: issue.id } });
     await database.client.issue.delete({ where: { id: issue.id } });
+    await database.client.projectTeam.deleteMany({ where: { projectId: project.id } });
     await database.client.project.delete({ where: { id: project.id } });
   });
 

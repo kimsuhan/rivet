@@ -64,7 +64,6 @@ import {
   CompactAssigneeTrigger,
   IssueStatusDisplay,
   PriorityDisplay,
-  PROJECT_ROLE_LABELS as ROLE_LABELS,
   StatusTrigger,
   TeamWorkStatusDisplay,
 } from './issue-attribute-presentation';
@@ -84,8 +83,6 @@ import {
 } from './issue-work-routing';
 import { TeamWorkCompletionModal } from './team-work-completion-modal';
 import { TeamWorkPrimaryAction } from './team-work-primary-action';
-
-type ProjectRole = 'BACKEND' | 'WEB_FRONTEND' | 'APP_FRONTEND';
 
 function formatHandoffDateTime(value: string): string {
   return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }).format(
@@ -117,7 +114,7 @@ function useTeamWorkCellMutation(
       assignee?: IssueMemberSummaryResponseDto | null;
       assigneeMembershipId?: string | null;
       completionMode?: 'COMPLETE_ONLY' | 'HANDOFF_AND_COMPLETE';
-      handoff?: { bodyMarkdown: string; destinationRoles?: Array<'APP_FRONTEND' | 'WEB_FRONTEND'> };
+      handoff?: { bodyMarkdown: string; destinationProjectTeamIds?: string[] };
       workNoteMarkdown?: string | null;
       workflowState?: {
         id: string;
@@ -247,9 +244,11 @@ function TeamWorkPanel({
     (key) => markdown(key as never),
     (key) => String(markdown.raw(key as never)),
   );
-  const states = useTeamsControllerListWorkflowStates(work.team.id, { query: { retry: false } });
+  const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, {
+    query: { retry: false },
+  });
   const members = useMembersControllerList(
-    { limit: 100, status: 'ACTIVE', teamId: work.team.id },
+    { limit: 100, status: 'ACTIVE', teamId: work.projectTeam.team.id },
     { query: { retry: false } },
   );
   const stateMutation = useTeamWorkCellMutation(issue, work, 'workflowState');
@@ -310,9 +309,8 @@ function TeamWorkPanel({
   const hasInitialHandoff = issue.handoffFlows.some(
     (handoff) =>
       handoff.kind === 'INITIAL' &&
-      (work.projectRole === 'BACKEND'
-        ? handoff.sourceTeamWork.id === work.id
-        : handoff.targets.some((target) => target.teamWork.id === work.id)),
+      (handoff.sourceTeamWork.id === work.id ||
+        handoff.targets.some((target) => target.teamWork.id === work.id)),
   );
   const initialHandoff = issue.handoffFlows.find(
     (handoff) => handoff.kind === 'INITIAL' && handoff.sourceTeamWork.id === work.id,
@@ -333,7 +331,8 @@ function TeamWorkPanel({
     <section className="border-b pb-6" aria-labelledby="selected-work-title">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pb-3 sm:justify-between">
         <h2 id="selected-work-title" className="order-1 text-lg font-semibold">
-          {ROLE_LABELS[work.projectRole]} · {work.team.name}
+          <span className="font-mono text-sm">{work.projectTeam.team.key}</span> ·{' '}
+          {work.projectTeam.team.name}
         </h2>
         <TeamWorkPrimaryAction
           className="order-3 sm:order-2"
@@ -415,7 +414,7 @@ function TeamWorkPanel({
       <section className="mt-5 border-t pt-4" aria-labelledby="handoff-context-title">
         <div className="flex items-center justify-between gap-3">
           <h3 id="handoff-context-title" className="text-sm font-semibold">
-            {work.projectRole === 'BACKEND' ? '보낸 전달' : '받은 전달'}
+            {initialHandoff ? '보낸 전달' : '받은 전달'}
           </h3>
           <Link
             className="text-primary text-sm underline underline-offset-4"
@@ -439,7 +438,7 @@ function TeamWorkPanel({
         ) : (
           <p className="text-muted-foreground mt-2 text-sm">아직 전달된 내용이 없습니다.</p>
         )}
-        {work.projectRole === 'BACKEND' && hasInitialHandoff ? (
+        {initialHandoff && hasInitialHandoff ? (
           <>
             {followUpSuccess ? (
               <Alert className="mt-4">
@@ -478,19 +477,17 @@ function TeamWorkPanel({
                 <DialogHeader>
                   <DialogTitle>추가 전달 작성</DialogTitle>
                   <DialogDescription>
-                    최초 전달 이후의 변경만 새 이력으로 남깁니다. 기존 전달과 프론트 작업은 바뀌지
+                    최초 전달 이후의 변경만 새 이력으로 남깁니다. 기존 전달 대상 작업은 바뀌지
                     않습니다.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="border-border bg-muted/40 rounded-lg border px-3 py-2.5 text-sm">
                   <p className="text-muted-foreground text-xs font-medium">전달 관계</p>
                   <p className="mt-1 font-medium">
-                    {work.identifier} · {ROLE_LABELS[work.projectRole]} →{' '}
+                    {work.identifier} · {work.projectTeam.team.name} →{' '}
                     {followUpRecipientWorks.length > 0
                       ? followUpRecipientWorks
-                          .map(
-                            (target) => `${target.identifier} · ${ROLE_LABELS[target.projectRole]}`,
-                          )
+                          .map((target) => `${target.identifier} · ${target.projectTeam.team.name}`)
                           .join(', ')
                       : '최초 전달 대상 작업'}
                   </p>
@@ -517,7 +514,7 @@ function TeamWorkPanel({
                   <summary className="cursor-pointer text-sm font-medium">작성 가이드 보기</summary>
                   <div className="text-muted-foreground mt-2 space-y-2 text-sm">
                     <p>
-                      변경 요약, 변경된 API 또는 요청·응답, 프론트에서 필요한 조치를 필요한 만큼만
+                      변경 요약, 변경된 결과 또는 입력·출력, 다음 팀에서 필요한 조치를 필요한 만큼만
                       적어 주세요.
                     </p>
                     <Button
@@ -807,7 +804,7 @@ export function IssueDetailScreen({
   const project = useProjectsControllerGet(issue?.project.id ?? '', {
     query: { enabled: Boolean(issue), retry: false },
   });
-  const [startRoles, setStartRoles] = useState<ProjectRole[]>([]);
+  const [startProjectTeamIds, setStartProjectTeamIds] = useState<string[]>([]);
   const [addTeamWorkDisclosure, setAddTeamWorkDisclosure] = useState(() => ({
     open: selectedWork?.stateCategory !== 'STARTED',
     workId: selectedWorkId,
@@ -902,16 +899,26 @@ export function IssueDetailScreen({
     descriptionDraft?.issueId === currentIssue.id
       ? descriptionDraft.value
       : (currentIssue.descriptionMarkdown ?? '');
-  const availableRoles = (project.data?.roleTeams ?? [])
-    .map(({ role }) => role)
-    .filter((role) => !currentIssue.teamWorks.some((work) => work.projectRole === role));
+  const availableProjectTeams = (project.data?.projectTeams ?? []).filter(
+    (projectTeam) =>
+      projectTeam.active &&
+      !projectTeam.team.archived &&
+      !currentIssue.teamWorks.some(
+        (work) =>
+          work.projectTeam.id === projectTeam.id &&
+          work.stateCategory !== 'COMPLETED' &&
+          work.stateCategory !== 'CANCELED',
+      ),
+  );
   const addTeamWorkOpen = addTeamWorkDisclosure.open;
   async function startWorks() {
-    if (!startRoles.length) return;
+    if (!startProjectTeamIds.length) return;
     try {
       const result = await start.mutateAsync({
         issueId: currentIssue.id,
-        data: { roleAssignments: startRoles.map((projectRole) => ({ projectRole })) },
+        data: {
+          teamAssignments: startProjectTeamIds.map((projectTeamId) => ({ projectTeamId })),
+        },
       });
       await Promise.all([
         queryClient.invalidateQueries({
@@ -923,7 +930,7 @@ export function IssueDetailScreen({
       ]);
       const first = result.teamWorks[0];
       if (first) router.push(detailHref(first.identifier), { scroll: false });
-      setStartRoles([]);
+      setStartProjectTeamIds([]);
     } catch {
       // React Query mutation 상태가 인라인 오류를 표시한다.
     }
@@ -991,7 +998,7 @@ export function IssueDetailScreen({
                 <>
                   <span className="font-mono">{issue.identifier}</span>
                   <span>{issue.project.name}</span>
-                  {selectedWork ? <span>{ROLE_LABELS[selectedWork.projectRole]}</span> : null}
+                  {selectedWork ? <span>{selectedWork.projectTeam.team.name}</span> : null}
                   <IssueLabelChips emptyLabel="" labels={issue.labels} />
                 </>
               ) : (
@@ -1102,7 +1109,7 @@ export function IssueDetailScreen({
             <>
               <Select
                 items={issue.teamWorks.map((work) => ({
-                  label: `${work.identifier} · ${ROLE_LABELS[work.projectRole]} · ${work.team.name}`,
+                  label: `${work.identifier} · ${work.projectTeam.team.name}`,
                   value: work.identifier,
                 }))}
                 value={selectedWork?.identifier ?? ''}
@@ -1125,7 +1132,7 @@ export function IssueDetailScreen({
                   <SelectGroup>
                     {issue.teamWorks.map((work) => (
                       <SelectItem key={work.id} value={work.identifier}>
-                        {work.identifier} · {ROLE_LABELS[work.projectRole]} · {work.team.name}
+                        {work.identifier} · {work.projectTeam.team.name}
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -1152,7 +1159,8 @@ export function IssueDetailScreen({
                       <span className="font-mono text-xs">{work.identifier}</span>
                       <span className="mt-1 flex items-center gap-1.5 text-sm font-medium">
                         <TeamWorkStatusDisplay category={work.stateCategory} />
-                        {ROLE_LABELS[work.projectRole]}
+                        <span className="font-mono text-xs">{work.projectTeam.team.key}</span>
+                        {work.projectTeam.team.name}
                       </span>
                       <span className="text-muted-foreground mt-1 block truncate text-xs">
                         {work.assignee?.user.displayName ?? '담당자 없음'}
@@ -1165,7 +1173,7 @@ export function IssueDetailScreen({
           ) : (
             <p className="text-muted-foreground text-sm">아직 시작한 팀 작업이 없습니다.</p>
           )}
-          {availableRoles.length ? (
+          {availableProjectTeams.length ? (
             <details
               className={
                 selectedWork?.stateCategory === 'STARTED'
@@ -1190,24 +1198,27 @@ export function IssueDetailScreen({
                 <Play className="size-4" />팀 작업 추가
               </summary>
               <div className="mt-3 space-y-2">
-                {availableRoles.map((role) => (
-                  <label key={role} className="flex items-center gap-2 text-sm">
+                {availableProjectTeams.map((projectTeam) => (
+                  <label key={projectTeam.id} className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={startRoles.includes(role)}
+                      checked={startProjectTeamIds.includes(projectTeam.id)}
                       onCheckedChange={(checked) =>
-                        setStartRoles((current) =>
-                          checked ? [...current, role] : current.filter((item) => item !== role),
+                        setStartProjectTeamIds((current) =>
+                          checked
+                            ? [...current, projectTeam.id]
+                            : current.filter((item) => item !== projectTeam.id),
                         )
                       }
                     />
-                    {ROLE_LABELS[role]}
+                    <span className="font-mono text-xs">{projectTeam.team.key}</span>
+                    {projectTeam.team.name}
                   </label>
                 ))}
               </div>
               <Button
                 className="mt-3 w-full"
                 size="sm"
-                disabled={!startRoles.length || start.isPending}
+                disabled={!startProjectTeamIds.length || start.isPending}
                 onClick={() => void startWorks()}
               >
                 {start.isPending ? <Spinner /> : <Play className="size-3.5" />}선택한 작업 시작
@@ -1268,7 +1279,7 @@ export function IssueDetailScreen({
                   <UserRound className="text-muted-foreground mx-auto size-8" />
                   <h2 className="mt-3 font-semibold">이슈에서 팀 작업을 시작하세요</h2>
                   <p className="text-muted-foreground mt-1 text-sm">
-                    본문과 댓글은 이미 사용할 수 있으며 실행 역할은 나중에 추가할 수 있습니다.
+                    본문과 댓글은 이미 사용할 수 있으며 참여 팀 작업은 나중에 추가할 수 있습니다.
                   </p>
                 </section>
               )}

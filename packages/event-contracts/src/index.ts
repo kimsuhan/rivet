@@ -41,9 +41,7 @@ export {
   validateIssueCreatedOutboxPayload,
 } from './issue-collaboration';
 export {
-  PRODUCT_ANALYTICS_PROJECT_ROLES,
   PRODUCT_ANALYTICS_PROJECT_STATUSES,
-  type ProductAnalyticsProjectRole,
   type ProductAnalyticsProjectStatus,
   PROJECT_CREATED,
   PROJECT_CREATED_SCHEMA_VERSION,
@@ -83,11 +81,9 @@ export {
   TEAM_WORK_CHANGED_SCHEMA_VERSION,
   TEAM_WORK_CREATED,
   TEAM_WORK_CREATED_SCHEMA_VERSION,
-  TEAM_WORK_PROJECT_ROLES,
   type TeamWorkChangedField,
   type TeamWorkChangedOutboxPayload,
   type TeamWorkCreatedOutboxPayload,
-  type TeamWorkProjectRole,
   validateTeamWorkChangedOutboxPayload,
   validateTeamWorkCreatedOutboxPayload,
 } from './team-work';

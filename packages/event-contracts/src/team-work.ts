@@ -4,10 +4,8 @@ export const TEAM_WORK_CHANGED = 'TEAM_WORK_CHANGED' as const;
 export const TEAM_WORK_CHANGED_SCHEMA_VERSION = 2 as const;
 
 export const TEAM_WORK_CHANGED_FIELDS = ['WORKFLOW_STATE', 'ASSIGNEE', 'WORK_NOTE'] as const;
-export const TEAM_WORK_PROJECT_ROLES = ['BACKEND', 'WEB_FRONTEND', 'APP_FRONTEND'] as const;
 
 export type TeamWorkChangedField = (typeof TEAM_WORK_CHANGED_FIELDS)[number];
-export type TeamWorkProjectRole = (typeof TEAM_WORK_PROJECT_ROLES)[number];
 
 export type TeamWorkCreatedOutboxPayload = {
   schemaVersion: typeof TEAM_WORK_CREATED_SCHEMA_VERSION;

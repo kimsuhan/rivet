@@ -6,9 +6,8 @@
  * OpenAPI spec version: 1.0
  */
 
-export interface ClaimTeamWorkDto {
-  /** 프로젝트 참여 팀 ID */
-  projectTeamId: string;
-  /** @nullable */
-  teamWorkId?: string | null;
+export interface CsvImportProjectTeamOptionDto {
+  id: string;
+  teamId: string;
+  active: boolean;
 }

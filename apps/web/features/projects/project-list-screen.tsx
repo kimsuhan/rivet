@@ -45,8 +45,8 @@ import {
 import {
   type ProjectLabels,
   ProjectProgress,
-  ProjectRoleBadges,
   ProjectStatusBadge,
+  ProjectTeamBadges,
 } from './project-shared';
 
 export function ProjectListScreen() {
@@ -62,11 +62,6 @@ export function ProjectListScreen() {
   const labels: ProjectLabels = {
     noWork: t('progress.none'),
     progress: t.raw('progress.summary') as string,
-    roles: {
-      APP_FRONTEND: t('role.APP_FRONTEND'),
-      BACKEND: t('role.BACKEND'),
-      WEB_FRONTEND: t('role.WEB_FRONTEND'),
-    },
     statuses: {
       CANCELED: t('status.CANCELED'),
       COMPLETED: t('status.COMPLETED'),
@@ -266,7 +261,7 @@ export function ProjectListScreen() {
                     </dd>
                   </div>
                 </dl>
-                <ProjectRoleBadges labels={labels.roles} roleTeams={project.roleTeams} />
+                <ProjectTeamBadges projectTeams={project.projectTeams} />
                 <ProjectProgress labels={labels} progress={project.progress} />
               </CardContent>
               <CardFooter className="justify-end">

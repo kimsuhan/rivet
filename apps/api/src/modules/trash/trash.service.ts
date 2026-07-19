@@ -38,10 +38,11 @@ const TRASH_PROJECT_SELECT = {
   id: true,
   name: true,
   purgeAt: true,
-  roleTeams: {
-    orderBy: { role: 'asc' },
+  projectTeams: {
+    orderBy: [{ isActive: 'desc' }, { team: { name: 'asc' } }, { id: 'asc' }],
     select: {
-      role: true,
+      id: true,
+      isActive: true,
       team: { select: { archivedAt: true, id: true, name: true } },
     },
   },
@@ -152,7 +153,7 @@ function issueResponse(row: TrashIssueRow): TrashItemResponseDto {
     project: row.project,
     purgeAt: row.purgeAt.toISOString(),
     resourceType: 'ISSUE',
-    roleTeams: [],
+    projectTeams: [],
     version: row.version,
   };
 }
@@ -169,8 +170,9 @@ function projectResponse(row: TrashProjectRow): TrashItemResponseDto {
     project: null,
     purgeAt: row.purgeAt.toISOString(),
     resourceType: 'PROJECT',
-    roleTeams: row.roleTeams.map(({ role, team }) => ({
-      role,
+    projectTeams: row.projectTeams.map(({ id, isActive, team }) => ({
+      active: isActive,
+      id,
       teamArchived: team.archivedAt !== null,
       teamId: team.id,
       teamName: team.name,
@@ -395,11 +397,11 @@ export class TrashService {
       });
 
       const warnings = project.archivedAt ? ['PROJECT_ARCHIVED'] : [];
-      const archivedRoleTeam = await transaction.projectRoleTeam.findFirst({
+      const archivedProjectTeam = await transaction.projectTeam.findFirst({
         select: { teamId: true },
         where: { projectId, team: { archivedAt: { not: null } }, workspaceId: context.workspaceId },
       });
-      if (archivedRoleTeam) warnings.push('TEAM_ARCHIVED');
+      if (archivedProjectTeam) warnings.push('TEAM_ARCHIVED');
       return { id: projectId, resourceType: 'PROJECT', version: project.version + 1, warnings };
     });
   }

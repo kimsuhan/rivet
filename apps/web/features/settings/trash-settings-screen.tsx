@@ -50,14 +50,15 @@ function ConnectionSummary({ item }: { item: TrashItemResponseDto }) {
   const t = useTranslations('Settings.trash');
 
   if (item.resourceType === 'PROJECT') {
-    if (item.roleTeams.length === 0) return <>{t('noRoleTeams')}</>;
+    if (item.projectTeams.length === 0) return <>{t('noRoleTeams')}</>;
 
     return (
       <span className="flex flex-wrap gap-x-3 gap-y-1">
-        {item.roleTeams.map((roleTeam) => (
-          <span key={`${roleTeam.role}-${roleTeam.teamId}`}>
-            {t(`roles.${roleTeam.role}`)} · {roleTeam.teamName}
-            {roleTeam.teamArchived ? ` (${t('archived')})` : ''}
+        {item.projectTeams.map((projectTeam) => (
+          <span key={projectTeam.id}>
+            {projectTeam.teamName}
+            {!projectTeam.active ? ` (${t('inactive')})` : ''}
+            {projectTeam.teamArchived ? ` (${t('archived')})` : ''}
           </span>
         ))}
       </span>
@@ -180,7 +181,7 @@ function RestoreDialog({
   const restoreProject = useTrashControllerRestoreProject();
   const mutation = item.resourceType === 'ISSUE' ? restoreIssue : restoreProject;
   const isConflict = mutation.error?.body.code === 'VERSION_CONFLICT';
-  const archivedTeams = item.roleTeams.filter((roleTeam) => roleTeam.teamArchived);
+  const archivedTeams = item.projectTeams.filter((projectTeam) => projectTeam.teamArchived);
 
   function restore(): void {
     const callbacks = {

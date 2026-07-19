@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 
-import { MembershipStatus, Prisma, ProjectRole, StateCategory } from '@rivet/database';
+import { MembershipStatus, Prisma, StateCategory } from '@rivet/database';
 
 import { ApiError } from '../../common/errors/api-error';
 import type { IssueCollaborationContext } from './issue-collaboration.context';
@@ -11,7 +11,7 @@ export type HandoffTeamWorkLockRow = {
   id: string;
   issueId: string;
   projectId: string;
-  projectRole: ProjectRole;
+  projectTeamId: string;
   teamId: string;
 };
 
@@ -66,7 +66,7 @@ export class IssueCollaborationLockService {
     teamWorkId: string,
   ): Promise<HandoffTeamWorkLockRow> {
     const [row] = await transaction.$queryRaw<HandoffTeamWorkLockRow[]>`
-      SELECT "work"."id", "work"."issue_id" AS "issueId", "work"."project_role" AS "projectRole", "work"."team_id" AS "teamId",
+      SELECT "work"."id", "work"."issue_id" AS "issueId", "work"."project_team_id" AS "projectTeamId", "work"."team_id" AS "teamId",
              "issue"."project_id" AS "projectId", "state"."category"
       FROM "team_works" AS "work"
       INNER JOIN "issues" AS "issue"

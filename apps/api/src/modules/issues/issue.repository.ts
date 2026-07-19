@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 
-import { IssueFileKind, Prisma, ProjectRole, StateCategory } from '@rivet/database';
+import { IssueFileKind, Prisma, StateCategory } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { issueResourceNotFound } from './issue.errors';
@@ -30,13 +30,19 @@ const TEAM_WORK_SELECT = {
       project: { select: { archivedAt: true, id: true, name: true, status: true } },
       status: true,
       teamWorks: {
-        select: { projectRole: true },
+        select: { projectTeamId: true },
         where: { deletedAt: null },
       },
       title: true,
     },
   },
-  projectRole: true,
+  projectTeam: {
+    select: {
+      id: true,
+      isActive: true,
+      team: { select: { archivedAt: true, id: true, key: true, name: true } },
+    },
+  },
   workNoteMarkdown: true,
   team: { select: { archivedAt: true, id: true, key: true, name: true } },
   updatedAt: true,
@@ -91,8 +97,13 @@ const ISSUE_SELECT = {
         select: {
           id: true,
           identifier: true,
-          projectRole: true,
-          team: { select: { archivedAt: true, id: true, key: true, name: true } },
+          projectTeam: {
+            select: {
+              id: true,
+              isActive: true,
+              team: { select: { archivedAt: true, id: true, key: true, name: true } },
+            },
+          },
           workflowState: {
             select: {
               category: true,
@@ -112,8 +123,13 @@ const ISSUE_SELECT = {
             select: {
               id: true,
               identifier: true,
-              projectRole: true,
-              team: { select: { archivedAt: true, id: true, key: true, name: true } },
+              projectTeam: {
+                select: {
+                  id: true,
+                  isActive: true,
+                  team: { select: { archivedAt: true, id: true, key: true, name: true } },
+                },
+              },
               workflowState: {
                 select: {
                   category: true,
@@ -258,7 +274,7 @@ export class IssueRepository {
     transaction: Prisma.TransactionClient,
     workspaceId: string,
     issueId: string,
-    projectRole: ProjectRole,
+    projectTeamId: string,
     teamWorkId?: string | null,
   ): Promise<TeamWorkRow[]> {
     return transaction.teamWork.findMany({
@@ -268,7 +284,7 @@ export class IssueRepository {
         assigneeMembershipId: null,
         deletedAt: null,
         issueId,
-        projectRole,
+        projectTeamId,
         workspaceId,
         ...(teamWorkId ? { id: teamWorkId } : {}),
       },

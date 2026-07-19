@@ -4,7 +4,6 @@ import {
   IssuePriority,
   Prisma,
   type PrismaClient,
-  ProjectRole,
   StateCategory,
 } from '@rivet/database';
 
@@ -28,7 +27,7 @@ export type CsvImportPreparedRow = {
   descriptionMarkdown: string | null;
   labelSources: string[];
   priority: IssuePriority;
-  projectRole: ProjectRole;
+  projectTeamId: string | null;
   projectSource: string;
   sourceKeyHash: string;
   sourceReference: string;
@@ -42,7 +41,7 @@ export type CsvImportAnalysis = {
   errors: CsvImportPreviewErrorDto[];
   excludedRowCount: number;
   preparedRows: CsvImportPreparedRow[];
-  projectTeams: Map<string, string>;
+  projectTeams: Map<string, Set<string>>;
   summary: {
     connectionCreateCount: number;
     errorCount: number;
@@ -95,7 +94,7 @@ export class CsvImportAnalysisService {
       ).map(({ sourceKeyHash }) => sourceKeyHash),
     );
     const preparedRows: CsvImportPreparedRow[] = [];
-    const projectTeams = new Map<string, string>();
+    const projectTeams = new Map<string, Set<string>>();
     let excludedRowCount = 0;
 
     for (const [index, row] of parsed.rows.entries()) {
@@ -231,31 +230,21 @@ export class CsvImportAnalysisService {
         }
       }
 
-      let projectRole: ProjectRole = ProjectRole.BACKEND;
+      let projectTeamId: string | null = null;
       if (projectMapping?.mode === 'MAP') {
         const project = projectMapping.targetId ? projects.get(projectMapping.targetId) : undefined;
         if (!project) addError('IMPORT_PROJECT_TARGET_INVALID', 'project');
         else {
-          const roles = project.roleTeams
-            .filter((roleTeam) => roleTeam.teamId === teamId)
-            .map(({ role }) => role)
-            .sort((left, right) =>
-              left === ProjectRole.BACKEND
-                ? -1
-                : right === ProjectRole.BACKEND
-                  ? 1
-                  : left.localeCompare(right),
-            );
-          if (!roles[0]) addError('IMPORT_PROJECT_TEAM_NOT_CONNECTED', 'project');
-          else projectRole = roles[0];
+          const projectTeam = project.projectTeams.find(
+            (candidate) => candidate.active && candidate.teamId === teamId,
+          );
+          if (!projectTeam) addError('IMPORT_PROJECT_TEAM_NOT_CONNECTED', 'project');
+          else projectTeamId = projectTeam.id;
         }
       } else if (projectMapping?.mode === 'CREATE' && teamId) {
-        const previousTeamId = projectTeams.get(projectSource);
-        if (previousTeamId && previousTeamId !== teamId) {
-          addError('IMPORT_PROJECT_TEAM_AMBIGUOUS', 'project');
-        } else {
-          projectTeams.set(projectSource, teamId);
-        }
+        const teamIds = projectTeams.get(projectSource) ?? new Set<string>();
+        teamIds.add(teamId);
+        projectTeams.set(projectSource, teamIds);
         if ([...projectSource].length > 200) addError('IMPORT_PROJECT_NAME_INVALID', 'project');
       }
 
@@ -272,7 +261,7 @@ export class CsvImportAnalysisService {
           descriptionMarkdown,
           labelSources,
           priority,
-          projectRole,
+          projectTeamId,
           projectSource,
           sourceKeyHash,
           sourceReference,
@@ -286,7 +275,7 @@ export class CsvImportAnalysisService {
 
     const createProjects = new Set(
       mapping.projects
-        .filter(({ mode, source }) => mode === 'CREATE' && projectTeams.has(source))
+        .filter(({ mode, source }) => mode === 'CREATE' && (projectTeams.get(source)?.size ?? 0) > 0)
         .map(({ source }) => source),
     );
     const connectionCreateCount = preparedRows.reduce(
@@ -296,7 +285,7 @@ export class CsvImportAnalysisService {
         row.labelSources.filter(
           (source) => labelMappings.get(csvImportMappingKey(source))?.mode !== 'IGNORE',
         ).length,
-      createProjects.size,
+      [...projectTeams.values()].reduce((count, teamIds) => count + teamIds.size, 0),
     );
     return {
       errors,

@@ -70,23 +70,25 @@ import { useIssueTemplateTargetOptions } from '@/features/issues/issue-template-
 import { cn } from '@/lib/utils';
 
 const PRIORITIES = ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
-const PROJECT_ROLES = ['BACKEND', 'WEB_FRONTEND', 'APP_FRONTEND'] as const;
 const NO_PROJECT = 'NO_PROJECT';
-const NO_ROLE = 'NO_ROLE';
+const NO_PROJECT_TEAM = 'NO_PROJECT_TEAM';
 
-type ProjectRole = (typeof PROJECT_ROLES)[number];
 type TemplateTab = 'active' | 'archived';
 type TemplateProjectOption = {
   id: string;
   name: string;
-  roleTeams: Array<{ role: ProjectRole; team: { archived: boolean } }>;
+  projectTeams: Array<{
+    active: boolean;
+    id: string;
+    team: { archived: boolean; key: string; name: string };
+  }>;
 };
 type IssueTemplateSnapshot = {
   archived: boolean;
   available: boolean;
   descriptionMarkdown: string;
   id: string;
-  initialRole: ProjectRole | null;
+  initialProjectTeamId: string | null;
   labelIds: string[];
   name: string;
   priority: (typeof PRIORITIES)[number];
@@ -96,7 +98,7 @@ type IssueTemplateSnapshot = {
 };
 type TemplateFormValues = {
   descriptionMarkdown: string;
-  initialRole: ProjectRole | typeof NO_ROLE;
+  initialProjectTeamId: string;
   labelIds: string[];
   name: string;
   priority: (typeof PRIORITIES)[number];
@@ -135,8 +137,8 @@ export type IssueTemplateSettingsLabels = {
   emptyArchivedTitle: string;
   errorDescription: string;
   errorTitle: string;
-  initialRoleLabel: string;
-  initialRoleNone: string;
+  initialTeamLabel: string;
+  initialTeamNone: string;
   labelsLabel: string;
   loading: string;
   nameLabel: string;
@@ -152,7 +154,6 @@ export type IssueTemplateSettingsLabels = {
   priorities: Record<(typeof PRIORITIES)[number], string>;
   priorityLabel: string;
   projectLabel: string;
-  projectRoles: Record<ProjectRole, string>;
   repairDescription: string;
   reloadLatest: string;
   restore: string;
@@ -194,14 +195,10 @@ function formValues(
   const project = template?.projectId
     ? projects.find((option) => option.id === template.projectId)
     : null;
-  const roleAvailable = Boolean(
-    template?.initialRole &&
-    project?.roleTeams.some(({ role, team }) => role === template.initialRole && !team.archived),
-  );
   const activeLabelIds = new Set(activeLabels.map(({ id }) => id));
   return {
     descriptionMarkdown: template?.descriptionMarkdown ?? '',
-    initialRole: roleAvailable && template?.initialRole ? template.initialRole : NO_ROLE,
+    initialProjectTeamId: template?.initialProjectTeamId ?? NO_PROJECT_TEAM,
     labelIds: template ? template.labelIds.filter((id) => activeLabelIds.has(id)) : [],
     name: template?.name ?? '',
     priority: template?.priority ?? 'NONE',
@@ -216,6 +213,7 @@ function TemplateRows({
   onEdit,
   onRestore,
   projectNames,
+  projectTeamNames,
 }: {
   items: IssueTemplateSnapshot[];
   labels: IssueTemplateSettingsLabels;
@@ -223,6 +221,7 @@ function TemplateRows({
   onEdit: (template: IssueTemplateSnapshot) => void;
   onRestore: (template: IssueTemplateSnapshot) => void;
   projectNames: Map<string, string>;
+  projectTeamNames: Map<string, string>;
 }) {
   return (
     <ul className="border-t">
@@ -242,7 +241,9 @@ function TemplateRows({
               {template.projectId
                 ? ` · ${projectNames.get(template.projectId) ?? labels.unavailable}`
                 : ''}
-              {template.initialRole ? ` · ${labels.projectRoles[template.initialRole]}` : ''}
+              {template.initialProjectTeamId
+                ? ` · ${projectTeamNames.get(template.initialProjectTeamId) ?? labels.unavailable}`
+                : ''}
               {template.labelIds.length > 0
                 ? ` · ${labels.labelsLabel} ${template.labelIds.length}`
                 : ''}
@@ -317,7 +318,7 @@ function TemplateFormDialog({
   );
   const schema = z.object({
     descriptionMarkdown: z.string().trim().min(1, labels.descriptionRequired),
-    initialRole: z.enum(['BACKEND', 'WEB_FRONTEND', 'APP_FRONTEND', NO_ROLE]),
+    initialProjectTeamId: z.string(),
     labelIds: z.array(z.string()),
     name: z
       .string()
@@ -341,7 +342,10 @@ function TemplateFormDialog({
   const labelIds = useWatch({ control: form.control, name: 'labelIds' });
   const descriptionMarkdown = useWatch({ control: form.control, name: 'descriptionMarkdown' });
   const priority = useWatch({ control: form.control, name: 'priority' });
-  const initialRole = useWatch({ control: form.control, name: 'initialRole' });
+  const initialProjectTeamId = useWatch({
+    control: form.control,
+    name: 'initialProjectTeamId',
+  });
   const priorityOptions = PRIORITIES.map((value) => ({
     icon: PRIORITY_PRESENTATION[value].icon,
     iconClassName: PRIORITY_PRESENTATION[value].iconClassName,
@@ -349,8 +353,10 @@ function TemplateFormDialog({
     value,
   }));
   const selectedProject = projects.find((project) => project.id === projectId);
-  const availableRoles = new Set(
-    selectedProject?.roleTeams.filter(({ team }) => !team.archived).map(({ role }) => role) ?? [],
+  const availableProjectTeams =
+    selectedProject?.projectTeams.filter(({ active, team }) => active && !team.archived) ?? [];
+  const selectedUnavailableProjectTeam = selectedProject?.projectTeams.find(
+    ({ id }) => id === initialProjectTeamId && !availableProjectTeams.some((item) => item.id === id),
   );
   const mutation = template ? updateTemplate : createTemplate;
   const isDirty = form.formState.isDirty;
@@ -369,8 +375,10 @@ function TemplateFormDialog({
     const normalizedProjectId = values.projectId === NO_PROJECT ? null : values.projectId;
     const data = {
       descriptionMarkdown: values.descriptionMarkdown.trim(),
-      initialRole:
-        normalizedProjectId && values.initialRole !== NO_ROLE ? values.initialRole : null,
+      initialProjectTeamId:
+        normalizedProjectId && values.initialProjectTeamId !== NO_PROJECT_TEAM
+          ? values.initialProjectTeamId
+          : null,
       labelIds: values.labelIds,
       name: values.name.normalize('NFC').trim(),
       priority: values.priority,
@@ -593,7 +601,9 @@ function TemplateFormDialog({
                         onValueChange={(next) => {
                           if (!next) return;
                           form.setValue('projectId', next, { shouldDirty: true });
-                          form.setValue('initialRole', NO_ROLE, { shouldDirty: true });
+                          form.setValue('initialProjectTeamId', NO_PROJECT_TEAM, {
+                            shouldDirty: true,
+                          });
                         }}
                       >
                         <SelectTrigger
@@ -616,45 +626,52 @@ function TemplateFormDialog({
                       </Select>
                     </Field>
                     <Field>
-                      <FieldLabel id="issue-template-role-label">
-                        {labels.initialRoleLabel}
+                      <FieldLabel id="issue-template-team-label">
+                        {labels.initialTeamLabel}
                       </FieldLabel>
                       <Select
                         items={[
-                          { label: labels.initialRoleNone, value: NO_ROLE },
-                          ...PROJECT_ROLES.filter((role) => availableRoles.has(role)).map(
-                            (role) => ({
-                              label: labels.projectRoles[role],
-                              value: role,
-                            }),
-                          ),
+                          { label: labels.initialTeamNone, value: NO_PROJECT_TEAM },
+                          ...availableProjectTeams.map((projectTeam) => ({
+                            label: `${projectTeam.team.name} (${projectTeam.team.key})`,
+                            value: projectTeam.id,
+                          })),
+                          ...(selectedUnavailableProjectTeam
+                            ? [
+                                {
+                                  label: `${selectedUnavailableProjectTeam.team.name} · ${labels.unavailable}`,
+                                  value: selectedUnavailableProjectTeam.id,
+                                },
+                              ]
+                            : []),
                         ]}
-                        value={initialRole}
+                        value={initialProjectTeamId}
                         disabled={projectId === NO_PROJECT}
                         onValueChange={(next) =>
                           next &&
-                          form.setValue('initialRole', next as TemplateFormValues['initialRole'], {
-                            shouldDirty: true,
-                          })
+                          form.setValue('initialProjectTeamId', next, { shouldDirty: true })
                         }
                       >
                         <SelectTrigger
-                          id="issue-template-role"
-                          aria-labelledby="issue-template-role-label"
+                          id="issue-template-team"
+                          aria-labelledby="issue-template-team-label"
                           className="w-full"
                         >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
-                            <SelectItem value={NO_ROLE}>{labels.initialRoleNone}</SelectItem>
-                            {PROJECT_ROLES.filter((role) => availableRoles.has(role)).map(
-                              (role) => (
-                                <SelectItem key={role} value={role}>
-                                  {labels.projectRoles[role]}
-                                </SelectItem>
-                              ),
-                            )}
+                            <SelectItem value={NO_PROJECT_TEAM}>{labels.initialTeamNone}</SelectItem>
+                            {availableProjectTeams.map((projectTeam) => (
+                              <SelectItem key={projectTeam.id} value={projectTeam.id}>
+                                {projectTeam.team.name} ({projectTeam.team.key})
+                              </SelectItem>
+                            ))}
+                            {selectedUnavailableProjectTeam ? (
+                              <SelectItem value={selectedUnavailableProjectTeam.id}>
+                                {selectedUnavailableProjectTeam.team.name} · {labels.unavailable}
+                              </SelectItem>
+                            ) : null}
                           </SelectGroup>
                         </SelectContent>
                       </Select>
@@ -887,15 +904,21 @@ export function IssueTemplateSettingsScreen({ labels }: { labels: IssueTemplateS
       (projectsQuery.data?.items ?? []).map((project) => ({
         id: project.id,
         name: project.name,
-        roleTeams: project.roleTeams as Array<{
-          role: ProjectRole;
-          team: { archived: boolean };
-        }>,
+        projectTeams: project.projectTeams,
       })),
     [projectsQuery.data?.items],
   );
   const projectNames = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
+    [projects],
+  );
+  const projectTeamNames = useMemo(
+    () =>
+      new Map(
+        projects.flatMap((project) =>
+          project.projectTeams.map((projectTeam) => [projectTeam.id, projectTeam.team.name] as const),
+        ),
+      ),
     [projects],
   );
   const activeLabels = useMemo(
@@ -1041,6 +1064,7 @@ export function IssueTemplateSettingsScreen({ labels }: { labels: IssueTemplateS
               onEdit={setFormTemplate}
               onRestore={setRestoreTemplate}
               projectNames={projectNames}
+              projectTeamNames={projectTeamNames}
             />
           )}
         </TabsContent>

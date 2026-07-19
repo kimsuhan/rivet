@@ -42,6 +42,7 @@ import { ProjectsService } from './projects.service';
 
 function workspaceContext(authentication: AuthenticatedRequestContext): {
   membershipId: string;
+  membershipRole: 'ADMIN' | 'MEMBER';
   workspaceId: string;
 } {
   const { membership, workspace } = authentication.session;
@@ -59,7 +60,7 @@ function workspaceContext(authentication: AuthenticatedRequestContext): {
     });
   }
 
-  return { membershipId: membership.id, workspaceId: workspace.id };
+  return { membershipId: membership.id, membershipRole: membership.role, workspaceId: workspace.id };
 }
 
 @ApiTags('projects')
@@ -127,7 +128,7 @@ export class ProjectsController {
   }
 
   @Patch(':projectId')
-  @ApiOperation({ summary: '프로젝트 기본 정보, 상태와 역할별 팀 수정' })
+  @ApiOperation({ summary: '프로젝트 기본 정보, 상태와 참여 팀 수정' })
   @ApiParam({ format: 'uuid', name: 'projectId' })
   @ApiOkResponse({ type: ProjectResponseDto })
   @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
@@ -136,12 +137,12 @@ export class ProjectsController {
     type: ApiErrorResponseDto,
   })
   @ApiConflictResponse({
-    description: 'VERSION_CONFLICT 또는 PROJECT_ROLE_IN_USE',
+    description: 'VERSION_CONFLICT 또는 PROJECT_TEAM_IN_USE',
     type: ApiErrorResponseDto,
   })
   @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
   @ApiUnprocessableEntityResponse({
-    description: 'VALIDATION_ERROR, PROJECT_ROLE_REQUIRED 또는 PROJECT_DATE_INVALID',
+    description: 'VALIDATION_ERROR 또는 PROJECT_DATE_INVALID',
     type: ApiErrorResponseDto,
   })
   update(

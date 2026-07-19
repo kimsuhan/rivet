@@ -1,4 +1,4 @@
-import { ProjectRole, StateCategory } from '@rivet/database';
+import { StateCategory } from '@rivet/database';
 
 import { isInlineDisplayable } from '../files/file-content.policy';
 import type {
@@ -23,18 +23,28 @@ function workflowStateResponse(state: TeamWorkRow['workflowState']) {
   return { ...state };
 }
 
+function projectTeamResponse(projectTeam: TeamWorkRow['projectTeam']) {
+  if (!projectTeam) {
+    throw new Error('팀 작업에 프로젝트 참여 팀이 연결되어 있지 않습니다.');
+  }
+
+  return {
+    active: projectTeam.isActive,
+    id: projectTeam.id,
+    team: teamResponse(projectTeam.team),
+  };
+}
+
 function teamWorkReference(teamWork: {
   id: string;
   identifier: string;
-  projectRole: ProjectRole;
-  team: { archivedAt: Date | null; id: string; key: string; name: string };
+  projectTeam: TeamWorkRow['projectTeam'];
   workflowState: TeamWorkRow['workflowState'];
 }) {
   return {
     id: teamWork.id,
     identifier: teamWork.identifier,
-    projectRole: teamWork.projectRole,
-    team: teamResponse(teamWork.team),
+    projectTeam: projectTeamResponse(teamWork.projectTeam),
     workflowState: workflowStateResponse(teamWork.workflowState),
   };
 }
@@ -64,10 +74,9 @@ export function toTeamWorkSummary(row: TeamWorkRow): TeamWorkSummaryResponseDto 
       status: row.issue.status,
       title: row.issue.title,
     },
-    projectRole: row.projectRole,
+    projectTeam: projectTeamResponse(row.projectTeam),
     workNoteMarkdown: row.workNoteMarkdown,
     stateCategory: row.workflowState.category,
-    team: teamResponse(row.team),
     updatedAt: row.updatedAt.toISOString(),
     version: row.version,
     workflowState: workflowStateResponse(row.workflowState),
@@ -86,18 +95,22 @@ export function toIssueWorkflowSummary(teamWorks: TeamWorkRow[]): IssueWorkflowS
     ({ workflowState }) => workflowState.category === StateCategory.CANCELED,
   ).length;
   const validCount = teamWorks.length - canceledCount;
+  const activeProjectTeams = new Map(
+    teamWorks
+      .filter(
+        ({ workflowState }) =>
+          workflowState.category !== StateCategory.COMPLETED &&
+          workflowState.category !== StateCategory.CANCELED,
+      )
+      .map(({ projectTeam }) => {
+        const response = projectTeamResponse(projectTeam);
+        return [response.id, response] as const;
+      }),
+  );
   return {
-    activeRoles: [
-      ...new Set(
-        teamWorks
-          .filter(
-            ({ workflowState }) =>
-              workflowState.category !== StateCategory.COMPLETED &&
-              workflowState.category !== StateCategory.CANCELED,
-          )
-          .map(({ projectRole }) => projectRole),
-      ),
-    ].sort(),
+    activeTeams: [...activeProjectTeams.values()].sort((left, right) =>
+      left.team.name.localeCompare(right.team.name, 'ko'),
+    ),
     allTeamWorksCompleted: validCount > 0 && completedCount === validCount,
     canceledCount,
     completedCount,

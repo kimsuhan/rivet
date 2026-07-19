@@ -2,11 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 
-import {
-  createPrismaClient,
-  NotificationType,
-  type ProjectRole,
-} from '../../../packages/database/src';
+import { createPrismaClient, NotificationType } from '../../../packages/database/src';
 import {
   cleanupM2Users,
   clearM1RateLimits,
@@ -128,7 +124,7 @@ async function completeOnboarding(
 
 async function createIssueFromDialog(
   page: Page,
-  input: { initialBackend: boolean; projectName: string; title: string; withAttachment: boolean },
+  input: { initialTeamName?: string; projectName: string; title: string; withAttachment: boolean },
 ): Promise<void> {
   const activeMembersResponse = page.waitForResponse((response) => {
     const url = new URL(response.url());
@@ -153,9 +149,9 @@ async function createIssueFromDialog(
     dialog.getByRole('textbox', { name: 'Markdown 본문 편집기' }),
     '# 공유 설명\n\n모든 팀 작업이 같은 본문을 사용합니다.',
   );
-  if (input.initialBackend) {
-    await dialog.getByRole('button', { name: /^역할(?:$|:)/u }).click();
-    await page.getByRole('checkbox', { name: '백엔드' }).click();
+  if (input.initialTeamName) {
+    await dialog.getByRole('button', { name: /^참여 팀(?:$|:)/u }).click();
+    await page.getByRole('checkbox', { name: input.initialTeamName }).click();
     await page.keyboard.press('Escape');
   }
   if (input.withAttachment) {
@@ -209,29 +205,25 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
       body: {
         leadMembershipId: membership.id,
         name: projectName,
-        roleTeams: [
-          { role: 'BACKEND' satisfies ProjectRole, teamId: apiTeam.id },
-          { role: 'WEB_FRONTEND' satisfies ProjectRole, teamId: webTeam.id },
-        ],
+        teamIds: [apiTeam.id, webTeam.id],
         status: 'PLANNED',
       },
       method: 'POST',
     });
 
     await createIssueFromDialog(page, {
-      initialBackend: false,
       projectName,
-      title: `시작 역할 없는 이슈 ${runId}`,
+      title: `시작 팀 없는 이슈 ${runId}`,
       withAttachment: true,
     });
     await expect(page).toHaveURL(/\/issues\/F-\d+\?tab=work$/u);
-    await expect(page.getByRole('heading', { name: `시작 역할 없는 이슈 ${runId}` })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `시작 팀 없는 이슈 ${runId}` })).toBeVisible();
     await expect(
       page.getByRole('heading', { name: '이슈에서 팀 작업을 시작하세요' }),
     ).toBeVisible();
     await expect(page.getByText('모든 팀 작업이 같은 본문을 사용합니다.')).toBeVisible();
     await expect(page.getByText('m9-shared.txt')).toBeVisible();
-    await page.getByRole('checkbox', { name: '웹 프론트' }).click();
+    await page.getByRole('checkbox', { name: '웹' }).click();
     await page.getByRole('button', { name: '선택한 작업 시작' }).click();
     await expect(
       page.getByRole('combobox', {
@@ -246,7 +238,7 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     await expect(page.getByText('공유 댓글도 이슈에 한 번만 남습니다.')).toBeVisible();
 
     await createIssueFromDialog(page, {
-      initialBackend: true,
+      initialTeamName: '백엔드',
       projectName,
       title: `초기 백엔드 이슈 ${runId}`,
       withAttachment: false,
@@ -283,7 +275,7 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     await expect(page.getByText('모든 팀 작업이 같은 본문을 사용합니다.')).toBeVisible();
     await expect(page.getByText('담당자 저장 중…')).toBeHidden();
 
-    await page.getByRole('checkbox', { name: '웹 프론트' }).click();
+    await page.getByRole('checkbox', { name: '웹' }).click();
     await page.getByRole('button', { name: '선택한 작업 시작' }).click();
     await expect(page).toHaveURL(/&work=WEB-/u);
     const webIdentifier = new URL(page.url()).searchParams.get('work');
@@ -362,7 +354,7 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
       .click();
     const backendCompletionDialog = page.getByRole('dialog', { name: /완료$/u });
     await expect(backendCompletionDialog).toBeVisible();
-    await backendCompletionDialog.getByText('프론트에 전달 후 완료').click();
+    await backendCompletionDialog.getByText('다른 팀에 전달 후 완료').click();
     await fillWithSelfMention(
       page,
       backendCompletionDialog.getByRole('textbox', { name: 'Markdown 본문 편집기' }),

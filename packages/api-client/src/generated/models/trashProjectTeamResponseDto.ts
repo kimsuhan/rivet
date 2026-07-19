@@ -5,9 +5,11 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { ProjectRoleTeamInputDtoRole } from './projectRoleTeamInputDtoRole';
 
-export interface ProjectRoleTeamInputDto {
-  role: ProjectRoleTeamInputDtoRole;
+export interface TrashProjectTeamResponseDto {
+  id: string;
+  active: boolean;
   teamId: string;
+  teamName: string;
+  teamArchived: boolean;
 }

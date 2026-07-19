@@ -6,7 +6,6 @@
  * OpenAPI spec version: 1.0
  */
 import type { CreateProjectDtoStatus } from './createProjectDtoStatus';
-import type { ProjectRoleTeamInputDto } from './projectRoleTeamInputDto';
 
 export interface CreateProjectDto {
   /**
@@ -32,9 +31,6 @@ export interface CreateProjectDto {
      * @pattern ^\d{4}-\d{2}-\d{2}$
      */
   targetDate?: string | null;
-  /**
-     * @minItems 1
-     * @maxItems 3
-     */
-  roleTeams: ProjectRoleTeamInputDto[];
+  /** @maxItems 100 */
+  teamIds?: string[];
 }

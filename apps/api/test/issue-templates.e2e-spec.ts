@@ -27,6 +27,7 @@ describe('A4 workspace issue templates API', () => {
   let workspaceId: string;
   let labelId: string;
   let projectId: string;
+  let projectTeamId: string;
   let teamId: string;
   let memberMembershipId: string;
   let adminSessionToken: string;
@@ -157,6 +158,9 @@ describe('A4 workspace issue templates API', () => {
           workspaceId: workspace.id,
         },
       });
+      const projectTeam = await transaction.projectTeam.findUniqueOrThrow({
+        where: { projectId_teamId: { projectId: project.id, teamId: team.id } },
+      });
       return {
         adminId: admin.id,
         labelId: label.id,
@@ -165,6 +169,7 @@ describe('A4 workspace issue templates API', () => {
         otherId: other.id,
         otherWorkspaceId: otherWorkspace.id,
         projectId: project.id,
+        projectTeamId: projectTeam.id,
         teamId: team.id,
         workspaceId: workspace.id,
       };
@@ -174,6 +179,7 @@ describe('A4 workspace issue templates API', () => {
     workspaceId = fixture.workspaceId;
     labelId = fixture.labelId;
     projectId = fixture.projectId;
+    projectTeamId = fixture.projectTeamId;
     teamId = fixture.teamId;
     memberMembershipId = fixture.memberMembershipId;
 
@@ -214,6 +220,7 @@ describe('A4 workspace issue templates API', () => {
       await database.client.projectRoleTeam.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
       });
+      await database.client.projectTeam.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.label.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.teamMember.deleteMany({
@@ -246,7 +253,7 @@ describe('A4 workspace issue templates API', () => {
   it('manages and applies templates without synchronizing created issues', async () => {
     const createBody = {
       descriptionMarkdown: '## 재현 절차\n\n1. 동작을 실행한다.',
-      initialRole: ProjectRole.BACKEND,
+      initialProjectTeamId: projectTeamId,
       labelIds: [labelId],
       name: '  버그 신고  ',
       priority: IssuePriority.HIGH,
@@ -269,7 +276,7 @@ describe('A4 workspace issue templates API', () => {
     expect(created.body).toMatchObject({
       archived: false,
       available: true,
-      initialRole: ProjectRole.BACKEND,
+      initialProjectTeamId: projectTeamId,
       labelIds: [labelId],
       name: '버그 신고',
       projectId,
@@ -330,10 +337,10 @@ describe('A4 workspace issue templates API', () => {
       .send({
         appliedTemplate: { id: issueTemplateId, version: 1 },
         descriptionMarkdown: '제거된 팀 멤버 할당은 거부',
-        initialRoles: [
+        initialTeams: [
           {
             assigneeMembershipId: memberMembershipId,
-            projectRole: ProjectRole.BACKEND,
+            projectTeamId,
           },
         ],
         projectId,
@@ -482,7 +489,7 @@ describe('A4 workspace issue templates API', () => {
       .send({ version: 2 })
       .expect(422)
       .expect(({ body }) => {
-        expect(body.details).toEqual({ unavailableReason: 'TEAM_UNAVAILABLE' });
+        expect(body.details).toEqual({ unavailableReason: 'PROJECT_TEAM_UNAVAILABLE' });
       });
     await database.client.team.update({ data: { archivedAt: null }, where: { id: teamId } });
 
@@ -498,7 +505,7 @@ describe('A4 workspace issue templates API', () => {
       .send({ version: 2 })
       .expect(422)
       .expect(({ body }) => {
-        expect(body.details).toEqual({ unavailableReason: 'ROLE_UNAVAILABLE' });
+        expect(body.details).toEqual({ unavailableReason: 'PROJECT_TEAM_UNAVAILABLE' });
       });
     await database.client.projectRoleTeam.create({
       data: {

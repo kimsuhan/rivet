@@ -7,7 +7,6 @@ import {
   IssueFileKind,
   MembershipStatus,
   Prisma,
-  ProjectRole,
   StateCategory,
 } from '@rivet/database';
 import {
@@ -40,7 +39,6 @@ import { IssueCollaborationLockService } from './issue-collaboration-lock.servic
 import { toCollaborationMemberResponse as toMemberResponse } from './issue-collaboration-response.mapper';
 
 const TERMINAL_CATEGORIES = [StateCategory.COMPLETED, StateCategory.CANCELED] as const;
-const FRONTEND_ROLES = [ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND] as const;
 
 type Transaction = Prisma.TransactionClient;
 
@@ -99,7 +97,7 @@ export class IssueHandoffService {
     teamWorkId: string,
     dto: {
       bodyMarkdown: string;
-      destinationRoles?: (typeof ProjectRole.WEB_FRONTEND | typeof ProjectRole.APP_FRONTEND)[];
+      destinationProjectTeamIds?: string[];
       kind: HandoffKind;
     },
   ): Promise<HandoffResourceResponseDto> {
@@ -109,12 +107,6 @@ export class IssueHandoffService {
       context.workspaceId,
       teamWorkId,
     );
-    if (source.projectRole !== ProjectRole.BACKEND) {
-      unprocessable(
-        'HANDOFF_NOT_ALLOWED',
-        '백엔드 역할의 팀 작업에만 작업 전달을 작성할 수 있습니다.',
-      );
-    }
     const sourceTeamMember = await transaction.teamMember.findFirst({
       select: { membershipId: true },
       where: {
@@ -127,7 +119,7 @@ export class IssueHandoffService {
     if (!sourceTeamMember) {
       throw new ApiError({
         code: 'TEAM_WORK_TEAM_MEMBER_REQUIRED',
-        message: '원본 백엔드 팀의 활성 멤버만 작업 전달을 작성할 수 있습니다.',
+        message: '원본 팀의 활성 멤버만 작업 전달을 작성할 수 있습니다.',
         status: HttpStatus.FORBIDDEN,
       });
     }
@@ -157,7 +149,7 @@ export class IssueHandoffService {
     if (dto.kind === HandoffKind.INITIAL && source.category !== StateCategory.COMPLETED) {
       unprocessable(
         'HANDOFF_REQUIRES_COMPLETION',
-        '최초 작업 전달은 백엔드 팀 작업 완료와 함께 작성해야 합니다.',
+        '최초 작업 전달은 원본 팀 작업 완료와 함께 작성해야 합니다.',
       );
     }
 
@@ -166,10 +158,10 @@ export class IssueHandoffService {
         ? await this.ensureHandoffTargets(
             transaction,
             context,
-            teamWorkId,
             source.issueId,
             source.projectId,
-            dto.destinationRoles,
+            source.projectTeamId,
+            dto.destinationProjectTeamIds,
           )
         : [
             ...new Set(
@@ -181,7 +173,7 @@ export class IssueHandoffService {
     if (dto.kind === HandoffKind.INITIAL && targetTeamWorkIds.length === 0) {
       unprocessable(
         'HANDOFF_DESTINATION_REQUIRED',
-        '최초 작업 전달 대상 역할을 하나 이상 선택해 주세요.',
+        '최초 작업 전달 대상 팀을 하나 이상 선택해 주세요.',
       );
     }
 
@@ -239,7 +231,7 @@ export class IssueHandoffService {
       { apiHandoffId: created.id },
     );
     const targets = await transaction.teamWork.findMany({
-      orderBy: [{ projectRole: 'asc' }, { identifier: 'asc' }, { id: 'asc' }],
+      orderBy: [{ team: { name: 'asc' } }, { identifier: 'asc' }, { id: 'asc' }],
       select: {
         assigneeMembershipId: true,
         team: {
@@ -360,29 +352,46 @@ export class IssueHandoffService {
   private async ensureHandoffTargets(
     transaction: Transaction,
     context: Context,
-    sourceTeamWorkId: string,
     issueId: string,
     projectId: string,
-    requestedRoles?: (typeof ProjectRole.WEB_FRONTEND | typeof ProjectRole.APP_FRONTEND)[],
+    sourceProjectTeamId: string,
+    requestedProjectTeamIds?: string[],
   ): Promise<string[]> {
-    const roleTeams = await transaction.projectRoleTeam.findMany({
-      orderBy: { role: 'asc' },
-      select: { role: true, teamId: true },
+    const requestedIds = [...new Set(requestedProjectTeamIds ?? [])].sort();
+    if (requestedIds.length === 0) {
+      unprocessable('HANDOFF_DESTINATION_REQUIRED', '전달 대상 팀을 하나 이상 선택해 주세요.');
+    }
+    if (requestedIds.includes(sourceProjectTeamId)) {
+      unprocessable('HANDOFF_SELF_DESTINATION', '현재 팀에는 작업을 전달할 수 없습니다.');
+    }
+
+    const projectTeams = await transaction.projectTeam.findMany({
+      orderBy: [{ team: { name: 'asc' } }, { id: 'asc' }],
+      select: { id: true, teamId: true },
       where: {
+        id: { in: requestedIds },
+        isActive: true,
         projectId,
-        role: { in: requestedRoles?.length ? requestedRoles : [...FRONTEND_ROLES] },
+        team: { archivedAt: null },
         workspaceId: context.workspaceId,
       },
     });
+    if (projectTeams.length !== requestedIds.length) {
+      unprocessable(
+        'HANDOFF_DESTINATION_INVALID',
+        '같은 프로젝트의 활성 참여 팀만 전달 대상으로 선택할 수 있습니다.',
+      );
+    }
+
     const targets: string[] = [];
-    for (const roleTeam of roleTeams) {
+    for (const projectTeam of projectTeams) {
       const existing = await transaction.teamWork.findFirst({
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         select: { id: true },
         where: {
           deletedAt: null,
           issueId,
-          projectRole: roleTeam.role,
+          projectTeamId: projectTeam.id,
           workflowState: { category: { notIn: [...TERMINAL_CATEGORIES] } },
           workspaceId: context.workspaceId,
         },
@@ -393,14 +402,14 @@ export class IssueHandoffService {
       }
       const team = await transaction.team.findFirst({
         select: { id: true, key: true, nextIssueNumber: true },
-        where: { archivedAt: null, id: roleTeam.teamId, workspaceId: context.workspaceId },
+        where: { archivedAt: null, id: projectTeam.teamId, workspaceId: context.workspaceId },
       });
       const state = await transaction.workflowState.findFirst({
         orderBy: [{ isDefault: 'desc' }, { position: 'asc' }],
         select: { id: true },
         where: {
           category: { notIn: [...TERMINAL_CATEGORIES] },
-          teamId: roleTeam.teamId,
+          teamId: projectTeam.teamId,
           workspaceId: context.workspaceId,
         },
       });
@@ -414,7 +423,7 @@ export class IssueHandoffService {
           createdByMembershipId: context.membershipId,
           identifier: `${team.key}-${team.nextIssueNumber}`,
           issueId,
-          projectRole: roleTeam.role,
+          projectTeamId: projectTeam.id,
           sequenceNumber: team.nextIssueNumber,
           teamId: team.id,
           workflowStateId: state.id,
@@ -427,7 +436,9 @@ export class IssueHandoffService {
           actorMembershipId: context.membershipId,
           afterData: {
             identifier: `${team.key}-${team.nextIssueNumber}`,
-            projectRole: roleTeam.role,
+            projectTeamId: projectTeam.id,
+            teamId: team.id,
+            teamKey: team.key,
           },
           eventType: 'TEAM_WORK_CREATED',
           issueId,

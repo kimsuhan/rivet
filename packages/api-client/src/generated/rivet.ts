@@ -7366,7 +7366,7 @@ export const getProjectsControllerUpdateUrl = (projectId: string,) => {
 }
 
 /**
- * @summary 프로젝트 기본 정보, 상태와 역할별 팀 수정
+ * @summary 프로젝트 기본 정보, 상태와 참여 팀 수정
  */
 export const projectsControllerUpdate = async (projectId: string,
     updateProjectDto: UpdateProjectDto, options?: RequestInit): Promise<ProjectResponseDto> => {
@@ -7416,7 +7416,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ProjectsControllerUpdateMutationError = ErrorType<ApiErrorResponseDto>
 
     /**
- * @summary 프로젝트 기본 정보, 상태와 역할별 팀 수정
+ * @summary 프로젝트 기본 정보, 상태와 참여 팀 수정
  */
 export const useProjectsControllerUpdate = <TError = ErrorType<ApiErrorResponseDto>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof projectsControllerUpdate>>, TError,{projectId: string;data: BodyType<UpdateProjectDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}

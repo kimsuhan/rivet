@@ -673,8 +673,7 @@ export class OutboxProcessorService {
       if (!validation.success) return;
       capture('project_created', {
         hasTargetDate: validation.payload.hasTargetDate,
-        roleCount: validation.payload.roleCount,
-        roles: validation.payload.roles,
+        teamCount: validation.payload.teamCount,
       });
       return;
     }

@@ -129,7 +129,7 @@ export class IssuesService {
         context,
         issue.id,
         dto.projectId,
-        dto.initialRoles ?? [],
+        dto.initialTeams ?? [],
       );
       await this.statuses.recalculate(transaction, context.workspaceId, issue.id);
       await transaction.activityEvent.create({

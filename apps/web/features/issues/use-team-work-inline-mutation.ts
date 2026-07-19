@@ -15,7 +15,7 @@ type Change = {
   assignee?: IssueMemberSummaryResponseDto | null;
   assigneeMembershipId?: string | null;
   completionMode?: 'COMPLETE_ONLY' | 'HANDOFF_AND_COMPLETE';
-  handoff?: { bodyMarkdown: string; destinationRoles?: Array<'APP_FRONTEND' | 'WEB_FRONTEND'> };
+  handoff?: { bodyMarkdown: string; destinationProjectTeamIds?: string[] };
   workNoteMarkdown?: string | null;
   workflowState?: TeamWorkSummaryResponseDto['workflowState'];
 };

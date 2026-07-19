@@ -1,6 +1,5 @@
 import { Prisma } from '@rivet/database';
 
-import { PROJECT_ROLE_POSITION } from './domain/project-role';
 import type { ProjectProgressResponseDto, ProjectResponseDto } from './dto/project-response.dto';
 import { projectDateValue } from './project-list.cursor';
 
@@ -18,9 +17,12 @@ export const PROJECT_SELECT = {
     },
   },
   name: true,
-  roleTeams: {
+  projectTeams: {
+    orderBy: [{ isActive: 'desc' }, { team: { name: 'asc' } }, { id: 'asc' }],
     select: {
-      role: true,
+      deactivatedAt: true,
+      id: true,
+      isActive: true,
       team: { select: { archivedAt: true, id: true, key: true, name: true } },
     },
   },
@@ -64,17 +66,17 @@ export function toProjectResponse(
       : null,
     name: row.name,
     progress,
-    roleTeams: row.roleTeams
-      .map(({ role, team }) => ({
-        role,
+    projectTeams: row.projectTeams.map(({ deactivatedAt, id, isActive, team }) => ({
+        active: isActive,
+        deactivatedAt: deactivatedAt?.toISOString() ?? null,
+        id,
         team: {
           archived: team.archivedAt !== null,
           id: team.id,
           key: team.key,
           name: team.name,
         },
-      }))
-      .sort((left, right) => PROJECT_ROLE_POSITION[left.role] - PROJECT_ROLE_POSITION[right.role]),
+      })),
     startDate: projectDateValue(row.startDate),
     status: row.status,
     targetDate: projectDateValue(row.targetDate),

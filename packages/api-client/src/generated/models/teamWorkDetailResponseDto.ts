@@ -6,9 +6,8 @@
  * OpenAPI spec version: 1.0
  */
 import type { IssueMemberSummaryResponseDto } from './issueMemberSummaryResponseDto';
-import type { IssueTeamSummaryResponseDto } from './issueTeamSummaryResponseDto';
+import type { IssueProjectTeamSummaryResponseDto } from './issueProjectTeamSummaryResponseDto';
 import type { IssueWorkflowStateSummaryResponseDto } from './issueWorkflowStateSummaryResponseDto';
-import type { TeamWorkDetailResponseDtoProjectRole } from './teamWorkDetailResponseDtoProjectRole';
 import type { TeamWorkDetailResponseDtoStateCategory } from './teamWorkDetailResponseDtoStateCategory';
 import type { TeamWorkIssueSummaryResponseDto } from './teamWorkIssueSummaryResponseDto';
 
@@ -16,8 +15,7 @@ export interface TeamWorkDetailResponseDto {
   id: string;
   identifier: string;
   issue: TeamWorkIssueSummaryResponseDto;
-  projectRole: TeamWorkDetailResponseDtoProjectRole;
-  team: IssueTeamSummaryResponseDto;
+  projectTeam: IssueProjectTeamSummaryResponseDto;
   workflowState: IssueWorkflowStateSummaryResponseDto;
   stateCategory: TeamWorkDetailResponseDtoStateCategory;
   /** @nullable */

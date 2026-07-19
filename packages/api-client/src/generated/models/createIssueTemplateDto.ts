@@ -5,7 +5,6 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { CreateIssueTemplateDtoInitialRole } from './createIssueTemplateDtoInitialRole';
 import type { CreateIssueTemplateDtoPriority } from './createIssueTemplateDtoPriority';
 
 export interface CreateIssueTemplateDto {
@@ -24,6 +23,9 @@ export interface CreateIssueTemplateDto {
   labelIds?: string[];
   /** @nullable */
   projectId?: string | null;
-  /** @nullable */
-  initialRole?: CreateIssueTemplateDtoInitialRole;
+  /**
+     * 기본 프로젝트의 활성 참여 팀 ID
+     * @nullable
+     */
+  initialProjectTeamId?: string | null;
 }

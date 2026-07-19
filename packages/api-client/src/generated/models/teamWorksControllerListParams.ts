@@ -27,10 +27,10 @@ teamId?: string;
  */
 projectId?: string;
 /**
- * 쉼표로 구분한 프로젝트 역할
- * @maxLength 100
+ * 쉼표로 구분한 프로젝트 참여 팀 ID
+ * @maxLength 2048
  */
-projectRole?: string;
+projectTeamId?: string;
 /**
  * 쉼표로 구분한 워크플로 상태 ID
  * @maxLength 2048

@@ -193,6 +193,7 @@ describe('M2 team and workflow management', () => {
       });
       await database.client.teamWork.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.issue.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+      await database.client.projectTeam.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.workflowState.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
@@ -442,6 +443,7 @@ describe('M2 team and workflow management', () => {
 
     await database.client.teamWork.deleteMany({ where: { issueId: issue.id } });
     await database.client.issue.delete({ where: { id: issue.id } });
+    await database.client.projectTeam.deleteMany({ where: { projectId: project.id } });
     await database.client.project.delete({ where: { id: project.id } });
     const compactedWorkflow = await request(app.getHttpServer())
       .get(`/api/v1/teams/${teamId}/workflow-states`)

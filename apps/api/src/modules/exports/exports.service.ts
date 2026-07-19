@@ -26,7 +26,7 @@ const PROJECT_EXPORT_HEADERS = [
   '설명',
   '상태',
   '리드',
-  '역할별 팀',
+  '참여 팀',
   '시작일',
   '목표일',
   '생성 시각',
@@ -88,7 +88,7 @@ const ISSUE_EXPORT_SELECT = {
     select: {
       assigneeTeamMember: { select: { membership: { select: { id: true, user: { select: { displayName: true } } } } } },
       identifier: true,
-      projectRole: true,
+      projectTeam: { select: { id: true, isActive: true } },
       workNoteMarkdown: true,
       team: { select: { archivedAt: true, id: true, key: true, name: true } },
       workflowState: { select: { category: true, id: true, name: true } },
@@ -110,10 +110,11 @@ const PROJECT_EXPORT_SELECT = {
     },
   },
   name: true,
-  roleTeams: {
-    orderBy: { role: 'asc' },
+  projectTeams: {
+    orderBy: [{ isActive: 'desc' }, { team: { name: 'asc' } }, { id: 'asc' }],
     select: {
-      role: true,
+      id: true,
+      isActive: true,
       team: { select: { archivedAt: true, id: true, key: true, name: true } },
     },
   },
@@ -183,7 +184,9 @@ function issueCsvRow(issue: IssueExportRow): string {
         membershipId: teamWork.assigneeTeamMember.membership.id,
       } : null,
       identifier: teamWork.identifier,
-      projectRole: teamWork.projectRole,
+      projectTeam: teamWork.projectTeam
+        ? { active: teamWork.projectTeam.isActive, id: teamWork.projectTeam.id }
+        : null,
       workNoteMarkdown: teamWork.workNoteMarkdown,
       team: { archived: teamWork.team.archivedAt !== null, id: teamWork.team.id, key: teamWork.team.key, name: teamWork.team.name },
       workflowState: teamWork.workflowState,
@@ -234,8 +237,9 @@ function projectCsvRow(project: ProjectExportRow): string {
         })
       : null,
     jsonCell(
-      project.roleTeams.map(({ role, team }) => ({
-        role,
+      project.projectTeams.map(({ id, isActive, team }) => ({
+        active: isActive,
+        id,
         team: {
           archived: team.archivedAt !== null,
           id: team.id,

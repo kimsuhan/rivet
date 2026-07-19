@@ -6,7 +6,6 @@ import {
   IssueStatus,
   MembershipRole,
   MembershipStatus,
-  ProjectRole,
   ProjectStatus,
   StateCategory,
 } from '@rivet/database';
@@ -29,6 +28,12 @@ export class IssueTeamSummaryResponseDto {
   @ApiProperty() name!: string;
   @ApiProperty() key!: string;
   @ApiProperty() archived!: boolean;
+}
+
+export class IssueProjectTeamSummaryResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty() active!: boolean;
+  @ApiProperty({ type: IssueTeamSummaryResponseDto }) team!: IssueTeamSummaryResponseDto;
 }
 
 export class IssueWorkflowStateSummaryResponseDto {
@@ -93,8 +98,8 @@ export class TeamWorkIssueSummaryResponseDto {
 export class TeamWorkReferenceResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() identifier!: string;
-  @ApiProperty({ enum: ProjectRole }) projectRole!: ProjectRole;
-  @ApiProperty({ type: IssueTeamSummaryResponseDto }) team!: IssueTeamSummaryResponseDto;
+  @ApiProperty({ type: IssueProjectTeamSummaryResponseDto })
+  projectTeam!: IssueProjectTeamSummaryResponseDto;
   @ApiProperty({ type: IssueWorkflowStateSummaryResponseDto })
   workflowState!: IssueWorkflowStateSummaryResponseDto;
 }
@@ -103,8 +108,8 @@ export class TeamWorkSummaryResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ example: 'API-42-2' }) identifier!: string;
   @ApiProperty({ type: TeamWorkIssueSummaryResponseDto }) issue!: TeamWorkIssueSummaryResponseDto;
-  @ApiProperty({ enum: ProjectRole }) projectRole!: ProjectRole;
-  @ApiProperty({ type: IssueTeamSummaryResponseDto }) team!: IssueTeamSummaryResponseDto;
+  @ApiProperty({ type: IssueProjectTeamSummaryResponseDto })
+  projectTeam!: IssueProjectTeamSummaryResponseDto;
   @ApiProperty({ type: IssueWorkflowStateSummaryResponseDto })
   workflowState!: IssueWorkflowStateSummaryResponseDto;
   @ApiProperty({ enum: StateCategory }) stateCategory!: StateCategory;
@@ -123,7 +128,8 @@ export class IssueWorkflowSummaryResponseDto {
   @ApiProperty({ minimum: 0 }) completedCount!: number;
   @ApiProperty({ minimum: 0 }) canceledCount!: number;
   @ApiProperty({ minimum: 0 }) unassignedCount!: number;
-  @ApiProperty({ enum: ProjectRole, isArray: true }) activeRoles!: ProjectRole[];
+  @ApiProperty({ isArray: true, type: IssueProjectTeamSummaryResponseDto })
+  activeTeams!: IssueProjectTeamSummaryResponseDto[];
   @ApiProperty() allTeamWorksCompleted!: boolean;
 }
 

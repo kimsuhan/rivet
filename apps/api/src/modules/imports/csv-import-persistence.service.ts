@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
 
-import { ImportRunStatus, Prisma, ProjectRole, ProjectStatus } from '@rivet/database';
+import { ImportRunStatus, Prisma, ProjectStatus } from '@rivet/database';
 
 import type { CsvImportContext } from './csv-import.context';
 import type { CsvImportAnalysis } from './csv-import-analysis.service';
@@ -52,14 +52,15 @@ export class CsvImportPersistenceService {
     await writeBatches(labelsToCreate, (data) => transaction.label.createMany({ data }));
 
     const projectIds = new Map<string, string>();
+    const projectTeamIds = new Map<string, string>();
     const createdProjectSources = new Set<string>();
     const projectsToCreate: Prisma.ProjectCreateManyInput[] = [];
-    const projectRoleTeamsToCreate: Prisma.ProjectRoleTeamCreateManyInput[] = [];
+    const projectTeamsToCreate: Prisma.ProjectTeamCreateManyInput[] = [];
     const activityEventsToCreate: Prisma.ActivityEventCreateManyInput[] = [];
     for (const entry of mapping.projects) {
       if (entry.mode === 'MAP' && entry.targetId) projectIds.set(entry.source, entry.targetId);
-      const teamId = analysis.projectTeams.get(entry.source);
-      if (entry.mode === 'CREATE' && teamId) {
+      const teamIds = analysis.projectTeams.get(entry.source);
+      if (entry.mode === 'CREATE' && teamIds && teamIds.size > 0) {
         const projectId = randomUUID();
         projectsToCreate.push({
           id: projectId,
@@ -67,12 +68,16 @@ export class CsvImportPersistenceService {
           status: ProjectStatus.PLANNED,
           workspaceId: context.workspaceId,
         });
-        projectRoleTeamsToCreate.push({
-          projectId,
-          role: ProjectRole.BACKEND,
-          teamId,
-          workspaceId: context.workspaceId,
-        });
+        for (const teamId of [...teamIds].sort()) {
+          const projectTeamId = randomUUID();
+          projectTeamsToCreate.push({
+            id: projectTeamId,
+            projectId,
+            teamId,
+            workspaceId: context.workspaceId,
+          });
+          projectTeamIds.set(`${entry.source}:${teamId}`, projectTeamId);
+        }
         activityEventsToCreate.push({
           actorMembershipId: context.membershipId,
           afterData: { importRunId: run.id },
@@ -85,8 +90,8 @@ export class CsvImportPersistenceService {
       }
     }
     await writeBatches(projectsToCreate, (data) => transaction.project.createMany({ data }));
-    await writeBatches(projectRoleTeamsToCreate, (data) =>
-      transaction.projectRoleTeam.createMany({ data }),
+    await writeBatches(projectTeamsToCreate, (data) =>
+      transaction.projectTeam.createMany({ data }),
     );
 
     const workspace = await transaction.workspace.findUniqueOrThrow({
@@ -146,6 +151,9 @@ export class CsvImportPersistenceService {
       const projectId = projectIds.get(row.projectSource);
       const team = teamSequences.get(row.teamId);
       if (!projectId || !team) throw new Error('IMPORT_RESOLVED_TARGET_MISSING');
+      const projectTeamId =
+        row.projectTeamId ?? projectTeamIds.get(`${row.projectSource}:${row.teamId}`);
+      if (!projectTeamId) throw new Error('IMPORT_PROJECT_TEAM_TARGET_MISSING');
       const issueNumber = workspace.nextIssueNumber + index;
       const teamOffset = nextTeamOffset.get(row.teamId) ?? 0;
       nextTeamOffset.set(row.teamId, teamOffset + 1);
@@ -170,7 +178,7 @@ export class CsvImportPersistenceService {
         id: teamWorkId,
         identifier: `${team.key}-${teamWorkNumber}`,
         issueId,
-        projectRole: row.projectRole,
+        projectTeamId,
         sequenceNumber: teamWorkNumber,
         teamId: row.teamId,
         workflowStateId: row.workflowStateId,

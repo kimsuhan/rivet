@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Monitor, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Monitor, RotateCcw, Search, Users } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
@@ -12,6 +12,7 @@ import {
   getProjectsControllerGetQueryKey,
   getProjectsControllerListQueryKey,
   type ProjectResponseDto,
+  useAuthControllerGetSession,
   useMembersControllerList,
   useProjectsControllerCreate,
   useProjectsControllerGet,
@@ -24,7 +25,9 @@ import { ContentEmpty } from '@/components/states/content-empty';
 import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Field,
   FieldDescription,
@@ -50,7 +53,6 @@ import { Link, useRouter } from '@/i18n/navigation';
 import {
   createProjectPayload,
   PROJECT_FORM_STATUSES,
-  PROJECT_ROLES,
   projectFormDefaults,
   projectFormSchema,
   type ProjectFormValues,
@@ -176,6 +178,7 @@ function ProjectForm({
   const queryClient = useQueryClient();
   const create = useProjectsControllerCreate();
   const update = useProjectsControllerUpdate();
+  const session = useAuthControllerGetSession({ query: { retry: false } });
   const teams = useTeamsControllerList({ includeArchived: false }, { query: { retry: false } });
   const members = useMembersControllerList(
     { limit: 100, status: 'ACTIVE' },
@@ -186,25 +189,40 @@ function ProjectForm({
     descriptionTooLong: t('validation.descriptionTooLong'),
     nameRequired: t('validation.nameRequired'),
     nameTooLong: t('validation.nameTooLong'),
-    roleRequired: t('validation.roleRequired'),
   });
   const form = useForm<ProjectFormValues>({
     defaultValues: projectFormDefaults(project),
     resolver: zodResolver(schema),
   });
   const values = useWatch({ control: form.control });
-  const [notice, setNotice] = useState<'ERROR' | 'ROLE_IN_USE' | 'VERSION_CONFLICT' | null>(null);
+  const [notice, setNotice] = useState<'ERROR' | 'TEAM_IN_USE' | 'VERSION_CONFLICT' | null>(null);
   const [blockingIssues, setBlockingIssues] = useState<BlockingIssue[]>([]);
   const [latestProject, setLatestProject] = useState<ProjectResponseDto | null>(null);
   const [lastSubmitted, setLastSubmitted] = useState<ProjectFormValues | null>(null);
+  const [teamSearch, setTeamSearch] = useState('');
   const mutation = project ? update : create;
   const isPending = mutation.isPending;
-  const currentTeams = project?.roleTeams.map(({ team }) => team) ?? [];
+  const currentTeams = project?.projectTeams.map(({ team }) => team) ?? [];
   const teamOptions = uniqueById([...currentTeams, ...(teams.data?.items ?? [])]);
   const memberOptions = uniqueById([
     ...(project?.lead ? [project.lead] : []),
     ...(members.data?.items ?? []),
   ]);
+  const currentMembership = session.data?.authenticated ? session.data.membership : null;
+  const canManageTeams =
+    currentMembership?.role === 'ADMIN' ||
+    (project
+      ? project.lead?.id === currentMembership?.id
+      : values.leadMembershipId === currentMembership?.id);
+  const normalizedTeamSearch = teamSearch.normalize('NFC').trim().toLocaleLowerCase('ko-KR');
+  const visibleTeamOptions = teamOptions.filter((team) =>
+    normalizedTeamSearch
+      ? `${team.name} ${team.key}`.toLocaleLowerCase('ko-KR').includes(normalizedTeamSearch)
+      : true,
+  );
+  const inactiveProjectTeamIds = new Set(
+    project?.projectTeams.filter(({ active }) => !active).map(({ team }) => team.id) ?? [],
+  );
 
   async function refreshLatest() {
     if (!reload) return null;
@@ -231,6 +249,7 @@ function ProjectForm({
       name: fieldErrors.name?.[0],
       startDate: fieldErrors.startDate?.[0],
       targetDate: fieldErrors.targetDate?.[0],
+      teamIds: fieldErrors.teamIds?.[0],
     };
     for (const [field, message] of Object.entries(fieldMap)) {
       if (message) form.setError(field as keyof ProjectFormValues, { message, type: 'server' });
@@ -241,16 +260,16 @@ function ProjectForm({
       void refreshLatest();
       return;
     }
-    if (body.code === 'PROJECT_ROLE_IN_USE') {
+    if (body.code === 'PROJECT_TEAM_IN_USE') {
       setBlockingIssues(readBlockingIssues(body.details));
-      setNotice('ROLE_IN_USE');
+      setNotice('TEAM_IN_USE');
       void refreshLatest();
       return;
     }
-    if (body.code === 'PROJECT_ROLE_REQUIRED') {
+    if (body.code === 'PROJECT_TEAM_MANAGE_FORBIDDEN') {
       form.setError(
-        'BACKEND',
-        { message: t('validation.roleRequired'), type: 'server' },
+        'teamIds',
+        { message: t('validation.teamManageForbidden'), type: 'server' },
         { shouldFocus: true },
       );
       return;
@@ -302,8 +321,10 @@ function ProjectForm({
     setNotice(null);
   }
 
-  if (teams.isPending || members.isPending) return <ContentLoading label={t('loading')} />;
-  if (teams.isError || members.isError) {
+  if (teams.isPending || members.isPending || session.isPending) {
+    return <ContentLoading label={t('loading')} />;
+  }
+  if (teams.isError || members.isError || session.isError) {
     return (
       <ContentError
         headingLevel={1}
@@ -313,6 +334,7 @@ function ProjectForm({
         onRetry={() => {
           if (teams.isError) void teams.refetch();
           if (members.isError) void members.refetch();
+          if (session.isError) void session.refetch();
         }}
       />
     );
@@ -363,11 +385,11 @@ function ProjectForm({
             </AlertDescription>
           </Alert>
         ) : null}
-        {notice === 'ROLE_IN_USE' ? (
+        {notice === 'TEAM_IN_USE' ? (
           <Alert variant="destructive">
-            <AlertTitle>{t('roleInUse.title')}</AlertTitle>
+            <AlertTitle>{t('teamInUse.title')}</AlertTitle>
             <AlertDescription className="flex flex-col items-start gap-3">
-              <p>{t('roleInUse.description')}</p>
+              <p>{t('teamInUse.description')}</p>
               {blockingIssues.length > 0 ? (
                 <ul className="flex list-disc flex-col gap-1 pl-5">
                   {blockingIssues.map((issue) => (
@@ -474,34 +496,89 @@ function ProjectForm({
           </div>
         </FieldSet>
 
-        <FieldSet data-invalid={Boolean(form.formState.errors.BACKEND)}>
-          <FieldLegend>{t('field.roleTeams')}</FieldLegend>
-          <FieldDescription>{t('field.roleTeamsHint')}</FieldDescription>
-          <div className="flex flex-col gap-3">
-            {PROJECT_ROLES.map((role) => (
-              <ProjectSelectField
-                key={role}
-                id={`project-role-${role.toLowerCase()}`}
-                label={t(`role.${role}`)}
-                description={t(`roleDescription.${role}`)}
-                value={values[role] || 'NONE'}
-                items={[
-                  { label: t('field.noTeam'), value: 'NONE' },
-                  ...teamOptions.map((team) => ({
-                    label: `${team.name} (${team.key})`,
-                    value: team.id,
-                  })),
-                ]}
-                onChange={(value) =>
-                  form.setValue(role, value === 'NONE' ? '' : value, {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
-                }
-              />
-            ))}
+        <FieldSet data-invalid={Boolean(form.formState.errors.teamIds)}>
+          <FieldLegend>{t('field.participatingTeams')}</FieldLegend>
+          <FieldDescription>{t('field.participatingTeamsHint')}</FieldDescription>
+          {!canManageTeams ? (
+            <Alert>
+              <Users aria-hidden="true" />
+              <AlertTitle>{t('teamPermission.title')}</AlertTitle>
+              <AlertDescription>{t('teamPermission.description')}</AlertDescription>
+            </Alert>
+          ) : null}
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            />
+            <Input
+              id="project-team-search"
+              className="pl-9"
+              type="search"
+              value={teamSearch}
+              onChange={(event) => setTeamSearch(event.currentTarget.value)}
+              placeholder={t('field.teamSearchPlaceholder')}
+              aria-label={t('field.teamSearchLabel')}
+            />
           </div>
-          <FieldError errors={[form.formState.errors.BACKEND]} />
+          {visibleTeamOptions.length === 0 ? (
+            <div className="border-border bg-muted/30 rounded-lg border border-dashed px-4 py-6 text-center">
+              <p className="text-sm font-medium">{t('field.noMatchingTeams')}</p>
+              <p className="text-muted-foreground mt-1 text-xs">{t('field.noMatchingTeamsHint')}</p>
+            </div>
+          ) : (
+            <ul
+              className="divide-border overflow-hidden rounded-xl border"
+              aria-label={t('field.participatingTeams')}
+            >
+              {visibleTeamOptions.map((team) => {
+                const checked = (values.teamIds ?? []).includes(team.id);
+                const inactive = inactiveProjectTeamIds.has(team.id);
+                return (
+                  <li key={team.id} className="group border-b last:border-b-0">
+                    <label className="hover:bg-accent/60 flex min-h-14 cursor-pointer items-center gap-3 px-4 py-2 transition-colors has-[:disabled]:cursor-not-allowed">
+                      <Checkbox
+                        checked={checked}
+                        disabled={!canManageTeams || team.archived}
+                        aria-describedby={`project-team-${team.id}-description`}
+                        onCheckedChange={(next) => {
+                          const selected = values.teamIds ?? [];
+                          form.setValue(
+                            'teamIds',
+                            next
+                              ? [...new Set([...selected, team.id])]
+                              : selected.filter((id) => id !== team.id),
+                            { shouldDirty: true, shouldValidate: true },
+                          );
+                        }}
+                      />
+                      <span className="bg-muted text-muted-foreground min-w-12 rounded-md px-2 py-1 text-center font-mono text-xs font-semibold">
+                        {team.key}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{team.name}</span>
+                        <span
+                          id={`project-team-${team.id}-description`}
+                          className="text-muted-foreground block text-xs"
+                        >
+                          {team.archived
+                            ? t('field.archivedTeam')
+                            : inactive
+                              ? t('field.inactiveTeam')
+                              : t('field.activeWorkspaceTeam')}
+                        </span>
+                      </span>
+                      {inactive ? <Badge variant="outline">{t('field.reactivate')}</Badge> : null}
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {(values.teamIds ?? []).length === 0 ? (
+            <FieldDescription>{t('field.noParticipatingTeams')}</FieldDescription>
+          ) : null}
+          <FieldError errors={[form.formState.errors.teamIds]} />
         </FieldSet>
 
         <div className="bg-background fixed inset-x-0 bottom-0 flex justify-end gap-2 border-t px-6 py-3 lg:left-14 xl:left-60">

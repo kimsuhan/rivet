@@ -5,12 +5,12 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { CsvImportProjectRoleTeamOptionDto } from './csvImportProjectRoleTeamOptionDto';
+import type { CsvImportProjectTeamOptionDto } from './csvImportProjectTeamOptionDto';
 
 export interface CsvImportProjectOptionDto {
   id: string;
   name: string;
   /** @minimum 1 */
   version: number;
-  roleTeams: CsvImportProjectRoleTeamOptionDto[];
+  projectTeams: CsvImportProjectTeamOptionDto[];
 }

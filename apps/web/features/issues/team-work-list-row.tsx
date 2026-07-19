@@ -14,7 +14,6 @@ import { Link } from '@/i18n/navigation';
 import {
   CompactAssigneeTrigger,
   PriorityDisplay,
-  PROJECT_ROLE_LABELS as ROLE_LABELS,
   StatusTrigger,
 } from './issue-attribute-presentation';
 import { issueWorkHref } from './issue-work-routing';
@@ -41,9 +40,11 @@ export function TeamWorkListRow({
   work: TeamWorkSummaryResponseDto;
   density?: 'compact' | 'comfortable';
 }) {
-  const states = useTeamsControllerListWorkflowStates(work.team.id, { query: { retry: false } });
+  const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, {
+    query: { retry: false },
+  });
   const members = useMembersControllerList(
-    { limit: 100, status: 'ACTIVE', teamId: work.team.id },
+    { limit: 100, status: 'ACTIVE', teamId: work.projectTeam.team.id },
     { query: { retry: false } },
   );
   const stateMutation = useTeamWorkInlineMutation(work, 'workflowState');
@@ -66,11 +67,12 @@ export function TeamWorkListRow({
         >
           <span className="font-medium">{work.issue.title}</span>
           <span className="text-muted-foreground mt-1 block truncate text-xs">
-            {work.issue.identifier} · {ROLE_LABELS[work.projectRole]} · {work.team.name}
+            {work.issue.identifier} · {work.projectTeam.team.name}
           </span>
         </Link>
         <span className="text-muted-foreground truncate max-lg:hidden">
-          {work.team.name} · {ROLE_LABELS[work.projectRole]}
+          <span className="font-mono text-xs">{work.projectTeam.team.key}</span> ·{' '}
+          {work.projectTeam.team.name}
         </span>
         <StatusTrigger
           identifier={work.identifier}

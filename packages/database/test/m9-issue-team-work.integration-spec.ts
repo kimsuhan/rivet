@@ -107,6 +107,7 @@ describe('M9 issue and team-work database integration', () => {
     await prisma.teamWork.deleteMany({ where: { workspaceId } });
     await prisma.issue.deleteMany({ where: { workspaceId } });
     await prisma.projectRoleTeam.deleteMany({ where: { workspaceId } });
+    await prisma.projectTeam.deleteMany({ where: { workspaceId } });
     await prisma.project.deleteMany({ where: { workspaceId } });
     await prisma.workflowState.deleteMany({ where: { workspaceId } });
     await prisma.teamMember.deleteMany({ where: { workspaceId } });

@@ -49,6 +49,7 @@ model Workspace {
   outboxEvents         OutboxEvent[]
   projects             Project[]
   projectRoles         ProjectRoleTeam[]
+  projectTeams         ProjectTeam[]
   issueTemplates       IssueTemplate[]
   issueTemplateLabels  IssueTemplateLabel[]
   issues               Issue[]
@@ -231,6 +232,7 @@ model Team {
   teamMembers    TeamMember[]
   workflowStates WorkflowState[]
   projectRoles   ProjectRoleTeam[]
+  projectTeams   ProjectTeam[]
   teamWorks      TeamWork[]
 
   @@unique([workspaceId, id])

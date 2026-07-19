@@ -1,11 +1,10 @@
-import type { ProjectResponseDto, ProjectRoleTeamResponseDto } from '@rivet/api-client';
+import type { ProjectResponseDto, ProjectTeamResponseDto } from '@rivet/api-client';
 
 import { Badge } from '@/components/ui/badge';
 
 export type ProjectLabels = {
   noWork: string;
   progress: string;
-  roles: Record<'APP_FRONTEND' | 'BACKEND' | 'WEB_FRONTEND', string>;
   statuses: Record<'CANCELED' | 'COMPLETED' | 'IN_PROGRESS' | 'PLANNED', string>;
 };
 
@@ -47,18 +46,13 @@ export function ProjectStatusBadge({
   return <Badge variant="secondary">{labels[status]}</Badge>;
 }
 
-export function ProjectRoleBadges({
-  labels,
-  roleTeams,
-}: {
-  labels: ProjectLabels['roles'];
-  roleTeams: ProjectRoleTeamResponseDto[];
-}) {
+export function ProjectTeamBadges({ projectTeams }: { projectTeams: ProjectTeamResponseDto[] }) {
+  const activeTeams = projectTeams.filter(({ active }) => active);
   return (
     <div className="flex min-w-0 flex-wrap gap-2">
-      {roleTeams.map(({ role, team }) => (
-        <Badge key={role} variant="outline" className="max-w-full">
-          <span>{labels[role]}</span>
+      {activeTeams.map(({ id, team }) => (
+        <Badge key={id} variant="outline" className="max-w-full">
+          <span className="font-mono text-[0.7rem]">{team.key}</span>
           <span aria-hidden="true">·</span>
           <span className="truncate">{team.name}</span>
         </Badge>

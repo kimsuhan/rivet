@@ -12,7 +12,7 @@ import {
 } from 'class-validator';
 
 export class CreateTeamDto {
-  @ApiProperty({ example: '프론트 웹', maxLength: 100, minLength: 1 })
+  @ApiProperty({ example: '디자인', maxLength: 100, minLength: 1 })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString({ message: '팀 이름을 입력해 주세요.' })
   @IsNotEmpty({ message: '팀 이름을 입력해 주세요.' })

@@ -19,9 +19,12 @@ export class TrashConnectionResponseDto {
   name!: string;
 }
 
-export class TrashProjectRoleTeamResponseDto {
-  @ApiProperty({ enum: ['BACKEND', 'WEB_FRONTEND', 'APP_FRONTEND'] })
-  role!: 'BACKEND' | 'WEB_FRONTEND' | 'APP_FRONTEND';
+export class TrashProjectTeamResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty()
+  active!: boolean;
 
   @ApiProperty({ format: 'uuid' })
   teamId!: string;
@@ -64,8 +67,8 @@ export class TrashItemResponseDto {
   @ApiPropertyOptional({ nullable: true, type: TrashConnectionResponseDto })
   project!: TrashConnectionResponseDto | null;
 
-  @ApiProperty({ isArray: true, type: TrashProjectRoleTeamResponseDto })
-  roleTeams!: TrashProjectRoleTeamResponseDto[];
+  @ApiProperty({ isArray: true, type: TrashProjectTeamResponseDto })
+  projectTeams!: TrashProjectTeamResponseDto[];
 }
 
 export class TrashListResponseDto {

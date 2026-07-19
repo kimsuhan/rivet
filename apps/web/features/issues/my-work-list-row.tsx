@@ -12,7 +12,6 @@ import { Link } from '@/i18n/navigation';
 
 import {
   PriorityDisplay,
-  PROJECT_ROLE_LABELS as ROLE_LABELS,
   StatusTrigger,
 } from './issue-attribute-presentation';
 import { IssueLabelChips } from './issue-label-chips';
@@ -31,7 +30,9 @@ export function MyWorkListRow({
   work: TeamWorkSummaryResponseDto;
   density?: 'compact' | 'comfortable';
 }) {
-  const states = useTeamsControllerListWorkflowStates(work.team.id, { query: { retry: false } });
+  const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, {
+    query: { retry: false },
+  });
   const stateMutation = useTeamWorkInlineMutation(work, 'workflowState');
   const [completionModalOpen, setCompletionModalOpen] = useState(false);
   const href = myWorkHref(work.identifier);
@@ -64,7 +65,7 @@ export function MyWorkListRow({
         <div className="min-w-0">
           <p className="truncate font-medium" title={work.issue.title}>{work.issue.title}</p>
           <p className="text-muted-foreground mt-1 truncate text-xs">
-            <span className="font-mono">{work.identifier}</span> · <span className="font-mono">{work.issue.identifier}</span> · {ROLE_LABELS[work.projectRole]}
+            <span className="font-mono">{work.identifier}</span> · <span className="font-mono">{work.issue.identifier}</span> · <span className="font-mono">{work.projectTeam.team.key}</span> · {work.projectTeam.team.name}
           </p>
         </div>
         <div className="min-w-0">

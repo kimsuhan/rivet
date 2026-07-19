@@ -5,19 +5,18 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { CreateIssueHandoffDtoDestinationRolesItem } from './createIssueHandoffDtoDestinationRolesItem';
 import type { CreateIssueHandoffDtoKind } from './createIssueHandoffDtoKind';
 
 export interface CreateIssueHandoffDto {
   kind: CreateIssueHandoffDtoKind;
   /**
-     * 최초 전달은 변경·구현 요약, API 명세 링크, 사용 가능 환경, 추가·변경 API, 요청·응답 변경, 오류·권한, 프론트 주의사항을 필요할 때만 Markdown으로 기록합니다. 추가 전달은 변경 사항과 프론트 조치만 기록합니다. 제목만 있는 빈 섹션은 저장하지 않습니다.
+     * 팀 간 전달은 작업 결과, 결과물 링크, 사용 가능 환경, 후속 작업, 입력·출력 변경, 주의·권한과 전달 대상 참고사항을 필요한 만큼 Markdown으로 기록합니다. 추가 전달은 변경 사항과 다음 팀의 조치만 기록합니다. 제목만 있는 빈 섹션은 저장하지 않습니다.
      * @maxLength 50000
      */
   bodyMarkdown: string;
   /**
-     * 최초 전달에서 생성하거나 재사용할 프론트엔드 역할
-     * @maxItems 2
+     * 최초 전달에서 생성하거나 재사용할 같은 프로젝트의 활성 참여 팀 ID
+     * @maxItems 100
      */
-  destinationRoles?: CreateIssueHandoffDtoDestinationRolesItem[];
+  destinationProjectTeamIds?: string[];
 }

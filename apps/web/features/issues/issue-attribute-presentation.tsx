@@ -39,12 +39,6 @@ export const ISSUE_STATUS_PRESENTATION: Record<IssueSummaryResponseDto['status']
   CANCELED: { icon: CircleX, iconClassName: 'text-muted-foreground', label: '취소' },
 };
 
-export const PROJECT_ROLE_LABELS = {
-  APP_FRONTEND: '앱 프론트',
-  BACKEND: '백엔드',
-  WEB_FRONTEND: '웹 프론트',
-} as const;
-
 export const TEAM_WORK_STATUS_PRESENTATION: Record<
   TeamWorkSummaryResponseDto['stateCategory'],
   Presentation

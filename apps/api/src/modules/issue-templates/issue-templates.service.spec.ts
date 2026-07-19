@@ -1,7 +1,7 @@
 import { HttpStatus } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 
-import { IssuePriority, ProjectRole } from '@rivet/database';
+import { IssuePriority } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { IssueTemplatesService } from './issue-templates.service';
@@ -11,11 +11,12 @@ describe('IssueTemplatesService', () => {
   const templateId = '953685f0-4921-41cd-8422-d8a1ccc3f547';
   const labelId = '05ed9724-f207-447d-9f18-7026f493d3fd';
   const projectId = 'c5ef63e6-3f70-4caf-bb56-256486afbb84';
+  const initialProjectTeamId = '9d2b632a-5ac1-493a-bcce-ec8f55043a75';
   const template = {
     archivedAt: null,
     descriptionMarkdown: '## 재현 절차',
     id: templateId,
-    initialRole: ProjectRole.BACKEND,
+    initialProjectTeamId,
     labels: [{ labelId }],
     name: '버그 신고',
     normalizedName: '버그 신고',
@@ -38,7 +39,7 @@ describe('IssueTemplatesService', () => {
     },
     label: { findMany: jest.fn() },
     project: { findMany: jest.fn() },
-    projectRoleTeam: { findFirst: jest.fn(), findMany: jest.fn() },
+    projectTeam: { findFirst: jest.fn(), findMany: jest.fn() },
   };
   const database = {
     client: {
@@ -46,7 +47,7 @@ describe('IssueTemplatesService', () => {
       issueTemplate: { findFirst: jest.fn(), findMany: jest.fn() },
       label: { findMany: jest.fn() },
       project: { findMany: jest.fn() },
-      projectRoleTeam: { findMany: jest.fn() },
+      projectTeam: { findMany: jest.fn() },
     },
   };
   let moduleRef: TestingModule;
@@ -71,10 +72,11 @@ describe('IssueTemplatesService', () => {
     database.client.project.findMany.mockResolvedValue([
       { archivedAt: null, deletedAt: null, id: projectId },
     ]);
-    database.client.projectRoleTeam.findMany.mockResolvedValue([
+    database.client.projectTeam.findMany.mockResolvedValue([
       {
+        id: initialProjectTeamId,
+        isActive: true,
         projectId,
-        role: ProjectRole.BACKEND,
         team: { archivedAt: null },
       },
     ]);
@@ -104,7 +106,7 @@ describe('IssueTemplatesService', () => {
   it('normalizes and stores an independent template snapshot', async () => {
     const created = {
       ...template,
-      initialRole: null,
+      initialProjectTeamId: null,
       labels: [],
       name: '기능 요청',
       normalizedName: '기능 요청',
@@ -149,17 +151,17 @@ describe('IssueTemplatesService', () => {
     expect(database.client.$transaction).not.toHaveBeenCalled();
   });
 
-  it('requires a project when an initial role is configured', async () => {
+  it('requires a project when an initial project team is configured', async () => {
     await expect(
       service.create(workspaceId, {
         descriptionMarkdown: '## 작업 내용',
-        initialRole: ProjectRole.BACKEND,
+        initialProjectTeamId: projectId,
         name: '역할만 있는 템플릿',
       }),
     ).rejects.toMatchObject({
       response: {
         code: 'VALIDATION_ERROR',
-        fieldErrors: { initialRole: expect.any(Array) },
+        fieldErrors: { initialProjectTeamId: expect.any(Array) },
       },
       status: HttpStatus.UNPROCESSABLE_ENTITY,
     });
@@ -227,7 +229,7 @@ describe('IssueTemplatesService', () => {
       .mockResolvedValueOnce([{ archivedAt: archived.archivedAt, version: 3 }])
       .mockResolvedValueOnce([{ id: labelId }])
       .mockResolvedValueOnce([{ id: projectId }])
-      .mockResolvedValueOnce([{ teamId: '9d2b632a-5ac1-493a-bcce-ec8f55043a75' }]);
+      .mockResolvedValueOnce([{ teamId: initialProjectTeamId }]);
     transaction.issueTemplate.findFirst
       .mockResolvedValueOnce(archived)
       .mockResolvedValueOnce(restored);
@@ -289,7 +291,7 @@ describe('IssueTemplatesService', () => {
       .mockResolvedValueOnce([{ archivedAt: null, version: 1 }])
       .mockResolvedValueOnce([{ id: labelId }])
       .mockResolvedValueOnce([{ id: projectId }])
-      .mockResolvedValueOnce([{ teamId: '9d2b632a-5ac1-493a-bcce-ec8f55043a75' }]);
+      .mockResolvedValueOnce([{ teamId: initialProjectTeamId }]);
     transaction.issueTemplate.findFirst.mockResolvedValue(template);
 
     await expect(service.apply(workspaceId, templateId, { version: 1 })).resolves.toMatchObject({

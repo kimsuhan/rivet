@@ -22,3 +22,4 @@ export {
   WebPushDeliveryStatus,
   WebPushSubscriptionStatus,
 } from './generated/prisma/enums';
+export { assertSafeTestDatabaseUrl } from './test-database-url';

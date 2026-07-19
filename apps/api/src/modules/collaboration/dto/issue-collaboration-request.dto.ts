@@ -16,24 +16,24 @@ import {
   Min,
 } from 'class-validator';
 
-import { HandoffKind, ProjectRole } from '@rivet/database';
+import { HandoffKind } from '@rivet/database';
 
 const HANDOFF_BODY_DESCRIPTION =
-  '최초 전달은 변경·구현 요약, API 명세 링크, 사용 가능 환경, 추가·변경 API, 요청·응답 변경, 오류·권한, 프론트 주의사항을 필요할 때만 Markdown으로 기록합니다. 추가 전달은 변경 사항과 프론트 조치만 기록합니다. 제목만 있는 빈 섹션은 저장하지 않습니다.';
+  '팀 간 전달은 작업 결과, 결과물 링크, 사용 가능 환경, 후속 작업, 입력·출력 변경, 주의·권한과 전달 대상 참고사항을 필요한 만큼 Markdown으로 기록합니다. 추가 전달은 변경 사항과 다음 팀의 조치만 기록합니다. 제목만 있는 빈 섹션은 저장하지 않습니다.';
 const HANDOFF_BODY_EXAMPLE = [
-  '## 변경 요약',
+  '## 작업 결과 요약',
   '로그인 응답에 워크스페이스 정보를 추가했습니다.',
-  '## API 명세 링크',
+  '## 결과물 링크',
   'https://api.example.com/openapi.json',
   '## 사용 가능 환경',
   '개발 환경',
-  '## 추가·변경 API',
+  '## 후속 작업',
   'POST /sessions',
-  '## 요청·응답 변경',
+  '## 입력·출력 변경',
   '응답에 workspaceId를 추가했습니다.',
-  '## 오류·권한',
+  '## 주의·권한',
   '401 응답 계약은 동일합니다.',
-  '## 프론트 주의사항',
+  '## 전달 대상 참고사항',
   '기존 필드는 유지됩니다.',
 ].join('\n\n');
 
@@ -62,16 +62,19 @@ export class CreateIssueHandoffDto {
   bodyMarkdown!: string;
 
   @ApiPropertyOptional({
-    description: '최초 전달에서 생성하거나 재사용할 프론트엔드 역할',
-    enum: [ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND],
+    description: '최초 전달에서 생성하거나 재사용할 같은 프로젝트의 활성 참여 팀 ID',
+    format: 'uuid',
     isArray: true,
+    type: String,
+    uniqueItems: true,
   })
+  @Transform(({ value }) => (Array.isArray(value) ? value.map(normalizeUuid) : value))
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(2)
+  @ArrayMaxSize(100)
   @ArrayUnique()
-  @IsIn([ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND], { each: true })
-  destinationRoles?: (typeof ProjectRole.WEB_FRONTEND | typeof ProjectRole.APP_FRONTEND)[];
+  @IsUUID('4', { each: true })
+  destinationProjectTeamIds?: string[];
 }
 
 export class CreateCommentDto {

@@ -5,14 +5,14 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { InitialRoleAssignmentDto } from './initialRoleAssignmentDto';
+import type { InitialTeamAssignmentDto } from './initialTeamAssignmentDto';
 
 export interface StartIssueDto {
   /**
      * @minItems 1
-     * @maxItems 3
+     * @maxItems 100
      */
-  roleAssignments: InitialRoleAssignmentDto[];
-  /** 선택 역할 팀에 현재 사용자가 활성 멤버인지 확인 */
+  teamAssignments: InitialTeamAssignmentDto[];
+  /** 선택 팀에 현재 사용자가 활성 멤버인지 확인 */
   requireCurrentUserTeamMembership?: boolean;
 }

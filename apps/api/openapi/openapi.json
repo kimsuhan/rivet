@@ -4641,12 +4641,12 @@
             }
           },
           {
-            "name": "projectRole",
+            "name": "projectTeamId",
             "required": false,
             "in": "query",
-            "description": "쉼표로 구분한 프로젝트 역할",
+            "description": "쉼표로 구분한 프로젝트 참여 팀 ID",
             "schema": {
-              "maxLength": 100,
+              "maxLength": 2048,
               "type": "string"
             }
           },
@@ -6565,7 +6565,7 @@
             }
           },
           "409": {
-            "description": "VERSION_CONFLICT 또는 PROJECT_ROLE_IN_USE",
+            "description": "VERSION_CONFLICT 또는 PROJECT_TEAM_IN_USE",
             "content": {
               "application/json": {
                 "schema": {
@@ -6575,7 +6575,7 @@
             }
           },
           "422": {
-            "description": "VALIDATION_ERROR, PROJECT_ROLE_REQUIRED 또는 PROJECT_DATE_INVALID",
+            "description": "VALIDATION_ERROR 또는 PROJECT_DATE_INVALID",
             "content": {
               "application/json": {
                 "schema": {
@@ -6590,7 +6590,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "프로젝트 기본 정보, 상태와 역할별 팀 수정",
+        "summary": "프로젝트 기본 정보, 상태와 참여 팀 수정",
         "tags": [
           "projects"
         ]
@@ -9307,21 +9307,18 @@
           "bodyMarkdown": {
             "type": "string",
             "maxLength": 50000,
-            "description": "최초 전달은 변경·구현 요약, API 명세 링크, 사용 가능 환경, 추가·변경 API, 요청·응답 변경, 오류·권한, 프론트 주의사항을 필요할 때만 Markdown으로 기록합니다. 추가 전달은 변경 사항과 프론트 조치만 기록합니다. 제목만 있는 빈 섹션은 저장하지 않습니다.",
-            "example": "## 변경 요약\n\n로그인 응답에 워크스페이스 정보를 추가했습니다.\n\n## API 명세 링크\n\nhttps://api.example.com/openapi.json\n\n## 사용 가능 환경\n\n개발 환경\n\n## 추가·변경 API\n\nPOST /sessions\n\n## 요청·응답 변경\n\n응답에 workspaceId를 추가했습니다.\n\n## 오류·권한\n\n401 응답 계약은 동일합니다.\n\n## 프론트 주의사항\n\n기존 필드는 유지됩니다."
+            "description": "팀 간 전달은 작업 결과, 결과물 링크, 사용 가능 환경, 후속 작업, 입력·출력 변경, 주의·권한과 전달 대상 참고사항을 필요한 만큼 Markdown으로 기록합니다. 추가 전달은 변경 사항과 다음 팀의 조치만 기록합니다. 제목만 있는 빈 섹션은 저장하지 않습니다.",
+            "example": "## 작업 결과 요약\n\n로그인 응답에 워크스페이스 정보를 추가했습니다.\n\n## 결과물 링크\n\nhttps://api.example.com/openapi.json\n\n## 사용 가능 환경\n\n개발 환경\n\n## 후속 작업\n\nPOST /sessions\n\n## 입력·출력 변경\n\n응답에 workspaceId를 추가했습니다.\n\n## 주의·권한\n\n401 응답 계약은 동일합니다.\n\n## 전달 대상 참고사항\n\n기존 필드는 유지됩니다."
           },
-          "destinationRoles": {
-            "type": "array",
+          "destinationProjectTeamIds": {
             "uniqueItems": true,
-            "maxItems": 2,
+            "maxItems": 100,
+            "description": "최초 전달에서 생성하거나 재사용할 같은 프로젝트의 활성 참여 팀 ID",
+            "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "WEB_FRONTEND",
-                "APP_FRONTEND"
-              ]
-            },
-            "description": "최초 전달에서 생성하거나 재사용할 프론트엔드 역할"
+              "format": "uuid"
+            }
           }
         },
         "required": [
@@ -10111,25 +10108,25 @@
           "teamIds"
         ]
       },
-      "CsvImportProjectRoleTeamOptionDto": {
+      "CsvImportProjectTeamOptionDto": {
         "type": "object",
         "properties": {
-          "role": {
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
+          "id": {
+            "type": "string",
+            "format": "uuid"
           },
           "teamId": {
             "type": "string",
             "format": "uuid"
+          },
+          "active": {
+            "type": "boolean"
           }
         },
         "required": [
-          "role",
-          "teamId"
+          "id",
+          "teamId",
+          "active"
         ]
       },
       "CsvImportProjectOptionDto": {
@@ -10146,10 +10143,10 @@
             "type": "number",
             "minimum": 1
           },
-          "roleTeams": {
+          "projectTeams": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/CsvImportProjectRoleTeamOptionDto"
+              "$ref": "#/components/schemas/CsvImportProjectTeamOptionDto"
             }
           }
         },
@@ -10157,7 +10154,7 @@
           "id",
           "name",
           "version",
-          "roleTeams"
+          "projectTeams"
         ]
       },
       "CsvImportLabelOptionDto": {
@@ -10604,14 +10601,10 @@
             "nullable": true,
             "format": "uuid"
           },
-          "initialRole": {
+          "initialProjectTeamId": {
+            "type": "string",
             "nullable": true,
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
+            "format": "uuid"
           },
           "archived": {
             "type": "boolean"
@@ -10629,7 +10622,7 @@
               "ARCHIVED",
               "LABEL_UNAVAILABLE",
               "PROJECT_UNAVAILABLE",
-              "ROLE_UNAVAILABLE",
+              "PROJECT_TEAM_UNAVAILABLE",
               "TEAM_UNAVAILABLE"
             ],
             "type": "string"
@@ -10642,7 +10635,7 @@
           "priority",
           "labelIds",
           "projectId",
-          "initialRole",
+          "initialProjectTeamId",
           "archived",
           "version",
           "available",
@@ -10701,14 +10694,11 @@
             "nullable": true,
             "format": "uuid"
           },
-          "initialRole": {
+          "initialProjectTeamId": {
+            "type": "string",
             "nullable": true,
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
+            "format": "uuid",
+            "description": "기본 프로젝트의 활성 참여 팀 ID"
           }
         },
         "required": [
@@ -10757,14 +10747,11 @@
             "nullable": true,
             "format": "uuid"
           },
-          "initialRole": {
+          "initialProjectTeamId": {
+            "type": "string",
             "nullable": true,
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
+            "format": "uuid",
+            "description": "기본 프로젝트의 활성 참여 팀 ID"
           }
         },
         "required": [
@@ -10939,6 +10926,50 @@
           "status"
         ]
       },
+      "IssueTeamSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "key",
+          "archived"
+        ]
+      },
+      "IssueProjectTeamSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "team": {
+            "$ref": "#/components/schemas/IssueTeamSummaryResponseDto"
+          }
+        },
+        "required": [
+          "id",
+          "active",
+          "team"
+        ]
+      },
       "IssueWorkflowSummaryResponseDto": {
         "type": "object",
         "properties": {
@@ -10958,15 +10989,10 @@
             "type": "number",
             "minimum": 0
           },
-          "activeRoles": {
+          "activeTeams": {
             "type": "array",
             "items": {
-              "type": "string",
-              "enum": [
-                "BACKEND",
-                "WEB_FRONTEND",
-                "APP_FRONTEND"
-              ]
+              "$ref": "#/components/schemas/IssueProjectTeamSummaryResponseDto"
             }
           },
           "allTeamWorksCompleted": {
@@ -10978,7 +11004,7 @@
           "completedCount",
           "canceledCount",
           "unassignedCount",
-          "activeRoles",
+          "activeTeams",
           "allTeamWorksCompleted"
         ]
       },
@@ -11144,30 +11170,6 @@
           "labels"
         ]
       },
-      "IssueTeamSummaryResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "key": {
-            "type": "string"
-          },
-          "archived": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "key",
-          "archived"
-        ]
-      },
       "IssueWorkflowStateSummaryResponseDto": {
         "type": "object",
         "properties": {
@@ -11223,16 +11225,8 @@
           "issue": {
             "$ref": "#/components/schemas/TeamWorkIssueSummaryResponseDto"
           },
-          "projectRole": {
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
-          },
-          "team": {
-            "$ref": "#/components/schemas/IssueTeamSummaryResponseDto"
+          "projectTeam": {
+            "$ref": "#/components/schemas/IssueProjectTeamSummaryResponseDto"
           },
           "workflowState": {
             "$ref": "#/components/schemas/IssueWorkflowStateSummaryResponseDto"
@@ -11278,8 +11272,7 @@
           "id",
           "identifier",
           "issue",
-          "projectRole",
-          "team",
+          "projectTeam",
           "workflowState",
           "stateCategory",
           "assignee",
@@ -11313,16 +11306,13 @@
           "totalCount"
         ]
       },
-      "InitialRoleAssignmentDto": {
+      "InitialTeamAssignmentDto": {
         "type": "object",
         "properties": {
-          "projectRole": {
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
+          "projectTeamId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "프로젝트 참여 팀 ID"
           },
           "assigneeMembershipId": {
             "type": "string",
@@ -11331,7 +11321,7 @@
           }
         },
         "required": [
-          "projectRole"
+          "projectTeamId"
         ]
       },
       "AppliedIssueTemplateDto": {
@@ -11397,13 +11387,13 @@
               "format": "uuid"
             }
           },
-          "initialRoles": {
+          "initialTeams": {
             "uniqueItems": true,
-            "maxItems": 3,
-            "description": "생성과 함께 시작할 프로젝트 역할",
+            "maxItems": 100,
+            "description": "생성과 함께 시작할 프로젝트 참여 팀",
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/InitialRoleAssignmentDto"
+              "$ref": "#/components/schemas/InitialTeamAssignmentDto"
             }
           },
           "appliedTemplate": {
@@ -11508,16 +11498,8 @@
           "identifier": {
             "type": "string"
           },
-          "projectRole": {
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
-          },
-          "team": {
-            "$ref": "#/components/schemas/IssueTeamSummaryResponseDto"
+          "projectTeam": {
+            "$ref": "#/components/schemas/IssueProjectTeamSummaryResponseDto"
           },
           "workflowState": {
             "$ref": "#/components/schemas/IssueWorkflowStateSummaryResponseDto"
@@ -11526,8 +11508,7 @@
         "required": [
           "id",
           "identifier",
-          "projectRole",
-          "team",
+          "projectTeam",
           "workflowState"
         ]
       },
@@ -11721,22 +11702,22 @@
       "StartIssueDto": {
         "type": "object",
         "properties": {
-          "roleAssignments": {
+          "teamAssignments": {
             "uniqueItems": true,
             "minItems": 1,
-            "maxItems": 3,
+            "maxItems": 100,
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/InitialRoleAssignmentDto"
+              "$ref": "#/components/schemas/InitialTeamAssignmentDto"
             }
           },
           "requireCurrentUserTeamMembership": {
             "type": "boolean",
-            "description": "선택 역할 팀에 현재 사용자가 활성 멤버인지 확인"
+            "description": "선택 팀에 현재 사용자가 활성 멤버인지 확인"
           }
         },
         "required": [
-          "roleAssignments"
+          "teamAssignments"
         ]
       },
       "StartIssueResponseDto": {
@@ -11760,13 +11741,10 @@
       "ClaimTeamWorkDto": {
         "type": "object",
         "properties": {
-          "projectRole": {
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
+          "projectTeamId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "프로젝트 참여 팀 ID"
           },
           "teamWorkId": {
             "type": "string",
@@ -11775,7 +11753,7 @@
           }
         },
         "required": [
-          "projectRole"
+          "projectTeamId"
         ]
       },
       "ClaimTeamWorkResponseDto": {
@@ -12044,16 +12022,8 @@
           "issue": {
             "$ref": "#/components/schemas/TeamWorkIssueSummaryResponseDto"
           },
-          "projectRole": {
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
-          },
-          "team": {
-            "$ref": "#/components/schemas/IssueTeamSummaryResponseDto"
+          "projectTeam": {
+            "$ref": "#/components/schemas/IssueProjectTeamSummaryResponseDto"
           },
           "workflowState": {
             "$ref": "#/components/schemas/IssueWorkflowStateSummaryResponseDto"
@@ -12099,8 +12069,7 @@
           "id",
           "identifier",
           "issue",
-          "projectRole",
-          "team",
+          "projectTeam",
           "workflowState",
           "stateCategory",
           "assignee",
@@ -12117,16 +12086,14 @@
             "type": "string",
             "maxLength": 50000
           },
-          "destinationRoles": {
-            "type": "array",
+          "destinationProjectTeamIds": {
             "uniqueItems": true,
-            "maxItems": 2,
+            "maxItems": 100,
+            "description": "같은 프로젝트에서 전달할 활성 참여 팀 ID",
+            "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "WEB_FRONTEND",
-                "APP_FRONTEND"
-              ]
+              "format": "uuid"
             }
           }
         },
@@ -12470,7 +12437,7 @@
           },
           "name": {
             "type": "string",
-            "example": "프론트 웹"
+            "example": "디자인"
           },
           "key": {
             "type": "string",
@@ -12967,23 +12934,29 @@
           "archived"
         ]
       },
-      "ProjectRoleTeamResponseDto": {
+      "ProjectTeamResponseDto": {
         "type": "object",
         "properties": {
-          "role": {
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "deactivatedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
           },
           "team": {
             "$ref": "#/components/schemas/ProjectTeamSummaryResponseDto"
           }
         },
         "required": [
-          "role",
+          "id",
+          "active",
+          "deactivatedAt",
           "team"
         ]
       },
@@ -13052,10 +13025,10 @@
             "nullable": true,
             "format": "date"
           },
-          "roleTeams": {
+          "projectTeams": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProjectRoleTeamResponseDto"
+              "$ref": "#/components/schemas/ProjectTeamResponseDto"
             }
           },
           "progress": {
@@ -13085,7 +13058,7 @@
           "lead",
           "startDate",
           "targetDate",
-          "roleTeams",
+          "projectTeams",
           "progress",
           "archived",
           "version",
@@ -13110,27 +13083,6 @@
         "required": [
           "items",
           "nextCursor"
-        ]
-      },
-      "ProjectRoleTeamInputDto": {
-        "type": "object",
-        "properties": {
-          "role": {
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
-          },
-          "teamId": {
-            "type": "string",
-            "format": "uuid"
-          }
-        },
-        "required": [
-          "role",
-          "teamId"
         ]
       },
       "CreateProjectDto": {
@@ -13173,19 +13125,18 @@
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "format": "date"
           },
-          "roleTeams": {
+          "teamIds": {
             "uniqueItems": true,
-            "maxItems": 3,
-            "minItems": 1,
+            "maxItems": 100,
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProjectRoleTeamInputDto"
+              "type": "string",
+              "format": "uuid"
             }
           }
         },
         "required": [
-          "name",
-          "roleTeams"
+          "name"
         ]
       },
       "UpdateProjectDto": {
@@ -13231,13 +13182,13 @@
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "format": "date"
           },
-          "roleTeams": {
+          "teamIds": {
             "uniqueItems": true,
-            "maxItems": 3,
-            "minItems": 1,
+            "maxItems": 100,
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProjectRoleTeamInputDto"
+              "type": "string",
+              "format": "uuid"
             }
           }
         },
@@ -13524,7 +13475,7 @@
           },
           "name": {
             "type": "string",
-            "example": "프론트 웹"
+            "example": "디자인"
           },
           "key": {
             "type": "string",
@@ -13578,7 +13529,7 @@
           "name": {
             "type": "string",
             "maxLength": 100,
-            "example": "프론트 웹",
+            "example": "디자인",
             "minLength": 1
           },
           "key": {
@@ -13655,7 +13606,7 @@
           },
           "name": {
             "type": "string",
-            "example": "프론트 웹"
+            "example": "디자인"
           },
           "key": {
             "type": "string",
@@ -13699,7 +13650,7 @@
           "name": {
             "type": "string",
             "maxLength": 100,
-            "example": "프론트 웹",
+            "example": "디자인",
             "minLength": 1
           },
           "key": {
@@ -13839,16 +13790,15 @@
           "name"
         ]
       },
-      "TrashProjectRoleTeamResponseDto": {
+      "TrashProjectTeamResponseDto": {
         "type": "object",
         "properties": {
-          "role": {
-            "enum": [
-              "BACKEND",
-              "WEB_FRONTEND",
-              "APP_FRONTEND"
-            ],
-            "type": "string"
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "active": {
+            "type": "boolean"
           },
           "teamId": {
             "type": "string",
@@ -13862,7 +13812,8 @@
           }
         },
         "required": [
-          "role",
+          "id",
+          "active",
           "teamId",
           "teamName",
           "teamArchived"
@@ -13916,10 +13867,10 @@
               }
             ]
           },
-          "roleTeams": {
+          "projectTeams": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/TrashProjectRoleTeamResponseDto"
+              "$ref": "#/components/schemas/TrashProjectTeamResponseDto"
             }
           }
         },
@@ -13932,7 +13883,7 @@
           "purgeAt",
           "createdAt",
           "version",
-          "roleTeams"
+          "projectTeams"
         ]
       },
       "TrashListResponseDto": {

@@ -1,11 +1,11 @@
 export const HANDOFF_SECTION_TITLES = [
-  '변경 요약',
-  'API 명세 링크',
+  '작업 결과 요약',
+  '결과물 링크',
   '사용 가능 환경',
-  '추가·변경 API',
-  '요청·응답 변경',
-  '오류·권한',
-  '프론트 주의사항',
+  '후속 작업',
+  '입력·출력 변경',
+  '주의·권한',
+  '전달 대상 참고사항',
 ] as const;
 
 export const HANDOFF_TEMPLATE = HANDOFF_SECTION_TITLES.map((heading) => `## ${heading}`).join(
@@ -14,8 +14,8 @@ export const HANDOFF_TEMPLATE = HANDOFF_SECTION_TITLES.map((heading) => `## ${he
 
 export const FOLLOW_UP_HANDOFF_TEMPLATE = [
   '## 변경 요약',
-  '## 변경된 API 또는 요청·응답',
-  '## 프론트에서 필요한 조치',
+  '## 변경된 결과 또는 입력·출력',
+  '## 다음 팀에서 필요한 조치',
 ].join('\n\n');
 
 function safeHttpUrl(candidate: string): string | null {
@@ -35,7 +35,9 @@ function safeHttpUrl(candidate: string): string | null {
 export function extractHandoffApiSpecificationUrl(body: string): string | null {
   const bodyMarkdown = body.normalize('NFC').trim();
   const headings = [...bodyMarkdown.matchAll(/^##[ \t]+(.+?)[ \t]*$/gmu)];
-  const apiHeadingIndex = headings.findIndex((heading) => heading[1] === 'API 명세 링크');
+  const apiHeadingIndex = headings.findIndex(
+    (heading) => heading[1] === '결과물 링크' || heading[1] === 'API 명세 링크',
+  );
   const apiHeading = headings[apiHeadingIndex];
   if (!apiHeading) return null;
 
