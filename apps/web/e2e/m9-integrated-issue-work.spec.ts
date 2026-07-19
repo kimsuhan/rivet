@@ -115,6 +115,7 @@ async function completeOnboarding(
   await page.getByLabel('비밀번호', { exact: true }).fill(input.password);
   await page.getByRole('button', { name: '로그인', exact: true }).click();
   await expect(page).toHaveURL(/\/onboarding\/workspace$/u);
+  await page.getByRole('button', { name: '새 워크스페이스 만들기' }).click();
   await page.getByLabel('워크스페이스 이름').fill('M9 브라우저 워크스페이스');
   await page.getByLabel('슬러그').fill(input.slug);
   await page.getByRole('button', { name: '워크스페이스 만들기' }).click();

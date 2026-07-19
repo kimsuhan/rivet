@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FileUploadQueue } from './file-upload-queue';
 import { optimizeWorkspaceImage } from './image-optimizer';
@@ -36,7 +36,23 @@ function uploaded(id: string, file: File) {
 }
 
 describe('FileUploadQueue', () => {
-  afterEach(cleanup);
+  const NativeURL = URL;
+  const createObjectURL = vi.fn((file: File) => `blob:${file.name}`);
+  const revokeObjectURL = vi.fn();
+
+  beforeEach(() => {
+    class TestURL extends NativeURL {
+      static override createObjectURL = createObjectURL;
+      static override revokeObjectURL = revokeObjectURL;
+    }
+    vi.stubGlobal('URL', TestURL);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
 
   it('compact 모드는 기본 상태에서 아이콘 트리거만 보이고 파일 선택 뒤 큐를 펼친다', async () => {
     const user = userEvent.setup();
@@ -55,14 +71,51 @@ describe('FileUploadQueue', () => {
     if (!input) return;
     const root = input.closest('div');
     expect(screen.getByRole('button', { name: labels.chooseFiles })).toBeVisible();
-    expect(root).toHaveClass('w-fit');
+    expect(root).toHaveClass('contents');
     expect(screen.queryByRole('list', { name: labels.selectedFiles })).not.toBeInTheDocument();
 
     await user.upload(input, new File(['attached'], 'attached.txt', { type: 'text/plain' }));
 
     expect(await screen.findByRole('list', { name: labels.selectedFiles })).toBeVisible();
-    expect(root).toHaveClass('w-full');
+    expect(root).toHaveClass('contents');
+    expect(screen.getByRole('list', { name: labels.selectedFiles })).toHaveClass('basis-full');
     await waitFor(() => expect(sendFile).toHaveBeenCalledTimes(1));
+  });
+
+  it('이미지는 로컬 미리보기를 표시하고 다른 파일은 유형별 아이콘을 사용한다', async () => {
+    const user = userEvent.setup();
+    const sendFile = vi.fn(async (file: File) => uploaded(file.name, file));
+    const { container } = render(
+      <FileUploadQueue
+        compactTrigger
+        labels={labels}
+        onFileIdsChange={() => undefined}
+        sendFile={sendFile}
+      />,
+    );
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    if (!input) return;
+
+    await user.upload(input, [
+      new File(['image'], 'screen.png', { type: 'image/png' }),
+      new File(['rows'], 'report.csv', { type: 'text/csv' }),
+      new File(['archive'], 'bundle.zip', { type: 'application/zip' }),
+      new File(['code'], 'README.md', { type: 'text/markdown' }),
+    ]);
+
+    expect(await screen.findByRole('list', { name: labels.selectedFiles })).toBeVisible();
+    expect(container.querySelector('img[data-file-kind="image"]')).toHaveAttribute(
+      'src',
+      'blob:screen.png',
+    );
+    expect(container.querySelector('[data-file-kind="spreadsheet"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-file-kind="archive"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-file-kind="code"]')).toBeInTheDocument();
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: `screen.png ${labels.remove}` }));
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:screen.png');
   });
 
   it('일부 실패가 성공 ID를 잃지 않으며 재시도와 제거 상태를 독립 처리한다', async () => {

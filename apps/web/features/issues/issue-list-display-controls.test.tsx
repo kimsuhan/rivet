@@ -35,6 +35,7 @@ describe('IssueListDisplayControls', () => {
 
     expect(onSortDirectionChange).toHaveBeenCalledWith('asc');
     expect(onDensityChange).toHaveBeenCalledWith('compact');
+    expect(document.querySelector('[data-slot="separator"]')).toHaveClass('-my-0.5');
   });
 
   it('정렬 메뉴에는 기준만 한 번씩 노출한다', async () => {

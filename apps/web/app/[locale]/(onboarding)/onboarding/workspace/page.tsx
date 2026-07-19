@@ -12,7 +12,7 @@ export async function generateMetadata({
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: 'Onboarding.workspace' });
 
-  return { title: t('title') };
+  return { title: t('entryTitle') };
 }
 
 export default async function WorkspaceOnboardingPage({
@@ -47,8 +47,23 @@ export default async function WorkspaceOnboardingPage({
           inviteStep: common('inviteStep'),
           currentStepStatus: common('currentStepStatus'),
           completedStepStatus: common('completedStepStatus'),
+          entryTitle: t('entryTitle'),
+          entryDescription: t('entryDescription'),
+          invitationChoiceTitle: t('invitationChoiceTitle'),
+          invitationChoiceDescription: t('invitationChoiceDescription'),
+          creationChoiceTitle: t('creationChoiceTitle'),
+          creationChoiceDescription: t('creationChoiceDescription'),
+          waitingTitle: t('waitingTitle'),
+          waitingDescription: t('waitingDescription'),
+          waitingEmailLabel: t('waitingEmailLabel'),
+          waitingEmailUnavailable: t('waitingEmailUnavailable'),
+          waitingHelpTitle: t('waitingHelpTitle'),
+          waitingHelpDescription: t('waitingHelpDescription'),
+          backToChoices: t('backToChoices'),
           title: t('title'),
           description: t('description'),
+          creationWarningTitle: t('creationWarningTitle'),
+          creationWarningDescription: t('creationWarningDescription'),
           nameLabel: t('nameLabel'),
           namePlaceholder: t('namePlaceholder'),
           nameRequired: t('nameRequired'),

@@ -49,7 +49,8 @@ const labels = {
   issueIdExampleLabel: '표시 ID 예시',
   issueIdPlaceholder: 'TEAM',
   keyFormat: '팀 키는 영문 대문자 2~5자로 입력해 주세요.',
-  keyImmutableDescription: '첫 이슈를 만든 뒤에는 팀 키를 변경할 수 없습니다.',
+  keyImmutableDescription:
+    '팀 이름을 바탕으로 자동 생성되며 영문 대문자 2~5자로 수정할 수 있습니다. 첫 이슈를 만든 뒤에는 변경할 수 없습니다.',
   keyInUse: '이미 사용 중인 팀 키입니다. 다른 키를 입력해 주세요.',
   keyLabel: '팀 키',
   keyPlaceholder: 'WEB',
@@ -150,14 +151,14 @@ describe('TeamOnboardingScreen', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: labels.title })).toBeVisible();
     expect(screen.getByText('김리벳')).toBeVisible();
-    await user.type(screen.getByLabelText(labels.nameLabel), '웹');
-    await user.type(screen.getByLabelText(labels.keyLabel), 'WEB');
+    await user.type(screen.getByLabelText(labels.nameLabel), 'web');
+    expect(screen.getByLabelText(labels.keyLabel)).toHaveValue('WEB');
     expect(screen.getByText('WEB-1')).toBeVisible();
     await user.click(screen.getByRole('button', { name: labels.submit }));
 
     await waitFor(() =>
       expect(mocks.mutate).toHaveBeenCalledWith(
-        { data: { key: 'WEB', memberIds: ['membership-id'], name: '웹' } },
+        { data: { key: 'WEB', memberIds: ['membership-id'], name: 'web' } },
         expect.any(Object),
       ),
     );
@@ -169,17 +170,62 @@ describe('TeamOnboardingScreen', () => {
     expect(mocks.hardReplace).toHaveBeenCalledWith('/ko/onboarding/invite');
   });
 
-  it('팀 키를 영문 대문자 2~5자로 제한하고 키 불변 안내를 표시한다', async () => {
+  it('팀 이름으로 키를 자동 생성하고 이름 변경과 함께 갱신한다', async () => {
     const user = userEvent.setup();
     renderScreen();
 
-    await user.type(screen.getByLabelText(labels.nameLabel), '웹');
-    await user.type(screen.getByLabelText(labels.keyLabel), 'web');
+    const nameInput = screen.getByLabelText(labels.nameLabel);
+    const keyInput = screen.getByLabelText(labels.keyLabel);
+    await user.type(nameInput, 'Product Design');
+
+    expect(keyInput).toHaveValue('PD');
+    expect(screen.getByText('PD-1')).toBeVisible();
+
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Web Platform');
+
+    expect(keyInput).toHaveValue('WP');
+
+    await user.clear(nameInput);
+    await user.type(nameInput, 'X');
+
+    expect(keyInput).toHaveValue('XTEAM');
+  });
+
+  it('한글 이름에 유효한 기본 키를 만들고 직접 입력은 영문 대문자로 정규화한다', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    const nameInput = screen.getByLabelText(labels.nameLabel);
+    const keyInput = screen.getByLabelText(labels.keyLabel);
+    await user.type(nameInput, '웹 플랫폼');
+
+    expect((keyInput as HTMLInputElement).value).toMatch(/^T[A-Z]{4}$/);
+
+    await user.clear(keyInput);
+    await user.type(keyInput, 'w3e-b한글');
+
+    expect(keyInput).toHaveValue('WEB');
+
+    await user.clear(nameInput);
+    await user.type(nameInput, '다른 팀');
+
+    expect(keyInput).toHaveValue('WEB');
+    expect(screen.getByText(labels.keyImmutableDescription)).toBeVisible();
+  });
+
+  it('정규화한 팀 키가 2자보다 짧으면 길이 오류를 표시한다', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.type(screen.getByLabelText(labels.nameLabel), 'web');
+    await user.clear(screen.getByLabelText(labels.keyLabel));
+    await user.type(screen.getByLabelText(labels.keyLabel), '1a한글');
     await user.click(screen.getByRole('button', { name: labels.submit }));
 
+    expect(screen.getByLabelText(labels.keyLabel)).toHaveValue('A');
     expect(await screen.findByText(labels.keyFormat)).toBeVisible();
     expect(screen.getByLabelText(labels.keyLabel)).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByText(labels.keyImmutableDescription)).toBeVisible();
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
 
@@ -190,8 +236,7 @@ describe('TeamOnboardingScreen', () => {
     const user = userEvent.setup();
     renderScreen();
 
-    await user.type(screen.getByLabelText(labels.nameLabel), '웹');
-    await user.type(screen.getByLabelText(labels.keyLabel), 'WEB');
+    await user.type(screen.getByLabelText(labels.nameLabel), 'web');
     await user.click(screen.getByRole('button', { name: labels.submit }));
 
     act(() => {
@@ -200,7 +245,7 @@ describe('TeamOnboardingScreen', () => {
 
     expect(await screen.findByText(message)).toBeVisible();
     expect(screen.getByLabelText(field)).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByLabelText(labels.nameLabel)).toHaveValue('웹');
+    expect(screen.getByLabelText(labels.nameLabel)).toHaveValue('web');
     expect(screen.getByLabelText(labels.keyLabel)).toHaveValue('WEB');
   });
 

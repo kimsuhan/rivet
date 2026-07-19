@@ -2,6 +2,7 @@
 
 import { Dot, Star } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
+import { useEffect } from 'react';
 
 import { useSavedViewsControllerList } from '@rivet/api-client';
 
@@ -13,8 +14,12 @@ import { savedViewHref } from './saved-view-navigation';
 
 export function SavedViewSidebarNavigation({
   resourceType,
+  expanded,
+  onHasItemsChange,
 }: {
   resourceType: 'ISSUES' | 'MY_WORK';
+  expanded: boolean;
+  onHasItemsChange?: (hasItems: boolean) => void;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -22,8 +27,13 @@ export function SavedViewSidebarNavigation({
   const views = useSavedViewsControllerList({ resourceType }, { query: { retry: false } });
   const viewPathname = resourceType === 'ISSUES' ? '/issues' : '/my-issues';
   const resourceLabel = resourceType === 'ISSUES' ? '이슈' : '내 작업';
+  const hasItems = Boolean(views.data?.items.length);
 
-  if (!views.data?.items.length) return null;
+  useEffect(() => {
+    onHasItemsChange?.(hasItems);
+  }, [hasItems, onHasItemsChange]);
+
+  if (!hasItems || !expanded) return null;
 
   return (
     <div
@@ -31,7 +41,7 @@ export function SavedViewSidebarNavigation({
       aria-label={`${resourceLabel} 저장된 보기`}
       className="ml-4 hidden flex-col gap-0.5 border-l pl-2 xl:flex"
     >
-      {views.data.items.map((view) => {
+      {views.data!.items.map((view) => {
         const active = pathname === viewPathname && selectedId === view.id;
         return (
           <Link

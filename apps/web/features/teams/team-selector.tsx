@@ -111,7 +111,12 @@ export function DesktopTeamNavigation({
                       : 'text-sidebar-foreground hover:bg-surface-2 hover:text-foreground border-transparent',
                   )}
                 >
-                  <code className="w-4 shrink-0 truncate text-center text-xs xl:w-8">
+                  <code
+                    className={cn(
+                      'w-4 shrink-0 truncate rounded text-center text-xs xl:w-8',
+                      active ? 'text-sidebar-accent-foreground' : 'bg-surface-2 text-muted-foreground',
+                    )}
+                  >
                     <span className="xl:hidden">{team.key.slice(0, 1)}</span>
                     <span className="hidden xl:inline">{team.key}</span>
                   </code>

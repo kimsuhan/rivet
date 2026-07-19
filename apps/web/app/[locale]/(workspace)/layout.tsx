@@ -75,6 +75,8 @@ export default async function WorkspaceLayout({
               openTeamSelector: shell('openTeamSelector'),
               inboxUnread: shell.raw('inboxUnread') as string,
               skipToContent: shell('skipToContent'),
+              expandSection: shell.raw('expandSection') as string,
+              collapseSection: shell.raw('collapseSection') as string,
               navigation: {
                 issues: navigation('issues'),
                 myIssues: navigation('myIssues'),
@@ -136,6 +138,9 @@ export default async function WorkspaceLayout({
                 close: issueCreate('close'),
                 description: issueCreate('description'),
                 descriptionLabel: issueCreate('descriptionLabel'),
+                discardChanges: issueCreate('discardChanges'),
+                discardDescription: issueCreate('discardDescription'),
+                discardTitle: issueCreate('discardTitle'),
                 errorDescription: issueCreate('errorDescription'),
                 errorTitle: issueCreate('errorTitle'),
                 initialRolesDescription: issueCreate('initialRolesDescription'),

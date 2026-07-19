@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useRef } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -50,7 +51,63 @@ type TeamOnboardingLabels = OnboardingFrameLabels & {
   title: string;
 };
 
+function hashTeamName(name: string) {
+  let hash = 2_166_136_261;
+
+  for (const character of name) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+
+  let letters = '';
+  let value = hash >>> 0;
+
+  for (let index = 0; index < 4; index += 1) {
+    letters += String.fromCharCode(65 + (value % 26));
+    value = Math.floor(value / 26);
+  }
+
+  return letters;
+}
+
+function createTeamKey(name: string) {
+  const trimmedName = name.trim();
+
+  if (!trimmedName) {
+    return '';
+  }
+
+  const words = trimmedName
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .match(/[A-Za-z]+/g);
+
+  if (!words?.length) {
+    return `T${hashTeamName(trimmedName)}`;
+  }
+
+  if (words.length === 1) {
+    const [word] = words;
+    const key = word?.slice(0, 5).toUpperCase() ?? '';
+    return key.length < 2 ? `${key}TEAM`.slice(0, 5) : key;
+  }
+
+  return words
+    .map((word) => word[0])
+    .join('')
+    .slice(0, 5)
+    .toUpperCase();
+}
+
+function normalizeTeamKey(value: string) {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z]/g, '')
+    .slice(0, 5);
+}
+
 export function TeamOnboardingScreen({ labels }: { labels: TeamOnboardingLabels }) {
+  const hasEditedKey = useRef(false);
   const session = useAuthControllerGetSession({ query: { retry: false } });
   const mutation = useTeamsControllerCreate();
   const schema = z.object({
@@ -68,10 +125,13 @@ export function TeamOnboardingScreen({ labels }: { labels: TeamOnboardingLabels 
     register,
     setError,
     setFocus,
+    setValue,
   } = useForm<z.infer<typeof schema>>({
     defaultValues: { key: '', name: '' },
     resolver: zodResolver(schema),
   });
+  const nameField = register('name');
+  const keyField = register('key');
   const key = useWatch({ control, name: 'key' });
   const membership =
     !session.isPending &&
@@ -173,7 +233,19 @@ export function TeamOnboardingScreen({ labels }: { labels: TeamOnboardingLabels 
                       aria-describedby="team-name-error"
                       aria-invalid={Boolean(errors.name)}
                       placeholder={labels.namePlaceholder}
-                      {...register('name')}
+                      {...nameField}
+                      onChange={(event) => {
+                        nameField.onChange(event);
+
+                        if (hasEditedKey.current) {
+                          return;
+                        }
+
+                        setValue('key', createTeamKey(event.target.value), {
+                          shouldDirty: true,
+                          shouldValidate: Boolean(errors.key),
+                        });
+                      }}
                     />
                     <FieldError id="team-name-error" errors={[errors.name]} />
                   </Field>
@@ -188,7 +260,15 @@ export function TeamOnboardingScreen({ labels }: { labels: TeamOnboardingLabels 
                       maxLength={5}
                       placeholder={labels.keyPlaceholder}
                       spellCheck={false}
-                      {...register('key')}
+                      {...keyField}
+                      onChange={(event) => {
+                        const normalizedKey = normalizeTeamKey(event.target.value);
+                        setValue('key', normalizedKey, {
+                          shouldDirty: true,
+                          shouldValidate: Boolean(errors.key),
+                        });
+                        hasEditedKey.current = true;
+                      }}
                     />
                     <FieldDescription id="team-key-description">
                       {labels.keyImmutableDescription}

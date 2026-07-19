@@ -68,7 +68,7 @@ export function IssueListDisplayControls({
       >
         {descending ? <ArrowDown /> : <ArrowUp />}
       </Button>
-      <Separator orientation="vertical" className="mx-0.5 h-4! self-center" />
+      <Separator orientation="vertical" className="mx-0.5 -my-0.5" />
       <Button
         type="button"
         size="icon-sm"

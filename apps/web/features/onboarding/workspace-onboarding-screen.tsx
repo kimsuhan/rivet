@@ -2,12 +2,20 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSyncExternalStore } from 'react';
+import {
+  ArrowLeftIcon,
+  Building2Icon,
+  CircleAlertIcon,
+  CircleHelpIcon,
+  MailIcon,
+} from 'lucide-react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 
 import {
   getAuthControllerGetSessionQueryKey,
+  useAuthControllerGetSession,
   useWorkspacesControllerCreate,
 } from '@rivet/api-client';
 
@@ -35,8 +43,17 @@ function subscribeToHost() {
 type WorkspaceOnboardingLabels = OnboardingFrameLabels & {
   addressPreviewLabel: string;
   addressPrefix: string;
+  backToChoices: string;
+  creationChoiceDescription: string;
+  creationChoiceTitle: string;
+  creationWarningDescription: string;
+  creationWarningTitle: string;
+  entryDescription: string;
+  entryTitle: string;
   errorDescription: string;
   errorTitle: string;
+  invitationChoiceDescription: string;
+  invitationChoiceTitle: string;
   nameInvalid: string;
   nameLabel: string;
   namePlaceholder: string;
@@ -55,11 +72,64 @@ type WorkspaceOnboardingLabels = OnboardingFrameLabels & {
   submitting: string;
   title: string;
   description: string;
+  waitingDescription: string;
+  waitingEmailLabel: string;
+  waitingEmailUnavailable: string;
+  waitingHelpDescription: string;
+  waitingHelpTitle: string;
+  waitingTitle: string;
 };
 
+function hashWorkspaceName(name: string) {
+  let hash = 2_166_136_261;
+
+  for (const character of name) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+
+  return (hash >>> 0).toString(36).padStart(6, '0').slice(0, 6);
+}
+
+function createWorkspaceSlug(name: string) {
+  const trimmedName = name.trim();
+
+  if (!trimmedName) {
+    return '';
+  }
+
+  const asciiSlug = trimmedName
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (!asciiSlug) {
+    return `workspace-${hashWorkspaceName(trimmedName)}`;
+  }
+
+  const validLengthSlug = asciiSlug.length < 3 ? `${asciiSlug}-workspace` : asciiSlug;
+  const slug = validLengthSlug.slice(0, 50).replace(/-+$/g, '');
+
+  return slug;
+}
+
+function BackToChoicesButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button type="button" variant="outline" size="sm" className="self-start" onClick={onClick}>
+      <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
+      {label}
+    </Button>
+  );
+}
+
 export function WorkspaceOnboardingScreen({ labels }: { labels: WorkspaceOnboardingLabels }) {
+  const [view, setView] = useState<'choice' | 'create' | 'waiting'>('choice');
+  const hasEditedSlug = useRef(false);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const session = useAuthControllerGetSession({ query: { retry: false } });
   const mutation = useWorkspacesControllerCreate();
   const addressPrefix = useSyncExternalStore(
     subscribeToHost,
@@ -83,11 +153,15 @@ export function WorkspaceOnboardingScreen({ labels }: { labels: WorkspaceOnboard
     register,
     setError,
     setFocus,
+    setValue,
   } = useForm<z.infer<typeof schema>>({
     defaultValues: { name: '', slug: '' },
     resolver: zodResolver(schema),
   });
+  const nameField = register('name');
+  const slugField = register('slug');
   const slug = useWatch({ control, name: 'slug' });
+  const accountEmail = session.data?.authenticated ? session.data.user.email : null;
   const hasMappedError = Boolean(
     mutation.error &&
     (mutation.error.body.code === 'WORKSPACE_SLUG_IN_USE' ||
@@ -136,8 +210,105 @@ export function WorkspaceOnboardingScreen({ labels }: { labels: WorkspaceOnboard
     );
   });
 
+  if (view === 'choice') {
+    return (
+      <OnboardingFrame currentStep={1} labels={labels}>
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h1>{labels.entryTitle}</h1>
+            </CardTitle>
+            <CardDescription>{labels.entryDescription}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              aria-label={labels.invitationChoiceTitle}
+              aria-describedby="invitation-choice-description"
+              className="h-auto w-full items-start justify-start px-4 py-4 text-left whitespace-normal"
+              onClick={() => setView('waiting')}
+            >
+              <MailIcon data-icon="inline-start" aria-hidden="true" />
+              <span className="flex flex-col items-start gap-1">
+                <span>{labels.invitationChoiceTitle}</span>
+                <span
+                  id="invitation-choice-description"
+                  className="text-muted-foreground text-xs leading-relaxed font-normal"
+                >
+                  {labels.invitationChoiceDescription}
+                </span>
+              </span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              aria-label={labels.creationChoiceTitle}
+              aria-describedby="creation-choice-description"
+              className="h-auto w-full items-start justify-start px-4 py-4 text-left whitespace-normal"
+              onClick={() => setView('create')}
+            >
+              <Building2Icon data-icon="inline-start" aria-hidden="true" />
+              <span className="flex flex-col items-start gap-1">
+                <span>{labels.creationChoiceTitle}</span>
+                <span
+                  id="creation-choice-description"
+                  className="text-muted-foreground text-xs leading-relaxed font-normal"
+                >
+                  {labels.creationChoiceDescription}
+                </span>
+              </span>
+            </Button>
+          </CardContent>
+        </Card>
+      </OnboardingFrame>
+    );
+  }
+
+  if (view === 'waiting') {
+    return (
+      <OnboardingFrame currentStep={1} labels={labels}>
+        <BackToChoicesButton label={labels.backToChoices} onClick={() => setView('choice')} />
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h1>{labels.waitingTitle}</h1>
+            </CardTitle>
+            <CardDescription>{labels.waitingDescription}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <Alert>
+              <MailIcon aria-hidden="true" />
+              <AlertTitle>{labels.waitingEmailLabel}</AlertTitle>
+              <AlertDescription className="break-all">
+                {accountEmail ?? labels.waitingEmailUnavailable}
+              </AlertDescription>
+            </Alert>
+            <Alert>
+              <CircleHelpIcon aria-hidden="true" />
+              <AlertTitle>{labels.waitingHelpTitle}</AlertTitle>
+              <AlertDescription>{labels.waitingHelpDescription}</AlertDescription>
+            </Alert>
+          </CardContent>
+          <CardFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => setView('create')}
+            >
+              <Building2Icon data-icon="inline-start" aria-hidden="true" />
+              {labels.creationChoiceTitle}
+            </Button>
+          </CardFooter>
+        </Card>
+      </OnboardingFrame>
+    );
+  }
+
   return (
     <OnboardingFrame currentStep={1} labels={labels}>
+      <BackToChoicesButton label={labels.backToChoices} onClick={() => setView('choice')} />
       <form noValidate aria-busy={mutation.isPending} onSubmit={submit}>
         <Card>
           <CardHeader>
@@ -147,6 +318,11 @@ export function WorkspaceOnboardingScreen({ labels }: { labels: WorkspaceOnboard
             <CardDescription>{labels.description}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
+            <Alert>
+              <CircleAlertIcon aria-hidden="true" />
+              <AlertTitle>{labels.creationWarningTitle}</AlertTitle>
+              <AlertDescription>{labels.creationWarningDescription}</AlertDescription>
+            </Alert>
             {mutation.isError && !hasMappedError ? (
               <Alert variant="destructive">
                 <AlertTitle>{labels.errorTitle}</AlertTitle>
@@ -162,7 +338,19 @@ export function WorkspaceOnboardingScreen({ labels }: { labels: WorkspaceOnboard
                   aria-describedby="workspace-name-error"
                   aria-invalid={Boolean(errors.name)}
                   placeholder={labels.namePlaceholder}
-                  {...register('name')}
+                  {...nameField}
+                  onChange={(event) => {
+                    nameField.onChange(event);
+
+                    if (hasEditedSlug.current) {
+                      return;
+                    }
+
+                    setValue('slug', createWorkspaceSlug(event.target.value), {
+                      shouldDirty: true,
+                      shouldValidate: Boolean(errors.slug),
+                    });
+                  }}
                 />
                 <FieldError id="workspace-name-error" errors={[errors.name]} />
               </Field>
@@ -176,7 +364,11 @@ export function WorkspaceOnboardingScreen({ labels }: { labels: WorkspaceOnboard
                   aria-invalid={Boolean(errors.slug)}
                   placeholder={labels.slugPlaceholder}
                   spellCheck={false}
-                  {...register('slug')}
+                  {...slugField}
+                  onChange={(event) => {
+                    slugField.onChange(event);
+                    hasEditedSlug.current = true;
+                  }}
                 />
                 <FieldDescription id="workspace-slug-description">
                   {labels.slugDescription}
