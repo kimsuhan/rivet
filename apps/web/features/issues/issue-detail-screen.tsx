@@ -40,6 +40,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -795,6 +796,7 @@ export function IssueDetailScreen({
   const selectedWork =
     issue?.teamWorks.find((work) => matchesRequestedTeamWork(work.identifier, requestedWork)) ??
     issue?.teamWorks[0];
+  const selectedWorkId = selectedWork?.id ?? null;
   const session = useAuthControllerGetSession({ query: { retry: false } });
   const members = useMembersControllerList(
     { limit: 100, status: 'ACTIVE' },
@@ -806,12 +808,23 @@ export function IssueDetailScreen({
     query: { enabled: Boolean(issue), retry: false },
   });
   const [startRoles, setStartRoles] = useState<ProjectRole[]>([]);
+  const [addTeamWorkDisclosure, setAddTeamWorkDisclosure] = useState(() => ({
+    open: selectedWork?.stateCategory !== 'STARTED',
+    workId: selectedWorkId,
+  }));
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState<{
     issueId: string;
     value: string;
   } | null>(null);
   const issueMutationError = start.error ?? updateIssue.error;
+
+  if (addTeamWorkDisclosure.workId !== selectedWorkId) {
+    setAddTeamWorkDisclosure({
+      open: selectedWork?.stateCategory !== 'STARTED',
+      workId: selectedWorkId,
+    });
+  }
 
   useEffect(() => {
     if (isMyWorkEntry || !issueQuery.isError || !legacyWork.data) return;
@@ -892,6 +905,7 @@ export function IssueDetailScreen({
   const availableRoles = (project.data?.roleTeams ?? [])
     .map(({ role }) => role)
     .filter((role) => !currentIssue.teamWorks.some((work) => work.projectRole === role));
+  const addTeamWorkOpen = addTeamWorkDisclosure.open;
   async function startWorks() {
     if (!startRoles.length) return;
     try {
@@ -988,11 +1002,21 @@ export function IssueDetailScreen({
                   ) : (
                     <PriorityDisplay priority={issue.priority} />
                   )}
-                  <span className="tabular-nums">
-                    {issue.progress.total === 0
-                      ? '아직 시작된 팀 작업이 없습니다'
-                      : `작업 ${issue.progress.completed}/${issue.progress.total} 완료 · ${issue.progress.percentage}%`}
-                  </span>
+                  {issue.progress.total === 0 ? (
+                    <span>아직 시작된 팀 작업이 없습니다</span>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="tabular-nums">
+                        작업 {issue.progress.completed}/{issue.progress.total} 완료 ·{' '}
+                        {issue.progress.percentage}%
+                      </span>
+                      <Progress
+                        aria-label={`작업 진행률 ${issue.progress.percentage}%`}
+                        className="w-20 shrink-0 sm:w-24"
+                        value={issue.progress.percentage}
+                      />
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -1017,7 +1041,7 @@ export function IssueDetailScreen({
               <Button size="sm" variant="outline" onClick={() => void statusAction('REOPEN')}>
                 다시 열기
               </Button>
-            ) : !isMyWorkEntry ? (
+            ) : !isMyWorkEntry && issue.status === 'IN_PROGRESS' ? (
               <Button size="sm" variant="outline" onClick={() => void statusAction('PAUSE')}>
                 일시 중지
               </Button>
@@ -1148,7 +1172,13 @@ export function IssueDetailScreen({
                   ? 'rounded-lg border border-dashed p-3'
                   : 'bg-surface-2 rounded-lg border p-3'
               }
-              open={selectedWork?.stateCategory !== 'STARTED'}
+              open={addTeamWorkOpen}
+              onToggle={(event) =>
+                setAddTeamWorkDisclosure({
+                  open: event.currentTarget.open,
+                  workId: selectedWorkId,
+                })
+              }
             >
               <summary
                 className={

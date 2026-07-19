@@ -366,6 +366,23 @@ describe('MarkdownEditor @ mention typeahead', () => {
 describe('MarkdownEditor density and character count', () => {
   afterEach(() => cleanup());
 
+  it('이미지 업로드 동작을 서식 도구와 세로 구분선으로 묶어 표시한다', () => {
+    render(
+      <Harness>
+        {(value, onChange) => (
+          <CommentEditor charLimit={100} labels={labels} onChange={onChange} value={value} />
+        )}
+      </Harness>,
+    );
+
+    const toolbar = screen.getByRole('toolbar', { name: labels.toolbar });
+    const separator = toolbar.querySelector('[data-slot="separator"]');
+    const imageInput = screen.getByLabelText(labels.image.choose);
+
+    expect(separator).toHaveAttribute('data-orientation', 'vertical');
+    expect(separator?.nextElementSibling).toContainElement(imageInput);
+  });
+
   it.each([
     {
       classes: ['text-xl', 'font-semibold'],

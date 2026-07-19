@@ -21,6 +21,17 @@ vi.mock('@rivet/api-client', () => ({
     },
   }),
   useNotificationsControllerUnreadCount: () => ({ data: { count: 7 } }),
+  useProjectsControllerList: () => ({
+    data: {
+      items: [
+        {
+          id: 'project-1',
+          name: '리벳 웹',
+        },
+      ],
+      nextCursor: null,
+    },
+  }),
   useSavedViewsControllerList: ({ resourceType }: { resourceType: 'ISSUES' | 'MY_WORK' }) => ({
     data: {
       items:
@@ -178,6 +189,8 @@ const labels = {
   },
   openSearch: '검색 열기',
   openTeamSelector: '팀 선택 열기',
+  expandSection: '{section} 하위 목록 펼치기',
+  collapseSection: '{section} 하위 목록 접기',
   profile: {
     cancel: '취소',
     choose: '사진 선택',
@@ -218,6 +231,9 @@ const labels = {
     close: '이슈 만들기 닫기',
     description: '설명',
     descriptionLabel: '설명',
+    discardChanges: '변경 버리기',
+    discardDescription: '저장하지 않은 입력은 복구할 수 없음',
+    discardTitle: '작성 중인 변경 버리기',
     errorDescription: '오류 설명',
     errorTitle: '오류',
     initialRolesDescription: '선택하지 않아도 됩니다.',
@@ -368,7 +384,7 @@ describe('AppShell', () => {
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
   });
 
-  it('데스크톱과 모바일에서 이슈, 내 작업, 알림함, 프로젝트 순서를 유지한다', () => {
+  it('데스크톱과 모바일에서 내 작업, 알림함, 이슈, 프로젝트 순서를 유지한다', () => {
     render(
       <AppShell labels={labels}>
         <p>업무 내용</p>
@@ -379,12 +395,13 @@ describe('AppShell', () => {
       screen.getByRole('navigation', { name: labels.desktopNavigation }),
     ).getAllByRole('link');
     expect(desktopLinks.map((link) => link.getAttribute('href'))).toEqual([
-      '/issues',
-      '/issues?view=saved-issues&query=%EA%B8%B4%EA%B8%89&sort=priority&sortDirection=desc',
       '/my-issues',
       '/my-issues?view=saved-my-work&sort=executionOrder&sortDirection=desc',
       '/inbox',
+      '/issues',
+      '/issues?view=saved-issues&query=%EA%B8%B4%EA%B8%89&sort=priority&sortDirection=desc',
       '/projects',
+      '/projects/project-1',
     ]);
 
     const mobileNavigation = screen.getByRole('navigation', { name: labels.mobileNavigation });
@@ -392,12 +409,12 @@ describe('AppShell', () => {
       within(mobileNavigation)
         .getAllByRole('link')
         .map((link) => link.getAttribute('href')),
-    ).toEqual(['/issues', '/my-issues', '/inbox', '/projects']);
+    ).toEqual(['/my-issues', '/inbox', '/issues', '/projects']);
     expect(
       Array.from(mobileNavigation.children).map(
         (item) => item.getAttribute('href') ?? item.getAttribute('aria-label'),
       ),
-    ).toEqual(['/issues', '/my-issues', '/inbox', '/projects', labels.openTeamSelector]);
+    ).toEqual(['/my-issues', '/inbox', '/issues', '/projects', labels.openTeamSelector]);
     expect(
       within(mobileNavigation).getByRole('button', { name: labels.openTeamSelector }),
     ).toBeVisible();
@@ -475,6 +492,31 @@ describe('AppShell', () => {
       'href',
       '/my-issues?view=saved-my-work&sort=executionOrder&sortDirection=desc',
     );
+  });
+
+  it('데스크톱 사이드바에서 프로젝트를 하위 메뉴로 표시하고 해당 이슈 화면으로 연결한다', () => {
+    pathname = '/projects/project-1';
+    window.history.replaceState({}, '', '/ko/projects/project-1');
+
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    const desktopNavigation = screen.getByRole('navigation', { name: labels.desktopNavigation });
+    const projectGroup = within(desktopNavigation).getByRole('group', {
+      name: '프로젝트 목록',
+    });
+    const projectParent = within(desktopNavigation).getByRole('link', {
+      name: labels.navigation.projects,
+    });
+    const projectLink = within(projectGroup).getByRole('link', { name: '리벳 웹' });
+
+    expect(projectParent).toHaveAttribute('aria-current', 'page');
+    expect(projectLink).toHaveAttribute('aria-current', 'location');
+    expect(projectLink).toHaveAttribute('href', '/projects/project-1');
+    expect(projectLink).toHaveAttribute('title', '리벳 웹 프로젝트 이슈 보기');
   });
 
   it('내 작업 상세 경로에서는 내 작업 탐색을 활성화한다', () => {
@@ -592,6 +634,13 @@ describe('AppShell', () => {
     expect(window.location.pathname).toBe('/ko/my-issues');
     expect(window.location.search).toBe('?view=all');
     expect(window.location.hash).toBe('#top');
+    const desktopNavigation = screen.getByRole('navigation', { name: labels.desktopNavigation });
+    expect(
+      within(desktopNavigation).getByRole('link', { name: labels.navigation.myIssues }),
+    ).toHaveAttribute('aria-current', 'page');
+    expect(
+      within(desktopNavigation).getByRole('link', { name: labels.navigation.issues }),
+    ).not.toHaveAttribute('aria-current');
   });
 
   it('팀 화면 create 플래그를 소비하고 현재 팀을 만들기 기본값으로 전달한다', async () => {
@@ -629,6 +678,13 @@ describe('AppShell', () => {
     expect(window.location.pathname).toBe('/ko/projects/project-1');
     expect(window.location.search).toBe('?view=active');
     expect(window.location.hash).toBe('#tree');
+    const desktopNavigation = screen.getByRole('navigation', { name: labels.desktopNavigation });
+    expect(
+      within(desktopNavigation).getByRole('link', { name: labels.navigation.projects }),
+    ).toHaveAttribute('aria-current', 'page');
+    expect(
+      within(desktopNavigation).getByRole('link', { name: labels.navigation.issues }),
+    ).not.toHaveAttribute('aria-current');
   });
 
   it('직접 연 팀 보드를 마지막 팀과 보기로 기억한다', async () => {

@@ -1,6 +1,20 @@
 'use client';
 
-import { FileIcon, PaperclipIcon, RotateCwIcon, Trash2Icon, UploadIcon } from 'lucide-react';
+import {
+  FileArchiveIcon,
+  FileAudioIcon,
+  FileCode2Icon,
+  FileIcon,
+  FileSpreadsheetIcon,
+  FileTextIcon,
+  FileVideoIcon,
+  type LucideIcon,
+  PaperclipIcon,
+  RotateCwIcon,
+  Trash2Icon,
+  UploadIcon,
+} from 'lucide-react';
+import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -34,8 +48,83 @@ type UploadTask = {
   file: File;
   fileId: string | null;
   id: string;
+  previewUrl: string | null;
   status: 'failed' | 'optimizing' | 'succeeded' | 'uploading';
 };
+
+type FileKind = 'archive' | 'audio' | 'code' | 'file' | 'spreadsheet' | 'text' | 'video';
+
+const FILE_KIND_ICONS: Record<FileKind, LucideIcon> = {
+  archive: FileArchiveIcon,
+  audio: FileAudioIcon,
+  code: FileCode2Icon,
+  file: FileIcon,
+  spreadsheet: FileSpreadsheetIcon,
+  text: FileTextIcon,
+  video: FileVideoIcon,
+};
+
+function fileKind(file: File): FileKind {
+  const mimeType = file.type.toLowerCase();
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+  if (mimeType.startsWith('audio/')) return 'audio';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (
+    mimeType.includes('zip') ||
+    mimeType.includes('compressed') ||
+    ['7z', 'bz2', 'gz', 'rar', 'tar', 'zip'].includes(extension)
+  ) {
+    return 'archive';
+  }
+  if (
+    mimeType.includes('spreadsheet') ||
+    mimeType.includes('excel') ||
+    ['csv', 'ods', 'tsv', 'xls', 'xlsx'].includes(extension)
+  ) {
+    return 'spreadsheet';
+  }
+  if (
+    mimeType.includes('json') ||
+    mimeType.includes('javascript') ||
+    mimeType.includes('xml') ||
+    ['css', 'html', 'java', 'js', 'jsx', 'json', 'md', 'py', 'sql', 'ts', 'tsx', 'xml'].includes(
+      extension,
+    )
+  ) {
+    return 'code';
+  }
+  if (mimeType.startsWith('text/') || mimeType === 'application/pdf') return 'text';
+  return 'file';
+}
+
+function FileVisual({ file, previewUrl }: { file: File; previewUrl: string | null }) {
+  if (previewUrl) {
+    return (
+      <Image
+        src={previewUrl}
+        alt=""
+        width={48}
+        height={48}
+        unoptimized
+        data-file-kind="image"
+        className="bg-surface-1 size-12 shrink-0 rounded-lg border object-cover"
+      />
+    );
+  }
+
+  const kind = fileKind(file);
+  const Icon = FILE_KIND_ICONS[kind];
+  return (
+    <span
+      aria-hidden="true"
+      data-file-kind={kind}
+      className="bg-surface-1 text-muted-foreground flex size-12 shrink-0 items-center justify-center rounded-lg border"
+    >
+      <Icon className="size-5" />
+    </span>
+  );
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -66,6 +155,15 @@ export function FileUploadQueue({
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const removedTaskIds = useRef(new Set<string>());
   const compactInputRef = useRef<HTMLInputElement>(null);
+  const previewUrls = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    const urls = previewUrls.current;
+    return () => {
+      for (const url of urls.values()) URL.revokeObjectURL(url);
+      urls.clear();
+    };
+  }, []);
 
   useEffect(() => {
     onFileIdsChange(
@@ -134,11 +232,18 @@ export function FileUploadQueue({
         continue;
       }
 
+      const id = crypto.randomUUID();
+      const previewUrl =
+        file.type.startsWith('image/') && typeof URL.createObjectURL === 'function'
+          ? URL.createObjectURL(file)
+          : null;
+      if (previewUrl) previewUrls.current.set(id, previewUrl);
       nextTasks.push({
         error: null,
         file,
         fileId: null,
-        id: crypto.randomUUID(),
+        id,
+        previewUrl,
         status: 'uploading',
       });
     }
@@ -155,17 +260,15 @@ export function FileUploadQueue({
 
   function removeTask(task: UploadTask) {
     removedTaskIds.current.add(task.id);
+    const previewUrl = previewUrls.current.get(task.id);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrls.current.delete(task.id);
     setTasks((current) => current.filter((currentTask) => currentTask.id !== task.id));
     if (task.fileId) void removeFile(task.fileId).catch(() => undefined);
   }
 
   return (
-    <div
-      className={cn(
-        'flex flex-col gap-3',
-        compactTrigger && (tasks.length > 0 || selectionError ? 'w-full' : 'w-fit'),
-      )}
-    >
+    <div className={cn(compactTrigger ? 'contents' : 'flex flex-col gap-3')}>
       {compactTrigger ? (
         <>
           <input
@@ -218,19 +321,22 @@ export function FileUploadQueue({
       )}
 
       {selectionError ? (
-        <p className="text-destructive text-sm" role="alert">
+        <p className={cn('text-destructive text-sm', compactTrigger && 'basis-full')} role="alert">
           {selectionError}
         </p>
       ) : null}
 
       {tasks.length ? (
-        <ul aria-label={labels.selectedFiles} className="flex flex-col gap-2">
+        <ul
+          aria-label={labels.selectedFiles}
+          className={cn('flex flex-col gap-2', compactTrigger && 'basis-full')}
+        >
           {tasks.map((task) => (
             <li
               key={task.id}
               className="bg-surface-1 flex min-w-0 items-center gap-3 rounded-lg border p-3"
             >
-              <FileIcon aria-hidden="true" className="text-muted-foreground size-5 shrink-0" />
+              <FileVisual file={task.file} previewUrl={task.previewUrl} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium" title={task.file.name}>
                   {task.file.name}

@@ -143,7 +143,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           </p>
         </div>
         <Link
-          href="/issues?create=1"
+          href={`${pathname}?create=1`}
           className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-2')}
         >
           <Plus className="size-4" />
@@ -424,7 +424,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           }
         >
           {mode === 'my' ? (
-            <Link href="/issues?create=1" className={buttonVariants({ size: 'sm' })}>
+            <Link href={`${pathname}?create=1`} className={buttonVariants({ size: 'sm' })}>
               이슈 만들기
             </Link>
           ) : null}

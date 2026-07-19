@@ -88,6 +88,9 @@ export type IssueCreateLabels = {
   close: string;
   description: string;
   descriptionLabel: string;
+  discardChanges: string;
+  discardDescription: string;
+  discardTitle: string;
   errorDescription: string;
   errorTitle: string;
   initialRolesDescription: string;
@@ -221,6 +224,7 @@ export function GlobalIssueCreate({
   const [templateSelectionRequired, setTemplateSelectionRequired] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [templateApplyError, setTemplateApplyError] = useState(false);
+  const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
   const [openPopover, setOpenPopover] = useState<
     'initialRoles' | 'labels' | 'priority' | 'project' | 'template' | null
   >(null);
@@ -349,6 +353,7 @@ export function GlobalIssueCreate({
     setTemplateNotice(false);
     setTemplateSelectionRequired(false);
     setTemplateApplyError(false);
+    setShowDiscardConfirmation(false);
     dirtyTemplateFields.current.clear();
     if (seed?.projectId) dirtyTemplateFields.current.add('project');
     copiedTemplateFields.current.clear();
@@ -357,10 +362,31 @@ export function GlobalIssueCreate({
     create.reset();
   }
 
-  function closeCreate() {
+  const hasUnsavedChanges =
+    title.length > 0 ||
+    descriptionMarkdown.length > 0 ||
+    projectId !== (seed?.projectId ?? '') ||
+    priority !== 'MEDIUM' ||
+    initialRoles.length > 0 ||
+    labelIds.length > 0 ||
+    attachmentFileIds.length > 0 ||
+    !filesReady ||
+    selectedTemplateId.length > 0 ||
+    appliedTemplate !== null;
+
+  function discardAndClose() {
     if (applyInFlight.current) return;
     reset();
     onOpenChange(false);
+  }
+
+  function requestClose() {
+    if (applyInFlight.current) return;
+    if (hasUnsavedChanges) {
+      setShowDiscardConfirmation(true);
+      return;
+    }
+    discardAndClose();
   }
 
   async function apply(snapshot: IssueTemplateSnapshot) {
@@ -546,8 +572,11 @@ export function GlobalIssueCreate({
           if (!next && (pendingTemplate || suppressCreateClose.current || applyInFlight.current)) {
             return;
           }
-          if (!next) reset();
-          onOpenChange(next);
+          if (!next) {
+            requestClose();
+            return;
+          }
+          onOpenChange(true);
         }}
       >
         <DialogContent
@@ -1091,7 +1120,7 @@ export function GlobalIssueCreate({
                 type="button"
                 variant="outline"
                 disabled={templateApplyPending}
-                onClick={closeCreate}
+                onClick={requestClose}
               >
                 {labels.cancel}
               </Button>
@@ -1117,6 +1146,20 @@ export function GlobalIssueCreate({
           </form>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={showDiscardConfirmation} onOpenChange={setShowDiscardConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{labels.discardTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{labels.discardDescription}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{labels.cancel}</AlertDialogCancel>
+            <AlertDialogAction type="button" onClick={discardAndClose}>
+              {labels.discardChanges}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog
         open={pendingTemplate !== null}
         onOpenChange={(next) => {

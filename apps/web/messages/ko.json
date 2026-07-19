@@ -295,7 +295,9 @@
     "openSearch": "검색 열기",
     "openTeamSelector": "팀 선택 열기",
     "inboxUnread": "알림함, 읽지 않은 알림 {count}개",
-    "skipToContent": "본문으로 건너뛰기"
+    "skipToContent": "본문으로 건너뛰기",
+    "expandSection": "{section} 하위 목록 펼치기",
+    "collapseSection": "{section} 하위 목록 접기"
   },
   "UserMenu": {
     "open": "사용자 메뉴 열기",
@@ -615,6 +617,9 @@
     "initialRolesEmpty": "이 프로젝트에서 선택할 수 있는 팀이 아직 없습니다.",
     "initialRolesToolbarLabel": "역할",
     "close": "이슈 만들기 닫기",
+    "discardTitle": "작성 중인 변경을 버릴까요?",
+    "discardDescription": "저장하지 않은 이슈 입력은 복구할 수 없습니다.",
+    "discardChanges": "변경 버리기",
     "titleLabel": "제목",
     "titlePlaceholder": "할 일을 간단히 적어 주세요",
     "titleRequired": "이슈 제목을 입력해 주세요.",

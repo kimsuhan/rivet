@@ -64,11 +64,18 @@ vi.mock('@/features/collaboration/markdown-editor', () => ({
 }));
 
 vi.mock('@/features/files/file-upload-queue', () => ({
-  FileUploadQueue: ({ compactTrigger }: { compactTrigger?: boolean }) => (
+  FileUploadQueue: ({
+    compactTrigger,
+    onFileIdsChange,
+  }: {
+    compactTrigger?: boolean;
+    onFileIdsChange: (ids: string[]) => void;
+  }) => (
     <button
       type="button"
       aria-label="파일 선택"
       data-compact-trigger={compactTrigger ? 'true' : 'false'}
+      onClick={() => onFileIdsChange(['uploaded-file-id'])}
     />
   ),
 }));
@@ -153,14 +160,20 @@ function Wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-function renderCreate() {
+function renderCreate({
+  onOpenChange = vi.fn(),
+  seed = null,
+}: {
+  onOpenChange?: (open: boolean) => void;
+  seed?: { projectId?: string } | null;
+} = {}) {
   return render(
     <GlobalIssueCreate
       currentTeamKey={null}
       labels={labels}
-      onOpenChange={vi.fn()}
+      onOpenChange={onOpenChange}
       open
-      seed={null}
+      seed={seed}
     />,
     { wrapper: Wrapper },
   );
@@ -651,6 +664,54 @@ describe('GlobalIssueCreate issue template', () => {
       'data-compact-trigger',
       'true',
     );
+  });
+
+  it('작성한 내용이 있으면 닫기 전에 확인하고 취소 시 입력을 유지하며 확인 시 버린다', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    renderCreate({ onOpenChange });
+
+    const title = screen.getByLabelText(labels.titleLabel);
+    await user.type(title, '닫기 전에 확인할 이슈');
+    await user.click(screen.getByRole('button', { name: labels.cancel }));
+
+    const confirmation = screen.getByRole('alertdialog', { name: labels.discardTitle });
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await user.click(within(confirmation).getByRole('button', { name: labels.cancel }));
+    expect(title).toHaveValue('닫기 전에 확인할 이슈');
+
+    await user.keyboard('{Escape}');
+    const escapeConfirmation = screen.getByRole('alertdialog', { name: labels.discardTitle });
+    await user.click(within(escapeConfirmation).getByRole('button', { name: labels.cancel }));
+    expect(title).toHaveValue('닫기 전에 확인할 이슈');
+
+    await user.click(screen.getByRole('button', { name: labels.close }));
+    await user.click(
+      within(screen.getByRole('alertdialog', { name: labels.discardTitle })).getByRole('button', {
+        name: labels.discardChanges,
+      }),
+    );
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(title).toHaveValue('');
+  });
+
+  it('첨부파일도 작성 중 변경으로 취급하고 입력이 없으면 바로 닫는다', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const view = renderCreate({ onOpenChange });
+
+    await user.click(screen.getByRole('button', { name: '파일 선택' }));
+    await user.click(screen.getByRole('button', { name: labels.cancel }));
+    expect(screen.getByRole('alertdialog', { name: labels.discardTitle })).toBeVisible();
+
+    view.unmount();
+    renderCreate({ onOpenChange });
+    await user.click(screen.getByRole('button', { name: labels.cancel }));
+    expect(
+      screen.queryByRole('alertdialog', { name: labels.discardTitle }),
+    ).not.toBeInTheDocument();
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
   });
 
   it('템플릿 조회 중에는 결과가 확인될 때까지 트리거를 표시하지 않는다', () => {

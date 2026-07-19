@@ -64,6 +64,7 @@ import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } fro
 import { createPortal } from 'react-dom';
 
 import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   type DeleteUploadedFile,
@@ -584,28 +585,31 @@ function Toolbar({
         </Button>
 
         {imagesEnabled ? (
-          <label className="ml-auto" title={labels.image.choose}>
-            <input
-              type="file"
-              accept="image/gif,image/jpeg,image/png,image/webp"
-              className="sr-only"
-              disabled={disabled}
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0];
-                if (file) editor.dispatchCommand(INSERT_MARKDOWN_IMAGE_COMMAND, file);
-                event.currentTarget.value = '';
-              }}
-            />
-            <span
-              className={cn(
-                'hover:bg-muted focus-within:ring-ring inline-flex size-7 cursor-pointer items-center justify-center rounded-md focus-within:ring-2',
-                TOOLBAR_HIT_AREA,
-              )}
-            >
-              <ImageIcon aria-hidden="true" className="size-4" />
-              <span className="sr-only">{labels.image.choose}</span>
-            </span>
-          </label>
+          <>
+            <Separator orientation="vertical" className="ml-auto h-5! self-center" />
+            <label title={labels.image.choose}>
+              <input
+                type="file"
+                accept="image/gif,image/jpeg,image/png,image/webp"
+                className="sr-only"
+                disabled={disabled}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (file) editor.dispatchCommand(INSERT_MARKDOWN_IMAGE_COMMAND, file);
+                  event.currentTarget.value = '';
+                }}
+              />
+              <span
+                className={cn(
+                  'hover:bg-muted focus-within:ring-ring inline-flex size-7 cursor-pointer items-center justify-center rounded-md focus-within:ring-2',
+                  TOOLBAR_HIT_AREA,
+                )}
+              >
+                <ImageIcon aria-hidden="true" className="size-4" />
+                <span className="sr-only">{labels.image.choose}</span>
+              </span>
+            </label>
+          </>
         ) : null}
       </div>
       {linkError ? (
