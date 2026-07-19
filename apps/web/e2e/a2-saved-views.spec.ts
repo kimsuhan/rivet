@@ -39,6 +39,7 @@ test('A2 개인 저장된 보기를 저장하고 기본 보기로 복원한다',
     await page.getByLabel('비밀번호', { exact: true }).fill(password);
     await page.getByRole('button', { name: '로그인', exact: true }).click();
     await expect(page).toHaveURL(/\/onboarding\/workspace$/u);
+    await page.getByRole('button', { name: '새 워크스페이스 만들기' }).click();
     await page.getByLabel('워크스페이스 이름').fill('A2 저장된 보기 워크스페이스');
     await page.getByLabel('슬러그').fill(`a2-view-${runId}`);
     await page.getByRole('button', { name: '워크스페이스 만들기' }).click();

@@ -19,7 +19,7 @@ export function OnboardingFrame({
   labels,
 }: {
   children: ReactNode;
-  currentStep: 1 | 2 | 3;
+  currentStep?: 1 | 2 | 3;
   labels: OnboardingFrameLabels;
 }) {
   const steps = [labels.workspaceStep, labels.teamStep, labels.inviteStep];
@@ -30,41 +30,43 @@ export function OnboardingFrame({
         <div className="flex justify-center">
           <RivetWordmark alt={labels.productName} className="h-6" />
         </div>
-        <nav aria-label={labels.stepsLabel}>
-          <ol className="flex flex-wrap items-center justify-center gap-2 text-sm">
-            {steps.map((step, index) => {
-              const stepNumber = index + 1;
-              const isCurrent = stepNumber === currentStep;
-              const isCompleted = stepNumber < currentStep;
+        {currentStep ? (
+          <nav aria-label={labels.stepsLabel}>
+            <ol className="flex flex-wrap items-center justify-center gap-2 text-sm">
+              {steps.map((step, index) => {
+                const stepNumber = index + 1;
+                const isCurrent = stepNumber === currentStep;
+                const isCompleted = stepNumber < currentStep;
 
-              return (
-                <li
-                  key={step}
-                  aria-current={isCurrent ? 'step' : undefined}
-                  className={cn(
-                    'flex items-center gap-2',
-                    isCurrent ? 'text-foreground font-medium' : 'text-muted-foreground',
-                  )}
-                >
-                  <span className="flex items-baseline gap-1">
-                    <span>{step}</span>
-                    {isCurrent ? (
-                      <span className="text-xs">({labels.currentStepStatus})</span>
-                    ) : null}
-                    {isCompleted ? (
-                      <span className="text-xs">({labels.completedStepStatus})</span>
-                    ) : null}
-                  </span>
-                  {index < steps.length - 1 ? (
-                    <span aria-hidden="true" className="text-muted-foreground">
-                      →
+                return (
+                  <li
+                    key={step}
+                    aria-current={isCurrent ? 'step' : undefined}
+                    className={cn(
+                      'flex items-center gap-2',
+                      isCurrent ? 'text-foreground font-medium' : 'text-muted-foreground',
+                    )}
+                  >
+                    <span className="flex items-baseline gap-1">
+                      <span>{step}</span>
+                      {isCurrent ? (
+                        <span className="text-xs">({labels.currentStepStatus})</span>
+                      ) : null}
+                      {isCompleted ? (
+                        <span className="text-xs">({labels.completedStepStatus})</span>
+                      ) : null}
                     </span>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ol>
-        </nav>
+                    {index < steps.length - 1 ? (
+                      <span aria-hidden="true" className="text-muted-foreground">
+                        →
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        ) : null}
         {children}
       </div>
     </main>

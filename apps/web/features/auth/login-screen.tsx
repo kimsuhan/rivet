@@ -132,7 +132,9 @@ export function LoginScreen({
           <Field data-invalid={Boolean(form.formState.errors.password)}>
             <div className="flex items-center justify-between gap-4">
               <FieldLabel htmlFor="login-password">{labels.password}</FieldLabel>
-              <AuthLink href={forgotPasswordHref}>{labels.forgotPassword}</AuthLink>
+              <AuthLink href={forgotPasswordHref} tabIndex={-1}>
+                {labels.forgotPassword}
+              </AuthLink>
             </div>
             <PasswordInput
               id="login-password"
@@ -142,6 +144,7 @@ export function LoginScreen({
               }
               aria-invalid={Boolean(form.formState.errors.password)}
               labels={{ show: labels.showPassword, hide: labels.hidePassword }}
+              excludeToggleFromTabOrder
               {...form.register('password')}
             />
             <FieldError id="login-password-error" errors={[form.formState.errors.password]} />
