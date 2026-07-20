@@ -41,7 +41,7 @@ export function TeamWorkListRow({
   work: TeamWorkSummaryResponseDto;
   density?: 'compact' | 'comfortable';
 }) {
-  const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, {
+  const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, undefined, {
     query: { retry: false },
   });
   const members = useMembersControllerList(

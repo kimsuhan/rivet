@@ -198,6 +198,8 @@ export default async function WorkspaceLayout({
                 errorTitle: teamSelector('errorTitle'),
                 errorDescription: teamSelector('errorDescription'),
                 loading: teamSelector('loading'),
+                myTeams: teamSelector('myTeams'),
+                otherTeams: teamSelector('otherTeams'),
                 retry: teamSelector('retry'),
                 close: teamSelector('close'),
               },

@@ -2,12 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
 
-import {
-  MembershipStatus,
-  Prisma,
-  type PrismaClient,
-  StateCategory,
-} from '@rivet/database';
+import { MembershipStatus, Prisma, type PrismaClient, StateCategory } from '@rivet/database';
 
 type DatabaseClient = Prisma.TransactionClient | PrismaClient;
 
@@ -57,6 +52,7 @@ export class CsvImportTargetRepository {
           workflowStates: {
             orderBy: [{ position: 'asc' }, { id: 'asc' }],
             select: { category: true, id: true, name: true, version: true },
+            where: { disabledAt: null },
           },
         },
         where: { archivedAt: null, workspaceId },

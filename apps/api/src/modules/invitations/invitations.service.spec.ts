@@ -4,6 +4,7 @@ import type { ConfigType } from '@nestjs/config';
 import { DatabaseService } from '../../common/database/database.service';
 import { apiConfig } from '../../config/api.config';
 import { AuthRateLimitService } from '../auth/auth-rate-limit.service';
+import { TeamManagementPolicy } from '../teams/team-management.policy';
 import { InvitationRepository } from './invitation.repository';
 import { InvitationQueryService } from './invitation-query.service';
 import { InvitationsService } from './invitations.service';
@@ -35,6 +36,7 @@ describe('InvitationsService', () => {
   const invitationId = '953685f0-4921-41cd-8422-d8a1ccc3f547';
   const secondInvitationId = '05ed9724-f207-447d-9f18-7026f493d3fd';
   const thirdInvitationId = 'c5ef63e6-3f70-4caf-bb56-256486afbb84';
+  const teamId = 'a64aca1e-7f90-4a4c-81a1-397c0dcbedba';
   const firstCreatedAt = new Date('2026-07-11T03:00:00.000Z');
   const secondCreatedAt = new Date('2026-07-11T02:00:00.000Z');
   const thirdCreatedAt = new Date('2026-07-11T01:00:00.000Z');
@@ -51,6 +53,7 @@ describe('InvitationsService', () => {
   const transaction = {
     $executeRaw: jest.fn(),
     $queryRaw: jest.fn(),
+    workspaceInvitationTeam: { create: jest.fn(), findUnique: jest.fn() },
   };
   const database = {
     client: {
@@ -64,6 +67,7 @@ describe('InvitationsService', () => {
     assertNotBlocked: jest.fn(),
     consume: jest.fn(),
   };
+  const management = { assertCanManageTeam: jest.fn() };
   let service: InvitationsService;
   let queries: InvitationQueryService;
 
@@ -78,11 +82,15 @@ describe('InvitationsService', () => {
     database.client.workspaceMembership.findMany.mockResolvedValue([]);
     rateLimits.assertNotBlocked.mockResolvedValue(undefined);
     rateLimits.consume.mockResolvedValue(undefined);
+    management.assertCanManageTeam.mockResolvedValue(undefined);
     transaction.$executeRaw.mockResolvedValue(1);
     transaction.$queryRaw.mockResolvedValue([]);
+    transaction.workspaceInvitationTeam.create.mockResolvedValue({});
+    transaction.workspaceInvitationTeam.findUnique.mockResolvedValue(null);
 
     service = new InvitationsService(
       database as unknown as DatabaseService,
+      management as unknown as TeamManagementPolicy,
       rateLimits as unknown as AuthRateLimitService,
       config,
     );
@@ -189,7 +197,7 @@ describe('InvitationsService', () => {
     });
 
     await expect(
-      service.create({ membershipId, workspaceId }, ['Invitee@Example.com']),
+      service.create({ membershipId, role: 'ADMIN', workspaceId }, ['Invitee@Example.com']),
     ).resolves.toEqual({
       items: [{ email: 'Invitee@Example.com', invitationId: null, result: 'ALREADY_MEMBER' }],
     });
@@ -198,6 +206,29 @@ describe('InvitationsService', () => {
     expect(queries[0]).toContain('FOR UPDATE');
     expect(queries[1]).toContain('INNER JOIN "workspace_memberships"');
     expect(transaction.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('adds a managed team target to an existing pending workspace invitation', async () => {
+    database.client.workspaceInvitation.findMany.mockResolvedValue([
+      { normalizedEmail: 'invitee@example.com' },
+    ]);
+    transaction.$queryRaw
+      .mockResolvedValueOnce([{ expiresAt: row.expiresAt, id: invitationId }])
+      .mockResolvedValueOnce([]);
+
+    await expect(
+      service.create(
+        { membershipId, role: 'MEMBER', workspaceId },
+        ['invitee@example.com'],
+        teamId,
+      ),
+    ).resolves.toEqual({
+      items: [{ email: 'invitee@example.com', invitationId, result: 'TEAM_ADDED' }],
+    });
+    expect(management.assertCanManageTeam).toHaveBeenCalledTimes(2);
+    expect(transaction.workspaceInvitationTeam.create).toHaveBeenCalledWith({
+      data: { invitationId, invitedByMembershipId: membershipId, teamId, workspaceId },
+    });
   });
 
   it('maps a concurrent terminal reissue unique failure to the effective pending invitation', async () => {

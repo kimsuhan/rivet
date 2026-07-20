@@ -11,6 +11,8 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  PowerOff,
+  RotateCcw,
   ShieldX,
   Star,
   Trash2,
@@ -23,9 +25,11 @@ import {
   getTeamsControllerListWorkflowStatesQueryKey,
   useTeamsControllerCreateWorkflowState,
   useTeamsControllerDeleteWorkflowState,
+  useTeamsControllerDisableWorkflowState,
   useTeamsControllerList,
   useTeamsControllerListWorkflowStates,
   useTeamsControllerReorderWorkflowStates,
+  useTeamsControllerRestoreWorkflowState,
   useTeamsControllerSetDefaultWorkflowState,
   useTeamsControllerUpdateWorkflowState,
   type WorkflowStateResponseDto,
@@ -114,6 +118,8 @@ export type WorkflowSettingsLabels = {
   deleteInUseTitle: string;
   deleteTitle: string;
   deleting: string;
+  disable: string;
+  disabledBadge: string;
   description: string;
   discardChanges: string;
   discardDescription: string;
@@ -134,6 +140,7 @@ export type WorkflowSettingsLabels = {
   rename: string;
   renameDescription: string;
   renameTitle: string;
+  restore: string;
   reorderErrorDescription: string;
   reorderErrorTitle: string;
   reorderSuccess: string;
@@ -151,7 +158,11 @@ export type WorkflowSettingsLabels = {
   terminalDefaultDescription: string;
   terminalDefaultTitle: string;
   title: string;
+  toggleErrorDescription: string;
+  toggleErrorTitle: string;
 };
+
+const workflowListParams = { includeDisabled: true } as const;
 
 const categories = [
   WorkflowStateResponseDtoCategory.BACKLOG,
@@ -550,7 +561,9 @@ function DeleteStateDialog({
   const [replacementError, setReplacementError] = useState(false);
   const [notice, setNotice] = useState<'CONFLICT' | 'IN_USE' | 'ERROR' | null>(null);
   const replacementTriggerRef = useRef<HTMLButtonElement>(null);
-  const replacements = states.filter((candidate) => candidate.id !== state.id);
+  const replacements = states.filter(
+    (candidate) => candidate.id !== state.id && candidate.disabledAt === null,
+  );
   const replacementItems = replacements.map((candidate) => ({
     label: candidate.name,
     value: candidate.id,
@@ -691,9 +704,13 @@ export function WorkflowSettingsScreen({
   const router = useRouter();
   const queryClient = useQueryClient();
   const teams = useTeamsControllerList({ includeArchived: false }, { query: { retry: false } });
-  const workflow = useTeamsControllerListWorkflowStates(teamId, { query: { retry: false } });
+  const workflow = useTeamsControllerListWorkflowStates(teamId, workflowListParams, {
+    query: { retry: false },
+  });
   const reorder = useTeamsControllerReorderWorkflowStates();
   const setDefault = useTeamsControllerSetDefaultWorkflowState();
+  const disable = useTeamsControllerDisableWorkflowState();
+  const restore = useTeamsControllerRestoreWorkflowState();
   const [createCategory, setCreateCategory] = useState<WorkflowStateResponseDto['category'] | null>(
     null,
   );
@@ -702,19 +719,22 @@ export function WorkflowSettingsScreen({
   const [deleteTarget, setDeleteTarget] = useState<WorkflowStateResponseDto | null>(null);
   const [defaultConfirmationTarget, setDefaultConfirmationTarget] =
     useState<WorkflowStateResponseDto | null>(null);
-  const [notice, setNotice] = useState<'CONFLICT' | 'DEFAULT_ERROR' | 'REORDER_ERROR' | null>(null);
+  const [notice, setNotice] = useState<
+    'CONFLICT' | 'DEFAULT_ERROR' | 'REORDER_ERROR' | 'TOGGLE_ERROR' | null
+  >(null);
   const [reorderAnnouncement, setReorderAnnouncement] = useState('');
-  const selectedTeam = teams.data?.items.find((team) => team.id === teamId);
+  const manageableTeams = (teams.data?.items ?? []).filter((team) => team.canManage);
+  const selectedTeam = manageableTeams.find((team) => team.id === teamId);
   const sortedStates = categories.flatMap((category) =>
     (workflow.data?.items ?? [])
       .filter((state) => state.category === category)
       .sort((left, right) => left.position - right.position),
   );
-  const teamItems = (teams.data?.items ?? []).map((team) => ({ label: team.name, value: team.id }));
+  const teamItems = manageableTeams.map((team) => ({ label: team.name, value: team.id }));
 
   const refresh = async () => {
     await queryClient.invalidateQueries({
-      queryKey: getTeamsControllerListWorkflowStatesQueryKey(teamId),
+      queryKey: getTeamsControllerListWorkflowStatesQueryKey(teamId, workflowListParams),
     });
   };
 
@@ -798,7 +818,10 @@ export function WorkflowSettingsScreen({
           if (error.body.code === 'VERSION_CONFLICT') void refresh();
         },
         onSuccess: (data) => {
-          queryClient.setQueryData(getTeamsControllerListWorkflowStatesQueryKey(teamId), data);
+          queryClient.setQueryData(
+            getTeamsControllerListWorkflowStatesQueryKey(teamId, workflowListParams),
+            data,
+          );
           setReorderAnnouncement(
             labels.reorderSuccess
               .replace('{state}', state.name)
@@ -822,7 +845,10 @@ export function WorkflowSettingsScreen({
           if (error.body.code === 'VERSION_CONFLICT') void refresh();
         },
         onSuccess: (data) => {
-          queryClient.setQueryData(getTeamsControllerListWorkflowStatesQueryKey(teamId), data);
+          queryClient.setQueryData(
+            getTeamsControllerListWorkflowStatesQueryKey(teamId, workflowListParams),
+            data,
+          );
           setReorderAnnouncement(labels.defaultSuccess.replace('{state}', state.name));
         },
       },
@@ -841,7 +867,26 @@ export function WorkflowSettingsScreen({
     makeDefault(state);
   };
 
-  const isWorkflowMutating = reorder.isPending || setDefault.isPending;
+  const toggleDisabled = (state: WorkflowStateResponseDto) => {
+    if (disable.isPending || restore.isPending) return;
+
+    setManageTargetId(null);
+    setNotice(null);
+    const mutation = state.disabledAt ? restore : disable;
+    mutation.mutate(
+      { data: { version: state.version }, stateId: state.id },
+      {
+        onError: (error) => {
+          setNotice(error.body.code === 'VERSION_CONFLICT' ? 'CONFLICT' : 'TOGGLE_ERROR');
+          if (error.body.code === 'VERSION_CONFLICT') void refresh();
+        },
+        onSuccess: () => void refresh(),
+      },
+    );
+  };
+
+  const isWorkflowMutating =
+    reorder.isPending || setDefault.isPending || disable.isPending || restore.isPending;
 
   return (
     <section className="mx-auto w-full max-w-5xl">
@@ -873,7 +918,7 @@ export function WorkflowSettingsScreen({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false}>
-                {teams.data.items.map((team) => (
+                {manageableTeams.map((team) => (
                   <SelectItem key={team.id} value={team.id}>
                     {team.name}
                   </SelectItem>
@@ -900,6 +945,12 @@ export function WorkflowSettingsScreen({
         <Alert variant="destructive" className="mt-4">
           <AlertTitle>{labels.defaultErrorTitle}</AlertTitle>
           <AlertDescription>{labels.defaultErrorDescription}</AlertDescription>
+        </Alert>
+      ) : null}
+      {notice === 'TOGGLE_ERROR' ? (
+        <Alert variant="destructive" className="mt-4">
+          <AlertTitle>{labels.toggleErrorTitle}</AlertTitle>
+          <AlertDescription>{labels.toggleErrorDescription}</AlertDescription>
         </Alert>
       ) : null}
       <p role="status" aria-live="polite" className="sr-only">
@@ -940,7 +991,10 @@ export function WorkflowSettingsScreen({
                     {sectionStates.map((state, stateIndex) => (
                       <li
                         key={state.id}
-                        className="group hover:bg-muted/25 focus-within:bg-muted/25 flex min-h-12 items-center gap-3 border-b px-3 last:border-b-0"
+                        className={cn(
+                          'group hover:bg-muted/25 focus-within:bg-muted/25 flex min-h-12 items-center gap-3 border-b px-3 last:border-b-0',
+                          state.disabledAt && 'opacity-60',
+                        )}
                       >
                         <WorkflowStateIcon
                           category={state.category}
@@ -960,13 +1014,18 @@ export function WorkflowSettingsScreen({
                             {labels.defaultBadge}
                           </Badge>
                         ) : null}
+                        {state.disabledAt ? (
+                          <Badge variant="secondary">{labels.disabledBadge}</Badge>
+                        ) : null}
                         <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-sm"
                             aria-label={stateLabel(labels.moveUp, state.name)}
-                            disabled={stateIndex === 0 || isWorkflowMutating}
+                            disabled={
+                              Boolean(state.disabledAt) || stateIndex === 0 || isWorkflowMutating
+                            }
                             onClick={() => move(state, -1)}
                           >
                             <ArrowUp aria-hidden="true" />
@@ -976,7 +1035,11 @@ export function WorkflowSettingsScreen({
                             variant="ghost"
                             size="icon-sm"
                             aria-label={stateLabel(labels.moveDown, state.name)}
-                            disabled={stateIndex === sectionStates.length - 1 || isWorkflowMutating}
+                            disabled={
+                              Boolean(state.disabledAt) ||
+                              stateIndex === sectionStates.length - 1 ||
+                              isWorkflowMutating
+                            }
                             onClick={() => move(state, 1)}
                           >
                             <ArrowDown aria-hidden="true" />
@@ -1002,7 +1065,9 @@ export function WorkflowSettingsScreen({
                               className="w-full justify-start"
                               size="sm"
                               variant="ghost"
-                              disabled={stateIndex === 0 || isWorkflowMutating}
+                              disabled={
+                                Boolean(state.disabledAt) || stateIndex === 0 || isWorkflowMutating
+                              }
                               onClick={() => {
                                 setManageTargetId(null);
                                 move(state, -1);
@@ -1017,7 +1082,9 @@ export function WorkflowSettingsScreen({
                               size="sm"
                               variant="ghost"
                               disabled={
-                                stateIndex === sectionStates.length - 1 || isWorkflowMutating
+                                Boolean(state.disabledAt) ||
+                                stateIndex === sectionStates.length - 1 ||
+                                isWorkflowMutating
                               }
                               onClick={() => {
                                 setManageTargetId(null);
@@ -1033,7 +1100,9 @@ export function WorkflowSettingsScreen({
                               className="w-full justify-start"
                               size="sm"
                               variant="ghost"
-                              disabled={state.isDefault || isWorkflowMutating}
+                              disabled={
+                                Boolean(state.disabledAt) || state.isDefault || isWorkflowMutating
+                              }
                               onClick={() => requestDefault(state)}
                             >
                               {setDefault.isPending &&
@@ -1047,6 +1116,23 @@ export function WorkflowSettingsScreen({
                                 : setDefault.isPending && setDefault.variables?.stateId === state.id
                                   ? labels.defaulting
                                   : labels.defaultSet}
+                            </Button>
+                            <Button
+                              type="button"
+                              className="w-full justify-start"
+                              size="sm"
+                              variant="ghost"
+                              disabled={
+                                (!state.disabledAt && state.isDefault) || isWorkflowMutating
+                              }
+                              onClick={() => toggleDisabled(state)}
+                            >
+                              {state.disabledAt ? (
+                                <RotateCcw data-icon="inline-start" />
+                              ) : (
+                                <PowerOff data-icon="inline-start" />
+                              )}
+                              {state.disabledAt ? labels.restore : labels.disable}
                             </Button>
                             <Button
                               type="button"

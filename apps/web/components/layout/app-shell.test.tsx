@@ -11,7 +11,13 @@ vi.mock('@rivet/api-client', () => ({
   useAuthControllerGetSession: () => ({
     data: {
       authenticated: true,
-      membership: { id: 'membership-1', role: 'ADMIN', status: 'ACTIVE' },
+      membership: {
+        id: 'membership-1',
+        ledTeamIds: [],
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        teamIds: ['team-web'],
+      },
       user: {
         avatarFileId: null,
         displayName: '김리벳',
@@ -143,8 +149,12 @@ vi.mock('@/features/issues/global-issue-create', () => ({
 }));
 
 vi.mock('@/features/teams/team-selector', () => ({
-  DesktopTeamNavigation: () => null,
-  TeamSelector: () => null,
+  DesktopTeamNavigation: ({ memberTeamIds }: { memberTeamIds: string[] | null }) => (
+    <div data-testid="desktop-team-navigation-memberships">{memberTeamIds?.join(',')}</div>
+  ),
+  TeamSelector: ({ memberTeamIds }: { memberTeamIds: string[] | null }) => (
+    <div data-testid="team-selector-memberships">{memberTeamIds?.join(',')}</div>
+  ),
 }));
 
 vi.mock('@/features/feedback/feedback-dialog', () => ({
@@ -342,6 +352,8 @@ const labels = {
     errorDescription: '팀 오류 설명',
     errorTitle: '팀 오류',
     loading: '팀 로딩',
+    myTeams: '내 팀',
+    otherTeams: '다른 팀',
     retry: '다시 시도',
     title: '팀',
   },
@@ -362,6 +374,13 @@ describe('AppShell', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+  });
+
+  it('현재 멤버십의 소속 팀을 데스크톱과 모바일 팀 탐색에 전달한다', () => {
+    render(<AppShell labels={labels}>본문</AppShell>);
+
+    expect(screen.getByTestId('desktop-team-navigation-memberships')).toHaveTextContent('team-web');
+    expect(screen.getByTestId('team-selector-memberships')).toHaveTextContent('team-web');
   });
 
   it('반복 탐색을 건너뛸 수 있는 본문 링크와 포커스 대상을 제공한다', () => {

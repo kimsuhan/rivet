@@ -28,7 +28,7 @@ export function MyWorkListRow({
   work: TeamWorkSummaryResponseDto;
   density?: 'compact' | 'comfortable';
 }) {
-  const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, {
+  const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, undefined, {
     query: { retry: false },
   });
   const stateMutation = useTeamWorkInlineMutation(work, 'workflowState');

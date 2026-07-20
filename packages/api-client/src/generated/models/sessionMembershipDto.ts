@@ -12,4 +12,6 @@ export interface SessionMembershipDto {
   id: string;
   role: SessionMembershipDtoRole;
   status: SessionMembershipDtoStatus;
+  ledTeamIds: string[];
+  teamIds: string[];
 }

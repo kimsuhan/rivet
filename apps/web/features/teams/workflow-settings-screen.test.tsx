@@ -7,9 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useTeamsControllerCreateWorkflowState,
   useTeamsControllerDeleteWorkflowState,
+  useTeamsControllerDisableWorkflowState,
   useTeamsControllerList,
   useTeamsControllerListWorkflowStates,
   useTeamsControllerReorderWorkflowStates,
+  useTeamsControllerRestoreWorkflowState,
   useTeamsControllerSetDefaultWorkflowState,
   useTeamsControllerUpdateWorkflowState,
 } from '@rivet/api-client';
@@ -36,6 +38,8 @@ type MutationCallbacks = {
 const mocks = vi.hoisted(() => ({
   create: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
   deleteState: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
+  disable: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
+  restore: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
   setDefault: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
   rename: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
   reorder: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
@@ -46,9 +50,11 @@ vi.mock('@rivet/api-client', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useTeamsControllerCreateWorkflowState: vi.fn(),
   useTeamsControllerDeleteWorkflowState: vi.fn(),
+  useTeamsControllerDisableWorkflowState: vi.fn(),
   useTeamsControllerList: vi.fn(),
   useTeamsControllerListWorkflowStates: vi.fn(),
   useTeamsControllerReorderWorkflowStates: vi.fn(),
+  useTeamsControllerRestoreWorkflowState: vi.fn(),
   useTeamsControllerSetDefaultWorkflowState: vi.fn(),
   useTeamsControllerUpdateWorkflowState: vi.fn(),
 }));
@@ -63,8 +69,11 @@ vi.mock('@/i18n/navigation', () => ({
 const labels: WorkflowSettingsLabels = messages.Settings.workflow;
 const team = {
   archived: false,
+  canManage: true,
+  description: null,
   id: 'team-web',
   key: 'WEB',
+  leaderCount: 1,
   memberCount: 3,
   name: '웹',
   version: 2,
@@ -73,6 +82,7 @@ const states = [
   {
     category: 'BACKLOG' as const,
     color: null,
+    disabledAt: null,
     id: 'state-backlog',
     isDefault: true,
     name: '미분류',
@@ -82,6 +92,7 @@ const states = [
   {
     category: 'BACKLOG' as const,
     color: 'BROWN' as const,
+    disabledAt: null,
     id: 'state-paused',
     isDefault: false,
     name: '보류',
@@ -91,6 +102,7 @@ const states = [
   {
     category: 'UNSTARTED' as const,
     color: null,
+    disabledAt: null,
     id: 'state-todo',
     isDefault: false,
     name: '할 일',
@@ -100,6 +112,7 @@ const states = [
   {
     category: 'STARTED' as const,
     color: 'INDIGO' as const,
+    disabledAt: null,
     id: 'state-doing',
     isDefault: false,
     name: '진행 중',
@@ -109,6 +122,7 @@ const states = [
   {
     category: 'STARTED' as const,
     color: 'TEAL' as const,
+    disabledAt: null,
     id: 'state-review',
     isDefault: false,
     name: '검토',
@@ -118,6 +132,7 @@ const states = [
   {
     category: 'COMPLETED' as const,
     color: null,
+    disabledAt: null,
     id: 'state-done',
     isDefault: false,
     name: '완료',
@@ -127,6 +142,7 @@ const states = [
   {
     category: 'CANCELED' as const,
     color: 'RED' as const,
+    disabledAt: null,
     id: 'state-canceled',
     isDefault: false,
     name: '취소',
@@ -205,6 +221,12 @@ describe('WorkflowSettingsScreen', () => {
     );
     vi.mocked(useTeamsControllerDeleteWorkflowState).mockReturnValue(
       mutationResult(mocks.deleteState) as never,
+    );
+    vi.mocked(useTeamsControllerDisableWorkflowState).mockReturnValue(
+      mutationResult(mocks.disable) as never,
+    );
+    vi.mocked(useTeamsControllerRestoreWorkflowState).mockReturnValue(
+      mutationResult(mocks.restore) as never,
     );
   });
 
@@ -462,6 +484,19 @@ describe('WorkflowSettingsScreen', () => {
     expect(input).toHaveAttribute('aria-errormessage', 'workflow-state-name-error');
     expect(document.getElementById('workflow-state-name-error')).toHaveTextContent(
       labels.nameInvalid,
+    );
+  });
+
+  it('기본값이 아닌 상태를 사용 중지한다', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: '보류 ' + labels.manage }));
+    await user.click(screen.getByRole('button', { name: labels.disable }));
+
+    expect(mocks.disable).toHaveBeenCalledWith(
+      { data: { version: 6 }, stateId: 'state-paused' },
+      expect.any(Object),
     );
   });
 

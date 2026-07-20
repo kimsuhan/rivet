@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,6 +29,8 @@ const labels: TeamSelectorLabels = {
   errorDescription: '잠시 후 다시 시도해 주세요.',
   errorTitle: '팀을 불러오지 못했습니다',
   loading: '팀을 불러오는 중입니다.',
+  myTeams: '내 팀',
+  otherTeams: '다른 팀',
   retry: '다시 시도',
   title: '팀',
 };
@@ -41,6 +43,7 @@ const activeTeam = {
   version: 1,
 };
 const archivedTeam = { ...activeTeam, archived: true, id: 'team-old', key: 'OLD', name: '이전 팀' };
+const otherTeam = { ...activeTeam, id: 'team-api', key: 'API', name: 'API' };
 
 function queryResult(value: Record<string, unknown> = {}) {
   return {
@@ -62,7 +65,14 @@ describe('team selectors', () => {
   afterEach(cleanup);
 
   it('데스크톱 탐색에는 활성 팀 이름과 키만 표시하고 현재 팀을 구분한다', () => {
-    render(<DesktopTeamNavigation currentTeamKey="WEB" labels={labels} teamView="issues" />);
+    render(
+      <DesktopTeamNavigation
+        currentTeamKey="WEB"
+        labels={labels}
+        memberTeamIds={[activeTeam.id]}
+        teamView="issues"
+      />,
+    );
 
     const link = screen.getByRole('link', { name: '웹 (WEB)' });
     expect(link).toHaveAttribute('href', '/teams/WEB/issues');
@@ -71,7 +81,14 @@ describe('team selectors', () => {
   });
 
   it('마지막 팀 보드 보기를 다른 팀 링크에도 유지한다', () => {
-    render(<DesktopTeamNavigation currentTeamKey={null} labels={labels} teamView="board" />);
+    render(
+      <DesktopTeamNavigation
+        currentTeamKey={null}
+        labels={labels}
+        memberTeamIds={[]}
+        teamView="board"
+      />,
+    );
 
     expect(screen.getByRole('link', { name: '웹 (WEB)' })).toHaveAttribute(
       'href',
@@ -79,10 +96,43 @@ describe('team selectors', () => {
     );
   });
 
+  it('데스크톱 탐색에서 소속 팀과 다른 팀을 구분한다', () => {
+    vi.mocked(useTeamsControllerList).mockReturnValue(
+      queryResult({ data: { items: [activeTeam, otherTeam, archivedTeam], nextCursor: null } }),
+    );
+    render(
+      <DesktopTeamNavigation
+        currentTeamKey={null}
+        labels={labels}
+        memberTeamIds={[activeTeam.id]}
+        teamView="issues"
+      />,
+    );
+
+    const myTeams = screen.getByRole('heading', { name: labels.myTeams }).parentElement;
+    const otherTeams = screen.getByRole('heading', { name: labels.otherTeams }).parentElement;
+
+    expect(myTeams).not.toBeNull();
+    expect(otherTeams).not.toBeNull();
+    expect(within(myTeams!).getByRole('link', { name: '웹 (WEB)' })).toBeVisible();
+    expect(within(myTeams!).queryByRole('link', { name: 'API (API)' })).not.toBeInTheDocument();
+    expect(within(otherTeams!).getByRole('link', { name: 'API (API)' })).toBeVisible();
+  });
+
   it('모바일 선택에서 팀을 고르면 마지막 팀을 기억하고 대화상자를 닫는다', async () => {
     const onOpenChange = vi.fn();
     const user = userEvent.setup();
-    render(<TeamSelector labels={labels} open onOpenChange={onOpenChange} teamView="issues" />);
+    render(
+      <TeamSelector
+        labels={labels}
+        memberTeamIds={[activeTeam.id]}
+        open
+        onOpenChange={onOpenChange}
+        teamView="issues"
+      />,
+    );
+
+    expect(screen.getByRole('region', { name: labels.myTeams })).toBeVisible();
 
     await user.click(screen.getByRole('link', { name: /웹/ }));
 
@@ -98,7 +148,13 @@ describe('team selectors', () => {
     );
     const user = userEvent.setup();
     const view = render(
-      <TeamSelector labels={labels} open onOpenChange={vi.fn()} teamView="issues" />,
+      <TeamSelector
+        labels={labels}
+        memberTeamIds={[]}
+        open
+        onOpenChange={vi.fn()}
+        teamView="issues"
+      />,
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent(labels.errorTitle);
@@ -108,13 +164,29 @@ describe('team selectors', () => {
     vi.mocked(useTeamsControllerList).mockReturnValue(
       queryResult({ data: { items: [], nextCursor: null } }),
     );
-    view.rerender(<TeamSelector labels={labels} open onOpenChange={vi.fn()} teamView="issues" />);
+    view.rerender(
+      <TeamSelector
+        labels={labels}
+        memberTeamIds={[]}
+        open
+        onOpenChange={vi.fn()}
+        teamView="issues"
+      />,
+    );
     expect(screen.getByRole('heading', { name: labels.emptyTitle })).toBeVisible();
 
     vi.mocked(useTeamsControllerList).mockReturnValue(
       queryResult({ data: undefined, isPending: true }),
     );
-    view.rerender(<TeamSelector labels={labels} open onOpenChange={vi.fn()} teamView="issues" />);
+    view.rerender(
+      <TeamSelector
+        labels={labels}
+        memberTeamIds={[]}
+        open
+        onOpenChange={vi.fn()}
+        teamView="issues"
+      />,
+    );
     expect(screen.getByRole('status')).toHaveTextContent(labels.loading);
   });
 });

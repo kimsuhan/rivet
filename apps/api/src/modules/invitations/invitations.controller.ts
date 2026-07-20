@@ -271,6 +271,7 @@ export class InvitationsController {
     return this.invitations.create(
       {
         membershipId: authentication.session.membership!.id,
+        role: authentication.session.membership!.role,
         workspaceId: authentication.session.workspace!.id,
       },
       dto.emails,
@@ -330,5 +331,36 @@ export class InvitationsController {
     @Param('invitationId', new ParseUUIDPipe({ version: '4' })) invitationId: string,
   ): Promise<InvitationResponseDto> {
     return this.invitations.cancel(authentication.session.workspace!.id, invitationId);
+  }
+}
+
+@ApiTags('invitations')
+@ApiCookieAuth('sessionCookie')
+@Controller('teams/:teamId/invitations')
+export class TeamInvitationsController {
+  constructor(private readonly invitations: InvitationsService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '관리 중인 팀으로 이메일 초대' })
+  @ApiOkResponse({ type: CreateInvitationsResponseDto })
+  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({ description: 'CSRF_INVALID 또는 FORBIDDEN', type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  @ApiUnprocessableEntityResponse({ description: 'VALIDATION_ERROR', type: ApiErrorResponseDto })
+  create(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
+    @Body() dto: CreateInvitationsDto,
+  ): Promise<CreateInvitationsResponseDto> {
+    return this.invitations.create(
+      {
+        membershipId: authentication.session.membership!.id,
+        role: authentication.session.membership!.role,
+        workspaceId: authentication.session.workspace!.id,
+      },
+      dto.emails,
+      teamId,
+    );
   }
 }

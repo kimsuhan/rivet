@@ -2,7 +2,16 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { Archive, GitBranch, Pencil, Plus, ShieldX, UsersRound } from 'lucide-react';
+import {
+  Archive,
+  GitBranch,
+  MailPlus,
+  Pencil,
+  Plus,
+  ShieldCheck,
+  ShieldX,
+  UsersRound,
+} from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
@@ -14,12 +23,15 @@ import {
   type TeamResponseDto,
   type TeamSummaryResponseDto,
   useAuthControllerGetSession,
+  useTeamInvitationsControllerCreate,
   useTeamsControllerAddMember,
   useTeamsControllerArchive,
   useTeamsControllerCreate,
   useTeamsControllerGet,
   useTeamsControllerList,
+  useTeamsControllerRemoveLeader,
   useTeamsControllerRemoveMember,
+  useTeamsControllerSetLeader,
   useTeamsControllerUpdate,
 } from '@rivet/api-client';
 
@@ -59,6 +71,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { useMemberPages } from '@/features/members/member-settings-queries';
 import { Link } from '@/i18n/navigation';
 
@@ -88,6 +101,9 @@ export type TeamSettingsLabels = {
   creating: string;
   currentAdmin: string;
   description: string;
+  descriptionLabel: string;
+  descriptionPlaceholder: string;
+  descriptionTooLong: string;
   discardChanges: string;
   discardDescription: string;
   discardTitle: string;
@@ -106,10 +122,21 @@ export type TeamSettingsLabels = {
   keyLockedTitle: string;
   keyPlaceholder: string;
   keepEditing: string;
+  invite: string;
+  inviteDescription: string;
+  inviteEmailInvalid: string;
+  inviteEmailLabel: string;
+  inviteEmailPlaceholder: string;
+  inviteSend: string;
+  inviteTitle: string;
+  inviting: string;
   loadMoreMembers: string;
   loadMoreMembersErrorDescription: string;
   loadMoreMembersErrorTitle: string;
   loading: string;
+  leaderBadge: string;
+  leadersDescription: string;
+  leadersLabel: string;
   memberBlockedDescription: string;
   memberBlockedTitle: string;
   memberRequired: string;
@@ -127,9 +154,11 @@ export type TeamSettingsLabels = {
   removeMemberAction: string;
   removeMemberDescription: string;
   removeMemberTitle: string;
+  removeLeader: string;
   retry: string;
   save: string;
   saving: string;
+  setLeader: string;
   title: string;
   workflow: string;
 };
@@ -454,6 +483,7 @@ function TeamEditDialog({
   hasMemberLoadError,
   hasMoreMembers,
   isLoadingMoreMembers,
+  isAdmin,
   labels,
   members,
   onClose,
@@ -463,6 +493,7 @@ function TeamEditDialog({
   hasMemberLoadError: boolean;
   hasMoreMembers: boolean;
   isLoadingMoreMembers: boolean;
+  isAdmin: boolean;
   labels: TeamSettingsLabels;
   members: MemberSummaryResponseDto[];
   onClose: () => void;
@@ -473,7 +504,10 @@ function TeamEditDialog({
   const update = useTeamsControllerUpdate();
   const addMember = useTeamsControllerAddMember();
   const removeMember = useTeamsControllerRemoveMember();
+  const setLeader = useTeamsControllerSetLeader();
+  const removeLeader = useTeamsControllerRemoveLeader();
   const schema = z.object({
+    description: z.string().max(500, labels.descriptionTooLong),
     key: z
       .string()
       .trim()
@@ -489,7 +523,7 @@ function TeamEditDialog({
     setError,
     setValue,
   } = useForm<z.infer<typeof schema>>({
-    defaultValues: { key: team.key, name: team.name },
+    defaultValues: { description: team.description ?? '', key: team.key, name: team.name },
     resolver: zodResolver(schema),
   });
   const [keyLocked, setKeyLocked] = useState(false);
@@ -498,6 +532,7 @@ function TeamEditDialog({
     'CONFLICT' | 'MEMBER_BLOCKED' | 'MEMBER_ERROR' | 'UPDATE_ERROR' | null
   >(null);
   const [pendingMemberId, setPendingMemberId] = useState<string | null>(null);
+  const [pendingLeaderId, setPendingLeaderId] = useState<string | null>(null);
   const [removeMemberTarget, setRemoveMemberTarget] = useState<MemberSummaryResponseDto | null>(
     null,
   );
@@ -517,15 +552,16 @@ function TeamEditDialog({
   };
 
   const submit = handleSubmit((values) => {
-    if (update.isPending || pendingMemberId) return;
+    if (update.isPending || pendingMemberId || pendingLeaderId) return;
 
     clearErrors();
     setNotice(null);
     update.mutate(
       {
         data: {
+          ...(dirtyFields.description ? { description: values.description.trim() || null } : {}),
           ...(dirtyFields.name ? { name: values.name } : {}),
-          ...(!keyLocked && dirtyFields.key ? { key: values.key } : {}),
+          ...(isAdmin && !keyLocked && dirtyFields.key ? { key: values.key } : {}),
           version,
         },
         teamId: team.id,
@@ -601,8 +637,29 @@ function TeamEditDialog({
     );
   };
 
+  const changeLeader = (memberId: string, checked: boolean) => {
+    if (!isAdmin || pendingLeaderId) return;
+
+    setPendingLeaderId(memberId);
+    setNotice(null);
+    const mutation = checked ? setLeader : removeLeader;
+    mutation.mutate(
+      { membershipId: memberId, teamId: team.id },
+      {
+        onError: () => {
+          setNotice('MEMBER_ERROR');
+          setPendingLeaderId(null);
+        },
+        onSuccess: async () => {
+          await refresh();
+          setPendingLeaderId(null);
+        },
+      },
+    );
+  };
+
   const requestClose = () => {
-    if (update.isPending || pendingMemberId) return;
+    if (update.isPending || pendingMemberId || pendingLeaderId) return;
     if (isDirty) {
       setShowDiscardConfirmation(true);
       return;
@@ -661,28 +718,42 @@ function TeamEditDialog({
                 />
                 <FieldError id="edit-team-name-error" errors={[errors.name]} />
               </Field>
-              <Field data-invalid={Boolean(errors.key)} data-disabled={keyLocked || undefined}>
-                <FieldLabel htmlFor="edit-team-key">{labels.keyLabel}</FieldLabel>
-                <Input
-                  id="edit-team-key"
-                  autoCapitalize="characters"
-                  autoComplete="off"
-                  aria-errormessage={errors.key ? 'edit-team-key-error' : undefined}
-                  aria-invalid={Boolean(errors.key)}
-                  disabled={keyLocked}
-                  maxLength={5}
-                  spellCheck={false}
-                  {...keyField}
-                  onChange={(event) => {
-                    setValue('key', normalizeTeamKey(event.target.value), {
-                      shouldDirty: true,
-                      shouldValidate: Boolean(errors.key),
-                    });
-                  }}
+              <Field data-invalid={Boolean(errors.description)}>
+                <FieldLabel htmlFor="edit-team-description">{labels.descriptionLabel}</FieldLabel>
+                <Textarea
+                  id="edit-team-description"
+                  aria-errormessage={errors.description ? 'edit-team-description-error' : undefined}
+                  aria-invalid={Boolean(errors.description)}
+                  maxLength={500}
+                  placeholder={labels.descriptionPlaceholder}
+                  {...register('description')}
                 />
-                <FieldDescription>{labels.keyDescription}</FieldDescription>
-                <FieldError id="edit-team-key-error" errors={[errors.key]} />
+                <FieldError id="edit-team-description-error" errors={[errors.description]} />
               </Field>
+              {isAdmin ? (
+                <Field data-invalid={Boolean(errors.key)} data-disabled={keyLocked || undefined}>
+                  <FieldLabel htmlFor="edit-team-key">{labels.keyLabel}</FieldLabel>
+                  <Input
+                    id="edit-team-key"
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    aria-errormessage={errors.key ? 'edit-team-key-error' : undefined}
+                    aria-invalid={Boolean(errors.key)}
+                    disabled={keyLocked}
+                    maxLength={5}
+                    spellCheck={false}
+                    {...keyField}
+                    onChange={(event) => {
+                      setValue('key', normalizeTeamKey(event.target.value), {
+                        shouldDirty: true,
+                        shouldValidate: Boolean(errors.key),
+                      });
+                    }}
+                  />
+                  <FieldDescription>{labels.keyDescription}</FieldDescription>
+                  <FieldError id="edit-team-key-error" errors={[errors.key]} />
+                </Field>
+              ) : null}
               <FieldSet>
                 <FieldLegend variant="label">{labels.membersLabel}</FieldLegend>
                 <FieldDescription>{labels.membersDescription}</FieldDescription>
@@ -695,7 +766,11 @@ function TeamEditDialog({
                       key={member.id}
                       checked={selectedMemberIds.has(member.id)}
                       currentAdmin={false}
-                      disabled={pendingMemberId !== null}
+                      disabled={
+                        pendingMemberId !== null ||
+                        pendingLeaderId !== null ||
+                        team.leaderIds.includes(member.id)
+                      }
                       labels={labels}
                       member={member}
                       onCheckedChange={(checked) => {
@@ -741,6 +816,40 @@ function TeamEditDialog({
                   </Button>
                 ) : null}
               </FieldSet>
+              {isAdmin ? (
+                <FieldSet>
+                  <FieldLegend variant="label">{labels.leadersLabel}</FieldLegend>
+                  <FieldDescription>{labels.leadersDescription}</FieldDescription>
+                  <div className="flex max-h-52 flex-col gap-3 overflow-y-auto py-1">
+                    {members
+                      .filter((member) => selectedMemberIds.has(member.id))
+                      .map((member) => {
+                        const isLeader = team.leaderIds.includes(member.id);
+                        const id = 'team-leader-' + member.id;
+
+                        return (
+                          <Field key={member.id} orientation="horizontal">
+                            <Checkbox
+                              id={id}
+                              checked={isLeader}
+                              disabled={pendingLeaderId !== null}
+                              onCheckedChange={(value) => changeLeader(member.id, Boolean(value))}
+                            />
+                            <FieldLabel htmlFor={id} className="min-w-0">
+                              <span className="truncate">{member.user.displayName}</span>
+                              {isLeader ? (
+                                <Badge variant="outline">{labels.leaderBadge}</Badge>
+                              ) : null}
+                              <span className="sr-only">
+                                {isLeader ? labels.removeLeader : labels.setLeader}
+                              </span>
+                            </FieldLabel>
+                          </Field>
+                        );
+                      })}
+                  </div>
+                </FieldSet>
+              ) : null}
             </FieldGroup>
           </form>
           <DialogFooter>
@@ -750,7 +859,9 @@ function TeamEditDialog({
             <Button
               type="submit"
               form="edit-team-form"
-              disabled={update.isPending || pendingMemberId !== null || !isDirty}
+              disabled={
+                update.isPending || pendingMemberId !== null || pendingLeaderId !== null || !isDirty
+              }
             >
               {update.isPending ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
               {update.isPending ? labels.saving : labels.save}
@@ -815,15 +926,97 @@ function TeamEditDialog({
   );
 }
 
-function TeamRow({
+function TeamInviteDialog({
   labels,
-  onArchive,
-  onEdit,
+  onClose,
   team,
 }: {
   labels: TeamSettingsLabels;
+  onClose: () => void;
+  team: TeamSummaryResponseDto;
+}) {
+  const mutation = useTeamInvitationsControllerCreate();
+  const schema = z.object({
+    email: z.string().trim().pipe(z.email(labels.inviteEmailInvalid)),
+  });
+  const {
+    formState: { errors },
+    handleSubmit,
+    register,
+  } = useForm<z.infer<typeof schema>>({
+    defaultValues: { email: '' },
+    resolver: zodResolver(schema),
+  });
+  const [unexpectedError, setUnexpectedError] = useState(false);
+  const submit = handleSubmit(({ email }) => {
+    if (mutation.isPending) return;
+    setUnexpectedError(false);
+    mutation.mutate(
+      { data: { emails: [email] }, teamId: team.id },
+      {
+        onError: () => setUnexpectedError(true),
+        onSuccess: onClose,
+      },
+    );
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && !mutation.isPending && onClose()}>
+      <DialogContent closeLabel={labels.close}>
+        <DialogHeader>
+          <DialogTitle>{labels.inviteTitle}</DialogTitle>
+          <DialogDescription>
+            {labels.inviteDescription.replace('{team}', team.name)}
+          </DialogDescription>
+        </DialogHeader>
+        <form id="team-invite-form" noValidate onSubmit={submit} className="space-y-4">
+          {unexpectedError ? (
+            <Alert variant="destructive">
+              <AlertTitle>{labels.errorTitle}</AlertTitle>
+              <AlertDescription>{labels.errorDescription}</AlertDescription>
+            </Alert>
+          ) : null}
+          <Field data-invalid={Boolean(errors.email)}>
+            <FieldLabel htmlFor="team-invite-email">{labels.inviteEmailLabel}</FieldLabel>
+            <Input
+              id="team-invite-email"
+              type="email"
+              autoComplete="email"
+              placeholder={labels.inviteEmailPlaceholder}
+              aria-errormessage={errors.email ? 'team-invite-email-error' : undefined}
+              aria-invalid={Boolean(errors.email)}
+              {...register('email')}
+            />
+            <FieldError id="team-invite-email-error" errors={[errors.email]} />
+          </Field>
+        </form>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={mutation.isPending} onClick={onClose}>
+            {labels.cancel}
+          </Button>
+          <Button type="submit" form="team-invite-form" disabled={mutation.isPending}>
+            {mutation.isPending ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
+            {mutation.isPending ? labels.inviting : labels.inviteSend}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TeamRow({
+  isAdmin,
+  labels,
+  onArchive,
+  onEdit,
+  onInvite,
+  team,
+}: {
+  isAdmin: boolean;
+  labels: TeamSettingsLabels;
   onArchive: (team: TeamSummaryResponseDto) => void;
   onEdit: (teamId: string) => void;
+  onInvite: (team: TeamSummaryResponseDto) => void;
   team: TeamSummaryResponseDto;
 }) {
   return (
@@ -840,10 +1033,25 @@ function TeamRow({
           <UsersRound aria-hidden="true" className="size-3.5" />
           {team.memberCount}
           {labels.memberUnit}
+          {team.leaderCount > 0 ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <ShieldCheck aria-hidden="true" className="size-3.5" />
+              {team.leaderCount}
+              {labels.leaderBadge}
+            </>
+          ) : null}
         </span>
+        {team.description ? (
+          <p className="text-muted-foreground mt-1 truncate text-xs">{team.description}</p>
+        ) : null}
       </div>
-      {!team.archived ? (
+      {!team.archived && (isAdmin || team.canManage) ? (
         <div className="flex items-center gap-1">
+          <Button type="button" variant="ghost" size="sm" onClick={() => onInvite(team)}>
+            <MailPlus data-icon="inline-start" />
+            {labels.invite}
+          </Button>
           <Button type="button" variant="ghost" size="sm" onClick={() => onEdit(team.id)}>
             <Pencil data-icon="inline-start" />
             {labels.edit}
@@ -855,10 +1063,12 @@ function TeamRow({
             <GitBranch data-icon="inline-start" />
             {labels.workflow}
           </Link>
-          <Button type="button" variant="ghost" size="sm" onClick={() => onArchive(team)}>
-            <Archive data-icon="inline-start" />
-            {labels.archive}
-          </Button>
+          {isAdmin ? (
+            <Button type="button" variant="ghost" size="sm" onClick={() => onArchive(team)}>
+              <Archive data-icon="inline-start" />
+              {labels.archive}
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </li>
@@ -873,12 +1083,14 @@ export function TeamSettingsScreen({ labels }: { labels: TeamSettingsLabels }) {
   const archive = useTeamsControllerArchive();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTeamId, setEditTeamId] = useState<string | null>(null);
+  const [inviteTarget, setInviteTarget] = useState<TeamSummaryResponseDto | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<TeamSummaryResponseDto | null>(null);
   const [archiveError, setArchiveError] = useState<Notice>(null);
   const detail = useTeamsControllerGet(editTeamId ?? '', {
     query: { enabled: Boolean(editTeamId), retry: false },
   });
-  const allTeams = teams.data?.items ?? [];
+  const isAdmin = Boolean(session.data?.authenticated && session.data.membership?.role === 'ADMIN');
+  const allTeams = (teams.data?.items ?? []).filter((team) => isAdmin || team.canManage);
   const activeTeams = allTeams.filter((team) => !team.archived);
   const archivedTeams = allTeams.filter((team) => team.archived);
   const membershipId =
@@ -971,10 +1183,12 @@ export function TeamSettingsScreen({ labels }: { labels: TeamSettingsLabels }) {
           <h1 className="text-xl font-semibold tracking-[-0.015em]">{labels.title}</h1>
           <p className="text-muted-foreground mt-1 max-w-2xl text-sm">{labels.description}</p>
         </div>
-        <Button type="button" onClick={() => setCreateOpen(true)}>
-          <Plus data-icon="inline-start" />
-          {labels.create}
-        </Button>
+        {isAdmin ? (
+          <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Plus data-icon="inline-start" />
+            {labels.create}
+          </Button>
+        ) : null}
       </header>
 
       {detail.isPending && editTeamId ? (
@@ -1000,12 +1214,14 @@ export function TeamSettingsScreen({ labels }: { labels: TeamSettingsLabels }) {
               {activeTeams.map((team) => (
                 <TeamRow
                   key={team.id}
+                  isAdmin={isAdmin}
                   labels={labels}
                   onArchive={(target) => {
                     setArchiveError(null);
                     setArchiveTarget(target);
                   }}
                   onEdit={openEdit}
+                  onInvite={setInviteTarget}
                   team={team}
                 />
               ))}
@@ -1024,9 +1240,11 @@ export function TeamSettingsScreen({ labels }: { labels: TeamSettingsLabels }) {
               {archivedTeams.map((team) => (
                 <TeamRow
                   key={team.id}
+                  isAdmin={isAdmin}
                   labels={labels}
                   onArchive={setArchiveTarget}
                   onEdit={openEdit}
+                  onInvite={setInviteTarget}
                   team={team}
                 />
               ))}
@@ -1058,11 +1276,19 @@ export function TeamSettingsScreen({ labels }: { labels: TeamSettingsLabels }) {
           hasMemberLoadError={members.isFetchNextPageError}
           hasMoreMembers={Boolean(members.hasNextPage)}
           isLoadingMoreMembers={members.isFetchingNextPage}
+          isAdmin={isAdmin}
           labels={labels}
           members={activeMembers}
           onClose={() => setEditTeamId(null)}
           onLoadMoreMembers={() => void members.fetchNextPage()}
           team={detail.data}
+        />
+      ) : null}
+      {inviteTarget ? (
+        <TeamInviteDialog
+          labels={labels}
+          onClose={() => setInviteTarget(null)}
+          team={inviteTarget}
         />
       ) : null}
       {editTeamId && detail.isError && !detail.data ? (

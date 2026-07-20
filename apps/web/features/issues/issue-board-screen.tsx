@@ -28,7 +28,7 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
     { ...(team ? { teamId: team.id } : {}), sort: 'updatedAt', sortDirection: 'desc' },
     { query: { enabled: Boolean(team), retry: false } },
   );
-  const workflowStates = useTeamsControllerListWorkflowStates(team?.id ?? '', {
+  const workflowStates = useTeamsControllerListWorkflowStates(team?.id ?? '', undefined, {
     query: { enabled: Boolean(team), retry: false },
   });
   const states = [...(workflowStates.data?.items ?? [])].sort(

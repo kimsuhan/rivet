@@ -313,7 +313,7 @@ export class IssueRepository {
     const state = await transaction.workflowState.findFirst({
       orderBy: [{ position: 'asc' }, { id: 'asc' }],
       select: { id: true },
-      where: { category: StateCategory.UNSTARTED, teamId, workspaceId },
+      where: { category: StateCategory.UNSTARTED, disabledAt: null, teamId, workspaceId },
     });
     if (!state) issueResourceNotFound('팀의 시작 전 상태를 찾을 수 없습니다.');
     return state.id;

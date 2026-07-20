@@ -29,6 +29,8 @@ export type TeamSelectorLabels = {
   errorDescription: string;
   errorTitle: string;
   loading: string;
+  myTeams: string;
+  otherTeams: string;
   retry: string;
   title: string;
 };
@@ -40,14 +42,32 @@ function teamHref(teamKey: string, teamView: TeamView): string {
 export function DesktopTeamNavigation({
   currentTeamKey,
   labels,
+  memberTeamIds,
   teamView,
 }: {
   currentTeamKey: string | null;
   labels: TeamSelectorLabels;
+  memberTeamIds: string[] | null;
   teamView: TeamView;
 }) {
   const teams = useTeamsControllerList({ includeArchived: false }, { query: { retry: false } });
   const items = (teams.data?.items ?? []).filter((team) => !team.archived);
+  const memberTeamIdSet = new Set(memberTeamIds ?? []);
+  const groups =
+    memberTeamIds === null
+      ? [{ id: 'all', label: null, teams: items }]
+      : [
+          {
+            id: 'mine',
+            label: labels.myTeams,
+            teams: items.filter((team) => memberTeamIdSet.has(team.id)),
+          },
+          {
+            id: 'other',
+            label: labels.otherTeams,
+            teams: items.filter((team) => !memberTeamIdSet.has(team.id)),
+          },
+        ].filter((group) => group.teams.length > 0);
 
   return (
     <section
@@ -89,43 +109,56 @@ export function DesktopTeamNavigation({
       ) : null}
 
       {items.length > 0 ? (
-        <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-          {items.map((team) => {
-            const active = currentTeamKey === team.key;
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+          {groups.map((group) => (
+            <div key={group.id}>
+              {group.label ? (
+                <h3 className="text-muted-foreground mb-1 hidden px-2 text-[11px] font-medium xl:block">
+                  {group.label}
+                </h3>
+              ) : null}
+              <ul className="flex flex-col gap-1">
+                {group.teams.map((team) => {
+                  const active = currentTeamKey === team.key;
 
-            return (
-              <li key={team.id}>
-                <Link
-                  href={teamHref(team.key, teamView)}
-                  aria-current={active ? 'page' : undefined}
-                  aria-label={`${team.name} (${team.key})`}
-                  title={`${team.name} (${team.key})`}
-                  onClick={() => {
-                    rememberTeamKey(team.key);
-                    rememberTeamView(teamView);
-                  }}
-                  className={cn(
-                    'focus-visible:ring-sidebar-ring flex h-8 items-center gap-2 rounded-md border-l-2 px-2 text-sm transition-colors outline-none focus-visible:ring-2',
-                    active
-                      ? 'border-primary bg-sidebar-accent text-sidebar-accent-foreground'
-                      : 'text-sidebar-foreground hover:bg-surface-2 hover:text-foreground border-transparent',
-                  )}
-                >
-                  <code
-                    className={cn(
-                      'w-4 shrink-0 truncate rounded text-center text-xs xl:w-8',
-                      active ? 'text-sidebar-accent-foreground' : 'bg-surface-2 text-muted-foreground',
-                    )}
-                  >
-                    <span className="xl:hidden">{team.key.slice(0, 1)}</span>
-                    <span className="hidden xl:inline">{team.key}</span>
-                  </code>
-                  <span className="hidden min-w-0 truncate xl:inline">{team.name}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+                  return (
+                    <li key={team.id}>
+                      <Link
+                        href={teamHref(team.key, teamView)}
+                        aria-current={active ? 'page' : undefined}
+                        aria-label={`${team.name} (${team.key})`}
+                        title={`${team.name} (${team.key})${memberTeamIdSet.has(team.id) ? ` · ${labels.myTeams}` : ''}`}
+                        onClick={() => {
+                          rememberTeamKey(team.key);
+                          rememberTeamView(teamView);
+                        }}
+                        className={cn(
+                          'focus-visible:ring-sidebar-ring flex h-8 items-center gap-2 rounded-md border-l-2 px-2 text-sm transition-colors outline-none focus-visible:ring-2',
+                          active
+                            ? 'border-primary bg-sidebar-accent text-sidebar-accent-foreground'
+                            : 'text-sidebar-foreground hover:bg-surface-2 hover:text-foreground border-transparent',
+                        )}
+                      >
+                        <code
+                          className={cn(
+                            'w-4 shrink-0 truncate rounded text-center text-xs xl:w-8',
+                            active
+                              ? 'text-sidebar-accent-foreground'
+                              : 'bg-surface-2 text-muted-foreground',
+                          )}
+                        >
+                          <span className="xl:hidden">{team.key.slice(0, 1)}</span>
+                          <span className="hidden xl:inline">{team.key}</span>
+                        </code>
+                        <span className="hidden min-w-0 truncate xl:inline">{team.name}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
       ) : null}
     </section>
   );
@@ -135,11 +168,13 @@ export function TeamSelector({
   open,
   onOpenChange,
   labels,
+  memberTeamIds,
   teamView,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   labels: TeamSelectorLabels;
+  memberTeamIds: string[] | null;
   teamView: TeamView;
 }) {
   const teams = useTeamsControllerList(
@@ -147,6 +182,22 @@ export function TeamSelector({
     { query: { enabled: open, retry: false } },
   );
   const items = (teams.data?.items ?? []).filter((team) => !team.archived);
+  const memberTeamIdSet = new Set(memberTeamIds ?? []);
+  const groups =
+    memberTeamIds === null
+      ? [{ id: 'all', label: null, teams: items }]
+      : [
+          {
+            id: 'mine',
+            label: labels.myTeams,
+            teams: items.filter((team) => memberTeamIdSet.has(team.id)),
+          },
+          {
+            id: 'other',
+            label: labels.otherTeams,
+            teams: items.filter((team) => !memberTeamIdSet.has(team.id)),
+          },
+        ].filter((group) => group.teams.length > 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -176,26 +227,35 @@ export function TeamSelector({
           />
         ) : null}
         {items.length > 0 ? (
-          <ul className="divide-border overflow-y-auto rounded-lg border">
-            {items.map((team) => (
-              <li key={team.id} className="border-b last:border-b-0">
-                <Link
-                  href={teamHref(team.key, teamView)}
-                  onClick={() => {
-                    rememberTeamKey(team.key);
-                    rememberTeamView(teamView);
-                    onOpenChange(false);
-                  }}
-                  className="hover:bg-surface-2 focus-visible:ring-ring flex min-h-14 items-center gap-3 px-3 outline-none focus-visible:ring-2 focus-visible:ring-inset"
-                >
-                  <code className="bg-surface-2 text-muted-foreground w-12 shrink-0 rounded px-2 py-1 text-center text-xs">
-                    {team.key}
-                  </code>
-                  <span className="min-w-0 truncate font-medium">{team.name}</span>
-                </Link>
-              </li>
+          <div className="space-y-5 overflow-y-auto">
+            {groups.map((group) => (
+              <section key={group.id} aria-label={group.label ?? labels.title}>
+                {group.label ? (
+                  <h3 className="text-muted-foreground mb-2 text-xs font-medium">{group.label}</h3>
+                ) : null}
+                <ul className="divide-border rounded-lg border">
+                  {group.teams.map((team) => (
+                    <li key={team.id} className="border-b last:border-b-0">
+                      <Link
+                        href={teamHref(team.key, teamView)}
+                        onClick={() => {
+                          rememberTeamKey(team.key);
+                          rememberTeamView(teamView);
+                          onOpenChange(false);
+                        }}
+                        className="hover:bg-surface-2 focus-visible:ring-ring flex min-h-14 items-center gap-3 px-3 outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                      >
+                        <code className="bg-surface-2 text-muted-foreground w-12 shrink-0 rounded px-2 py-1 text-center text-xs">
+                          {team.key}
+                        </code>
+                        <span className="min-w-0 truncate font-medium">{team.name}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         ) : null}
       </DialogContent>
     </Dialog>

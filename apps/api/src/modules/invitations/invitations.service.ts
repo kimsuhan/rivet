@@ -16,35 +16,34 @@ import { apiConfig } from '../../config/api.config';
 import { normalizeEmail } from '../auth/auth-input.policy';
 import { AUTH_RATE_LIMITS, AuthRateLimitService } from '../auth/auth-rate-limit.service';
 import { createOneTimeToken } from '../auth/auth-token.crypto';
-import type {
-  CreateInvitationsResponseDto,
-  InvitationResponseDto,
-} from './dto/invitation.dto';
-import {
-  type InvitationRow,
-  toInvitationResponse,
-} from './invitation-response.mapper';
-
+import { type TeamManagementContext, TeamManagementPolicy } from '../teams/team-management.policy';
+import type { CreateInvitationsResponseDto, InvitationResponseDto } from './dto/invitation.dto';
+import { type InvitationRow, toInvitationResponse } from './invitation-response.mapper';
 
 type LockedInvitationRow = InvitationRow & {
   normalizedEmail: string;
   workspaceId: string;
 };
 
-
 @Injectable()
 export class InvitationsService {
   constructor(
     private readonly database: DatabaseService,
+    private readonly management: TeamManagementPolicy,
     private readonly rateLimits: AuthRateLimitService,
     @Inject(apiConfig.KEY) private readonly config: ConfigType<typeof apiConfig>,
   ) {}
 
-
   async create(
-    context: { membershipId: string; workspaceId: string },
+    context: TeamManagementContext,
     emails: string[],
+    teamId?: string,
   ): Promise<CreateInvitationsResponseDto> {
+    if (teamId) {
+      await this.database.client.$transaction((transaction) =>
+        this.management.assertCanManageTeam(transaction, context, teamId),
+      );
+    }
     const emailByNormalized = new Map<string, string>();
     for (const email of emails) {
       const trimmedEmail = email.trim();
@@ -95,6 +94,9 @@ export class InvitationsService {
     for (const [normalizedEmail, email] of emailByNormalized) {
       try {
         const result = await this.database.client.$transaction(async (transaction) => {
+          if (teamId) {
+            await this.management.assertCanManageTeam(transaction, context, teamId);
+          }
           // 수락 트랜잭션과 직렬화한 뒤 멤버십을 다시 확인해 새 pending 초대 생성을 막는다.
           const [pending] = await transaction.$queryRaw<Array<{ expiresAt: Date; id: string }>>`
             SELECT "id", "expires_at" AS "expiresAt"
@@ -123,7 +125,15 @@ export class InvitationsService {
 
           if (pending) {
             if (pending.expiresAt > new Date()) {
-              return { email, invitationId: pending.id, result: 'ALREADY_INVITED' as const };
+              const targetResult = teamId
+                ? await this.attachTeamTarget(transaction, context, pending.id, teamId)
+                : 'EXISTING';
+              return {
+                email,
+                invitationId: pending.id,
+                result:
+                  targetResult === 'ADDED' ? ('TEAM_ADDED' as const) : ('ALREADY_INVITED' as const),
+              };
             }
 
             await transaction.$executeRaw`
@@ -134,6 +144,9 @@ export class InvitationsService {
                   "updated_at" = NOW()
               WHERE "id" = ${pending.id}::uuid
             `;
+            if (teamId) {
+              await this.attachTeamTarget(transaction, context, pending.id, teamId);
+            }
             await this.issueEmail(transaction, {
               ...context,
               currentMemberCount,
@@ -162,6 +175,9 @@ export class InvitationsService {
               NOW()
             )
           `;
+          if (teamId) {
+            await this.attachTeamTarget(transaction, context, invitationId, teamId);
+          }
           await this.issueEmail(transaction, {
             ...context,
             currentMemberCount,
@@ -171,7 +187,10 @@ export class InvitationsService {
           return { email, invitationId, result: 'INVITED' as const };
         });
         items.push(result);
-      } catch {
+      } catch (error) {
+        if (error instanceof ApiError) {
+          throw error;
+        }
         const pending = await this.findPending(context.workspaceId, normalizedEmail);
         items.push(
           pending
@@ -182,6 +201,30 @@ export class InvitationsService {
     }
 
     return { items };
+  }
+
+  private async attachTeamTarget(
+    transaction: Prisma.TransactionClient,
+    context: TeamManagementContext,
+    invitationId: string,
+    teamId: string,
+  ): Promise<'ADDED' | 'EXISTING'> {
+    const current = await transaction.workspaceInvitationTeam.findUnique({
+      select: { teamId: true },
+      where: { invitationId_teamId: { invitationId, teamId } },
+    });
+    if (current) {
+      return 'EXISTING';
+    }
+    await transaction.workspaceInvitationTeam.create({
+      data: {
+        invitationId,
+        invitedByMembershipId: context.membershipId,
+        teamId,
+        workspaceId: context.workspaceId,
+      },
+    });
+    return 'ADDED';
   }
 
   async resend(
@@ -502,7 +545,6 @@ export class InvitationsService {
     }
     return toInvitationResponse(invitation);
   }
-
 
   private throwNotFound(): never {
     throw new ApiError({

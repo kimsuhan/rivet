@@ -13,6 +13,11 @@ export interface UpdateTeamDto {
      */
   name?: string;
   /**
+     * @maxLength 500
+     * @nullable
+     */
+  description?: string | null;
+  /**
      * @minLength 2
      * @maxLength 5
      * @pattern ^[A-Z]{2,5}$

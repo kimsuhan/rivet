@@ -168,10 +168,16 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
     { href: '/issues', label: labels.navigation.issues, icon: CircleDot },
     { href: '/projects', label: labels.navigation.projects, icon: FolderKanban },
   ];
-  const canManageWorkspace = Boolean(
+  const isWorkspaceAdmin = Boolean(
     session.data?.authenticated &&
     session.data.membership?.role === 'ADMIN' &&
     session.data.membership.status === 'ACTIVE',
+  );
+  const canAccessSettings = Boolean(
+    isWorkspaceAdmin ||
+    (session.data?.authenticated &&
+      session.data.membership?.status === 'ACTIVE' &&
+      (session.data.membership.ledTeamIds?.length ?? 0) > 0),
   );
   const unreadNotificationCount = unreadNotifications.data?.count ?? 0;
   const inboxNavigationLabel =
@@ -186,6 +192,9 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
   const selectedTeamView = selectedTeamLocation?.view ?? null;
   const lastTeamView = selectedTeamView ?? storedTeamView;
   const membershipId = session.data?.authenticated ? session.data.membership?.id : undefined;
+  const memberTeamIds = session.data?.authenticated
+    ? (session.data.membership?.teamIds ?? [])
+    : null;
   const currentSearch = searchParams.toString();
 
   useEffect(() => {
@@ -473,7 +482,10 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
                     >
                       <ChevronRight
                         aria-hidden="true"
-                        className={cn('size-3 transition-transform', sectionExpanded && 'rotate-90')}
+                        className={cn(
+                          'size-3 transition-transform',
+                          sectionExpanded && 'rotate-90',
+                        )}
                       />
                     </button>
                   ) : null}
@@ -506,6 +518,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
         <DesktopTeamNavigation
           currentTeamKey={selectedTeamKey}
           labels={labels.teamSelector}
+          memberTeamIds={memberTeamIds}
           teamView={lastTeamView}
         />
 
@@ -546,9 +559,9 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
                 {session.data.user.displayName}
               </span>
             </UserMenu>
-            {canManageWorkspace ? (
+            {canAccessSettings ? (
               <Link
-                href="/settings/members"
+                href={isWorkspaceAdmin ? '/settings/members' : '/settings/teams'}
                 aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
                 aria-label={labels.navigation.settings}
                 title={labels.navigation.settings}
@@ -714,6 +727,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
         open={teamSelectorOpen}
         onOpenChange={changeTeamSelectorOpen}
         labels={labels.teamSelector}
+        memberTeamIds={memberTeamIds}
         teamView={lastTeamView}
       />
       {session.data?.authenticated && profileOpen ? (

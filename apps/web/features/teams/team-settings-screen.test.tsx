@@ -6,12 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   useAuthControllerGetSession,
+  useTeamInvitationsControllerCreate,
   useTeamsControllerAddMember,
   useTeamsControllerArchive,
   useTeamsControllerCreate,
   useTeamsControllerGet,
   useTeamsControllerList,
+  useTeamsControllerRemoveLeader,
   useTeamsControllerRemoveMember,
+  useTeamsControllerSetLeader,
   useTeamsControllerUpdate,
 } from '@rivet/api-client';
 
@@ -41,6 +44,9 @@ const mocks = vi.hoisted(() => ({
   fetchMoreMembers: vi.fn(),
   memberPagesHook: vi.fn(),
   removeMember: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
+  removeLeader: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
+  setLeader: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
+  invite: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
   update: vi.fn<(variables: unknown, callbacks?: MutationCallbacks) => void>(),
 }));
 
@@ -53,7 +59,10 @@ vi.mock('@rivet/api-client', async (importOriginal) => ({
   useTeamsControllerGet: vi.fn(),
   useTeamsControllerList: vi.fn(),
   useTeamsControllerRemoveMember: vi.fn(),
+  useTeamsControllerRemoveLeader: vi.fn(),
+  useTeamsControllerSetLeader: vi.fn(),
   useTeamsControllerUpdate: vi.fn(),
+  useTeamInvitationsControllerCreate: vi.fn(),
 }));
 
 vi.mock('@/features/members/member-settings-queries', () => ({
@@ -93,22 +102,29 @@ const nextPageMember = {
 };
 const activeTeam = {
   archived: false,
+  canManage: true,
+  description: null,
   id: 'team-active',
   key: 'WEB',
+  leaderCount: 0,
   memberCount: 1,
   name: '웹',
   version: 3,
 };
 const archivedTeam = {
   archived: true,
+  canManage: true,
+  description: null,
   id: 'team-archived',
   key: 'OLD',
+  leaderCount: 0,
   memberCount: 2,
   name: '이전 웹',
   version: 4,
 };
 const teamDetail = {
   ...activeTeam,
+  leaderIds: [],
   memberIds: [activeAdmin.id],
   workflowStates: [],
 };
@@ -164,7 +180,7 @@ describe('TeamSettingsScreen', () => {
     vi.mocked(useAuthControllerGetSession).mockReturnValue(
       queryResult({
         authenticated: true,
-        membership: { id: activeAdmin.id, role: 'ADMIN', status: 'ACTIVE' },
+        membership: { id: activeAdmin.id, ledTeamIds: [], role: 'ADMIN', status: 'ACTIVE' },
       }) as never,
     );
     mocks.memberPagesHook.mockReturnValue({
@@ -189,6 +205,15 @@ describe('TeamSettingsScreen', () => {
     vi.mocked(useTeamsControllerRemoveMember).mockReturnValue(
       mutationResult(mocks.removeMember) as never,
     );
+    vi.mocked(useTeamsControllerSetLeader).mockReturnValue(
+      mutationResult(mocks.setLeader) as never,
+    );
+    vi.mocked(useTeamsControllerRemoveLeader).mockReturnValue(
+      mutationResult(mocks.removeLeader) as never,
+    );
+    vi.mocked(useTeamInvitationsControllerCreate).mockReturnValue(
+      mutationResult(mocks.invite) as never,
+    );
   });
 
   it('활성·보관 팀을 분리하고 워크플로 링크를 제공한다', async () => {
@@ -205,6 +230,72 @@ describe('TeamSettingsScreen', () => {
 
     expect(screen.getByText(archivedTeam.name)).toBeVisible();
     expect(screen.queryByRole('button', { name: labels.archive })).not.toBeInTheDocument();
+  });
+
+  it('팀장은 관리하는 팀만 보고 팀 키와 보관 기능 없이 팀 정보를 편집한다', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAuthControllerGetSession).mockReturnValue(
+      queryResult({
+        authenticated: true,
+        membership: {
+          id: activeMember.id,
+          ledTeamIds: [activeTeam.id],
+          role: 'MEMBER',
+          status: 'ACTIVE',
+        },
+      }) as never,
+    );
+    vi.mocked(useTeamsControllerGet).mockReturnValue(
+      queryResult({ ...teamDetail, canManage: true, leaderIds: [activeMember.id] }) as never,
+    );
+
+    renderScreen();
+
+    expect(screen.queryByRole('button', { name: labels.create })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: labels.workflow })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: labels.edit }));
+    expect(await screen.findByLabelText(labels.descriptionLabel)).toBeVisible();
+    expect(screen.queryByLabelText(labels.keyLabel)).not.toBeInTheDocument();
+    expect(screen.queryByText(labels.leadersLabel)).not.toBeInTheDocument();
+  });
+
+  it('관리자는 팀 멤버를 팀장으로 지정한다', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useTeamsControllerGet).mockReturnValue(
+      queryResult({
+        ...teamDetail,
+        leaderIds: [],
+        memberIds: [activeAdmin.id, activeMember.id],
+      }) as never,
+    );
+
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: labels.edit }));
+    await user.click(
+      await screen.findByRole('checkbox', {
+        name: new RegExp(activeMember.user.displayName + '.*' + labels.setLeader),
+      }),
+    );
+
+    expect(mocks.setLeader).toHaveBeenCalledWith(
+      { membershipId: activeMember.id, teamId: activeTeam.id },
+      expect.any(Object),
+    );
+  });
+
+  it('관리 중인 팀으로 이메일 초대를 보낸다', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: labels.invite }));
+    const dialog = await screen.findByRole('dialog', { name: labels.inviteTitle });
+    await user.type(within(dialog).getByLabelText(labels.inviteEmailLabel), 'new@example.com');
+    await user.click(within(dialog).getByRole('button', { name: labels.inviteSend }));
+
+    expect(mocks.invite).toHaveBeenCalledWith(
+      { data: { emails: ['new@example.com'] }, teamId: activeTeam.id },
+      expect.any(Object),
+    );
   });
 
   it('팀 생성 시 현재 관리자를 초기 멤버로 고정하고 선택한 활성 멤버를 전송한다', async () => {
@@ -487,7 +578,7 @@ describe('TeamSettingsScreen', () => {
     renderScreen();
 
     await user.click(screen.getByRole('button', { name: labels.edit }));
-    await user.click(await screen.findByRole('checkbox', { name: /팀원/ }));
+    await user.click((await screen.findAllByRole('checkbox', { name: /팀원/ }))[0]!);
 
     expect(mocks.removeMember).not.toHaveBeenCalled();
     expect(await screen.findByText(labels.removeMemberTitle)).toBeVisible();

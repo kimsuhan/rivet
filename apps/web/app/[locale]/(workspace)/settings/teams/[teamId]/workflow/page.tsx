@@ -59,6 +59,8 @@ export default async function WorkflowSettingsPage({
     deleteInUseTitle: t('deleteInUseTitle'),
     deleteTitle: t('deleteTitle'),
     deleting: t('deleting'),
+    disable: t('disable'),
+    disabledBadge: t('disabledBadge'),
     description: t('description'),
     discardChanges: t('discardChanges'),
     discardDescription: t('discardDescription'),
@@ -79,6 +81,7 @@ export default async function WorkflowSettingsPage({
     rename: t('rename'),
     renameDescription: t('renameDescription'),
     renameTitle: t('renameTitle'),
+    restore: t('restore'),
     reorderErrorDescription: t('reorderErrorDescription'),
     reorderErrorTitle: t('reorderErrorTitle'),
     reorderSuccess: t('reorderSuccess', { position: '{position}', state: '{state}' }),
@@ -96,6 +99,8 @@ export default async function WorkflowSettingsPage({
     terminalDefaultDescription: t('terminalDefaultDescription'),
     terminalDefaultTitle: t('terminalDefaultTitle'),
     title: t('title'),
+    toggleErrorDescription: t('toggleErrorDescription'),
+    toggleErrorTitle: t('toggleErrorTitle'),
   };
 
   return <WorkflowSettingsScreen labels={labels} teamId={teamId} />;

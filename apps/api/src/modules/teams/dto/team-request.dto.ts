@@ -23,6 +23,18 @@ export class TeamListQueryDto {
   includeArchived = false;
 }
 
+export class WorkflowStateListQueryDto {
+  @ApiPropertyOptional({ default: false })
+  @Transform(({ value }) => {
+    if (value === undefined) return false;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean({ message: '사용 중지 상태 포함 여부가 올바르지 않습니다.' })
+  includeDisabled = false;
+}
+
 export class UpdateTeamDto {
   @ApiPropertyOptional({ example: '디자인', maxLength: 100, minLength: 1 })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
@@ -31,6 +43,17 @@ export class UpdateTeamDto {
   @IsNotEmpty({ message: '팀 이름을 입력해 주세요.' })
   @MaxLength(100, { message: '팀 이름은 100자 이하여야 합니다.' })
   name?: string;
+
+  @ApiPropertyOptional({ example: '제품 웹 화면을 담당합니다.', maxLength: 500, nullable: true })
+  @Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    const description = value.trim();
+    return description.length > 0 ? description : null;
+  })
+  @IsOptional()
+  @IsString({ message: '팀 설명이 올바르지 않습니다.' })
+  @MaxLength(500, { message: '팀 설명은 500자 이하여야 합니다.' })
+  description?: string | null;
 
   @ApiPropertyOptional({ example: 'WEB', maxLength: 5, minLength: 2 })
   @IsOptional()

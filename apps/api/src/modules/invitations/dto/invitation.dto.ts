@@ -111,8 +111,8 @@ export class InvitationResultItemDto {
   @ApiProperty({ format: 'email' })
   email!: string;
 
-  @ApiProperty({ enum: ['INVITED', 'ALREADY_MEMBER', 'ALREADY_INVITED', 'FAILED'] })
-  result!: 'INVITED' | 'ALREADY_MEMBER' | 'ALREADY_INVITED' | 'FAILED';
+  @ApiProperty({ enum: ['INVITED', 'TEAM_ADDED', 'ALREADY_MEMBER', 'ALREADY_INVITED', 'FAILED'] })
+  result!: 'INVITED' | 'TEAM_ADDED' | 'ALREADY_MEMBER' | 'ALREADY_INVITED' | 'FAILED';
 
   @ApiProperty({ format: 'uuid', nullable: true, type: String })
   invitationId!: string | null;
@@ -173,6 +173,9 @@ export class AcceptInvitationResponseDto {
 
   @ApiProperty({ type: AcceptedInvitationMembershipDto })
   membership!: AcceptedInvitationMembershipDto;
+
+  @ApiProperty({ format: 'uuid', isArray: true, type: String })
+  joinedTeamIds!: string[];
 
   @ApiProperty({ type: AcceptedInvitationWorkspaceDto })
   workspace!: AcceptedInvitationWorkspaceDto;

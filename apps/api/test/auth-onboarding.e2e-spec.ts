@@ -366,11 +366,11 @@ describe('M1 authentication and first workspace', () => {
     expect(team.body).toMatchObject({ archived: false, key: 'MVP', name: '기본 팀' });
     expect(team.body.workflowStates).toEqual([
       expect.objectContaining({ category: 'BACKLOG', isDefault: true, name: '미분류' }),
+      expect.objectContaining({ category: 'BACKLOG', isDefault: false, name: '보류' }),
       expect.objectContaining({ category: 'UNSTARTED', isDefault: false, name: '할 일' }),
       expect.objectContaining({ category: 'STARTED', isDefault: false, name: '진행 중' }),
       expect.objectContaining({ category: 'STARTED', isDefault: false, name: '검토' }),
       expect.objectContaining({ category: 'COMPLETED', isDefault: false, name: '완료' }),
-      expect.objectContaining({ category: 'BACKLOG', isDefault: false, name: '보류' }),
       expect.objectContaining({ category: 'CANCELED', isDefault: false, name: '취소' }),
     ]);
     expect((await agent.get('/api/v1/auth/session').expect(200)).body.onboardingStep).toBe(

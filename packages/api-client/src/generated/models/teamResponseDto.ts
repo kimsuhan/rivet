@@ -11,9 +11,13 @@ export interface TeamResponseDto {
   id: string;
   name: string;
   key: string;
+  /** @nullable */
+  description: string | null;
   archived: boolean;
   /** @minimum 1 */
   version: number;
   memberIds: string[];
+  leaderIds: string[];
+  canManage: boolean;
   workflowStates: WorkflowStateResponseDto[];
 }
