@@ -9,7 +9,10 @@ const context = {
   workspaceId: '953685f0-4921-41cd-8422-d8a1ccc3f547',
 };
 const view = {
-  configuration: { query: '검색', sort: 'updatedAt', sortDirection: 'desc' },
+  configuration: {
+    query: '검색',
+    sorts: [{ direction: 'desc', field: 'updatedAt' }],
+  },
   createdAt: new Date('2026-07-15T00:00:00.000Z'),
   id: '05ed9724-f207-447d-9f18-7026f493d3fd',
   isDefault: false,
@@ -66,16 +69,44 @@ describe('SavedViewsService', () => {
     transaction.savedView.create.mockResolvedValue(view);
 
     await service.create(context, {
-      configuration: { query: '  검색  ', sort: 'updatedAt', sortDirection: 'desc' },
+      configuration: {
+        query: '  검색  ',
+        sorts: [
+          { direction: 'desc', field: 'priority' },
+          { direction: 'asc', field: 'status' },
+        ],
+      },
       name: '  최근 이슈  ',
       resourceType: 'ISSUES',
     });
 
     expect(transaction.savedView.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        configuration: { query: '검색', sort: 'updatedAt', sortDirection: 'desc' },
+        configuration: {
+          query: '검색',
+          sorts: [
+            { direction: 'desc', field: 'priority' },
+            { direction: 'asc', field: 'status' },
+          ],
+        },
         normalizedName: '최근 이슈',
         workspaceId: context.workspaceId,
+      }),
+    });
+  });
+
+  it('normalizes legacy issue sorting into the structured sort list', async () => {
+    transaction.savedView.create.mockResolvedValue(view);
+
+    await service.create(context, {
+      configuration: { sort: 'progress', sortDirection: 'asc' },
+      name: '기존 정렬 보기',
+      resourceType: 'ISSUES',
+    });
+
+    expect(transaction.savedView.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        configuration: { sorts: [{ direction: 'asc', field: 'progress' }] },
       }),
     });
   });
@@ -96,6 +127,21 @@ describe('SavedViewsService', () => {
     ['잘못된 작업 상태', 'MY_WORK', { stateCategory: 'STARTED,UNKNOWN' }],
     ['잘못된 표시 옵션', 'ISSUES', { density: 'tiny' }],
     ['잘못된 프로젝트', 'ISSUES', { projectId: 'not-a-uuid' }],
+    [
+      '중복된 정렬',
+      'ISSUES',
+      {
+        sorts: [
+          { direction: 'desc', field: 'priority' },
+          { direction: 'asc', field: 'priority' },
+        ],
+      },
+    ],
+    [
+      '혼합된 정렬 계약',
+      'ISSUES',
+      { sort: 'priority', sorts: [{ direction: 'desc', field: 'status' }] },
+    ],
   ] as const)('%s 구성을 거부한다', async (_label, resourceType, configuration) => {
     await expect(
       service.create(context, { configuration, name: '잘못된 보기', resourceType }),

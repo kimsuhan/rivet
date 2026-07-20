@@ -1,3 +1,5 @@
+import { normalizeIssueSorts, serializeIssueSorts } from './issue-multi-sort';
+
 const SAVED_VIEW_CONFIGURATION_KEYS = [
   'query',
   'projectId',
@@ -5,6 +7,7 @@ const SAVED_VIEW_CONFIGURATION_KEYS = [
   'stateCategory',
   'sort',
   'sortDirection',
+  'sorts',
   'density',
 ] as const;
 
@@ -33,6 +36,11 @@ export function normalizeSavedViewConfiguration(
 
   for (const key of SAVED_VIEW_CONFIGURATION_KEYS) {
     const value = configuration[key];
+    if (key === 'sorts') {
+      const sorts = normalizeIssueSorts(value);
+      if (sorts) normalized.sorts = serializeIssueSorts(sorts);
+      continue;
+    }
     if (typeof value === 'string' && value) normalized[key] = value;
   }
 

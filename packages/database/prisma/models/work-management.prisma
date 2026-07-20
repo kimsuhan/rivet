@@ -196,6 +196,7 @@ model Issue {
   @@index([workspaceId, status, updatedAt, id])
   @@index([workspaceId, projectId, updatedAt, id])
   @@index([workspaceId, deletedAt, createdAt, id])
+  @@index([workspaceId, deletedAt, updatedAt, id])
   @@map("issues")
 }
 

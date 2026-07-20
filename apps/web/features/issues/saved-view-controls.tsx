@@ -89,8 +89,8 @@ export function SavedViewControls({
 }: {
   activeFilters?: ReactNode;
   children?: ReactNode;
-  configuration: Record<string, string>;
-  defaultConfiguration?: Record<string, string>;
+  configuration: Record<string, unknown>;
+  defaultConfiguration?: Record<string, unknown>;
   resourceType: 'ISSUES' | 'MY_WORK';
   staleValueMessage?: string;
 }) {
@@ -112,7 +112,9 @@ export function SavedViewControls({
   const appliedViewId = useRef<string | null>(null);
   const initialViewResolved = useRef(false);
   const selectedId = searchParams.get('view');
-  const hasExplicitConfiguration = Object.keys(configuration).some((key) => searchParams.has(key));
+  const hasExplicitConfiguration =
+    Object.keys(configuration).some((key) => searchParams.has(key)) ||
+    (resourceType === 'ISSUES' && (searchParams.has('sort') || searchParams.has('sortDirection')));
 
   const apply = useCallback(
     (view: SavedViewResponseDto) => {

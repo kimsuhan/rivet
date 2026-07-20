@@ -6,4 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 
+/**
+ * ISSUES 보기의 sorts는 { field, direction } 객체 배열입니다.
+ */
 export type SavedViewResponseDtoConfiguration = { [key: string]: unknown };

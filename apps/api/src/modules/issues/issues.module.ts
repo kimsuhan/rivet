@@ -5,6 +5,7 @@ import { FilesModule } from '../files/files.module';
 import { IssueTemplatesModule } from '../issue-templates/issue-templates.module';
 import { IssueRepository } from './issue.repository';
 import { IssueAssignmentService } from './issue-assignment.service';
+import { IssueListRepository } from './issue-list.repository';
 import { IssueQueryService } from './issue-query.service';
 import { IssueStatusService } from './issue-status.service';
 import { IssuesController } from './issues.controller';
@@ -18,6 +19,7 @@ import { TeamWorksService } from './team-works.service';
   imports: [FilesModule, IssueCollaborationModule, IssueTemplatesModule],
   providers: [
     IssueAssignmentService,
+    IssueListRepository,
     IssueQueryService,
     IssueRepository,
     IssueStatusService,

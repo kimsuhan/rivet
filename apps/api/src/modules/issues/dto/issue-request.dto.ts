@@ -110,6 +110,16 @@ export class IssueListQueryDto {
   @IsIn(['asc', 'desc'])
   sortDirection?: 'asc' | 'desc';
 
+  @ApiPropertyOptional({
+    description:
+      '쉼표로 구분한 정렬 조건(field:direction). 최대 3개이며 sort/sortDirection과 함께 사용할 수 없습니다.',
+    example: 'priority:desc,status:asc,updatedAt:desc',
+  })
+  @IsOptional()
+  @IsString({ message: '다중 정렬 조건이 올바르지 않습니다.' })
+  @MaxLength(200)
+  sorts?: string;
+
   @ApiPropertyOptional({ default: 50, maximum: 100, minimum: 1, type: Number })
   @Type(() => Number)
   @IsInt()

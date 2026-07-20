@@ -47,6 +47,11 @@ updatedTo?: string;
 sort?: IssuesControllerListSort;
 sortDirection?: IssuesControllerListSortDirection;
 /**
+ * 쉼표로 구분한 정렬 조건(field:direction). 최대 3개이며 sort/sortDirection과 함께 사용할 수 없습니다.
+ * @maxLength 200
+ */
+sorts?: string;
+/**
  * @minimum 1
  * @maximum 100
  */
