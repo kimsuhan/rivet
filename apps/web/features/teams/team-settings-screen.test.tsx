@@ -219,7 +219,9 @@ describe('TeamSettingsScreen', () => {
     expect(adminCheckbox).toHaveAttribute('aria-disabled', 'true');
     await user.click(within(dialog).getByRole('checkbox', { name: /팀원/ }));
     await user.type(within(dialog).getByLabelText(labels.nameLabel), '모바일');
-    await user.type(within(dialog).getByLabelText(labels.keyLabel), 'APP');
+    const keyInput = within(dialog).getByLabelText(labels.keyLabel);
+    await user.clear(keyInput);
+    await user.type(keyInput, 'APP');
     await user.click(within(dialog).getByRole('button', { name: labels.create }));
 
     await waitFor(() =>
@@ -292,6 +294,26 @@ describe('TeamSettingsScreen', () => {
     );
     expect(nameInput).toHaveAttribute('aria-errormessage', 'create-team-name-error');
     expect(nameInput).toHaveFocus();
+  });
+
+  it('팀 이름에서 키를 자동 생성하고 직접 입력한 키는 영문 대문자로 정규화한다', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: labels.create }));
+    const dialog = await screen.findByRole('dialog', { name: labels.createTitle });
+    const nameInput = within(dialog).getByLabelText(labels.nameLabel);
+    const keyInput = within(dialog).getByLabelText(labels.keyLabel);
+
+    await user.type(nameInput, 'Product Design');
+    expect(keyInput).toHaveValue('PD');
+
+    await user.clear(keyInput);
+    await user.type(keyInput, 'p3l-a한글n');
+    expect(keyInput).toHaveValue('PLAN');
+
+    await user.clear(nameInput);
+    await user.type(nameInput, '다른 팀');
+    expect(keyInput).toHaveValue('PLAN');
   });
 
   it('팀 생성·편집의 저장하지 않은 변경을 닫기 전에 확인한다', async () => {
