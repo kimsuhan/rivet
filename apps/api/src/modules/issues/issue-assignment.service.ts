@@ -451,9 +451,7 @@ export class IssueAssignmentService {
           : [{ isDefault: 'desc' }, { position: 'asc' }, { id: 'asc' }],
         select: { id: true },
         where: {
-          ...(assignment.assigneeMembershipId
-            ? { category: StateCategory.UNSTARTED }
-            : { category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] } }),
+          ...(assignment.assigneeMembershipId ? { category: StateCategory.UNSTARTED } : {}),
           teamId: projectTeam.teamId,
           workspaceId: context.workspaceId,
         },

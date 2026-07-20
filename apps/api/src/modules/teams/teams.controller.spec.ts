@@ -48,7 +48,10 @@ describe('TeamsController', () => {
   };
   const teamQueries = {};
   const teams = { create: jest.fn() };
-  const workflowStates = {};
+  const workflowStates = {
+    createWorkflowState: jest.fn(),
+    setDefaultWorkflowState: jest.fn(),
+  };
   let moduleRef: TestingModule;
   let controller: TeamsController;
 
@@ -91,6 +94,45 @@ describe('TeamsController', () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, TeamsController.prototype.create)).toContain(
       AdminGuard,
     );
+  });
+
+  it('creates a workflow state and allows any category to become the default', async () => {
+    const state = {
+      category: 'COMPLETED' as const,
+      id: '05ed9724-f207-447d-9f18-7026f493d3fd',
+      isDefault: false,
+      name: '검증 완료',
+      position: 7,
+      version: 1,
+    };
+    workflowStates.createWorkflowState.mockResolvedValue(state);
+    workflowStates.setDefaultWorkflowState.mockResolvedValue({
+      items: [{ ...state, isDefault: true, version: 2 }],
+      nextCursor: null,
+    });
+
+    await expect(
+      controller.createWorkflowState(authentication, response.id, {
+        category: 'COMPLETED' as never,
+        name: '검증 완료',
+      }),
+    ).resolves.toEqual(state);
+    await expect(
+      controller.setDefaultWorkflowState(authentication, state.id, { version: 1 }),
+    ).resolves.toMatchObject({ items: [expect.objectContaining({ isDefault: true })] });
+    expect(workflowStates.createWorkflowState).toHaveBeenCalledWith(workspace.id, response.id, {
+      category: 'COMPLETED',
+      name: '검증 완료',
+    });
+    expect(workflowStates.setDefaultWorkflowState).toHaveBeenCalledWith(workspace.id, state.id, {
+      version: 1,
+    });
+    expect(
+      Reflect.getMetadata(HTTP_CODE_METADATA, TeamsController.prototype.createWorkflowState),
+    ).toBe(HttpStatus.CREATED);
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, TeamsController.prototype.setDefaultWorkflowState),
+    ).toContain(AdminGuard);
   });
 
   const unsafeSessionPatches: Array<[string, Partial<AuthenticatedRequestContext['session']>]> = [

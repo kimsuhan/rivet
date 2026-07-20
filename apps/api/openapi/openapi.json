@@ -8002,6 +8002,90 @@
         "tags": [
           "teams"
         ]
+      },
+      "post": {
+        "operationId": "TeamsController_createWorkflowState",
+        "parameters": [
+          {
+            "name": "teamId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkflowStateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "팀 워크플로 상태 생성",
+        "tags": [
+          "teams"
+        ]
       }
     },
     "/api/v1/workflow-states/{stateId}": {
@@ -8200,6 +8284,92 @@
           }
         ],
         "summary": "미사용 워크플로 상태 삭제",
+        "tags": [
+          "teams"
+        ]
+      }
+    },
+    "/api/v1/workflow-states/{stateId}/default": {
+      "post": {
+        "operationId": "TeamsController_setDefaultWorkflowState",
+        "parameters": [
+          {
+            "name": "stateId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWorkflowStateDefaultDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStateListResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "VERSION_CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "팀 워크플로 기본 상태 지정",
         "tags": [
           "teams"
         ]
@@ -13701,6 +13871,31 @@
           "nextCursor"
         ]
       },
+      "CreateWorkflowStateDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "enum": [
+              "BACKLOG",
+              "UNSTARTED",
+              "STARTED",
+              "COMPLETED",
+              "CANCELED"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "example": "검증 대기",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "category",
+          "name"
+        ]
+      },
       "UpdateWorkflowStateDto": {
         "type": "object",
         "properties": {
@@ -13717,6 +13912,18 @@
         },
         "required": [
           "name",
+          "version"
+        ]
+      },
+      "SetWorkflowStateDefaultDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
           "version"
         ]
       },

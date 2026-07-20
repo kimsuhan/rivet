@@ -23,6 +23,7 @@ import type {
   TeamWorkSummaryResponseDto,
 } from '@rivet/api-client';
 
+import { WORKFLOW_STATE_PRESENTATION } from '@/components/workflow-state-icon';
 import { cn } from '@/lib/utils';
 
 import { IssueInlineSelect, type IssueInlineSelectOption } from './issue-inline-select';
@@ -42,13 +43,7 @@ export const ISSUE_STATUS_PRESENTATION: Record<IssueSummaryResponseDto['status']
 export const TEAM_WORK_STATUS_PRESENTATION: Record<
   TeamWorkSummaryResponseDto['stateCategory'],
   Presentation
-> = {
-  BACKLOG: { icon: CircleDashed, iconClassName: 'text-muted-foreground', label: '백로그' },
-  UNSTARTED: { icon: Circle, iconClassName: 'text-foreground', label: '시작 전' },
-  STARTED: { icon: CircleDotDashed, iconClassName: 'text-info', label: '진행 중' },
-  COMPLETED: { icon: CircleCheck, iconClassName: 'text-success', label: '완료' },
-  CANCELED: { icon: CircleX, iconClassName: 'text-muted-foreground', label: '취소' },
-};
+> = WORKFLOW_STATE_PRESENTATION;
 
 export const PRIORITY_PRESENTATION: Record<IssueSummaryResponseDto['priority'], Presentation> = {
   NONE: { icon: Minus, iconClassName: 'text-muted-foreground', label: '없음' },

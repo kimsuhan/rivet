@@ -408,7 +408,6 @@ export class IssueHandoffService {
         orderBy: [{ isDefault: 'desc' }, { position: 'asc' }],
         select: { id: true },
         where: {
-          category: { notIn: [...TERMINAL_CATEGORIES] },
           teamId: projectTeam.teamId,
           workspaceId: context.workspaceId,
         },

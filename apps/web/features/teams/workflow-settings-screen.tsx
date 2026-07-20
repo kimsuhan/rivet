@@ -2,17 +2,30 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, ArrowUp, GitBranch, Pencil, ShieldX, Trash2 } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowUp,
+  GitBranch,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  ShieldX,
+  Star,
+  Trash2,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import {
   getTeamsControllerListWorkflowStatesQueryKey,
+  useTeamsControllerCreateWorkflowState,
   useTeamsControllerDeleteWorkflowState,
   useTeamsControllerList,
   useTeamsControllerListWorkflowStates,
   useTeamsControllerReorderWorkflowStates,
+  useTeamsControllerSetDefaultWorkflowState,
   useTeamsControllerUpdateWorkflowState,
   type WorkflowStateResponseDto,
   WorkflowStateResponseDtoCategory,
@@ -33,7 +46,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -44,6 +57,7 @@ import {
 } from '@/components/ui/dialog';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -52,6 +66,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { WorkflowStateIcon } from '@/components/workflow-state-icon';
 import { Link, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
@@ -72,7 +87,16 @@ export type WorkflowSettingsLabels = {
   close: string;
   conflictDescription: string;
   conflictTitle: string;
+  create: string;
+  createDescription: string;
+  createTitle: string;
+  creating: string;
   defaultBadge: string;
+  defaultErrorDescription: string;
+  defaultErrorTitle: string;
+  defaultSet: string;
+  defaultSuccess: string;
+  defaulting: string;
   delete: string;
   deleteConfirm: string;
   deleteDescription: string;
@@ -89,6 +113,7 @@ export type WorkflowSettingsLabels = {
   forbiddenDescription: string;
   forbiddenTitle: string;
   loading: string;
+  manage: string;
   keepEditing: string;
   moveDown: string;
   moveUp: string;
@@ -112,6 +137,9 @@ export type WorkflowSettingsLabels = {
   teamLabel: string;
   teamMissingDescription: string;
   teamMissingTitle: string;
+  terminalDefaultConfirm: string;
+  terminalDefaultDescription: string;
+  terminalDefaultTitle: string;
   title: string;
 };
 
@@ -125,6 +153,155 @@ const categories = [
 
 function stateLabel(template: string, name: string): string {
   return name + ' ' + template;
+}
+
+function categoryName(
+  labels: WorkflowSettingsLabels,
+  category: WorkflowStateResponseDto['category'],
+) {
+  switch (category) {
+    case WorkflowStateResponseDtoCategory.BACKLOG:
+      return labels.categoryBacklog;
+    case WorkflowStateResponseDtoCategory.UNSTARTED:
+      return labels.categoryUnstarted;
+    case WorkflowStateResponseDtoCategory.STARTED:
+      return labels.categoryStarted;
+    case WorkflowStateResponseDtoCategory.COMPLETED:
+      return labels.categoryCompleted;
+    case WorkflowStateResponseDtoCategory.CANCELED:
+      return labels.categoryCanceled;
+  }
+}
+
+function CreateStateDialog({
+  category,
+  labels,
+  onClose,
+  onRefresh,
+  teamId,
+}: {
+  category: WorkflowStateResponseDto['category'];
+  labels: WorkflowSettingsLabels;
+  onClose: () => void;
+  onRefresh: () => Promise<void>;
+  teamId: string;
+}) {
+  const mutation = useTeamsControllerCreateWorkflowState();
+  const schema = z.object({
+    name: z.string().trim().min(1, labels.nameRequired).max(100, labels.nameTooLong),
+  });
+  const {
+    clearErrors,
+    formState: { errors, isDirty },
+    handleSubmit,
+    register,
+    setError,
+  } = useForm<z.infer<typeof schema>>({
+    defaultValues: { name: '' },
+    resolver: zodResolver(schema),
+  });
+  const [unexpectedError, setUnexpectedError] = useState(false);
+  const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
+
+  const submit = handleSubmit((values) => {
+    if (mutation.isPending) return;
+
+    clearErrors();
+    setUnexpectedError(false);
+    mutation.mutate(
+      { data: { category, name: values.name }, teamId },
+      {
+        onError: (error) => {
+          if (error.body.fieldErrors.name?.length || error.body.code === 'VALIDATION_ERROR') {
+            setError(
+              'name',
+              { message: labels.nameInvalid, type: 'server' },
+              { shouldFocus: true },
+            );
+            return;
+          }
+          setUnexpectedError(true);
+        },
+        onSuccess: async () => {
+          await onRefresh();
+          onClose();
+        },
+      },
+    );
+  });
+
+  const requestClose = () => {
+    if (mutation.isPending) return;
+    if (isDirty) {
+      setShowDiscardConfirmation(true);
+      return;
+    }
+    onClose();
+  };
+
+  return (
+    <>
+      <Dialog open onOpenChange={(open) => !open && requestClose()}>
+        <DialogContent closeLabel={labels.close}>
+          <DialogHeader>
+            <DialogTitle>{labels.createTitle}</DialogTitle>
+            <DialogDescription>
+              {labels.createDescription.replace('{category}', categoryName(labels, category))}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            id="create-workflow-state-form"
+            noValidate
+            aria-busy={mutation.isPending}
+            onSubmit={submit}
+            className="flex flex-col gap-4"
+          >
+            {unexpectedError ? (
+              <Alert variant="destructive">
+                <AlertTitle>{labels.errorTitle}</AlertTitle>
+                <AlertDescription>{labels.errorDescription}</AlertDescription>
+              </Alert>
+            ) : null}
+            <Field data-invalid={Boolean(errors.name)}>
+              <FieldLabel htmlFor="create-workflow-state-name">{labels.nameLabel}</FieldLabel>
+              <Input
+                id="create-workflow-state-name"
+                autoComplete="off"
+                aria-errormessage={errors.name ? 'create-workflow-state-name-error' : undefined}
+                aria-invalid={Boolean(errors.name)}
+                {...register('name')}
+              />
+              <FieldError id="create-workflow-state-name-error" errors={[errors.name]} />
+            </Field>
+          </form>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={requestClose}>
+              {labels.cancel}
+            </Button>
+            <Button type="submit" form="create-workflow-state-form" disabled={mutation.isPending}>
+              {mutation.isPending ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
+              {mutation.isPending ? labels.creating : labels.create}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={showDiscardConfirmation} onOpenChange={setShowDiscardConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{labels.discardTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{labels.discardDescription}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{labels.keepEditing}</AlertDialogCancel>
+            <AlertDialogAction type="button" variant="destructive" onClick={onClose}>
+              {labels.discardChanges}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
 }
 
 function RenameStateDialog({
@@ -443,13 +620,22 @@ export function WorkflowSettingsScreen({
   const teams = useTeamsControllerList({ includeArchived: false }, { query: { retry: false } });
   const workflow = useTeamsControllerListWorkflowStates(teamId, { query: { retry: false } });
   const reorder = useTeamsControllerReorderWorkflowStates();
+  const setDefault = useTeamsControllerSetDefaultWorkflowState();
+  const [createCategory, setCreateCategory] = useState<WorkflowStateResponseDto['category'] | null>(
+    null,
+  );
+  const [manageTargetId, setManageTargetId] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<WorkflowStateResponseDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WorkflowStateResponseDto | null>(null);
-  const [notice, setNotice] = useState<'CONFLICT' | 'ERROR' | null>(null);
+  const [defaultConfirmationTarget, setDefaultConfirmationTarget] =
+    useState<WorkflowStateResponseDto | null>(null);
+  const [notice, setNotice] = useState<'CONFLICT' | 'DEFAULT_ERROR' | 'REORDER_ERROR' | null>(null);
   const [reorderAnnouncement, setReorderAnnouncement] = useState('');
   const selectedTeam = teams.data?.items.find((team) => team.id === teamId);
-  const sortedStates = [...(workflow.data?.items ?? [])].sort(
-    (left, right) => left.position - right.position,
+  const sortedStates = categories.flatMap((category) =>
+    (workflow.data?.items ?? [])
+      .filter((state) => state.category === category)
+      .sort((left, right) => left.position - right.position),
   );
   const teamItems = (teams.data?.items ?? []).map((team) => ({ label: team.name, value: team.id }));
 
@@ -508,41 +694,21 @@ export function WorkflowSettingsScreen({
     );
   }
 
-  const categoryInfo = {
-    BACKLOG: [labels.categoryBacklog, labels.categoryBacklogDescription],
-    UNSTARTED: [labels.categoryUnstarted, labels.categoryUnstartedDescription],
-    STARTED: [labels.categoryStarted, labels.categoryStartedDescription],
-    COMPLETED: [labels.categoryCompleted, labels.categoryCompletedDescription],
-    CANCELED: [labels.categoryCanceled, labels.categoryCanceledDescription],
-  } satisfies Record<(typeof categories)[number], [string, string]>;
-  const stateSections = sortedStates.reduce<
-    Array<{
-      category: WorkflowStateResponseDto['category'];
-      states: WorkflowStateResponseDto[];
-    }>
-  >((sections, state) => {
-    const currentSection = sections.at(-1);
-    if (currentSection?.category === state.category) {
-      currentSection.states.push(state);
-    } else {
-      sections.push({ category: state.category, states: [state] });
-    }
-    return sections;
-  }, []);
-  for (const category of categories) {
-    if (!stateSections.some((section) => section.category === category)) {
-      stateSections.push({ category, states: [] });
-    }
-  }
+  const stateSections = categories.map((category) => ({
+    category,
+    states: sortedStates.filter((state) => state.category === category),
+  }));
 
   const move = (state: WorkflowStateResponseDto, direction: -1 | 1) => {
-    if (reorder.isPending) return;
+    if (reorder.isPending || setDefault.isPending) return;
 
-    const currentIndex = sortedStates.findIndex((candidate) => candidate.id === state.id);
-    const other = sortedStates[currentIndex + direction];
+    const sectionStates = sortedStates.filter((candidate) => candidate.category === state.category);
+    const sectionIndex = sectionStates.findIndex((candidate) => candidate.id === state.id);
+    const other = sectionStates[sectionIndex + direction];
     if (!other) return;
 
     const next = [...sortedStates];
+    const currentIndex = next.findIndex((candidate) => candidate.id === state.id);
     const otherIndex = next.findIndex((candidate) => candidate.id === other.id);
     [next[currentIndex], next[otherIndex]] = [next[otherIndex]!, next[currentIndex]!];
 
@@ -555,7 +721,7 @@ export function WorkflowSettingsScreen({
       },
       {
         onError: (error) => {
-          setNotice(error.body.code === 'VERSION_CONFLICT' ? 'CONFLICT' : 'ERROR');
+          setNotice(error.body.code === 'VERSION_CONFLICT' ? 'CONFLICT' : 'REORDER_ERROR');
           if (error.body.code === 'VERSION_CONFLICT') void refresh();
         },
         onSuccess: (data) => {
@@ -563,12 +729,46 @@ export function WorkflowSettingsScreen({
           setReorderAnnouncement(
             labels.reorderSuccess
               .replace('{state}', state.name)
-              .replace('{position}', String(otherIndex + 1)),
+              .replace('{position}', String(sectionIndex + direction + 1)),
           );
         },
       },
     );
   };
+
+  const makeDefault = (state: WorkflowStateResponseDto) => {
+    if (setDefault.isPending || reorder.isPending || state.isDefault) return;
+
+    setNotice(null);
+    setReorderAnnouncement('');
+    setDefault.mutate(
+      { data: { version: state.version }, stateId: state.id },
+      {
+        onError: (error) => {
+          setNotice(error.body.code === 'VERSION_CONFLICT' ? 'CONFLICT' : 'DEFAULT_ERROR');
+          if (error.body.code === 'VERSION_CONFLICT') void refresh();
+        },
+        onSuccess: (data) => {
+          queryClient.setQueryData(getTeamsControllerListWorkflowStatesQueryKey(teamId), data);
+          setReorderAnnouncement(labels.defaultSuccess.replace('{state}', state.name));
+        },
+      },
+    );
+  };
+
+  const requestDefault = (state: WorkflowStateResponseDto) => {
+    setManageTargetId(null);
+    if (
+      state.category === WorkflowStateResponseDtoCategory.COMPLETED ||
+      state.category === WorkflowStateResponseDtoCategory.CANCELED
+    ) {
+      setDefaultConfirmationTarget(state);
+      return;
+    }
+    makeDefault(state);
+  };
+
+  const isWorkflowMutating = reorder.isPending || setDefault.isPending;
 
   return (
     <section className="mx-auto w-full max-w-5xl">
@@ -617,100 +817,175 @@ export function WorkflowSettingsScreen({
           <AlertDescription>{labels.conflictDescription}</AlertDescription>
         </Alert>
       ) : null}
-      {notice === 'ERROR' ? (
+      {notice === 'REORDER_ERROR' ? (
         <Alert variant="destructive" className="mt-4">
           <AlertTitle>{labels.reorderErrorTitle}</AlertTitle>
           <AlertDescription>{labels.reorderErrorDescription}</AlertDescription>
+        </Alert>
+      ) : null}
+      {notice === 'DEFAULT_ERROR' ? (
+        <Alert variant="destructive" className="mt-4">
+          <AlertTitle>{labels.defaultErrorTitle}</AlertTitle>
+          <AlertDescription>{labels.defaultErrorDescription}</AlertDescription>
         </Alert>
       ) : null}
       <p role="status" aria-live="polite" className="sr-only">
         {reorderAnnouncement}
       </p>
 
-      <div className="mt-5 grid gap-4">
-        {stateSections.map(({ category, states: sectionStates }, sectionIndex) => {
-          const [title, description] = categoryInfo[category];
+      <Card className="mt-5 overflow-hidden" size="sm">
+        <CardContent className="p-0">
+          {stateSections.map(({ category, states: sectionStates }, sectionIndex) => {
+            const title = categoryName(labels, category);
 
-          return (
-            <Card key={`${category}-${sectionIndex}`} size="sm">
-              <CardHeader className="border-b">
-                <CardTitle>
-                  <h2>{title}</h2>
-                </CardTitle>
-                <CardDescription>{description}</CardDescription>
-              </CardHeader>
-              <CardContent className="px-0">
+            return (
+              <section
+                key={category}
+                aria-labelledby={`workflow-category-${category}`}
+                className={cn(sectionIndex > 0 && 'border-t')}
+              >
+                <div className="bg-muted/35 flex h-10 items-center justify-between border-b px-3">
+                  <h2
+                    id={`workflow-category-${category}`}
+                    className="text-muted-foreground text-xs font-medium"
+                  >
+                    {title}
+                  </h2>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={stateLabel(labels.create, title)}
+                    disabled={isWorkflowMutating}
+                    onClick={() => setCreateCategory(category)}
+                  >
+                    <Plus aria-hidden="true" />
+                  </Button>
+                </div>
                 {sectionStates.length ? (
                   <ol>
-                    {sectionStates.map((state) => {
-                      const stateIndex = sortedStates.findIndex(
-                        (candidate) => candidate.id === state.id,
-                      );
-                      return (
-                        <li
-                          key={state.id}
-                          className="flex min-h-12 items-center gap-3 border-b px-3 py-2 last:border-b-0"
+                    {sectionStates.map((state, stateIndex) => (
+                      <li
+                        key={state.id}
+                        className="group hover:bg-muted/25 focus-within:bg-muted/25 flex min-h-12 items-center gap-3 border-b px-3 last:border-b-0"
+                      >
+                        <WorkflowStateIcon category={state.category} />
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                          {state.name}
+                        </span>
+                        {state.isDefault ? (
+                          <Badge variant="outline" className="text-muted-foreground font-normal">
+                            {labels.defaultBadge}
+                          </Badge>
+                        ) : null}
+                        <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={stateLabel(labels.moveUp, state.name)}
+                            disabled={stateIndex === 0 || isWorkflowMutating}
+                            onClick={() => move(state, -1)}
+                          >
+                            <ArrowUp aria-hidden="true" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={stateLabel(labels.moveDown, state.name)}
+                            disabled={stateIndex === sectionStates.length - 1 || isWorkflowMutating}
+                            onClick={() => move(state, 1)}
+                          >
+                            <ArrowDown aria-hidden="true" />
+                          </Button>
+                        </div>
+                        <Popover
+                          open={manageTargetId === state.id}
+                          onOpenChange={(open) => setManageTargetId(open ? state.id : null)}
                         >
-                          <span className="text-muted-foreground w-5 text-center text-xs tabular-nums">
-                            {stateIndex + 1}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate font-medium">{state.name}</span>
-                          {state.isDefault ? (
-                            <Badge variant="outline">{labels.defaultBadge}</Badge>
-                          ) : null}
-                          <div className="flex items-center gap-1">
+                          <PopoverTrigger
+                            type="button"
+                            aria-label={stateLabel(labels.manage, state.name)}
+                            className={buttonVariants({ size: 'icon-sm', variant: 'ghost' })}
+                          >
+                            <MoreHorizontal aria-hidden="true" />
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-52 gap-1 p-1">
+                            <PopoverTitle className="px-2 py-1.5 text-sm">
+                              {state.name}
+                            </PopoverTitle>
                             <Button
                               type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={stateLabel(labels.moveUp, state.name)}
-                              disabled={stateIndex === 0 || reorder.isPending}
-                              onClick={() => move(state, -1)}
-                            >
-                              <ArrowUp aria-hidden="true" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={stateLabel(labels.moveDown, state.name)}
-                              disabled={stateIndex === sortedStates.length - 1 || reorder.isPending}
-                              onClick={() => move(state, 1)}
-                            >
-                              <ArrowDown aria-hidden="true" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
+                              className="w-full justify-start"
                               size="sm"
-                              onClick={() => setRenameTarget(state)}
+                              variant="ghost"
+                              disabled={state.isDefault || isWorkflowMutating}
+                              onClick={() => requestDefault(state)}
+                            >
+                              {setDefault.isPending &&
+                              setDefault.variables?.stateId === state.id ? (
+                                <Spinner data-icon="inline-start" aria-hidden="true" />
+                              ) : (
+                                <Star data-icon="inline-start" aria-hidden="true" />
+                              )}
+                              {state.isDefault
+                                ? labels.defaultBadge
+                                : setDefault.isPending && setDefault.variables?.stateId === state.id
+                                  ? labels.defaulting
+                                  : labels.defaultSet}
+                            </Button>
+                            <Button
+                              type="button"
+                              className="w-full justify-start"
+                              size="sm"
+                              variant="ghost"
+                              disabled={isWorkflowMutating}
+                              onClick={() => {
+                                setManageTargetId(null);
+                                setRenameTarget(state);
+                              }}
                             >
                               <Pencil data-icon="inline-start" />
                               {labels.rename}
                             </Button>
                             <Button
                               type="button"
-                              variant="ghost"
+                              className="w-full justify-start"
                               size="sm"
-                              onClick={() => setDeleteTarget(state)}
+                              variant="destructive"
+                              disabled={isWorkflowMutating}
+                              onClick={() => {
+                                setManageTargetId(null);
+                                setDeleteTarget(state);
+                              }}
                             >
                               <Trash2 data-icon="inline-start" />
                               {labels.delete}
                             </Button>
-                          </div>
-                        </li>
-                      );
-                    })}
+                          </PopoverContent>
+                        </Popover>
+                      </li>
+                    ))}
                   </ol>
                 ) : (
-                  <p className="text-muted-foreground px-3 py-5 text-sm">{labels.categoryEmpty}</p>
+                  <p className="text-muted-foreground px-3 py-4 text-sm">{labels.categoryEmpty}</p>
                 )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+              </section>
+            );
+          })}
+        </CardContent>
+      </Card>
 
+      {createCategory ? (
+        <CreateStateDialog
+          category={createCategory}
+          labels={labels}
+          onClose={() => setCreateCategory(null)}
+          onRefresh={refresh}
+          teamId={teamId}
+        />
+      ) : null}
       {renameTarget ? (
         <RenameStateDialog
           labels={labels}
@@ -728,6 +1003,29 @@ export function WorkflowSettingsScreen({
           states={sortedStates}
         />
       ) : null}
+      <AlertDialog
+        open={defaultConfirmationTarget !== null}
+        onOpenChange={(open) => !open && setDefaultConfirmationTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{labels.terminalDefaultTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{labels.terminalDefaultDescription}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{labels.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              type="button"
+              onClick={() => {
+                if (defaultConfirmationTarget) makeDefault(defaultConfirmationTarget);
+                setDefaultConfirmationTarget(null);
+              }}
+            >
+              {labels.terminalDefaultConfirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

@@ -1,7 +1,7 @@
 import { HttpStatus } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 
-import { Prisma } from '@rivet/database';
+import { Prisma, StateCategory } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { TeamRepository } from './team.repository';
@@ -50,7 +50,9 @@ describe('TeamsService management', () => {
       upsert: jest.fn(),
     },
     workflowState: {
+      create: jest.fn(),
       delete: jest.fn(),
+      findFirst: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
       updateManyAndReturn: jest.fn(),
@@ -301,11 +303,148 @@ describe('TeamsService management', () => {
     });
   });
 
+  it('inserts a workflow state at the end of its system category and shifts later states', async () => {
+    transaction.$queryRaw.mockResolvedValue([{ id: teamId }]);
+    transaction.workflowState.findMany.mockResolvedValue([
+      { category: StateCategory.BACKLOG, id: stateId, position: 0, version: 1 },
+      { category: StateCategory.BACKLOG, id: 'state-paused', position: 1, version: 2 },
+      { category: StateCategory.UNSTARTED, id: 'state-todo', position: 2, version: 3 },
+      { category: StateCategory.STARTED, id: 'state-doing', position: 3, version: 4 },
+      { category: StateCategory.STARTED, id: 'state-review', position: 4, version: 5 },
+      { category: StateCategory.COMPLETED, id: 'state-done', position: 5, version: 6 },
+      { category: StateCategory.CANCELED, id: 'state-canceled', position: 6, version: 7 },
+    ]);
+    transaction.workflowState.update
+      .mockResolvedValueOnce({
+        ...workflowState,
+        category: StateCategory.CANCELED,
+        id: 'state-canceled',
+        name: '취소',
+        position: 7,
+        version: 8,
+      })
+      .mockResolvedValueOnce({
+        ...workflowState,
+        category: StateCategory.COMPLETED,
+        id: 'state-done',
+        name: '완료',
+        position: 6,
+        version: 7,
+      });
+    transaction.workflowState.create.mockResolvedValue({
+      category: StateCategory.STARTED,
+      id: replacementStateId,
+      isDefault: false,
+      name: 'QA 중',
+      position: 5,
+      version: 1,
+    });
+
+    await expect(
+      workflowStates.createWorkflowState(workspaceId, teamId, {
+        category: StateCategory.STARTED,
+        name: ' QA 중 ',
+      }),
+    ).resolves.toMatchObject({
+      category: StateCategory.STARTED,
+      name: 'QA 중',
+      position: 5,
+    });
+    expect(transaction.workflowState.update).toHaveBeenNthCalledWith(1, {
+      data: { position: { increment: 1 }, version: { increment: 1 } },
+      select: expect.any(Object),
+      where: { id: 'state-canceled' },
+    });
+    expect(transaction.workflowState.update).toHaveBeenNthCalledWith(2, {
+      data: { position: { increment: 1 }, version: { increment: 1 } },
+      select: expect.any(Object),
+      where: { id: 'state-done' },
+    });
+    expect(transaction.workflowState.create).toHaveBeenCalledWith({
+      data: {
+        category: StateCategory.STARTED,
+        name: 'QA 중',
+        normalizedName: 'qa 중',
+        position: 5,
+        teamId,
+        workspaceId,
+      },
+      select: expect.any(Object),
+    });
+  });
+
+  it('moves the default marker to a state in any category atomically', async () => {
+    transaction.$queryRaw.mockResolvedValue([
+      { id: replacementStateId, isDefault: false, teamId, version: 3 },
+    ]);
+    transaction.workflowState.updateManyAndReturn.mockResolvedValue([
+      { ...workflowState, isDefault: false, version: 2 },
+    ]);
+    transaction.workflowState.update.mockResolvedValue({
+      ...workflowState,
+      category: StateCategory.COMPLETED,
+      id: replacementStateId,
+      isDefault: true,
+      name: '완료',
+      position: 4,
+      version: 4,
+    });
+    transaction.workflowState.findMany.mockResolvedValue([
+      { ...workflowState, isDefault: false, version: 2 },
+      {
+        ...workflowState,
+        category: StateCategory.COMPLETED,
+        id: replacementStateId,
+        isDefault: true,
+        name: '완료',
+        position: 4,
+        version: 4,
+      },
+    ]);
+
+    await expect(
+      workflowStates.setDefaultWorkflowState(workspaceId, replacementStateId, { version: 3 }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({ id: stateId, isDefault: false }),
+        expect.objectContaining({
+          category: StateCategory.COMPLETED,
+          id: replacementStateId,
+          isDefault: true,
+        }),
+      ],
+    });
+    expect(transaction.workflowState.updateManyAndReturn).toHaveBeenCalledWith({
+      data: { isDefault: false, version: { increment: 1 } },
+      select: expect.any(Object),
+      where: { isDefault: true, teamId, workspaceId },
+    });
+    expect(transaction.workflowState.update).toHaveBeenCalledWith({
+      data: { isDefault: true, version: { increment: 1 } },
+      select: expect.any(Object),
+      where: { id: replacementStateId },
+    });
+  });
+
+  it('rejects a stale default workflow state request', async () => {
+    transaction.$queryRaw.mockResolvedValue([
+      { id: replacementStateId, isDefault: false, teamId, version: 4 },
+    ]);
+
+    await expect(
+      workflowStates.setDefaultWorkflowState(workspaceId, replacementStateId, { version: 3 }),
+    ).rejects.toMatchObject({
+      response: { code: 'VERSION_CONFLICT', currentVersion: 4 },
+      status: HttpStatus.CONFLICT,
+    });
+    expect(transaction.workflowState.updateManyAndReturn).not.toHaveBeenCalled();
+  });
+
   it('reorders every workflow state through a collision-free temporary range', async () => {
     transaction.team.findFirst.mockResolvedValue({ id: teamId });
     transaction.$queryRaw.mockResolvedValue([
-      { id: stateId, position: 0, version: 1 },
-      { id: replacementStateId, position: 1, version: 2 },
+      { category: StateCategory.STARTED, id: stateId, position: 0, version: 1 },
+      { category: StateCategory.STARTED, id: replacementStateId, position: 1, version: 2 },
     ]);
     transaction.workflowState.update
       .mockResolvedValueOnce({})
@@ -335,8 +474,8 @@ describe('TeamsService management', () => {
   it('rejects an incomplete workflow state order without writing positions', async () => {
     transaction.team.findFirst.mockResolvedValue({ id: teamId });
     transaction.$queryRaw.mockResolvedValue([
-      { id: stateId, position: 0, version: 1 },
-      { id: replacementStateId, position: 1, version: 1 },
+      { category: StateCategory.BACKLOG, id: stateId, position: 0, version: 1 },
+      { category: StateCategory.UNSTARTED, id: replacementStateId, position: 1, version: 1 },
     ]);
 
     await expect(
@@ -345,6 +484,29 @@ describe('TeamsService management', () => {
       }),
     ).rejects.toMatchObject({
       response: { code: 'VALIDATION_ERROR' },
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+    });
+    expect(transaction.workflowState.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects workflow state reordering across system category boundaries', async () => {
+    transaction.$queryRaw.mockResolvedValue([
+      { category: StateCategory.BACKLOG, id: stateId, position: 0, version: 1 },
+      { category: StateCategory.UNSTARTED, id: replacementStateId, position: 1, version: 2 },
+    ]);
+
+    await expect(
+      workflowStates.reorderWorkflowStates(workspaceId, teamId, {
+        states: [
+          { id: replacementStateId, version: 2 },
+          { id: stateId, version: 1 },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'VALIDATION_ERROR',
+        fieldErrors: { states: ['상태는 같은 시스템 범주 안에서만 순서를 바꿀 수 있습니다.'] },
+      },
       status: HttpStatus.UNPROCESSABLE_ENTITY,
     });
     expect(transaction.workflowState.update).not.toHaveBeenCalled();

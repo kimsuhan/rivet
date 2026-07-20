@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -13,6 +14,21 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+
+import { StateCategory } from '@rivet/database';
+
+export class CreateWorkflowStateDto {
+  @ApiProperty({ enum: StateCategory })
+  @IsEnum(StateCategory, { message: '시스템 범주가 올바르지 않습니다.' })
+  category!: StateCategory;
+
+  @ApiProperty({ example: '검증 대기', maxLength: 100, minLength: 1 })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: '상태 이름이 올바르지 않습니다.' })
+  @IsNotEmpty({ message: '상태 이름을 입력해 주세요.' })
+  @MaxLength(100, { message: '상태 이름은 100자 이하여야 합니다.' })
+  name!: string;
+}
 
 export class UpdateWorkflowStateDto {
   @ApiProperty({ example: '검토 중', maxLength: 100, minLength: 1 })
@@ -49,6 +65,13 @@ export class ReorderWorkflowStatesDto {
   @ValidateNested({ each: true })
   @Type(() => WorkflowStateOrderItemDto)
   states!: WorkflowStateOrderItemDto[];
+}
+
+export class SetWorkflowStateDefaultDto {
+  @ApiProperty({ minimum: 1 })
+  @IsInt({ message: '상태 버전이 올바르지 않습니다.' })
+  @Min(1, { message: '상태 버전이 올바르지 않습니다.' })
+  version!: number;
 }
 
 export class DeleteWorkflowStateQueryDto {

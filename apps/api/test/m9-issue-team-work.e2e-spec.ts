@@ -56,6 +56,7 @@ describe('M9 issue content and team execution API', () => {
   let webDoneId: string;
   let webStartedId: string;
   let appBacklogDefaultId: string;
+  let appCompletedId: string;
   let appUnstartedId: string;
   let appPausedId: string;
   let appProjectTeamId: string;
@@ -221,7 +222,7 @@ describe('M9 issue content and team execution API', () => {
           workspaceId: workspace.id,
         },
       });
-      await transaction.workflowState.create({
+      const appCompleted = await transaction.workflowState.create({
         data: {
           category: StateCategory.COMPLETED,
           name: '완료',
@@ -351,6 +352,7 @@ describe('M9 issue content and team execution API', () => {
         ]);
       return {
         appBacklogDefaultId: appBacklogDefault.id,
+        appCompletedId: appCompleted.id,
         appPausedId: appPaused.id,
         appTeamId: app.id,
         appUnstartedId: appUnstarted.id,
@@ -390,6 +392,7 @@ describe('M9 issue content and team execution API', () => {
       webDoneId,
       webStartedId,
       appBacklogDefaultId,
+      appCompletedId,
       appUnstartedId,
       appPausedId,
       appProjectTeamId,
@@ -920,7 +923,7 @@ describe('M9 issue content and team execution API', () => {
     });
   });
 
-  it('creates default-backlog or unstarted team works based on assignee, and assignment only auto-starts the default backlog state', async () => {
+  it('uses any-category default for unassigned work and unstarted for assigned work', async () => {
     const unassignedIssue = await mutate('post', '/api/v1/issues')
       .send({
         initialTeams: [{ projectTeamId: appProjectTeamId }],
@@ -994,6 +997,32 @@ describe('M9 issue content and team execution API', () => {
       .expect(200);
     expect(pausedAssigned.body.teamWork.stateCategory).toBe('BACKLOG');
     expect(pausedAssigned.body.teamWork.workflowState.id).toBe(appPausedId);
+
+    const completedDefault = await mutate(
+      'post',
+      `/api/v1/workflow-states/${appCompletedId}/default`,
+    )
+      .send({ version: 1 })
+      .expect(200);
+    expect(
+      completedDefault.body.items.filter((state: { isDefault: boolean }) => state.isDefault),
+    ).toEqual([expect.objectContaining({ category: 'COMPLETED', id: appCompletedId })]);
+
+    const completedIssue = await mutate('post', '/api/v1/issues')
+      .send({
+        initialTeams: [{ projectTeamId: appProjectTeamId }],
+        projectId,
+        title: '완료가 기본값인 담당자 없는 앱 작업',
+      })
+      .expect(201);
+    expect(completedIssue.body.createdTeamWorks[0]).toMatchObject({
+      stateCategory: 'COMPLETED',
+      workflowState: { id: appCompletedId },
+    });
+
+    await mutate('post', `/api/v1/workflow-states/${appBacklogDefaultId}/default`)
+      .send({ version: 2 })
+      .expect(200);
   });
 
   it('applies the same auto-start rule to claim and bulk assignment entry points', async () => {
