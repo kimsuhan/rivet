@@ -6,11 +6,14 @@
  * OpenAPI spec version: 1.0
  */
 import type { WorkflowStateResponseDtoCategory } from './workflowStateResponseDtoCategory';
+import type { WorkflowStateResponseDtoColor } from './workflowStateResponseDtoColor';
 
 export interface WorkflowStateResponseDto {
   id: string;
   name: string;
   category: WorkflowStateResponseDtoCategory;
+  /** @nullable */
+  color: WorkflowStateResponseDtoColor;
   /** @minimum 0 */
   position: number;
   isDefault: boolean;

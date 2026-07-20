@@ -8,12 +8,10 @@ import {
 } from '@rivet/api-client';
 
 import { Button } from '@/components/ui/button';
+import { workflowStateProgress } from '@/components/workflow-state-icon';
 import { Link } from '@/i18n/navigation';
 
-import {
-  PriorityDisplay,
-  StatusTrigger,
-} from './issue-attribute-presentation';
+import { PriorityDisplay, StatusTrigger } from './issue-attribute-presentation';
 import { IssueLabelChips } from './issue-label-chips';
 import { myWorkHref } from './issue-work-routing';
 import { TeamWorkCompletionModal } from './team-work-completion-modal';
@@ -44,7 +42,7 @@ export function MyWorkListRow({
     <li className="group relative border-b last:border-b-0">
       <Link
         aria-label={`${work.identifier} 작업 상세 열기`}
-        className="absolute inset-0 rounded-sm focus-visible:ring-2 focus-visible:ring-ring"
+        className="focus-visible:ring-ring absolute inset-0 rounded-sm focus-visible:ring-2"
         href={href}
         onClick={() => {
           window.sessionStorage.setItem(
@@ -61,31 +59,52 @@ export function MyWorkListRow({
       <div
         className={`pointer-events-none relative z-10 grid ${density === 'compact' ? 'min-h-11 gap-2 py-1.5' : 'min-h-16 gap-3 py-2.5'} ${MY_WORK_GRID_COLUMNS} items-center px-3 text-sm max-md:gap-2 max-md:py-3`}
       >
-        <div className="min-w-0"><PriorityDisplay priority={work.issue.priority} /></div>
         <div className="min-w-0">
-          <p className="truncate font-medium" title={work.issue.title}>{work.issue.title}</p>
+          <PriorityDisplay priority={work.issue.priority} />
+        </div>
+        <div className="min-w-0">
+          <p className="truncate font-medium" title={work.issue.title}>
+            {work.issue.title}
+          </p>
           <p className="text-muted-foreground mt-1 truncate text-xs">
-            <span className="font-mono">{work.identifier}</span> · <span className="font-mono">{work.issue.identifier}</span> · <span className="font-mono">{work.projectTeam.team.key}</span> · {work.projectTeam.team.name}
+            <span className="font-mono">{work.identifier}</span> ·{' '}
+            <span className="font-mono">{work.issue.identifier}</span> ·{' '}
+            <span className="font-mono">{work.projectTeam.team.key}</span> ·{' '}
+            {work.projectTeam.team.name}
           </p>
         </div>
         <div className="min-w-0">
           <p className="text-muted-foreground truncate">{work.issue.project.name}</p>
-          <div className="mt-1 min-w-0"><IssueLabelChips emptyLabel="" labels={work.issue.labels} /></div>
+          <div className="mt-1 min-w-0">
+            <IssueLabelChips emptyLabel="" labels={work.issue.labels} />
+          </div>
         </div>
-        <div className="pointer-events-auto min-w-0" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+        <div
+          className="pointer-events-auto min-w-0"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
           <StatusTrigger
             busy={stateMutation.isPending}
             disabled={stateMutation.isPending || states.isPending}
             identifier={work.identifier}
             onValueChange={(id) => {
               const state = states.data?.items.find((item) => item.id === id);
-              if (state) stateMutation.mutate({ workflowState: state });
+              if (state) {
+                stateMutation.mutate({
+                  stateProgress: workflowStateProgress(states.data?.items ?? [], state),
+                  workflowState: state,
+                });
+              }
             }}
             states={states.data?.items ?? []}
             value={work.workflowState.id}
           />
         </div>
-        <div className="pointer-events-auto min-h-10 min-w-0 justify-self-end max-md:justify-self-start" onClick={(event) => event.stopPropagation()}>
+        <div
+          className="pointer-events-auto min-h-10 min-w-0 justify-self-end max-md:justify-self-start"
+          onClick={(event) => event.stopPropagation()}
+        >
           <TeamWorkPrimaryAction
             busy={stateMutation.isPending}
             compact
@@ -93,14 +112,24 @@ export function MyWorkListRow({
             onOpenCompletion={() => setCompletionModalOpen(true)}
             onStart={(stateId) => {
               const state = states.data?.items.find((item) => item.id === stateId);
-              if (state) stateMutation.mutate({ workflowState: state });
+              if (state) {
+                stateMutation.mutate({
+                  stateProgress: workflowStateProgress(states.data?.items ?? [], state),
+                  workflowState: state,
+                });
+              }
             }}
             states={states.data?.items ?? []}
             work={work}
           />
         </div>
         {stateMutation.isError ? (
-          <Button className="pointer-events-auto col-span-full justify-self-start" onClick={retry} size="sm" variant="outline">
+          <Button
+            className="pointer-events-auto col-span-full justify-self-start"
+            onClick={retry}
+            size="sm"
+            variant="outline"
+          >
             저장에 실패했습니다. 다시 시도
           </Button>
         ) : null}
@@ -115,6 +144,7 @@ export function MyWorkListRow({
             {
               ...(payload.handoff ? { handoff: payload.handoff } : {}),
               completionMode: payload.completionMode,
+              stateProgress: workflowStateProgress(states.data?.items ?? [], state),
               workflowState: state,
             },
             { onSuccess: () => setCompletionModalOpen(false) },

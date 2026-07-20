@@ -72,6 +72,7 @@ const team = {
 const states = [
   {
     category: 'BACKLOG' as const,
+    color: null,
     id: 'state-backlog',
     isDefault: true,
     name: '미분류',
@@ -80,6 +81,7 @@ const states = [
   },
   {
     category: 'BACKLOG' as const,
+    color: 'BROWN' as const,
     id: 'state-paused',
     isDefault: false,
     name: '보류',
@@ -88,6 +90,7 @@ const states = [
   },
   {
     category: 'UNSTARTED' as const,
+    color: null,
     id: 'state-todo',
     isDefault: false,
     name: '할 일',
@@ -96,6 +99,7 @@ const states = [
   },
   {
     category: 'STARTED' as const,
+    color: 'INDIGO' as const,
     id: 'state-doing',
     isDefault: false,
     name: '진행 중',
@@ -104,6 +108,7 @@ const states = [
   },
   {
     category: 'STARTED' as const,
+    color: 'TEAL' as const,
     id: 'state-review',
     isDefault: false,
     name: '검토',
@@ -112,6 +117,7 @@ const states = [
   },
   {
     category: 'COMPLETED' as const,
+    color: null,
     id: 'state-done',
     isDefault: false,
     name: '완료',
@@ -120,6 +126,7 @@ const states = [
   },
   {
     category: 'CANCELED' as const,
+    color: 'RED' as const,
     id: 'state-canceled',
     isDefault: false,
     name: '취소',
@@ -239,6 +246,66 @@ describe('WorkflowSettingsScreen', () => {
     expect(mocks.reorder).not.toHaveBeenCalled();
   });
 
+  it('진행 중 상태의 범주 내 순서에 따라 파이 진행도를 계산한다', () => {
+    renderScreen();
+
+    const doingProgress = stateRow('진행 중')
+      .querySelector('[data-workflow-state-progress]')
+      ?.getAttribute('data-workflow-state-progress');
+    const reviewProgress = stateRow('검토')
+      .querySelector('[data-workflow-state-progress]')
+      ?.getAttribute('data-workflow-state-progress');
+
+    expect(Number(doingProgress)).toBeCloseTo(1 / 3);
+    expect(Number(reviewProgress)).toBeCloseTo(2 / 3);
+  });
+
+  it('상태 관리 메뉴에서 범주 경계에 맞는 순서 이동 항목을 제공한다', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    const firstBacklogRow = stateRow('미분류');
+    await user.click(
+      within(firstBacklogRow).getByRole('button', { name: '미분류 ' + labels.manage }),
+    );
+    expect(screen.getByRole('button', { name: labels.moveUp })).toBeDisabled();
+    expect(screen.getByRole('button', { name: labels.moveDown })).toBeEnabled();
+
+    await user.keyboard('{Escape}');
+    const lastBacklogRow = stateRow('보류');
+    await user.click(within(lastBacklogRow).getByRole('button', { name: '보류 ' + labels.manage }));
+    expect(screen.getByRole('button', { name: labels.moveUp })).toBeEnabled();
+    expect(screen.getByRole('button', { name: labels.moveDown })).toBeDisabled();
+  });
+
+  it('상태 관리 메뉴에서 같은 범주 안의 상태를 위로 이동하고 메뉴를 닫는다', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    const reviewRow = stateRow('검토');
+    await user.click(within(reviewRow).getByRole('button', { name: '검토 ' + labels.manage }));
+    await user.click(screen.getByRole('button', { name: labels.moveUp }));
+
+    expect(mocks.reorder).toHaveBeenCalledWith(
+      {
+        data: {
+          states: [
+            { id: 'state-backlog', version: 1 },
+            { id: 'state-paused', version: 6 },
+            { id: 'state-todo', version: 2 },
+            { id: 'state-review', version: 4 },
+            { id: 'state-doing', version: 3 },
+            { id: 'state-done', version: 5 },
+            { id: 'state-canceled', version: 7 },
+          ],
+        },
+        teamId: team.id,
+      },
+      expect.any(Object),
+    );
+    expect(screen.queryByRole('button', { name: labels.moveUp })).not.toBeInTheDocument();
+  });
+
   it('순서 변경 성공을 보조 기술에 알린다', async () => {
     const user = userEvent.setup();
     renderScreen();
@@ -277,11 +344,12 @@ describe('WorkflowSettingsScreen', () => {
     await user.type(within(dialog).getByLabelText(labels.nameLabel), '검증 완료');
     expect(within(dialog).queryByRole('combobox')).not.toBeInTheDocument();
     expect(within(dialog).getByText(labels.categoryCompleted, { exact: false })).toBeVisible();
+    await user.click(within(dialog).getByRole('button', { name: labels.colors.TEAL }));
     await user.click(within(dialog).getByRole('button', { name: labels.create }));
 
     expect(mocks.create).toHaveBeenCalledWith(
       {
-        data: { category: 'COMPLETED', name: '검증 완료' },
+        data: { category: 'COMPLETED', color: 'TEAL', name: '검증 완료' },
         teamId: team.id,
       },
       expect.any(Object),
@@ -394,6 +462,26 @@ describe('WorkflowSettingsScreen', () => {
     expect(input).toHaveAttribute('aria-errormessage', 'workflow-state-name-error');
     expect(document.getElementById('workflow-state-name-error')).toHaveTextContent(
       labels.nameInvalid,
+    );
+  });
+
+  it('상태 이름을 유지하면서 선택한 색을 저장한다', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    const todoRow = stateRow('할 일');
+    await user.click(within(todoRow).getByRole('button', { name: '할 일 ' + labels.manage }));
+    await user.click(screen.getByRole('button', { name: labels.rename }));
+    const dialog = screen.getByRole('dialog', { name: labels.renameTitle });
+    await user.click(within(dialog).getByRole('button', { name: labels.colors.ORANGE }));
+    await user.click(within(dialog).getByRole('button', { name: labels.save }));
+
+    expect(mocks.rename).toHaveBeenCalledWith(
+      {
+        data: { color: 'ORANGE', name: '할 일', version: 2 },
+        stateId: 'state-todo',
+      },
+      expect.any(Object),
     );
   });
 

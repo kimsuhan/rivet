@@ -50,6 +50,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { workflowStateProgress } from '@/components/workflow-state-icon';
 import {
   HandoffEditor,
   IssueDescriptionEditor,
@@ -115,15 +116,9 @@ function useTeamWorkCellMutation(
       assigneeMembershipId?: string | null;
       completionMode?: 'COMPLETE_ONLY' | 'HANDOFF_AND_COMPLETE';
       handoff?: { bodyMarkdown: string; destinationProjectTeamIds?: string[] };
+      stateProgress?: number | null;
       workNoteMarkdown?: string | null;
-      workflowState?: {
-        id: string;
-        name: string;
-        category: TeamWorkSummaryResponseDto['stateCategory'];
-        position: number;
-        isDefault: boolean;
-        version: number;
-      };
+      workflowState?: TeamWorkSummaryResponseDto['workflowState'];
     }) =>
       teamWorksControllerUpdate(work.id, {
         version: work.version,
@@ -161,7 +156,12 @@ function useTeamWorkCellMutation(
           ? { workNoteMarkdown: change.workNoteMarkdown }
           : {}),
         ...(change.workflowState
-          ? { stateCategory: change.workflowState.category, workflowState: change.workflowState }
+          ? {
+              stateCategory: change.workflowState.category,
+              stateProgress:
+                change.stateProgress !== undefined ? change.stateProgress : work.stateProgress,
+              workflowState: change.workflowState,
+            }
           : {}),
       };
       issueKeys.forEach((queryKey) =>
@@ -271,7 +271,10 @@ function TeamWorkPanel({
       setCompletionModalOpen(true);
       return;
     }
-    stateMutation.mutate({ workflowState: state });
+    stateMutation.mutate({
+      stateProgress: workflowStateProgress(states.data?.items ?? [], state),
+      workflowState: state,
+    });
   }
 
   function createFollowUp() {
@@ -341,7 +344,12 @@ function TeamWorkPanel({
           onOpenCompletion={() => setCompletionModalOpen(true)}
           onStart={(stateId) => {
             const state = states.data?.items.find((item) => item.id === stateId);
-            if (state) stateMutation.mutate({ workflowState: state });
+            if (state) {
+              stateMutation.mutate({
+                stateProgress: workflowStateProgress(states.data?.items ?? [], state),
+                workflowState: state,
+              });
+            }
           }}
           states={states.data?.items ?? []}
           work={work}
@@ -402,6 +410,7 @@ function TeamWorkPanel({
             {
               ...(payload.handoff ? { handoff: payload.handoff } : {}),
               completionMode: payload.completionMode,
+              stateProgress: workflowStateProgress(states.data?.items ?? [], state),
               workflowState: state,
             },
             { onSuccess: () => setCompletionModalOpen(false) },
@@ -1030,7 +1039,12 @@ export function IssueDetailScreen({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {isMyWorkEntry && selectedWork ? (
-              <TeamWorkStatusDisplay category={selectedWork.stateCategory} />
+              <TeamWorkStatusDisplay
+                category={selectedWork.stateCategory}
+                color={selectedWork.workflowState.color}
+                name={selectedWork.workflowState.name}
+                progress={selectedWork.stateProgress}
+              />
             ) : (
               <IssueStatusDisplay status={issue.status} />
             )}
@@ -1158,7 +1172,12 @@ export function IssueDetailScreen({
                     >
                       <span className="font-mono text-xs">{work.identifier}</span>
                       <span className="mt-1 flex items-center gap-1.5 text-sm font-medium">
-                        <TeamWorkStatusDisplay category={work.stateCategory} />
+                        <TeamWorkStatusDisplay
+                          category={work.stateCategory}
+                          color={work.workflowState.color}
+                          name={work.workflowState.name}
+                          progress={work.stateProgress}
+                        />
                         <span className="font-mono text-xs">{work.projectTeam.team.key}</span>
                         {work.projectTeam.team.name}
                       </span>

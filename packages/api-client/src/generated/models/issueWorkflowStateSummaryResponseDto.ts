@@ -6,11 +6,14 @@
  * OpenAPI spec version: 1.0
  */
 import type { IssueWorkflowStateSummaryResponseDtoCategory } from './issueWorkflowStateSummaryResponseDtoCategory';
+import type { IssueWorkflowStateSummaryResponseDtoColor } from './issueWorkflowStateSummaryResponseDtoColor';
 
 export interface IssueWorkflowStateSummaryResponseDto {
   id: string;
   name: string;
   category: IssueWorkflowStateSummaryResponseDtoCategory;
+  /** @nullable */
+  color: IssueWorkflowStateSummaryResponseDtoColor;
   /** @minimum 0 */
   position: number;
   isDefault: boolean;

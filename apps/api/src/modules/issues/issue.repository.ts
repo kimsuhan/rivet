@@ -44,12 +44,24 @@ const TEAM_WORK_SELECT = {
     },
   },
   workNoteMarkdown: true,
-  team: { select: { archivedAt: true, id: true, key: true, name: true } },
+  team: {
+    select: {
+      archivedAt: true,
+      id: true,
+      key: true,
+      name: true,
+      workflowStates: {
+        orderBy: { position: 'asc' },
+        select: { category: true, id: true, position: true },
+      },
+    },
+  },
   updatedAt: true,
   version: true,
   workflowState: {
     select: {
       category: true,
+      color: true,
       id: true,
       isDefault: true,
       name: true,
@@ -107,6 +119,7 @@ const ISSUE_SELECT = {
           workflowState: {
             select: {
               category: true,
+              color: true,
               id: true,
               isDefault: true,
               name: true,
@@ -133,6 +146,7 @@ const ISSUE_SELECT = {
               workflowState: {
                 select: {
                   category: true,
+                  color: true,
                   id: true,
                   isDefault: true,
                   name: true,

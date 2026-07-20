@@ -1,7 +1,7 @@
 import { HttpStatus } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 
-import { Prisma, StateCategory } from '@rivet/database';
+import { Prisma, StateCategory, WorkflowStateColor } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { TeamRepository } from './team.repository';
@@ -17,6 +17,7 @@ describe('TeamsService management', () => {
   const replacementStateId = 'c5ef63e6-3f70-4caf-bb56-256486afbb84';
   const workflowState = {
     category: 'BACKLOG',
+    color: null,
     id: stateId,
     isDefault: true,
     name: '미분류',
@@ -333,6 +334,7 @@ describe('TeamsService management', () => {
       });
     transaction.workflowState.create.mockResolvedValue({
       category: StateCategory.STARTED,
+      color: WorkflowStateColor.INDIGO,
       id: replacementStateId,
       isDefault: false,
       name: 'QA 중',
@@ -343,6 +345,7 @@ describe('TeamsService management', () => {
     await expect(
       workflowStates.createWorkflowState(workspaceId, teamId, {
         category: StateCategory.STARTED,
+        color: WorkflowStateColor.INDIGO,
         name: ' QA 중 ',
       }),
     ).resolves.toMatchObject({
@@ -363,6 +366,7 @@ describe('TeamsService management', () => {
     expect(transaction.workflowState.create).toHaveBeenCalledWith({
       data: {
         category: StateCategory.STARTED,
+        color: WorkflowStateColor.INDIGO,
         name: 'QA 중',
         normalizedName: 'qa 중',
         position: 5,
@@ -370,6 +374,36 @@ describe('TeamsService management', () => {
         workspaceId,
       },
       select: expect.any(Object),
+    });
+  });
+
+  it('keeps the name and updates only the workflow state color', async () => {
+    client.workflowState.findFirst.mockResolvedValue(workflowState);
+    transaction.workflowState.updateManyAndReturn.mockResolvedValue([
+      { ...workflowState, color: WorkflowStateColor.TEAL, version: 2 },
+    ]);
+
+    await expect(
+      workflowStates.updateWorkflowState(workspaceId, stateId, {
+        color: WorkflowStateColor.TEAL,
+        name: workflowState.name,
+        version: 1,
+      }),
+    ).resolves.toMatchObject({ color: WorkflowStateColor.TEAL, version: 2 });
+    expect(transaction.workflowState.updateManyAndReturn).toHaveBeenCalledWith({
+      data: {
+        color: WorkflowStateColor.TEAL,
+        name: workflowState.name,
+        normalizedName: workflowState.name,
+        version: { increment: 1 },
+      },
+      select: expect.any(Object),
+      where: {
+        id: stateId,
+        team: { archivedAt: null },
+        version: 1,
+        workspaceId,
+      },
     });
   });
 

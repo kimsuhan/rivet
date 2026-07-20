@@ -11,7 +11,7 @@ import type { TeamResponseDto } from './dto/team-response.dto';
 import { teamOpenIssueConflict, teamResourceNotFound, teamVersionConflict } from './team.errors';
 import { TeamRepository } from './team.repository';
 import { normalizeTeamResourceName } from './team-input.policy';
-import { toTeamResponse } from './team-response.mapper';
+import { toTeamResponse, WORKFLOW_STATE_SELECT } from './team-response.mapper';
 import { teamUniqueConstraintTargets } from './team-unique.policy';
 
 @Injectable()
@@ -150,14 +150,7 @@ export class TeamsService {
               workspaceId: context.workspaceId,
             },
           ],
-          select: {
-            category: true,
-            id: true,
-            isDefault: true,
-            name: true,
-            position: true,
-            version: true,
-          },
+          select: WORKFLOW_STATE_SELECT,
         });
         await notifyResourceChanged(transaction, {
           changeType: 'CREATED',

@@ -15,7 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-import { StateCategory } from '@rivet/database';
+import { StateCategory, WorkflowStateColor } from '@rivet/database';
 
 export class CreateWorkflowStateDto {
   @ApiProperty({ enum: StateCategory })
@@ -28,6 +28,11 @@ export class CreateWorkflowStateDto {
   @IsNotEmpty({ message: '상태 이름을 입력해 주세요.' })
   @MaxLength(100, { message: '상태 이름은 100자 이하여야 합니다.' })
   name!: string;
+
+  @ApiPropertyOptional({ enum: WorkflowStateColor })
+  @IsOptional()
+  @IsEnum(WorkflowStateColor, { message: '상태 색상이 올바르지 않습니다.' })
+  color?: WorkflowStateColor;
 }
 
 export class UpdateWorkflowStateDto {
@@ -37,6 +42,11 @@ export class UpdateWorkflowStateDto {
   @IsNotEmpty({ message: '상태 이름을 입력해 주세요.' })
   @MaxLength(100, { message: '상태 이름은 100자 이하여야 합니다.' })
   name!: string;
+
+  @ApiPropertyOptional({ enum: WorkflowStateColor })
+  @IsOptional()
+  @IsEnum(WorkflowStateColor, { message: '상태 색상이 올바르지 않습니다.' })
+  color?: WorkflowStateColor;
 
   @ApiProperty({ minimum: 1 })
   @IsInt({ message: '상태 버전이 올바르지 않습니다.' })

@@ -23,7 +23,11 @@ import type {
   TeamWorkSummaryResponseDto,
 } from '@rivet/api-client';
 
-import { WORKFLOW_STATE_PRESENTATION } from '@/components/workflow-state-icon';
+import {
+  WORKFLOW_STATE_PRESENTATION,
+  WorkflowStateIcon,
+  workflowStateProgress,
+} from '@/components/workflow-state-icon';
 import { cn } from '@/lib/utils';
 
 import { IssueInlineSelect, type IssueInlineSelectOption } from './issue-inline-select';
@@ -40,10 +44,7 @@ export const ISSUE_STATUS_PRESENTATION: Record<IssueSummaryResponseDto['status']
   CANCELED: { icon: CircleX, iconClassName: 'text-muted-foreground', label: '취소' },
 };
 
-export const TEAM_WORK_STATUS_PRESENTATION: Record<
-  TeamWorkSummaryResponseDto['stateCategory'],
-  Presentation
-> = WORKFLOW_STATE_PRESENTATION;
+export const TEAM_WORK_STATUS_PRESENTATION = WORKFLOW_STATE_PRESENTATION;
 
 export const PRIORITY_PRESENTATION: Record<IssueSummaryResponseDto['priority'], Presentation> = {
   NONE: { icon: Minus, iconClassName: 'text-muted-foreground', label: '없음' },
@@ -92,15 +93,30 @@ export function IssueStatusDisplay({
 export function TeamWorkStatusDisplay({
   category,
   className,
+  color,
+  name,
+  progress,
 }: {
   category: TeamWorkSummaryResponseDto['stateCategory'];
   className?: string;
+  color?: string | null;
+  name: string;
+  progress?: number | null;
 }) {
   return (
-    <AttributeDisplay
-      presentation={TEAM_WORK_STATUS_PRESENTATION[category]}
-      {...(className ? { className } : {})}
-    />
+    <span
+      className={cn(
+        'inline-flex min-w-0 items-center gap-1.5 text-sm whitespace-nowrap',
+        className,
+      )}
+    >
+      <WorkflowStateIcon
+        category={category}
+        {...(color !== undefined ? { color } : {})}
+        {...(progress !== undefined ? { progress } : {})}
+      />
+      <span className="truncate">{name}</span>
+    </span>
   );
 }
 
@@ -171,16 +187,23 @@ export function StatusTrigger({
   onValueChange: (value: string) => void;
   states: Array<{
     category: TeamWorkSummaryResponseDto['stateCategory'];
+    color: string | null;
     id: string;
     name: string;
+    position: number;
   }>;
   value: string;
 }) {
   const current = states.find((state) => state.id === value);
   const currentLabel = current ? current.name : '상태 없음';
   const options: IssueInlineSelectOption[] = states.map((state) => ({
-    icon: TEAM_WORK_STATUS_PRESENTATION[state.category].icon,
-    iconClassName: TEAM_WORK_STATUS_PRESENTATION[state.category].iconClassName,
+    iconElement: (
+      <WorkflowStateIcon
+        category={state.category}
+        color={state.color}
+        progress={workflowStateProgress(states, state)}
+      />
+    ),
     label: state.name,
     value: state.id,
   }));

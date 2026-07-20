@@ -9,6 +9,7 @@ import {
   useTeamsControllerListWorkflowStates,
 } from '@rivet/api-client';
 
+import { workflowStateProgress } from '@/components/workflow-state-icon';
 import { Link } from '@/i18n/navigation';
 
 import {
@@ -82,7 +83,12 @@ export function TeamWorkListRow({
           disabled={stateMutation.isPending || states.isPending}
           onValueChange={(id) => {
             const state = states.data?.items.find((item) => item.id === id);
-            if (state) stateMutation.mutate({ workflowState: state });
+            if (state) {
+              stateMutation.mutate({
+                stateProgress: workflowStateProgress(states.data?.items ?? [], state),
+                workflowState: state,
+              });
+            }
           }}
         />
         <CompactAssigneeTrigger
@@ -104,7 +110,12 @@ export function TeamWorkListRow({
           onOpenCompletion={() => setCompletionModalOpen(true)}
           onStart={(stateId) => {
             const state = states.data?.items.find((item) => item.id === stateId);
-            if (state) stateMutation.mutate({ workflowState: state });
+            if (state) {
+              stateMutation.mutate({
+                stateProgress: workflowStateProgress(states.data?.items ?? [], state),
+                workflowState: state,
+              });
+            }
           }}
           states={states.data?.items ?? []}
           work={work}
@@ -123,6 +134,7 @@ export function TeamWorkListRow({
             {
               ...(payload.handoff ? { handoff: payload.handoff } : {}),
               completionMode: payload.completionMode,
+              stateProgress: workflowStateProgress(states.data?.items ?? [], state),
               workflowState: state,
             },
             { onSuccess: () => setCompletionModalOpen(false) },

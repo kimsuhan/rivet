@@ -9,6 +9,7 @@ import { TeamWorkPrimaryAction } from './team-work-primary-action';
 const STATES: WorkflowStateResponseDto[] = [
   {
     category: 'BACKLOG',
+    color: null,
     id: 'state-backlog',
     isDefault: true,
     name: '미분류',
@@ -17,6 +18,7 @@ const STATES: WorkflowStateResponseDto[] = [
   },
   {
     category: 'UNSTARTED',
+    color: null,
     id: 'state-unstarted',
     isDefault: false,
     name: '할 일',
@@ -25,6 +27,7 @@ const STATES: WorkflowStateResponseDto[] = [
   },
   {
     category: 'STARTED',
+    color: null,
     id: 'state-started',
     isDefault: false,
     name: '진행 중',
@@ -33,6 +36,7 @@ const STATES: WorkflowStateResponseDto[] = [
   },
   {
     category: 'STARTED',
+    color: null,
     id: 'state-review',
     isDefault: false,
     name: '검토',
@@ -41,6 +45,7 @@ const STATES: WorkflowStateResponseDto[] = [
   },
   {
     category: 'COMPLETED',
+    color: null,
     id: 'state-completed',
     isDefault: false,
     name: '완료',
@@ -70,6 +75,7 @@ function work(overrides: Partial<TeamWorkSummaryResponseDto> = {}): TeamWorkSumm
       team: { archived: false, id: 'team-1', key: 'PLAN', name: '기획' },
     },
     stateCategory: 'BACKLOG',
+    stateProgress: null,
     updatedAt: '2026-07-01T00:00:00.000Z',
     version: 1,
     workNoteMarkdown: null,

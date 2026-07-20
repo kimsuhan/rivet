@@ -6,6 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 import type { CreateWorkflowStateDtoCategory } from './createWorkflowStateDtoCategory';
+import type { CreateWorkflowStateDtoColor } from './createWorkflowStateDtoColor';
 
 export interface CreateWorkflowStateDto {
   category: CreateWorkflowStateDtoCategory;
@@ -14,4 +15,5 @@ export interface CreateWorkflowStateDto {
      * @maxLength 100
      */
   name: string;
+  color?: CreateWorkflowStateDtoColor;
 }

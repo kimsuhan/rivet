@@ -8,6 +8,7 @@ import {
   MembershipStatus,
   ProjectStatus,
   StateCategory,
+  WorkflowStateColor,
 } from '@rivet/database';
 
 export class IssueUserSummaryResponseDto {
@@ -40,6 +41,7 @@ export class IssueWorkflowStateSummaryResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() name!: string;
   @ApiProperty({ enum: StateCategory }) category!: StateCategory;
+  @ApiProperty({ enum: WorkflowStateColor, nullable: true }) color!: WorkflowStateColor | null;
   @ApiProperty({ minimum: 0 }) position!: number;
   @ApiProperty() isDefault!: boolean;
   @ApiProperty({ minimum: 1 }) version!: number;
@@ -113,6 +115,8 @@ export class TeamWorkSummaryResponseDto {
   @ApiProperty({ type: IssueWorkflowStateSummaryResponseDto })
   workflowState!: IssueWorkflowStateSummaryResponseDto;
   @ApiProperty({ enum: StateCategory }) stateCategory!: StateCategory;
+  @ApiProperty({ maximum: 1, minimum: 0, nullable: true, type: Number })
+  stateProgress!: number | null;
   @ApiProperty({ nullable: true, type: IssueMemberSummaryResponseDto })
   assignee!: IssueMemberSummaryResponseDto | null;
   @ApiProperty({ maxLength: 10000, nullable: true, type: String }) workNoteMarkdown!: string | null;

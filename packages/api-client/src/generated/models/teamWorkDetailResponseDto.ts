@@ -18,6 +18,12 @@ export interface TeamWorkDetailResponseDto {
   projectTeam: IssueProjectTeamSummaryResponseDto;
   workflowState: IssueWorkflowStateSummaryResponseDto;
   stateCategory: TeamWorkDetailResponseDtoStateCategory;
+  /**
+     * @minimum 0
+     * @maximum 1
+     * @nullable
+     */
+  stateProgress: number | null;
   /** @nullable */
   assignee: IssueMemberSummaryResponseDto | null;
   /**

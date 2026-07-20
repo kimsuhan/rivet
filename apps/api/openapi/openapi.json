@@ -11360,6 +11360,21 @@
             ],
             "type": "string"
           },
+          "color": {
+            "nullable": true,
+            "enum": [
+              "GRAY",
+              "COOL_GRAY",
+              "INDIGO",
+              "TEAL",
+              "GREEN",
+              "YELLOW",
+              "ORANGE",
+              "BROWN",
+              "RED"
+            ],
+            "type": "string"
+          },
           "position": {
             "type": "number",
             "minimum": 0
@@ -11376,6 +11391,7 @@
           "id",
           "name",
           "category",
+          "color",
           "position",
           "isDefault",
           "version"
@@ -11411,6 +11427,12 @@
             ],
             "type": "string"
           },
+          "stateProgress": {
+            "type": "number",
+            "nullable": true,
+            "maximum": 1,
+            "minimum": 0
+          },
           "assignee": {
             "nullable": true,
             "type": "object",
@@ -11445,6 +11467,7 @@
           "projectTeam",
           "workflowState",
           "stateCategory",
+          "stateProgress",
           "assignee",
           "workNoteMarkdown",
           "version",
@@ -12208,6 +12231,12 @@
             ],
             "type": "string"
           },
+          "stateProgress": {
+            "type": "number",
+            "nullable": true,
+            "maximum": 1,
+            "minimum": 0
+          },
           "assignee": {
             "nullable": true,
             "type": "object",
@@ -12242,6 +12271,7 @@
           "projectTeam",
           "workflowState",
           "stateCategory",
+          "stateProgress",
           "assignee",
           "workNoteMarkdown",
           "version",
@@ -13746,6 +13776,21 @@
             ],
             "type": "string"
           },
+          "color": {
+            "nullable": true,
+            "enum": [
+              "GRAY",
+              "COOL_GRAY",
+              "INDIGO",
+              "TEAL",
+              "GREEN",
+              "YELLOW",
+              "ORANGE",
+              "BROWN",
+              "RED"
+            ],
+            "type": "string"
+          },
           "position": {
             "type": "number",
             "minimum": 0
@@ -13762,6 +13807,7 @@
           "id",
           "name",
           "category",
+          "color",
           "position",
           "isDefault",
           "version"
@@ -13889,6 +13935,20 @@
             "maxLength": 100,
             "example": "검증 대기",
             "minLength": 1
+          },
+          "color": {
+            "enum": [
+              "GRAY",
+              "COOL_GRAY",
+              "INDIGO",
+              "TEAL",
+              "GREEN",
+              "YELLOW",
+              "ORANGE",
+              "BROWN",
+              "RED"
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -13904,6 +13964,20 @@
             "maxLength": 100,
             "example": "검토 중",
             "minLength": 1
+          },
+          "color": {
+            "enum": [
+              "GRAY",
+              "COOL_GRAY",
+              "INDIGO",
+              "TEAL",
+              "GREEN",
+              "YELLOW",
+              "ORANGE",
+              "BROWN",
+              "RED"
+            ],
+            "type": "string"
           },
           "version": {
             "type": "number",

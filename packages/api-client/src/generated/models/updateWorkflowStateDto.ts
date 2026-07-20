@@ -5,6 +5,7 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
+import type { UpdateWorkflowStateDtoColor } from './updateWorkflowStateDtoColor';
 
 export interface UpdateWorkflowStateDto {
   /**
@@ -12,6 +13,7 @@ export interface UpdateWorkflowStateDto {
      * @maxLength 100
      */
   name: string;
+  color?: UpdateWorkflowStateDtoColor;
   /** @minimum 1 */
   version: number;
 }

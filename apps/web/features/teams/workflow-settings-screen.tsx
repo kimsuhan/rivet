@@ -6,6 +6,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Check,
   GitBranch,
   MoreHorizontal,
   Pencil,
@@ -15,7 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 
 import {
@@ -65,8 +66,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
-import { WorkflowStateIcon } from '@/components/workflow-state-icon';
+import {
+  isWorkflowStateColorKey,
+  WORKFLOW_STATE_COLOR_PALETTE,
+  type WorkflowStateColorKey,
+  workflowStateColorKey,
+  WorkflowStateIcon,
+} from '@/components/workflow-state-icon';
 import { Link, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
@@ -87,6 +95,8 @@ export type WorkflowSettingsLabels = {
   close: string;
   conflictDescription: string;
   conflictTitle: string;
+  colorLabel: string;
+  colors: Record<WorkflowStateColorKey, string>;
   create: string;
   createDescription: string;
   createTitle: string;
@@ -173,6 +183,49 @@ function categoryName(
   }
 }
 
+function WorkflowStateColorPicker({
+  category,
+  color,
+  labels,
+  onChange,
+}: {
+  category: WorkflowStateResponseDto['category'];
+  color: WorkflowStateColorKey;
+  labels: WorkflowSettingsLabels;
+  onChange: (color: WorkflowStateColorKey) => void;
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">{labels.colorLabel}</legend>
+      <div className="flex flex-wrap gap-1.5">
+        {(Object.keys(WORKFLOW_STATE_COLOR_PALETTE) as WorkflowStateColorKey[]).map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-label={labels.colors[option]}
+            aria-pressed={color === option}
+            className={cn(
+              buttonVariants({ size: 'icon', variant: 'ghost' }),
+              'relative size-9',
+              color === option && 'bg-accent ring-ring ring-2',
+            )}
+            onClick={() => onChange(option)}
+            title={labels.colors[option]}
+          >
+            <WorkflowStateIcon category={category} color={option} variant="swatch" />
+            {color === option ? (
+              <Check
+                aria-hidden="true"
+                className="bg-background absolute -right-0.5 -bottom-0.5 size-3.5 rounded-full"
+              />
+            ) : null}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 function CreateStateDialog({
   category,
   labels,
@@ -188,20 +241,24 @@ function CreateStateDialog({
 }) {
   const mutation = useTeamsControllerCreateWorkflowState();
   const schema = z.object({
+    color: z.custom<WorkflowStateColorKey>(isWorkflowStateColorKey),
     name: z.string().trim().min(1, labels.nameRequired).max(100, labels.nameTooLong),
   });
   const {
     clearErrors,
+    control,
     formState: { errors, isDirty },
     handleSubmit,
     register,
     setError,
+    setValue,
   } = useForm<z.infer<typeof schema>>({
-    defaultValues: { name: '' },
+    defaultValues: { color: workflowStateColorKey(category), name: '' },
     resolver: zodResolver(schema),
   });
   const [unexpectedError, setUnexpectedError] = useState(false);
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
+  const color = useWatch({ control, name: 'color' });
 
   const submit = handleSubmit((values) => {
     if (mutation.isPending) return;
@@ -209,7 +266,7 @@ function CreateStateDialog({
     clearErrors();
     setUnexpectedError(false);
     mutation.mutate(
-      { data: { category, name: values.name }, teamId },
+      { data: { category, color: values.color, name: values.name }, teamId },
       {
         onError: (error) => {
           if (error.body.fieldErrors.name?.length || error.body.code === 'VALIDATION_ERROR') {
@@ -273,6 +330,12 @@ function CreateStateDialog({
               />
               <FieldError id="create-workflow-state-name-error" errors={[errors.name]} />
             </Field>
+            <WorkflowStateColorPicker
+              category={category}
+              color={color}
+              labels={labels}
+              onChange={(color) => setValue('color', color, { shouldDirty: true })}
+            />
           </form>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={requestClose}>
@@ -317,22 +380,26 @@ function RenameStateDialog({
 }) {
   const mutation = useTeamsControllerUpdateWorkflowState();
   const schema = z.object({
+    color: z.custom<WorkflowStateColorKey>(isWorkflowStateColorKey),
     name: z.string().trim().min(1, labels.nameRequired).max(100, labels.nameTooLong),
   });
   const {
     clearErrors,
+    control,
     formState: { errors, isDirty },
     handleSubmit,
     register,
     setError,
+    setValue,
   } = useForm<z.infer<typeof schema>>({
-    defaultValues: { name: state.name },
+    defaultValues: { color: workflowStateColorKey(state.category, state.color), name: state.name },
     resolver: zodResolver(schema),
   });
   const [version, setVersion] = useState(state.version);
   const [conflict, setConflict] = useState(false);
   const [unexpectedError, setUnexpectedError] = useState(false);
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
+  const color = useWatch({ control, name: 'color' });
 
   const submit = handleSubmit((values) => {
     if (mutation.isPending) return;
@@ -341,7 +408,7 @@ function RenameStateDialog({
     setConflict(false);
     setUnexpectedError(false);
     mutation.mutate(
-      { data: { name: values.name, version }, stateId: state.id },
+      { data: { color: values.color, name: values.name, version }, stateId: state.id },
       {
         onError: (error) => {
           if (error.body.code === 'VERSION_CONFLICT') {
@@ -420,6 +487,12 @@ function RenameStateDialog({
                 />
                 <FieldError id="workflow-state-name-error" errors={[errors.name]} />
               </Field>
+              <WorkflowStateColorPicker
+                category={state.category}
+                color={color}
+                labels={labels}
+                onChange={(color) => setValue('color', color, { shouldDirty: true })}
+              />
             </div>
           </form>
           <DialogFooter>
@@ -847,7 +920,7 @@ export function WorkflowSettingsScreen({
                 <div className="bg-muted/35 flex h-10 items-center justify-between border-b px-3">
                   <h2
                     id={`workflow-category-${category}`}
-                    className="text-muted-foreground text-xs font-medium"
+                    className="text-muted-foreground text-xs font-medium tracking-wide"
                   >
                     {title}
                   </h2>
@@ -869,7 +942,16 @@ export function WorkflowSettingsScreen({
                         key={state.id}
                         className="group hover:bg-muted/25 focus-within:bg-muted/25 flex min-h-12 items-center gap-3 border-b px-3 last:border-b-0"
                       >
-                        <WorkflowStateIcon category={state.category} />
+                        <WorkflowStateIcon
+                          category={state.category}
+                          color={state.color}
+                          progress={
+                            state.category === WorkflowStateResponseDtoCategory.STARTED
+                              ? (stateIndex + 1) / (sectionStates.length + 1)
+                              : null
+                          }
+                          variant="swatch"
+                        />
                         <span className="min-w-0 flex-1 truncate text-sm font-medium">
                           {state.name}
                         </span>
@@ -915,6 +997,37 @@ export function WorkflowSettingsScreen({
                             <PopoverTitle className="px-2 py-1.5 text-sm">
                               {state.name}
                             </PopoverTitle>
+                            <Button
+                              type="button"
+                              className="w-full justify-start"
+                              size="sm"
+                              variant="ghost"
+                              disabled={stateIndex === 0 || isWorkflowMutating}
+                              onClick={() => {
+                                setManageTargetId(null);
+                                move(state, -1);
+                              }}
+                            >
+                              <ArrowUp data-icon="inline-start" aria-hidden="true" />
+                              {labels.moveUp}
+                            </Button>
+                            <Button
+                              type="button"
+                              className="w-full justify-start"
+                              size="sm"
+                              variant="ghost"
+                              disabled={
+                                stateIndex === sectionStates.length - 1 || isWorkflowMutating
+                              }
+                              onClick={() => {
+                                setManageTargetId(null);
+                                move(state, 1);
+                              }}
+                            >
+                              <ArrowDown data-icon="inline-start" aria-hidden="true" />
+                              {labels.moveDown}
+                            </Button>
+                            <Separator className="my-1" />
                             <Button
                               type="button"
                               className="w-full justify-start"

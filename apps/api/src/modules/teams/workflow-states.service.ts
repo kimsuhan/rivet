@@ -80,6 +80,7 @@ export class WorkflowStatesService {
         const created = await transaction.workflowState.create({
           data: {
             category: dto.category,
+            ...(dto.color ? { color: dto.color } : {}),
             name,
             normalizedName,
             position,
@@ -194,14 +195,7 @@ export class WorkflowStatesService {
 
     try {
       const current = await this.database.client.workflowState.findFirst({
-        select: {
-          category: true,
-          id: true,
-          isDefault: true,
-          name: true,
-          position: true,
-          version: true,
-        },
+        select: WORKFLOW_STATE_SELECT,
         where: { id: stateId, team: { archivedAt: null }, workspaceId },
       });
       if (!current) {
@@ -210,21 +204,19 @@ export class WorkflowStatesService {
       if (current.version !== dto.version) {
         throw teamVersionConflict(current.version);
       }
-      if (current.name === name) {
+      if (current.name === name && (dto.color === undefined || current.color === dto.color)) {
         return current;
       }
 
       const updated = await this.database.client.$transaction(async (transaction) => {
         const [result] = await transaction.workflowState.updateManyAndReturn({
-          data: { name, normalizedName, version: { increment: 1 } },
-          select: {
-            category: true,
-            id: true,
-            isDefault: true,
-            name: true,
-            position: true,
-            version: true,
+          data: {
+            ...(dto.color !== undefined ? { color: dto.color } : {}),
+            name,
+            normalizedName,
+            version: { increment: 1 },
           },
+          select: WORKFLOW_STATE_SELECT,
           where: {
             id: stateId,
             team: { archivedAt: null },
@@ -373,14 +365,7 @@ export class WorkflowStatesService {
         updated.push(
           await transaction.workflowState.update({
             data: { position, version: { increment: 1 } },
-            select: {
-              category: true,
-              id: true,
-              isDefault: true,
-              name: true,
-              position: true,
-              version: true,
-            },
+            select: WORKFLOW_STATE_SELECT,
             where: { id: state.id },
           }),
         );

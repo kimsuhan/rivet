@@ -1,6 +1,7 @@
 'use client';
 
 import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import {
   Select,
@@ -15,6 +16,7 @@ import { cn } from '@/lib/utils';
 export type IssueInlineSelectOption = {
   icon?: LucideIcon;
   iconClassName?: string;
+  iconElement?: ReactNode;
   label: string;
   value: string;
 };
@@ -90,13 +92,14 @@ export function IssueInlineSelect({
         >
           {appearance !== 'default' && selectedOption ? (
             <span className="flex min-w-0 items-center gap-1.5">
-              {SelectedIcon ? (
-                <SelectedIcon
-                  aria-hidden="true"
-                  data-slot="inline-select-icon"
-                  className={cn('size-4 shrink-0', selectedOption.iconClassName)}
-                />
-              ) : null}
+              {selectedOption.iconElement ??
+                (SelectedIcon ? (
+                  <SelectedIcon
+                    aria-hidden="true"
+                    data-slot="inline-select-icon"
+                    className={cn('size-4 shrink-0', selectedOption.iconClassName)}
+                  />
+                ) : null)}
               <span
                 data-slot="inline-select-label"
                 className={cn('text-secondary-foreground min-w-0 truncate', labelClassName)}
@@ -116,13 +119,14 @@ export function IssueInlineSelect({
                 value={option.value}
                 className="data-selected:bg-accent/60 min-h-11 lg:min-h-9"
               >
-                {option.icon ? (
-                  <option.icon
-                    aria-hidden="true"
-                    data-slot="inline-select-item-icon"
-                    className={cn('size-4 shrink-0', option.iconClassName)}
-                  />
-                ) : null}
+                {option.iconElement ??
+                  (option.icon ? (
+                    <option.icon
+                      aria-hidden="true"
+                      data-slot="inline-select-item-icon"
+                      className={cn('size-4 shrink-0', option.iconClassName)}
+                    />
+                  ) : null)}
                 {option.label}
               </SelectItem>
             ))}

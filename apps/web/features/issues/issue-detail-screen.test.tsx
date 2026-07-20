@@ -75,7 +75,7 @@ vi.mock('./issue-attribute-presentation', () => ({
   IssueStatusDisplay: ({ status }: { status: string }) => <span>{status}</span>,
   PriorityDisplay: ({ priority }: { priority: string }) => <span>{priority}</span>,
   StatusTrigger: () => <button type="button">상태</button>,
-  TeamWorkStatusDisplay: ({ category }: { category: string }) => <span>{category}</span>,
+  TeamWorkStatusDisplay: ({ name }: { name: string }) => <span>{name}</span>,
 }));
 
 const project = {
@@ -117,10 +117,12 @@ function work(
       team: { archived: false, id: `team-${id}`, key: teamKey, name: `${teamKey} 팀` },
     },
     stateCategory,
+    stateProgress: stateCategory === 'STARTED' ? 0.5 : null,
     updatedAt: new Date(0).toISOString(),
     version: 1,
     workflowState: {
       category: stateCategory,
+      color: null,
       id: `state-${id}`,
       isDefault: true,
       name: stateCategory,
