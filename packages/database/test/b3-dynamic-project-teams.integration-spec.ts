@@ -202,7 +202,7 @@ describe('B3 dynamic project teams database integration', () => {
     await prisma.$disconnect();
   });
 
-  it('merges multiple legacy roles for one team and links legacy TeamWork to one participant', async () => {
+  it('syncs post-expand legacy role writes to one participant and links legacy TeamWork', async () => {
     await prisma.projectRoleTeam.createMany({
       data: [
         { projectId, role: ProjectRole.BACKEND, teamId: planningTeamId, workspaceId },

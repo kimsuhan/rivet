@@ -546,6 +546,55 @@ describe('TeamsService management', () => {
     expect(transaction.workflowState.update).not.toHaveBeenCalled();
   });
 
+  it('keeps the last unstarted state for a team in an active project', async () => {
+    transaction.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          category: StateCategory.UNSTARTED,
+          id: stateId,
+          isDefault: false,
+          name: '할 일',
+          teamId,
+          version: 1,
+        },
+      ])
+      .mockResolvedValueOnce([{ activeProjectCount: 1, unstartedCount: 1 }]);
+
+    await expect(
+      workflowStates.deleteWorkflowState({ membershipId, workspaceId }, stateId, { version: 1 }),
+    ).rejects.toMatchObject({
+      response: { code: 'TEAM_UNSTARTED_STATE_REQUIRED' },
+      status: HttpStatus.CONFLICT,
+    });
+    const usageQuery = (transaction.$queryRaw.mock.calls[1]?.[0] as string[] | undefined)?.join('');
+    expect(usageQuery).toContain('FROM "project_teams" project_team');
+    expect(usageQuery).not.toContain('FROM "project_role_teams"');
+    expect(transaction.workflowState.delete).not.toHaveBeenCalled();
+  });
+
+  it('allows the last unstarted state to be deleted when the team has no active project', async () => {
+    transaction.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          category: StateCategory.UNSTARTED,
+          id: stateId,
+          isDefault: false,
+          name: '할 일',
+          teamId,
+          version: 1,
+        },
+      ])
+      .mockResolvedValueOnce([{ activeProjectCount: 0, unstartedCount: 1 }])
+      .mockResolvedValueOnce([{ id: stateId, name: '할 일', position: 0, version: 1 }])
+      .mockResolvedValueOnce([]);
+    transaction.workflowState.delete.mockResolvedValue({});
+
+    await expect(
+      workflowStates.deleteWorkflowState({ membershipId, workspaceId }, stateId, { version: 1 }),
+    ).resolves.toBeUndefined();
+    expect(transaction.workflowState.delete).toHaveBeenCalledWith({ where: { id: stateId } });
+  });
+
   it('transfers the default marker before deleting an unused default state', async () => {
     transaction.$queryRaw
       .mockResolvedValueOnce([{ id: stateId, isDefault: true, name: '미분류', teamId, version: 1 }])

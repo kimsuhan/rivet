@@ -430,25 +430,30 @@ export class WorkflowStatesService {
 
       if (target.category === StateCategory.UNSTARTED) {
         const [usage] = await transaction.$queryRaw<
-          Array<{ activeRoleCount: number; unstartedCount: number }>
+          Array<{ activeProjectCount: number; unstartedCount: number }>
         >`
           SELECT
-            COUNT(DISTINCT role."project_id")::int AS "activeRoleCount",
-            COUNT(state."id")::int AS "unstartedCount"
-          FROM "workflow_states" state
-          LEFT JOIN "project_role_teams" role
-            ON role."workspace_id" = state."workspace_id"
-           AND role."team_id" = state."team_id"
-          LEFT JOIN "projects" project
-            ON project."workspace_id" = role."workspace_id"
-           AND project."id" = role."project_id"
-           AND project."archived_at" IS NULL
-           AND project."deleted_at" IS NULL
-          WHERE state."workspace_id" = ${context.workspaceId}::uuid
-            AND state."team_id" = ${target.teamId}::uuid
-            AND state."category" = 'UNSTARTED'::"StateCategory"
+            (
+              SELECT COUNT(*)::int
+              FROM "project_teams" project_team
+              INNER JOIN "projects" project
+                ON project."workspace_id" = project_team."workspace_id"
+               AND project."id" = project_team."project_id"
+               AND project."archived_at" IS NULL
+               AND project."deleted_at" IS NULL
+              WHERE project_team."workspace_id" = ${context.workspaceId}::uuid
+                AND project_team."team_id" = ${target.teamId}::uuid
+                AND project_team."is_active" = true
+            ) AS "activeProjectCount",
+            (
+              SELECT COUNT(*)::int
+              FROM "workflow_states" state
+              WHERE state."workspace_id" = ${context.workspaceId}::uuid
+                AND state."team_id" = ${target.teamId}::uuid
+                AND state."category" = 'UNSTARTED'::"StateCategory"
+            ) AS "unstartedCount"
         `;
-        if ((usage?.activeRoleCount ?? 0) > 0 && (usage?.unstartedCount ?? 0) <= 1) {
+        if ((usage?.activeProjectCount ?? 0) > 0 && (usage?.unstartedCount ?? 0) <= 1) {
           throw new ApiError({
             code: 'TEAM_UNSTARTED_STATE_REQUIRED',
             message: '활성 프로젝트에 참여 중인 팀은 시작 전 상태를 하나 이상 유지해야 합니다.',
