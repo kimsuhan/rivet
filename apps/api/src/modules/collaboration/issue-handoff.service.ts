@@ -408,6 +408,7 @@ export class IssueHandoffService {
         orderBy: [{ isDefault: 'desc' }, { position: 'asc' }],
         select: { id: true },
         where: {
+          disabledAt: null,
           teamId: projectTeam.teamId,
           workspaceId: context.workspaceId,
         },

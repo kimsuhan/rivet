@@ -37,6 +37,7 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 const labels = {
+  feedback: '피드백 보내기',
   loggingOut: '로그아웃 중',
   logout: '로그아웃',
   logoutError: '로그아웃하지 못했습니다. 잠시 후 다시 시도해 주세요.',
@@ -46,12 +47,19 @@ const labels = {
 
 const user = { displayName: '김리벳', email: 'kim@example.com' };
 
-function renderMenu(props: { onOpenChange?: () => void; onOpenProfile?: () => void } = {}) {
+function renderMenu(
+  props: {
+    onOpenChange?: () => void;
+    onOpenFeedback?: () => void;
+    onOpenProfile?: () => void;
+  } = {},
+) {
   return render(
     <UserMenu
       labels={labels}
       open
       onOpenChange={props.onOpenChange ?? vi.fn()}
+      onOpenFeedback={props.onOpenFeedback ?? vi.fn()}
       onOpenProfile={props.onOpenProfile ?? vi.fn()}
       user={user}
     >
@@ -78,7 +86,20 @@ describe('UserMenu', () => {
     expect(screen.getByText('김리벳')).toBeInTheDocument();
     expect(screen.getByText('kim@example.com')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: labels.profile })).toBeEnabled();
+    expect(screen.getByRole('button', { name: labels.feedback })).toBeEnabled();
     expect(screen.getByRole('button', { name: labels.logout })).toBeEnabled();
+  });
+
+  it('피드백 보내기를 누르면 메뉴를 닫고 피드백을 연다', async () => {
+    const onOpenChange = vi.fn();
+    const onOpenFeedback = vi.fn();
+    const interaction = userEvent.setup();
+    renderMenu({ onOpenChange, onOpenFeedback });
+
+    await interaction.click(screen.getByRole('button', { name: labels.feedback }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onOpenFeedback).toHaveBeenCalledOnce();
   });
 
   it('프로필 설정을 누르면 메뉴를 닫고 프로필을 연다', async () => {

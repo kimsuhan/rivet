@@ -7,12 +7,15 @@ import { useAuthControllerGetSession } from '@rivet/api-client';
 
 import { AdminSettingsBoundary } from './admin-settings-boundary';
 
+const navigation = vi.hoisted(() => ({ pathname: '/settings/teams' }));
+
 vi.mock('@rivet/api-client', () => ({
   useAuthControllerGetSession: vi.fn(),
 }));
 
 vi.mock('@/i18n/navigation', () => ({
   Link: (props: AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props} />,
+  usePathname: () => navigation.pathname,
 }));
 
 const labels = {
@@ -32,7 +35,10 @@ function mockSession(value: Record<string, unknown>) {
 describe('AdminSettingsBoundary', () => {
   afterEach(cleanup);
 
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    navigation.pathname = '/settings/teams';
+  });
 
   it('세션 확인 중에는 설정 내용을 노출하지 않는다', () => {
     mockSession({ data: undefined, isPending: true });
@@ -105,5 +111,30 @@ describe('AdminSettingsBoundary', () => {
     );
 
     expect(screen.getByText('설정 내용')).toBeInTheDocument();
+  });
+
+  it('팀장에게 팀 설정만 표시한다', () => {
+    mockSession({
+      data: {
+        authenticated: true,
+        membership: { ledTeamIds: ['team-web'], role: 'MEMBER', status: 'ACTIVE' },
+      },
+      isPending: false,
+    });
+
+    const { rerender } = render(
+      <AdminSettingsBoundary labels={labels}>
+        <div>설정 내용</div>
+      </AdminSettingsBoundary>,
+    );
+    expect(screen.getByText('설정 내용')).toBeInTheDocument();
+
+    navigation.pathname = '/settings/members';
+    rerender(
+      <AdminSettingsBoundary labels={labels}>
+        <div>설정 내용</div>
+      </AdminSettingsBoundary>,
+    );
+    expect(screen.queryByText('설정 내용')).not.toBeInTheDocument();
   });
 });

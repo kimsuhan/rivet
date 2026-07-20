@@ -80,6 +80,7 @@ describe('AuthService', () => {
     $queryRaw: jest.fn(),
     $transaction: jest.fn(),
     team: { findFirst: jest.fn() },
+    teamMember: { findMany: jest.fn() },
     user: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   };
   const rateLimits = {
@@ -106,6 +107,7 @@ describe('AuthService', () => {
       async (operation: (value: typeof transaction) => Promise<unknown>) => operation(transaction),
     );
     client.team.findFirst.mockResolvedValue(null);
+    client.teamMember.findMany.mockResolvedValue([]);
     client.user.findUnique.mockResolvedValue(null);
     client.user.update.mockResolvedValue({
       avatarFileId: null,
@@ -462,10 +464,31 @@ describe('AuthService', () => {
   it('returns unauthenticated without a session and COMPLETE when the workspace has a team', async () => {
     await expect(service.getSession(null)).resolves.toEqual({ authenticated: false });
     client.team.findFirst.mockResolvedValue({ id: 'team-id' });
+    client.teamMember.findMany.mockResolvedValue([
+      { role: 'MEMBER', teamId: 'member-team-id' },
+      { role: 'LEAD', teamId: 'lead-team-id' },
+    ]);
 
     await expect(service.getSession('session-token')).resolves.toEqual(
-      expect.objectContaining({ authenticated: true, onboardingStep: 'COMPLETE' }),
+      expect.objectContaining({
+        authenticated: true,
+        membership: expect.objectContaining({
+          ledTeamIds: ['lead-team-id'],
+          teamIds: ['member-team-id', 'lead-team-id'],
+        }),
+        onboardingStep: 'COMPLETE',
+      }),
     );
+    expect(client.teamMember.findMany).toHaveBeenCalledWith({
+      orderBy: { teamId: 'asc' },
+      select: { role: true, teamId: true },
+      where: {
+        membershipId: sessionContext.membership.id,
+        removedAt: null,
+        team: { archivedAt: null },
+        workspaceId: sessionContext.workspace.id,
+      },
+    });
   });
 
   it('prioritizes an active invitation continuation over workspace and team onboarding', async () => {

@@ -35,7 +35,12 @@ import { AdminGuard } from '../../common/guards/admin.guard';
 import type { AuthenticatedRequestContext } from '../auth/authentication.context';
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import { CreateTeamDto } from './dto/create-team.dto';
-import { TeamListQueryDto, UpdateTeamDto, VersionDto } from './dto/team-request.dto';
+import {
+  TeamListQueryDto,
+  UpdateTeamDto,
+  VersionDto,
+  WorkflowStateListQueryDto,
+} from './dto/team-request.dto';
 import {
   TeamListResponseDto,
   TeamResponseDto,
@@ -55,6 +60,7 @@ import { WorkflowStatesService } from './workflow-states.service';
 
 function workspaceContext(authentication: AuthenticatedRequestContext): {
   membershipId: string;
+  role: 'ADMIN' | 'MEMBER';
   workspaceId: string;
 } {
   const { membership, workspace } = authentication.session;
@@ -72,7 +78,7 @@ function workspaceContext(authentication: AuthenticatedRequestContext): {
     });
   }
 
-  return { membershipId: membership.id, workspaceId: workspace.id };
+  return { membershipId: membership.id, role: membership.role, workspaceId: workspace.id };
 }
 
 @ApiTags('teams')
@@ -99,7 +105,7 @@ export class TeamsController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Query() query: TeamListQueryDto,
   ): Promise<TeamListResponseDto> {
-    return this.teamQueries.list(workspaceContext(authentication).workspaceId, query);
+    return this.teamQueries.list(workspaceContext(authentication), query);
   }
 
   @Post('teams')
@@ -138,12 +144,11 @@ export class TeamsController {
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
   ): Promise<TeamResponseDto> {
-    return this.teamQueries.get(workspaceContext(authentication).workspaceId, teamId);
+    return this.teamQueries.get(workspaceContext(authentication), teamId);
   }
 
   @Patch('teams/:teamId')
-  @UseGuards(AdminGuard)
-  @ApiOperation({ summary: '팀 이름과 키 수정' })
+  @ApiOperation({ summary: '팀 이름·설명과 관리자 전용 키 수정' })
   @ApiOkResponse({ type: TeamResponseDto })
   @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
   @ApiForbiddenResponse({
@@ -161,11 +166,10 @@ export class TeamsController {
     @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
     @Body() dto: UpdateTeamDto,
   ): Promise<TeamResponseDto> {
-    return this.teams.update(workspaceContext(authentication).workspaceId, teamId, dto);
+    return this.teams.update(workspaceContext(authentication), teamId, dto);
   }
 
   @Put('teams/:teamId/members/:membershipId')
-  @UseGuards(AdminGuard)
   @ApiOperation({ summary: '활성 멤버를 팀에 추가하거나 복귀' })
   @ApiOkResponse({ type: TeamResponseDto })
   @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
@@ -179,11 +183,10 @@ export class TeamsController {
     @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
     @Param('membershipId', new ParseUUIDPipe({ version: '4' })) membershipId: string,
   ): Promise<TeamResponseDto> {
-    return this.teams.addMember(workspaceContext(authentication).workspaceId, teamId, membershipId);
+    return this.teams.addMember(workspaceContext(authentication), teamId, membershipId);
   }
 
   @Delete('teams/:teamId/members/:membershipId')
-  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '팀 멤버 제거' })
   @ApiNoContentResponse()
@@ -202,11 +205,35 @@ export class TeamsController {
     @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
     @Param('membershipId', new ParseUUIDPipe({ version: '4' })) membershipId: string,
   ): Promise<void> {
-    await this.teams.removeMember(
-      workspaceContext(authentication).workspaceId,
-      teamId,
-      membershipId,
-    );
+    await this.teams.removeMember(workspaceContext(authentication), teamId, membershipId);
+  }
+
+  @Put('teams/:teamId/leaders/:membershipId')
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: '활성 팀 멤버를 팀장으로 지정' })
+  @ApiOkResponse({ type: TeamResponseDto })
+  @ApiForbiddenResponse({ description: 'CSRF_INVALID 또는 FORBIDDEN', type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  setLeader(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
+    @Param('membershipId', new ParseUUIDPipe({ version: '4' })) membershipId: string,
+  ): Promise<TeamResponseDto> {
+    return this.teams.setLeader(workspaceContext(authentication), teamId, membershipId);
+  }
+
+  @Delete('teams/:teamId/leaders/:membershipId')
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: '팀장 권한 해제' })
+  @ApiOkResponse({ type: TeamResponseDto })
+  @ApiForbiddenResponse({ description: 'CSRF_INVALID 또는 FORBIDDEN', type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  removeLeader(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
+    @Param('membershipId', new ParseUUIDPipe({ version: '4' })) membershipId: string,
+  ): Promise<TeamResponseDto> {
+    return this.teams.removeLeader(workspaceContext(authentication), teamId, membershipId);
   }
 
   @Post('teams/:teamId/archive')
@@ -229,11 +256,12 @@ export class TeamsController {
     @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
     @Body() dto: VersionDto,
   ): Promise<TeamResponseDto> {
-    return this.teams.archive(workspaceContext(authentication).workspaceId, teamId, dto);
+    return this.teams.archive(workspaceContext(authentication), teamId, dto);
   }
 
   @Get('teams/:teamId/workflow-states')
   @ApiOperation({ summary: '팀 워크플로 상태 조회' })
+  @ApiQuery({ name: 'includeDisabled', required: false, type: Boolean })
   @ApiOkResponse({ type: WorkflowStateListResponseDto })
   @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
   @ApiForbiddenResponse({
@@ -244,15 +272,16 @@ export class TeamsController {
   listWorkflowStates(
     @CurrentAuthentication() authentication: AuthenticatedRequestContext,
     @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
+    @Query() query: WorkflowStateListQueryDto,
   ): Promise<WorkflowStateListResponseDto> {
     return this.teamQueries.listWorkflowStates(
       workspaceContext(authentication).workspaceId,
       teamId,
+      query.includeDisabled,
     );
   }
 
   @Post('teams/:teamId/workflow-states')
-  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: '팀 워크플로 상태 생성' })
   @ApiCreatedResponse({ type: WorkflowStateResponseDto })
@@ -268,15 +297,10 @@ export class TeamsController {
     @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
     @Body() dto: CreateWorkflowStateDto,
   ): Promise<WorkflowStateResponseDto> {
-    return this.workflowStates.createWorkflowState(
-      workspaceContext(authentication).workspaceId,
-      teamId,
-      dto,
-    );
+    return this.workflowStates.createWorkflowState(workspaceContext(authentication), teamId, dto);
   }
 
   @Patch('workflow-states/:stateId')
-  @UseGuards(AdminGuard)
   @ApiOperation({ summary: '워크플로 상태 이름 수정' })
   @ApiOkResponse({ type: WorkflowStateResponseDto })
   @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
@@ -292,15 +316,10 @@ export class TeamsController {
     @Param('stateId', new ParseUUIDPipe({ version: '4' })) stateId: string,
     @Body() dto: UpdateWorkflowStateDto,
   ): Promise<WorkflowStateResponseDto> {
-    return this.workflowStates.updateWorkflowState(
-      workspaceContext(authentication).workspaceId,
-      stateId,
-      dto,
-    );
+    return this.workflowStates.updateWorkflowState(workspaceContext(authentication), stateId, dto);
   }
 
   @Post('workflow-states/:stateId/default')
-  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '팀 워크플로 기본 상태 지정' })
   @ApiOkResponse({ type: WorkflowStateListResponseDto })
@@ -317,14 +336,13 @@ export class TeamsController {
     @Body() dto: SetWorkflowStateDefaultDto,
   ): Promise<WorkflowStateListResponseDto> {
     return this.workflowStates.setDefaultWorkflowState(
-      workspaceContext(authentication).workspaceId,
+      workspaceContext(authentication),
       stateId,
       dto,
     );
   }
 
   @Put('teams/:teamId/workflow-states/order')
-  @UseGuards(AdminGuard)
   @ApiOperation({ summary: '워크플로 상태 순서 교체' })
   @ApiOkResponse({ type: WorkflowStateListResponseDto })
   @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
@@ -340,15 +358,44 @@ export class TeamsController {
     @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
     @Body() dto: ReorderWorkflowStatesDto,
   ): Promise<WorkflowStateListResponseDto> {
-    return this.workflowStates.reorderWorkflowStates(
-      workspaceContext(authentication).workspaceId,
-      teamId,
-      dto,
-    );
+    return this.workflowStates.reorderWorkflowStates(workspaceContext(authentication), teamId, dto);
+  }
+
+  @Post('workflow-states/:stateId/disable')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '워크플로 상태 사용 중지' })
+  @ApiOkResponse({ type: WorkflowStateResponseDto })
+  @ApiForbiddenResponse({ description: 'CSRF_INVALID 또는 FORBIDDEN', type: ApiErrorResponseDto })
+  @ApiConflictResponse({
+    description:
+      'VERSION_CONFLICT, WORKFLOW_STATE_DEFAULT_REQUIRED 또는 TEAM_UNSTARTED_STATE_REQUIRED',
+    type: ApiErrorResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  disableWorkflowState(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('stateId', new ParseUUIDPipe({ version: '4' })) stateId: string,
+    @Body() dto: VersionDto,
+  ): Promise<WorkflowStateResponseDto> {
+    return this.workflowStates.disableWorkflowState(workspaceContext(authentication), stateId, dto);
+  }
+
+  @Post('workflow-states/:stateId/restore')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '사용 중지한 워크플로 상태 복구' })
+  @ApiOkResponse({ type: WorkflowStateResponseDto })
+  @ApiForbiddenResponse({ description: 'CSRF_INVALID 또는 FORBIDDEN', type: ApiErrorResponseDto })
+  @ApiConflictResponse({ description: 'VERSION_CONFLICT', type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  restoreWorkflowState(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('stateId', new ParseUUIDPipe({ version: '4' })) stateId: string,
+    @Body() dto: VersionDto,
+  ): Promise<WorkflowStateResponseDto> {
+    return this.workflowStates.restoreWorkflowState(workspaceContext(authentication), stateId, dto);
   }
 
   @Delete('workflow-states/:stateId')
-  @UseGuards(AdminGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '미사용 워크플로 상태 삭제' })
   @ApiQuery({ minimum: 1, name: 'version', required: true, type: Number })

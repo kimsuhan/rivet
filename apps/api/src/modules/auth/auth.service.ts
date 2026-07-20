@@ -332,15 +332,27 @@ export class AuthService {
       session.user.id,
       invitationContinuationToken,
     );
-    const hasTeam =
-      !hasInvitation && session.workspace
-        ? Boolean(
-            await this.database.client.team.findFirst({
-              select: { id: true },
-              where: { archivedAt: null, workspaceId: session.workspace.id },
+    const [hasTeam, teamMemberships] =
+      !hasInvitation && session.workspace && session.membership
+        ? await Promise.all([
+            this.database.client.team
+              .findFirst({
+                select: { id: true },
+                where: { archivedAt: null, workspaceId: session.workspace.id },
+              })
+              .then(Boolean),
+            this.database.client.teamMember.findMany({
+              orderBy: { teamId: 'asc' },
+              select: { role: true, teamId: true },
+              where: {
+                membershipId: session.membership.id,
+                removedAt: null,
+                team: { archivedAt: null },
+                workspaceId: session.workspace.id,
+              },
             }),
-          )
-        : false;
+          ])
+        : [false, []];
 
     return {
       authenticated: true,
@@ -348,8 +360,12 @@ export class AuthService {
       membership: session.membership
         ? {
             id: session.membership.id,
+            ledTeamIds: teamMemberships
+              .filter(({ role }) => role === 'LEAD')
+              .map(({ teamId }) => teamId),
             role: session.membership.role,
             status: 'ACTIVE',
+            teamIds: teamMemberships.map(({ teamId }) => teamId),
           }
         : null,
       onboardingStep: hasInvitation

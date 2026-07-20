@@ -29,6 +29,7 @@ export default async function InvitePage({ params }: { params: Promise<{ locale:
         title: t('title'),
         description: t('description'),
         loading: t('loading'),
+        redirecting: t('redirecting'),
         workspaceLabel: t('workspaceLabel'),
         invitedByLabel: t('invitedByLabel'),
         inviteEmailLabel: t('inviteEmailLabel'),

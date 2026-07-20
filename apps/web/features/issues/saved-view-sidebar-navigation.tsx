@@ -6,6 +6,11 @@ import { useEffect } from 'react';
 
 import { useSavedViewsControllerList } from '@rivet/api-client';
 
+import {
+  sidebarSubGroupClassName,
+  sidebarSubItemClassName,
+  sidebarSubItemStateClassName,
+} from '@/components/layout/sidebar-section';
 import { captureProductEvent } from '@/features/product-events/capture-product-event';
 import { Link, usePathname } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
@@ -39,7 +44,7 @@ export function SavedViewSidebarNavigation({
     <div
       role="group"
       aria-label={`${resourceLabel} 저장된 보기`}
-      className="ml-4 hidden flex-col gap-0.5 border-l pl-2 xl:flex"
+      className={sidebarSubGroupClassName}
     >
       {views.data!.items.map((view) => {
         const active = pathname === viewPathname && selectedId === view.id;
@@ -55,12 +60,7 @@ export function SavedViewSidebarNavigation({
             }
             aria-current={active ? 'location' : undefined}
             title={`${view.name} · ${resourceLabel} 개인 보기`}
-            className={cn(
-              'focus-visible:ring-sidebar-ring flex h-7 items-center gap-1.5 rounded-md px-1.5 text-xs transition-colors outline-none focus-visible:ring-2',
-              active
-                ? 'text-sidebar-accent-foreground font-medium'
-                : 'text-muted-foreground hover:bg-surface-2 hover:text-foreground',
-            )}
+            className={cn(sidebarSubItemClassName, sidebarSubItemStateClassName(active))}
           >
             <Dot
               aria-hidden="true"

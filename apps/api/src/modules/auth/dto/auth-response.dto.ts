@@ -44,6 +44,12 @@ export class SessionMembershipDto {
 
   @ApiProperty({ enum: ['ACTIVE'] })
   status!: 'ACTIVE';
+
+  @ApiProperty({ format: 'uuid', isArray: true, type: String })
+  ledTeamIds!: string[];
+
+  @ApiProperty({ format: 'uuid', isArray: true, type: String })
+  teamIds!: string[];
 }
 
 export class SessionWorkspaceDto {

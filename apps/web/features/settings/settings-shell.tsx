@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { useAuthControllerGetSession } from '@rivet/api-client';
+
 import { Link, usePathname } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
@@ -51,13 +53,16 @@ export function SettingsShell({
   labels: SettingsShellLabels;
 }) {
   const pathname = usePathname();
+  const session = useAuthControllerGetSession({ query: { retry: false } });
+  const isAdmin = Boolean(session.data?.authenticated && session.data.membership?.role === 'ADMIN');
+  const visibleLinks = isAdmin ? links : links.filter(({ label }) => label === 'teams');
 
   return (
     <div className="grid min-h-[calc(100dvh-3rem)] grid-cols-[12rem_minmax(0,1fr)] gap-8">
       <aside className="border-r pr-5">
         <p className="px-2 text-lg font-semibold tracking-[-0.015em]">{labels.title}</p>
         <nav aria-label={labels.navigation} className="mt-4 flex flex-col gap-1">
-          {links.map(({ href, icon: Icon, label }) => {
+          {visibleLinks.map(({ href, icon: Icon, label }) => {
             const active = pathname === href || pathname.startsWith(`${href}/`);
 
             return (

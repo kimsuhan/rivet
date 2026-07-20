@@ -452,6 +452,7 @@ export class IssueAssignmentService {
         select: { id: true },
         where: {
           ...(assignment.assigneeMembershipId ? { category: StateCategory.UNSTARTED } : {}),
+          disabledAt: null,
           teamId: projectTeam.teamId,
           workspaceId: context.workspaceId,
         },

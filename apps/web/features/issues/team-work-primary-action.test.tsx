@@ -10,6 +10,7 @@ const STATES: WorkflowStateResponseDto[] = [
   {
     category: 'BACKLOG',
     color: null,
+    disabledAt: null,
     id: 'state-backlog',
     isDefault: true,
     name: '미분류',
@@ -19,6 +20,7 @@ const STATES: WorkflowStateResponseDto[] = [
   {
     category: 'UNSTARTED',
     color: null,
+    disabledAt: null,
     id: 'state-unstarted',
     isDefault: false,
     name: '할 일',
@@ -28,6 +30,7 @@ const STATES: WorkflowStateResponseDto[] = [
   {
     category: 'STARTED',
     color: null,
+    disabledAt: null,
     id: 'state-started',
     isDefault: false,
     name: '진행 중',
@@ -37,6 +40,7 @@ const STATES: WorkflowStateResponseDto[] = [
   {
     category: 'STARTED',
     color: null,
+    disabledAt: null,
     id: 'state-review',
     isDefault: false,
     name: '검토',
@@ -46,6 +50,7 @@ const STATES: WorkflowStateResponseDto[] = [
   {
     category: 'COMPLETED',
     color: null,
+    disabledAt: null,
     id: 'state-completed',
     isDefault: false,
     name: '완료',

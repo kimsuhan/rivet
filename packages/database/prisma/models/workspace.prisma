@@ -8,6 +8,11 @@ enum MembershipStatus {
   INACTIVE
 }
 
+enum TeamMemberRole {
+  MEMBER
+  LEAD
+}
+
 enum StateCategory {
   BACKLOG
   UNSTARTED
@@ -53,9 +58,10 @@ model Workspace {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  createdByUser        User                  @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdByUser        User                      @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   memberships          WorkspaceMembership[]
   invitations          WorkspaceInvitation[]
+  invitationTeams      WorkspaceInvitationTeam[]
   teams                Team[]
   labels               Label[]
   outboxEvents         OutboxEvent[]
@@ -98,32 +104,33 @@ model WorkspaceMembership {
   deactivatedAt         DateTime?        @map("deactivated_at") @db.Timestamptz(3)
   updatedAt             DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  workspace              Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  user                   User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
-  invitedByMembership    WorkspaceMembership?  @relation("MembershipInvitations", fields: [workspaceId, invitedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
-  invitedMemberships     WorkspaceMembership[] @relation("MembershipInvitations")
-  sentInvitations        WorkspaceInvitation[] @relation("InvitationInviter")
+  workspace              Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user                   User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  invitedByMembership    WorkspaceMembership?      @relation("MembershipInvitations", fields: [workspaceId, invitedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  invitedMemberships     WorkspaceMembership[]     @relation("MembershipInvitations")
+  sentInvitations        WorkspaceInvitation[]     @relation("InvitationInviter")
+  sentTeamInvitations    WorkspaceInvitationTeam[] @relation("InvitationTeamInviter")
   teamMemberships        TeamMember[]
-  actorOutboxEvents      OutboxEvent[]         @relation("OutboxActorMembership")
-  ledProjects            Project[]             @relation("ProjectLeadMembership")
-  deletedProjects        Project[]             @relation("ProjectDeletedByMembership")
-  createdIssues          Issue[]               @relation("IssueCreatorMembership")
-  deletedIssues          Issue[]               @relation("IssueDeletedByMembership")
-  createdTeamWorks       TeamWork[]            @relation("TeamWorkCreatorMembership")
+  actorOutboxEvents      OutboxEvent[]             @relation("OutboxActorMembership")
+  ledProjects            Project[]                 @relation("ProjectLeadMembership")
+  deletedProjects        Project[]                 @relation("ProjectDeletedByMembership")
+  createdIssues          Issue[]                   @relation("IssueCreatorMembership")
+  deletedIssues          Issue[]                   @relation("IssueDeletedByMembership")
+  createdTeamWorks       TeamWork[]                @relation("TeamWorkCreatorMembership")
   issueSubscriptions     IssueSubscription[]
-  authoredHandoffs       ApiHandoff[]          @relation("ApiHandoffAuthorMembership")
-  actorActivityEvents    ActivityEvent[]       @relation("ActivityActorMembership")
-  receivedNotifications  Notification[]        @relation("NotificationRecipientMembership")
-  actedNotifications     Notification[]        @relation("NotificationActorMembership")
-  authoredComments       Comment[]             @relation("CommentAuthorMembership")
-  receivedMentions       Mention[]             @relation("MentionedMembership")
-  createdFileAttachments IssueFileAttachment[] @relation("IssueFileAttachmentCreator")
-  requestedExports       ExportAudit[]         @relation("ExportRequesterMembership")
-  requestedImportRuns    ImportRun[]           @relation("ImportRequesterMembership")
+  authoredHandoffs       ApiHandoff[]              @relation("ApiHandoffAuthorMembership")
+  actorActivityEvents    ActivityEvent[]           @relation("ActivityActorMembership")
+  receivedNotifications  Notification[]            @relation("NotificationRecipientMembership")
+  actedNotifications     Notification[]            @relation("NotificationActorMembership")
+  authoredComments       Comment[]                 @relation("CommentAuthorMembership")
+  receivedMentions       Mention[]                 @relation("MentionedMembership")
+  createdFileAttachments IssueFileAttachment[]     @relation("IssueFileAttachmentCreator")
+  requestedExports       ExportAudit[]             @relation("ExportRequesterMembership")
+  requestedImportRuns    ImportRun[]               @relation("ImportRequesterMembership")
   savedViews             SavedView[]
   webPushSubscriptions   WebPushSubscription[]
-  submittedFeedback      ProductFeedback[]     @relation("FeedbackSubmitterMembership")
-  changedFeedbackStatus  ProductFeedback[]     @relation("FeedbackStatusChangerMembership")
+  submittedFeedback      ProductFeedback[]         @relation("FeedbackSubmitterMembership")
+  changedFeedbackStatus  ProductFeedback[]         @relation("FeedbackStatusChangerMembership")
   productEventStates     ProductEventState[]
 
   @@unique([workspaceId, id])
@@ -217,10 +224,11 @@ model WorkspaceInvitation {
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  invitedByMembership WorkspaceMembership @relation("InvitationInviter", fields: [workspaceId, invitedByMembershipId], references: [workspaceId, id], onDelete: Restrict, map: "workspace_invitations_workspace_id_invited_by_membership_id_fke")
-  acceptedByUser      User?               @relation("InvitationAcceptor", fields: [acceptedByUserId], references: [id], onDelete: Restrict)
+  workspace           Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  invitedByMembership WorkspaceMembership       @relation("InvitationInviter", fields: [workspaceId, invitedByMembershipId], references: [workspaceId, id], onDelete: Restrict, map: "workspace_invitations_workspace_id_invited_by_membership_id_fke")
+  acceptedByUser      User?                     @relation("InvitationAcceptor", fields: [acceptedByUserId], references: [id], onDelete: Restrict)
   oneTimeTokens       OneTimeToken[]
+  teamTargets         WorkspaceInvitationTeam[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, createdAt, id])
@@ -228,11 +236,30 @@ model WorkspaceInvitation {
   @@map("workspace_invitations")
 }
 
+model WorkspaceInvitationTeam {
+  workspaceId           String   @map("workspace_id") @db.Uuid
+  invitationId          String   @map("invitation_id") @db.Uuid
+  teamId                String   @map("team_id") @db.Uuid
+  invitedByMembershipId String   @map("invited_by_membership_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  invitation          WorkspaceInvitation @relation(fields: [workspaceId, invitationId], references: [workspaceId, id], onDelete: Restrict)
+  team                Team                @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
+  invitedByMembership WorkspaceMembership @relation("InvitationTeamInviter", fields: [workspaceId, invitedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@id([invitationId, teamId])
+  @@unique([workspaceId, invitationId, teamId])
+  @@index([workspaceId, teamId, createdAt])
+  @@map("workspace_invitation_teams")
+}
+
 model Team {
   id              String    @id @default(uuid()) @db.Uuid
   workspaceId     String    @map("workspace_id") @db.Uuid
   name            String    @db.VarChar(100)
   normalizedName  String    @map("normalized_name") @db.VarChar(100)
+  description     String?   @db.VarChar(500)
   key             String    @db.VarChar(5)
   nextIssueNumber Int       @default(1) @map("next_issue_number")
   archivedAt      DateTime? @map("archived_at") @db.Timestamptz(3)
@@ -240,12 +267,13 @@ model Team {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  workspace      Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  teamMembers    TeamMember[]
-  workflowStates WorkflowState[]
-  projectRoles   ProjectRoleTeam[]
-  projectTeams   ProjectTeam[]
-  teamWorks      TeamWork[]
+  workspace         Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  teamMembers       TeamMember[]
+  workflowStates    WorkflowState[]
+  projectRoles      ProjectRoleTeam[]
+  projectTeams      ProjectTeam[]
+  teamWorks         TeamWork[]
+  invitationTargets WorkspaceInvitationTeam[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, key])
@@ -254,11 +282,12 @@ model Team {
 }
 
 model TeamMember {
-  workspaceId  String    @map("workspace_id") @db.Uuid
-  teamId       String    @map("team_id") @db.Uuid
-  membershipId String    @map("membership_id") @db.Uuid
-  joinedAt     DateTime  @default(now()) @map("joined_at") @db.Timestamptz(3)
-  removedAt    DateTime? @map("removed_at") @db.Timestamptz(3)
+  workspaceId  String         @map("workspace_id") @db.Uuid
+  teamId       String         @map("team_id") @db.Uuid
+  membershipId String         @map("membership_id") @db.Uuid
+  role         TeamMemberRole @default(MEMBER)
+  joinedAt     DateTime       @default(now()) @map("joined_at") @db.Timestamptz(3)
+  removedAt    DateTime?      @map("removed_at") @db.Timestamptz(3)
 
   team              Team                @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
   membership        WorkspaceMembership @relation(fields: [workspaceId, membershipId], references: [workspaceId, id], onDelete: Restrict)
@@ -280,6 +309,7 @@ model WorkflowState {
   color          WorkflowStateColor?
   position       Int
   isDefault      Boolean             @default(false) @map("is_default")
+  disabledAt     DateTime?           @map("disabled_at") @db.Timestamptz(3)
   version        Int                 @default(1)
   createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)

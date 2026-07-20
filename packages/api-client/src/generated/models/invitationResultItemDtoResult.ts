@@ -11,6 +11,7 @@ export type InvitationResultItemDtoResult = typeof InvitationResultItemDtoResult
 
 export const InvitationResultItemDtoResult = {
   INVITED: 'INVITED',
+  TEAM_ADDED: 'TEAM_ADDED',
   ALREADY_MEMBER: 'ALREADY_MEMBER',
   ALREADY_INVITED: 'ALREADY_INVITED',
   FAILED: 'FAILED',

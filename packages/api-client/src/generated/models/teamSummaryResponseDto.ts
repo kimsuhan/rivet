@@ -10,9 +10,14 @@ export interface TeamSummaryResponseDto {
   id: string;
   name: string;
   key: string;
+  /** @nullable */
+  description: string | null;
   archived: boolean;
   /** @minimum 1 */
   version: number;
   /** @minimum 0 */
   memberCount: number;
+  /** @minimum 0 */
+  leaderCount: number;
+  canManage: boolean;
 }

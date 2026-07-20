@@ -52,6 +52,7 @@ export class TeamRepository {
   async findWorkflowStatesByTeamId(
     workspaceId: string,
     teamId: string,
+    includeDisabled = false,
   ): Promise<WorkflowStateRow[]> {
     const team = await this.database.client.team.findFirst({
       select: { id: true },
@@ -60,18 +61,19 @@ export class TeamRepository {
     if (!team) {
       throw teamResourceNotFound('팀을 찾을 수 없습니다.');
     }
-    return this.findWorkflowStates(this.database.client, workspaceId, teamId);
+    return this.findWorkflowStates(this.database.client, workspaceId, teamId, includeDisabled);
   }
 
   findWorkflowStates(
     client: DatabaseClient,
     workspaceId: string,
     teamId: string,
+    includeDisabled = true,
   ): Promise<WorkflowStateRow[]> {
     return client.workflowState.findMany({
       orderBy: { position: 'asc' },
       select: WORKFLOW_STATE_SELECT,
-      where: { teamId, workspaceId },
+      where: { ...(includeDisabled ? {} : { disabledAt: null }), teamId, workspaceId },
     });
   }
 }

@@ -1,6 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 
-import { MembershipRole, MembershipStatus, Prisma, StateCategory } from '@rivet/database';
+import {
+  MembershipRole,
+  MembershipStatus,
+  Prisma,
+  StateCategory,
+  TeamMemberRole,
+} from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
@@ -11,6 +17,7 @@ import type { TeamResponseDto } from './dto/team-response.dto';
 import { teamOpenIssueConflict, teamResourceNotFound, teamVersionConflict } from './team.errors';
 import { TeamRepository } from './team.repository';
 import { normalizeTeamResourceName } from './team-input.policy';
+import { type TeamManagementContext, TeamManagementPolicy } from './team-management.policy';
 import { toTeamResponse, WORKFLOW_STATE_SELECT } from './team-response.mapper';
 import { teamUniqueConstraintTargets } from './team-unique.policy';
 
@@ -18,6 +25,7 @@ import { teamUniqueConstraintTargets } from './team-unique.policy';
 export class TeamsService {
   constructor(
     private readonly database: DatabaseService,
+    private readonly management: TeamManagementPolicy,
     private readonly teams: TeamRepository,
   ) {}
 
@@ -162,8 +170,11 @@ export class TeamsService {
 
         return {
           archived: team.archivedAt !== null,
+          canManage: true,
+          description: null,
           id: team.id,
           key: team.key,
+          leaderIds: [],
           memberIds: [...dto.memberIds].sort(),
           name: team.name,
           version: team.version,
@@ -175,11 +186,15 @@ export class TeamsService {
     }
   }
 
-  async update(workspaceId: string, teamId: string, dto: UpdateTeamDto): Promise<TeamResponseDto> {
-    if (dto.name === undefined && dto.key === undefined) {
+  async update(
+    context: TeamManagementContext,
+    teamId: string,
+    dto: UpdateTeamDto,
+  ): Promise<TeamResponseDto> {
+    if (dto.name === undefined && dto.key === undefined && dto.description === undefined) {
       throw new ApiError({
         code: 'VALIDATION_ERROR',
-        fieldErrors: { name: ['팀 이름이나 키 중 하나를 변경해 주세요.'] },
+        fieldErrors: { name: ['팀 이름, 설명이나 키 중 하나를 변경해 주세요.'] },
         message: '변경할 팀 정보를 입력해 주세요.',
         status: HttpStatus.UNPROCESSABLE_ENTITY,
       });
@@ -190,9 +205,16 @@ export class TeamsService {
 
     try {
       return await this.database.client.$transaction(async (transaction) => {
+        await this.management.assertCanManageTeam(transaction, context, teamId);
         const current = await transaction.team.findFirst({
-          select: { key: true, name: true, nextIssueNumber: true, version: true },
-          where: { archivedAt: null, id: teamId, workspaceId },
+          select: {
+            description: true,
+            key: true,
+            name: true,
+            nextIssueNumber: true,
+            version: true,
+          },
+          where: { archivedAt: null, id: teamId, workspaceId: context.workspaceId },
         });
 
         if (!current) {
@@ -204,9 +226,21 @@ export class TeamsService {
 
         const changesName = normalized !== undefined && normalized.name !== current.name;
         const changesKey = key !== undefined && key !== current.key;
+        const changesDescription =
+          dto.description !== undefined && dto.description !== current.description;
 
-        if (!changesName && !changesKey) {
-          return toTeamResponse(await this.teams.find(transaction, workspaceId, teamId));
+        if (!changesName && !changesKey && !changesDescription) {
+          return toTeamResponse(
+            await this.teams.find(transaction, context.workspaceId, teamId),
+            context,
+          );
+        }
+        if (changesKey && context.role !== MembershipRole.ADMIN) {
+          throw new ApiError({
+            code: 'FORBIDDEN',
+            message: '팀 키는 워크스페이스 관리자만 변경할 수 있습니다.',
+            status: HttpStatus.FORBIDDEN,
+          });
         }
         if (changesKey && current.nextIssueNumber !== 1) {
           throw new ApiError({
@@ -220,6 +254,7 @@ export class TeamsService {
           data: {
             ...(changesKey ? { key } : {}),
             ...(changesName ? normalized : {}),
+            ...(changesDescription ? { description: dto.description } : {}),
             version: { increment: 1 },
           },
           select: { version: true },
@@ -228,14 +263,14 @@ export class TeamsService {
             id: teamId,
             ...(changesKey ? { nextIssueNumber: 1 } : {}),
             version: dto.version,
-            workspaceId,
+            workspaceId: context.workspaceId,
           },
         });
 
         if (updated.length === 0) {
           const latest = await transaction.team.findFirst({
             select: { archivedAt: true, nextIssueNumber: true, version: true },
-            where: { id: teamId, workspaceId },
+            where: { id: teamId, workspaceId: context.workspaceId },
           });
           if (!latest) {
             throw teamResourceNotFound('팀을 찾을 수 없습니다.');
@@ -257,24 +292,37 @@ export class TeamsService {
           resourceId: teamId,
           resourceType: 'TEAM',
           version: updated[0]!.version,
-          workspaceId,
+          workspaceId: context.workspaceId,
         });
 
-        return toTeamResponse(await this.teams.find(transaction, workspaceId, teamId));
+        return toTeamResponse(
+          await this.teams.find(transaction, context.workspaceId, teamId),
+          context,
+        );
       });
     } catch (error) {
-      return this.throwTeamUniqueConflict(error, workspaceId, normalized?.normalizedName, key);
+      return this.throwTeamUniqueConflict(
+        error,
+        context.workspaceId,
+        normalized?.normalizedName,
+        key,
+      );
     }
   }
 
-  addMember(workspaceId: string, teamId: string, membershipId: string): Promise<TeamResponseDto> {
+  addMember(
+    context: TeamManagementContext,
+    teamId: string,
+    membershipId: string,
+  ): Promise<TeamResponseDto> {
     return this.database.client.$transaction(async (transaction) => {
+      await this.management.assertCanManageTeam(transaction, context, teamId);
       const accessibleRows = await transaction.$queryRaw<Array<{ teamId: string }>>`
         SELECT team."id" AS "teamId"
         FROM "teams" team
         INNER JOIN "workspace_memberships" membership
           ON membership."workspace_id" = team."workspace_id"
-        WHERE team."workspace_id" = ${workspaceId}::uuid
+        WHERE team."workspace_id" = ${context.workspaceId}::uuid
           AND team."id" = ${teamId}::uuid
           AND team."archived_at" IS NULL
           AND membership."id" = ${membershipId}::uuid
@@ -291,13 +339,16 @@ export class TeamsService {
         where: { teamId_membershipId: { membershipId, teamId } },
       });
       if (current?.removedAt === null) {
-        return toTeamResponse(await this.teams.find(transaction, workspaceId, teamId));
+        return toTeamResponse(
+          await this.teams.find(transaction, context.workspaceId, teamId),
+          context,
+        );
       }
 
       const joinedAt = new Date();
       await transaction.teamMember.upsert({
-        create: { joinedAt, membershipId, teamId, workspaceId },
-        update: { joinedAt, removedAt: null },
+        create: { joinedAt, membershipId, teamId, workspaceId: context.workspaceId },
+        update: { joinedAt, removedAt: null, role: TeamMemberRole.MEMBER },
         where: { teamId_membershipId: { membershipId, teamId } },
       });
       const updated = await transaction.team.update({
@@ -310,22 +361,32 @@ export class TeamsService {
         resourceId: teamId,
         resourceType: 'TEAM',
         version: updated.version,
-        workspaceId,
+        workspaceId: context.workspaceId,
       });
 
-      return toTeamResponse(await this.teams.find(transaction, workspaceId, teamId));
+      return toTeamResponse(
+        await this.teams.find(transaction, context.workspaceId, teamId),
+        context,
+      );
     });
   }
 
-  removeMember(workspaceId: string, teamId: string, membershipId: string): Promise<void> {
+  removeMember(
+    context: TeamManagementContext,
+    teamId: string,
+    membershipId: string,
+  ): Promise<void> {
     return this.database.client.$transaction(async (transaction) => {
-      const currentRows = await transaction.$queryRaw<Array<{ membershipId: string }>>`
-        SELECT team_member."membership_id" AS "membershipId"
+      await this.management.assertCanManageTeam(transaction, context, teamId);
+      const currentRows = await transaction.$queryRaw<
+        Array<{ membershipId: string; role: TeamMemberRole }>
+      >`
+        SELECT team_member."membership_id" AS "membershipId", team_member."role"
         FROM "teams" team
         INNER JOIN "team_members" team_member
           ON team_member."workspace_id" = team."workspace_id"
          AND team_member."team_id" = team."id"
-        WHERE team."workspace_id" = ${workspaceId}::uuid
+        WHERE team."workspace_id" = ${context.workspaceId}::uuid
           AND team."id" = ${teamId}::uuid
           AND team."archived_at" IS NULL
           AND team_member."membership_id" = ${membershipId}::uuid
@@ -334,6 +395,13 @@ export class TeamsService {
       `;
       if (!currentRows[0]) {
         throw teamResourceNotFound('팀 또는 팀 멤버를 찾을 수 없습니다.');
+      }
+      if (currentRows[0].role === TeamMemberRole.LEAD) {
+        throw new ApiError({
+          code: 'TEAM_LEADER_REMOVAL_REQUIRED',
+          message: '팀장 권한을 먼저 해제한 뒤 팀에서 제거해 주세요.',
+          status: HttpStatus.CONFLICT,
+        });
       }
 
       const openAssignments = await transaction.$queryRaw<
@@ -348,7 +416,7 @@ export class TeamsService {
           ON state."workspace_id" = work."workspace_id"
          AND state."team_id" = work."team_id"
          AND state."id" = work."workflow_state_id"
-        WHERE work."workspace_id" = ${workspaceId}::uuid
+        WHERE work."workspace_id" = ${context.workspaceId}::uuid
           AND work."team_id" = ${teamId}::uuid
           AND work."assignee_membership_id" = ${membershipId}::uuid
           AND work."deleted_at" IS NULL
@@ -382,13 +450,136 @@ export class TeamsService {
         resourceId: teamId,
         resourceType: 'TEAM',
         version: updated.version,
-        workspaceId,
+        workspaceId: context.workspaceId,
       });
     });
   }
 
-  archive(workspaceId: string, teamId: string, dto: VersionDto): Promise<TeamResponseDto> {
+  setLeader(
+    context: TeamManagementContext,
+    teamId: string,
+    membershipId: string,
+  ): Promise<TeamResponseDto> {
     return this.database.client.$transaction(async (transaction) => {
+      if (context.role !== MembershipRole.ADMIN) {
+        throw new ApiError({
+          code: 'FORBIDDEN',
+          message: '팀장은 워크스페이스 관리자만 지정할 수 있습니다.',
+          status: HttpStatus.FORBIDDEN,
+        });
+      }
+      await this.management.assertCanManageTeam(transaction, context, teamId);
+
+      const [member] = await transaction.$queryRaw<Array<{ role: TeamMemberRole }>>`
+        SELECT team_member."role"
+        FROM "team_members" AS team_member
+        INNER JOIN "workspace_memberships" AS membership
+          ON membership."workspace_id" = team_member."workspace_id"
+         AND membership."id" = team_member."membership_id"
+        WHERE team_member."workspace_id" = ${context.workspaceId}::uuid
+          AND team_member."team_id" = ${teamId}::uuid
+          AND team_member."membership_id" = ${membershipId}::uuid
+          AND team_member."removed_at" IS NULL
+          AND membership."status" = ${MembershipStatus.ACTIVE}::"MembershipStatus"
+        FOR UPDATE OF team_member, membership
+      `;
+      if (!member) {
+        throw teamResourceNotFound('팀장으로 지정할 활성 팀 멤버를 찾을 수 없습니다.');
+      }
+      if (member.role === TeamMemberRole.LEAD) {
+        return toTeamResponse(
+          await this.teams.find(transaction, context.workspaceId, teamId),
+          context,
+        );
+      }
+
+      await transaction.teamMember.update({
+        data: { role: TeamMemberRole.LEAD },
+        where: { teamId_membershipId: { membershipId, teamId } },
+      });
+      const updated = await transaction.team.update({
+        data: { version: { increment: 1 } },
+        select: { version: true },
+        where: { id: teamId },
+      });
+      await notifyResourceChanged(transaction, {
+        changeType: 'UPDATED',
+        resourceId: teamId,
+        resourceType: 'TEAM',
+        version: updated.version,
+        workspaceId: context.workspaceId,
+      });
+      return toTeamResponse(
+        await this.teams.find(transaction, context.workspaceId, teamId),
+        context,
+      );
+    });
+  }
+
+  removeLeader(
+    context: TeamManagementContext,
+    teamId: string,
+    membershipId: string,
+  ): Promise<TeamResponseDto> {
+    return this.database.client.$transaction(async (transaction) => {
+      if (context.role !== MembershipRole.ADMIN) {
+        throw new ApiError({
+          code: 'FORBIDDEN',
+          message: '팀장은 워크스페이스 관리자만 해제할 수 있습니다.',
+          status: HttpStatus.FORBIDDEN,
+        });
+      }
+      await this.management.assertCanManageTeam(transaction, context, teamId);
+
+      const [member] = await transaction.$queryRaw<Array<{ role: TeamMemberRole }>>`
+        SELECT "role"
+        FROM "team_members"
+        WHERE "workspace_id" = ${context.workspaceId}::uuid
+          AND "team_id" = ${teamId}::uuid
+          AND "membership_id" = ${membershipId}::uuid
+          AND "removed_at" IS NULL
+        FOR UPDATE
+      `;
+      if (!member) {
+        throw teamResourceNotFound('팀장을 찾을 수 없습니다.');
+      }
+      if (member.role === TeamMemberRole.MEMBER) {
+        return toTeamResponse(
+          await this.teams.find(transaction, context.workspaceId, teamId),
+          context,
+        );
+      }
+
+      await transaction.teamMember.update({
+        data: { role: TeamMemberRole.MEMBER },
+        where: { teamId_membershipId: { membershipId, teamId } },
+      });
+      const updated = await transaction.team.update({
+        data: { version: { increment: 1 } },
+        select: { version: true },
+        where: { id: teamId },
+      });
+      await notifyResourceChanged(transaction, {
+        changeType: 'UPDATED',
+        resourceId: teamId,
+        resourceType: 'TEAM',
+        version: updated.version,
+        workspaceId: context.workspaceId,
+      });
+      return toTeamResponse(
+        await this.teams.find(transaction, context.workspaceId, teamId),
+        context,
+      );
+    });
+  }
+
+  archive(
+    context: TeamManagementContext,
+    teamId: string,
+    dto: VersionDto,
+  ): Promise<TeamResponseDto> {
+    return this.database.client.$transaction(async (transaction) => {
+      const workspaceId = context.workspaceId;
       const rows = await transaction.$queryRaw<Array<{ archivedAt: Date | null; version: number }>>`
         SELECT "archived_at" AS "archivedAt", "version"
         FROM "teams"
@@ -404,7 +595,7 @@ export class TeamsService {
         throw teamVersionConflict(current.version);
       }
       if (current.archivedAt !== null) {
-        return toTeamResponse(await this.teams.find(transaction, workspaceId, teamId));
+        return toTeamResponse(await this.teams.find(transaction, workspaceId, teamId), context);
       }
 
       const openIssues = await transaction.$queryRaw<
@@ -453,7 +644,7 @@ export class TeamsService {
         throw teamVersionConflict(latest.version);
       }
 
-      const team = toTeamResponse(await this.teams.find(transaction, workspaceId, teamId));
+      const team = toTeamResponse(await this.teams.find(transaction, workspaceId, teamId), context);
       await notifyResourceChanged(transaction, {
         changeType: 'UPDATED',
         resourceId: teamId,

@@ -238,6 +238,7 @@ export * from './teamListResponseDto';
 export * from './teamResponseDto';
 export * from './teamsControllerDeleteWorkflowStateParams';
 export * from './teamsControllerListParams';
+export * from './teamsControllerListWorkflowStatesParams';
 export * from './teamSummaryResponseDto';
 export * from './teamWorkAssignmentDto';
 export * from './teamWorkDetailResponseDto';

@@ -272,6 +272,53 @@ export class InvitationContinuationService {
           )
         `;
       }
+      const teamTargets = await transaction.$queryRaw<Array<{ teamId: string }>>`
+        SELECT target."team_id" AS "teamId"
+        FROM "workspace_invitation_teams" AS target
+        INNER JOIN "teams" AS team
+          ON team."workspace_id" = target."workspace_id"
+         AND team."id" = target."team_id"
+        WHERE target."workspace_id" = ${invitation.workspaceId}::uuid
+          AND target."invitation_id" = ${invitation.id}::uuid
+          AND team."archived_at" IS NULL
+        ORDER BY target."team_id"
+        FOR UPDATE OF target, team
+      `;
+      const joinedTeamIds: string[] = [];
+      for (const { teamId } of teamTargets) {
+        const teamMember = await transaction.teamMember.findUnique({
+          select: { removedAt: true },
+          where: { teamId_membershipId: { membershipId, teamId } },
+        });
+        if (teamMember?.removedAt === null) {
+          joinedTeamIds.push(teamId);
+          continue;
+        }
+        const joinedAt = new Date();
+        await transaction.teamMember.upsert({
+          create: {
+            joinedAt,
+            membershipId,
+            teamId,
+            workspaceId: invitation.workspaceId,
+          },
+          update: { joinedAt, removedAt: null, role: 'MEMBER' },
+          where: { teamId_membershipId: { membershipId, teamId } },
+        });
+        const team = await transaction.team.update({
+          data: { version: { increment: 1 } },
+          select: { version: true },
+          where: { id: teamId },
+        });
+        await notifyResourceChanged(transaction, {
+          changeType: 'UPDATED',
+          resourceId: teamId,
+          resourceType: 'TEAM',
+          version: team.version,
+          workspaceId: invitation.workspaceId,
+        });
+        joinedTeamIds.push(teamId);
+      }
       await transaction.$executeRaw`
         UPDATE "workspace_invitations"
         SET "accepted_at" = NOW(),
@@ -310,6 +357,7 @@ export class InvitationContinuationService {
 
       return {
         invitationId: invitation.id,
+        joinedTeamIds,
         membershipId,
         success: true as const,
         workspaceId: invitation.workspaceId,
@@ -333,6 +381,7 @@ export class InvitationContinuationService {
 
     return {
       accepted: true,
+      joinedTeamIds: result.joinedTeamIds,
       membership: { id: result.membershipId, role: 'MEMBER', status: 'ACTIVE' },
       workspace: {
         id: result.workspaceId,

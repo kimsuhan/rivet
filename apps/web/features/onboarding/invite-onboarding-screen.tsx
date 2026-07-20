@@ -149,6 +149,7 @@ export function InviteOnboardingScreen({ labels }: { labels: InviteOnboardingLab
     ALREADY_MEMBER: labels.alreadyMember,
     FAILED: labels.failed,
     INVITED: labels.invited,
+    TEAM_ADDED: labels.invited,
   } as const;
 
   return (

@@ -62,6 +62,7 @@ const labels = {
   loginRequiredTitle: '로그인 또는 가입이 필요합니다',
   productName: 'Rivet',
   continuationDescription: '인증을 마치면 이 초대로 자동으로 돌아옵니다.',
+  redirecting: '워크스페이스로 이동하는 중입니다.',
   retry: '다시 시도',
   sessionErrorDescription: '잠시 후 다시 시도해 주세요.',
   sessionErrorTitle: '로그인 상태를 확인하지 못했습니다',
@@ -209,8 +210,9 @@ describe('InviteScreen', () => {
 
     renderScreen();
 
-    expect(await screen.findByText(labels.usedTitle)).toBeVisible();
     await waitFor(() => expect(mocks.sessionRefetch).toHaveBeenCalledOnce());
+    expect(await screen.findByText(labels.redirecting)).toBeVisible();
+    expect(screen.queryByText(labels.usedTitle)).not.toBeInTheDocument();
     await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/my-issues'));
   });
 
@@ -237,6 +239,46 @@ describe('InviteScreen', () => {
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
     await waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/my-issues'));
+  });
+
+  it('수락 성공 후 세션이 갱신돼도 워크스페이스 제한 경고 대신 이동 안내를 보여준다', async () => {
+    const pendingSession = {
+      authenticated: true,
+      csrfToken: 'csrf-token',
+      membership: null,
+      onboardingStep: 'CREATE_WORKSPACE',
+      user: { email: 'member@example.com' },
+      workspace: null,
+    };
+    let currentSession: unknown = pendingSession;
+    mocks.sessionHook.mockImplementation(
+      () =>
+        ({
+          data: currentSession,
+          isError: false,
+          isPending: false,
+          refetch: mocks.sessionRefetch,
+        }) as never,
+    );
+    const { invalidate } = renderScreen();
+    invalidate.mockImplementation(async () => {
+      currentSession = {
+        ...pendingSession,
+        membership: { id: 'membership-id' },
+        onboardingStep: 'COMPLETE',
+        workspace: { id: 'workspace-id' },
+      };
+    });
+    mocks.acceptMutate.mockImplementation((_variables, options) => {
+      void options?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: labels.accept }));
+
+    expect(await screen.findByText(labels.redirecting)).toBeVisible();
+    expect(screen.queryByText(labels.workspaceLimitTitle)).not.toBeInTheDocument();
     await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/my-issues'));
   });
 

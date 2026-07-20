@@ -17,6 +17,7 @@ export {
   ProjectRole,
   ProjectStatus,
   StateCategory,
+  TeamMemberRole,
   TokenPurpose,
   WebPushBrowser,
   WebPushDeliveryStatus,

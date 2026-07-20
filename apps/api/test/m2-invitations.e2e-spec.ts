@@ -29,6 +29,7 @@ const emails = {
   mismatch: `m2.mismatch.${runId}@example.com`,
   other: `m2.other.${runId}@example.com`,
   rateLimited: `m2.rate-limited.${runId}@example.com`,
+  teamTarget: `m2.team-target.${runId}@example.com`,
 };
 
 function invitationContinuationCookie(headers: { 'set-cookie'?: string | string[] }): string {
@@ -60,6 +61,7 @@ describe('M2 workspace invitations', () => {
   let workspaceId: string;
   let otherWorkspaceId: string;
   let adminMembershipId: string;
+  let teamId: string;
   let adminSessionToken: string;
   let adminCsrfToken: string;
   let inviteeSessionToken: string;
@@ -117,6 +119,24 @@ describe('M2 workspace invitations', () => {
       select: { id: true },
     });
     adminMembershipId = adminMembership.id;
+    const team = await database.client.team.create({
+      data: {
+        key: 'MTT',
+        name: 'M2 초대 팀',
+        normalizedName: 'm2 초대 팀',
+        workspaceId,
+      },
+      select: { id: true },
+    });
+    teamId = team.id;
+    await database.client.teamMember.create({
+      data: {
+        membershipId: adminMembershipId,
+        role: 'LEAD',
+        teamId,
+        workspaceId,
+      },
+    });
 
     const otherWorkspace = await database.client.workspace.create({
       data: {
@@ -177,6 +197,9 @@ describe('M2 workspace invitations', () => {
           OR: [{ invitationId: { in: invitationIds } }, { userId: { in: userIds } }],
         },
       });
+      await database.client.workspaceInvitationTeam.deleteMany({
+        where: { invitationId: { in: invitationIds } },
+      });
       await database.client.workspaceInvitation.deleteMany({
         where: { id: { in: invitationIds } },
       });
@@ -210,7 +233,7 @@ describe('M2 workspace invitations', () => {
 
     const displayedInviteeEmail = emails.invitee.toUpperCase();
     const created = await request(app.getHttpServer())
-      .post('/api/v1/invitations')
+      .post(`/api/v1/teams/${teamId}/invitations`)
       .set('Cookie', `rivet_session=${adminSessionToken}`)
       .set('Origin', WEB_ORIGIN)
       .set('X-CSRF-Token', adminCsrfToken)
@@ -295,6 +318,7 @@ describe('M2 workspace invitations', () => {
       .expect(200);
     expect(accepted.body).toMatchObject({
       accepted: true,
+      joinedTeamIds: [teamId],
       membership: { role: 'MEMBER', status: 'ACTIVE' },
       workspace: { id: workspaceId, name: 'M2 초대 워크스페이스' },
     });
@@ -303,6 +327,47 @@ describe('M2 workspace invitations', () => {
         where: { user: { normalizedEmail: emails.invitee } },
       }),
     ).toBe(1);
+    await expect(
+      database.client.teamMember.findUnique({
+        select: { removedAt: true, role: true },
+        where: {
+          teamId_membershipId: {
+            membershipId: accepted.body.membership.id as string,
+            teamId,
+          },
+        },
+      }),
+    ).resolves.toEqual({ removedAt: null, role: 'MEMBER' });
+
+    const joinedSession = await request(app.getHttpServer())
+      .get('/api/v1/auth/session')
+      .set('Cookie', boundSessionCookie)
+      .expect(200);
+    expect(joinedSession.body.membership).toMatchObject({
+      ledTeamIds: [],
+      teamIds: [teamId],
+    });
+
+    await database.client.teamMember.update({
+      data: { role: 'LEAD' },
+      where: {
+        teamId_membershipId: {
+          membershipId: accepted.body.membership.id as string,
+          teamId,
+        },
+      },
+    });
+    const teamLeadCreated = await request(app.getHttpServer())
+      .post(`/api/v1/teams/${teamId}/invitations`)
+      .set('Cookie', `rivet_session=${inviteeSessionToken}`)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', inviteeCsrfToken)
+      .send({ emails: [emails.teamTarget] })
+      .expect(200);
+    expect(teamLeadCreated.body.items).toEqual([
+      { email: emails.teamTarget, invitationId: expect.any(String), result: 'INVITED' },
+    ]);
+    const teamLeadInvitationId = teamLeadCreated.body.items[0].invitationId as string;
 
     const repeated = await request(app.getHttpServer())
       .post('/api/v1/auth/invitations/continuation/accept')
@@ -524,17 +589,33 @@ describe('M2 workspace invitations', () => {
       .set('Cookie', `rivet_session=${adminSessionToken}`)
       .expect(200);
     expect(secondListPage.body.items).toHaveLength(2);
-    expect(secondListPage.body.nextCursor).toBeNull();
+    expect(secondListPage.body.nextCursor).toEqual(expect.any(String));
 
-    const listedInvitations = [...firstListPage.body.items, ...secondListPage.body.items];
+    const thirdListPage = await request(app.getHttpServer())
+      .get(
+        `/api/v1/invitations?limit=2&cursor=${encodeURIComponent(
+          String(secondListPage.body.nextCursor),
+        )}`,
+      )
+      .set('Cookie', `rivet_session=${adminSessionToken}`)
+      .expect(200);
+    expect(thirdListPage.body.items).toHaveLength(1);
+    expect(thirdListPage.body.nextCursor).toBeNull();
+
+    const listedInvitations = [
+      ...firstListPage.body.items,
+      ...secondListPage.body.items,
+      ...thirdListPage.body.items,
+    ];
     expect(new Set(listedInvitations.map((invitation: { id: string }) => invitation.id)).size).toBe(
-      4,
+      5,
     );
     expect(listedInvitations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: invitationId, status: 'ACCEPTED' }),
         expect.objectContaining({ id: canceledInvitationId, status: 'CANCELED' }),
         expect.objectContaining({ id: expiredInvitationId, status: 'PENDING' }),
+        expect.objectContaining({ id: teamLeadInvitationId, status: 'PENDING' }),
       ]),
     );
     expect(

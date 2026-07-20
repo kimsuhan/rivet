@@ -131,6 +131,7 @@ import type {
   TeamWorksControllerListParams,
   TeamsControllerDeleteWorkflowStateParams,
   TeamsControllerListParams,
+  TeamsControllerListWorkflowStatesParams,
   TimelineResponseDto,
   TokenDto,
   TrashControllerListParams,
@@ -3593,6 +3594,1422 @@ export const useInvitationsControllerCancel = <TError = ErrorType<ApiErrorRespon
         TContext
       > => {
       return useMutation(getInvitationsControllerCancelMutationOptions(options), queryClient);
+    }
+
+export const getTeamInvitationsControllerCreateUrl = (teamId: string,) => {
+
+
+
+
+  return `/api/v1/teams/${teamId}/invitations`
+}
+
+/**
+ * @summary 관리 중인 팀으로 이메일 초대
+ */
+export const teamInvitationsControllerCreate = async (teamId: string,
+    createInvitationsDto: CreateInvitationsDto, options?: RequestInit): Promise<CreateInvitationsResponseDto> => {
+
+  return rivetFetch<CreateInvitationsResponseDto>(getTeamInvitationsControllerCreateUrl(teamId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createInvitationsDto)
+  }
+);}
+
+
+
+
+
+export const getTeamInvitationsControllerCreateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamInvitationsControllerCreate>>, TError,{teamId: string;data: BodyType<CreateInvitationsDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamInvitationsControllerCreate>>, TError,{teamId: string;data: BodyType<CreateInvitationsDto>}, TContext> => {
+
+const mutationKey = ['teamInvitationsControllerCreate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamInvitationsControllerCreate>>, {teamId: string;data: BodyType<CreateInvitationsDto>}> = (props) => {
+          const {teamId,data} = props ?? {};
+
+          return  teamInvitationsControllerCreate(teamId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamInvitationsControllerCreateMutationResult = NonNullable<Awaited<ReturnType<typeof teamInvitationsControllerCreate>>>
+    export type TeamInvitationsControllerCreateMutationBody = BodyType<CreateInvitationsDto>
+    export type TeamInvitationsControllerCreateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 관리 중인 팀으로 이메일 초대
+ */
+export const useTeamInvitationsControllerCreate = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamInvitationsControllerCreate>>, TError,{teamId: string;data: BodyType<CreateInvitationsDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamInvitationsControllerCreate>>,
+        TError,
+        {teamId: string;data: BodyType<CreateInvitationsDto>},
+        TContext
+      > => {
+      return useMutation(getTeamInvitationsControllerCreateMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerListUrl = (params?: TeamsControllerListParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/teams?${stringifiedParams}` : `/api/v1/teams`
+}
+
+/**
+ * @summary 팀 목록 조회
+ */
+export const teamsControllerList = async (params?: TeamsControllerListParams, options?: RequestInit): Promise<TeamListResponseDto> => {
+
+  return rivetFetch<TeamListResponseDto>(getTeamsControllerListUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerListQueryKey = (params?: TeamsControllerListParams,) => {
+    return [
+    `/api/v1/teams`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getTeamsControllerListQueryOptions = <TData = Awaited<ReturnType<typeof teamsControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(params?: TeamsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getTeamsControllerListQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof teamsControllerList>>> = ({ signal }) => teamsControllerList(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type TeamsControllerListQueryResult = NonNullable<Awaited<ReturnType<typeof teamsControllerList>>>
+export type TeamsControllerListQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useTeamsControllerList<TData = Awaited<ReturnType<typeof teamsControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: undefined |  TeamsControllerListParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof teamsControllerList>>,
+          TError,
+          Awaited<ReturnType<typeof teamsControllerList>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useTeamsControllerList<TData = Awaited<ReturnType<typeof teamsControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: TeamsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof teamsControllerList>>,
+          TError,
+          Awaited<ReturnType<typeof teamsControllerList>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useTeamsControllerList<TData = Awaited<ReturnType<typeof teamsControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: TeamsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 팀 목록 조회
+ */
+
+export function useTeamsControllerList<TData = Awaited<ReturnType<typeof teamsControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params?: TeamsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getTeamsControllerListQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getTeamsControllerCreateUrl = () => {
+
+
+
+
+  return `/api/v1/teams`
+}
+
+/**
+ * @summary 팀과 기본 워크플로 생성
+ */
+export const teamsControllerCreate = async (createTeamDto: CreateTeamDto, options?: RequestInit): Promise<TeamResponseDto> => {
+
+  return rivetFetch<TeamResponseDto>(getTeamsControllerCreateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createTeamDto)
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerCreateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreate>>, TError,{data: BodyType<CreateTeamDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreate>>, TError,{data: BodyType<CreateTeamDto>}, TContext> => {
+
+const mutationKey = ['teamsControllerCreate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerCreate>>, {data: BodyType<CreateTeamDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  teamsControllerCreate(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerCreateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerCreate>>>
+    export type TeamsControllerCreateMutationBody = BodyType<CreateTeamDto>
+    export type TeamsControllerCreateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 팀과 기본 워크플로 생성
+ */
+export const useTeamsControllerCreate = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreate>>, TError,{data: BodyType<CreateTeamDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerCreate>>,
+        TError,
+        {data: BodyType<CreateTeamDto>},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerCreateMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerGetUrl = (teamId: string,) => {
+
+
+
+
+  return `/api/v1/teams/${teamId}`
+}
+
+/**
+ * @summary 팀 상세 조회
+ */
+export const teamsControllerGet = async (teamId: string, options?: RequestInit): Promise<TeamResponseDto> => {
+
+  return rivetFetch<TeamResponseDto>(getTeamsControllerGetUrl(teamId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerGetQueryKey = (teamId: string,) => {
+    return [
+    `/api/v1/teams/${teamId}`
+    ] as const;
+    }
+
+
+export const getTeamsControllerGetQueryOptions = <TData = Awaited<ReturnType<typeof teamsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getTeamsControllerGetQueryKey(teamId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof teamsControllerGet>>> = ({ signal }) => teamsControllerGet(teamId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: teamId !== null && teamId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type TeamsControllerGetQueryResult = NonNullable<Awaited<ReturnType<typeof teamsControllerGet>>>
+export type TeamsControllerGetQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useTeamsControllerGet<TData = Awaited<ReturnType<typeof teamsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
+ teamId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof teamsControllerGet>>,
+          TError,
+          Awaited<ReturnType<typeof teamsControllerGet>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useTeamsControllerGet<TData = Awaited<ReturnType<typeof teamsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
+ teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof teamsControllerGet>>,
+          TError,
+          Awaited<ReturnType<typeof teamsControllerGet>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useTeamsControllerGet<TData = Awaited<ReturnType<typeof teamsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
+ teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 팀 상세 조회
+ */
+
+export function useTeamsControllerGet<TData = Awaited<ReturnType<typeof teamsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
+ teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getTeamsControllerGetQueryOptions(teamId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getTeamsControllerUpdateUrl = (teamId: string,) => {
+
+
+
+
+  return `/api/v1/teams/${teamId}`
+}
+
+/**
+ * @summary 팀 이름·설명과 관리자 전용 키 수정
+ */
+export const teamsControllerUpdate = async (teamId: string,
+    updateTeamDto: UpdateTeamDto, options?: RequestInit): Promise<TeamResponseDto> => {
+
+  return rivetFetch<TeamResponseDto>(getTeamsControllerUpdateUrl(teamId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateTeamDto)
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerUpdateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdate>>, TError,{teamId: string;data: BodyType<UpdateTeamDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdate>>, TError,{teamId: string;data: BodyType<UpdateTeamDto>}, TContext> => {
+
+const mutationKey = ['teamsControllerUpdate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerUpdate>>, {teamId: string;data: BodyType<UpdateTeamDto>}> = (props) => {
+          const {teamId,data} = props ?? {};
+
+          return  teamsControllerUpdate(teamId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerUpdateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerUpdate>>>
+    export type TeamsControllerUpdateMutationBody = BodyType<UpdateTeamDto>
+    export type TeamsControllerUpdateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 팀 이름·설명과 관리자 전용 키 수정
+ */
+export const useTeamsControllerUpdate = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdate>>, TError,{teamId: string;data: BodyType<UpdateTeamDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerUpdate>>,
+        TError,
+        {teamId: string;data: BodyType<UpdateTeamDto>},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerUpdateMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerAddMemberUrl = (teamId: string,
+    membershipId: string,) => {
+
+
+
+
+  return `/api/v1/teams/${teamId}/members/${membershipId}`
+}
+
+/**
+ * @summary 활성 멤버를 팀에 추가하거나 복귀
+ */
+export const teamsControllerAddMember = async (teamId: string,
+    membershipId: string, options?: RequestInit): Promise<TeamResponseDto> => {
+
+  return rivetFetch<TeamResponseDto>(getTeamsControllerAddMemberUrl(teamId,membershipId),
+  {
+    ...options,
+    method: 'PUT'
+
+
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerAddMemberMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerAddMember>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerAddMember>>, TError,{teamId: string;membershipId: string}, TContext> => {
+
+const mutationKey = ['teamsControllerAddMember'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerAddMember>>, {teamId: string;membershipId: string}> = (props) => {
+          const {teamId,membershipId} = props ?? {};
+
+          return  teamsControllerAddMember(teamId,membershipId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerAddMemberMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerAddMember>>>
+
+    export type TeamsControllerAddMemberMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 활성 멤버를 팀에 추가하거나 복귀
+ */
+export const useTeamsControllerAddMember = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerAddMember>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerAddMember>>,
+        TError,
+        {teamId: string;membershipId: string},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerAddMemberMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerRemoveMemberUrl = (teamId: string,
+    membershipId: string,) => {
+
+
+
+
+  return `/api/v1/teams/${teamId}/members/${membershipId}`
+}
+
+/**
+ * @summary 팀 멤버 제거
+ */
+export const teamsControllerRemoveMember = async (teamId: string,
+    membershipId: string, options?: RequestInit): Promise<void> => {
+
+  return rivetFetch<void>(getTeamsControllerRemoveMemberUrl(teamId,membershipId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerRemoveMemberMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRemoveMember>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRemoveMember>>, TError,{teamId: string;membershipId: string}, TContext> => {
+
+const mutationKey = ['teamsControllerRemoveMember'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerRemoveMember>>, {teamId: string;membershipId: string}> = (props) => {
+          const {teamId,membershipId} = props ?? {};
+
+          return  teamsControllerRemoveMember(teamId,membershipId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerRemoveMemberMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerRemoveMember>>>
+
+    export type TeamsControllerRemoveMemberMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 팀 멤버 제거
+ */
+export const useTeamsControllerRemoveMember = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRemoveMember>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerRemoveMember>>,
+        TError,
+        {teamId: string;membershipId: string},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerRemoveMemberMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerSetLeaderUrl = (teamId: string,
+    membershipId: string,) => {
+
+
+
+
+  return `/api/v1/teams/${teamId}/leaders/${membershipId}`
+}
+
+/**
+ * @summary 활성 팀 멤버를 팀장으로 지정
+ */
+export const teamsControllerSetLeader = async (teamId: string,
+    membershipId: string, options?: RequestInit): Promise<TeamResponseDto> => {
+
+  return rivetFetch<TeamResponseDto>(getTeamsControllerSetLeaderUrl(teamId,membershipId),
+  {
+    ...options,
+    method: 'PUT'
+
+
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerSetLeaderMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetLeader>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetLeader>>, TError,{teamId: string;membershipId: string}, TContext> => {
+
+const mutationKey = ['teamsControllerSetLeader'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerSetLeader>>, {teamId: string;membershipId: string}> = (props) => {
+          const {teamId,membershipId} = props ?? {};
+
+          return  teamsControllerSetLeader(teamId,membershipId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerSetLeaderMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerSetLeader>>>
+
+    export type TeamsControllerSetLeaderMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 활성 팀 멤버를 팀장으로 지정
+ */
+export const useTeamsControllerSetLeader = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetLeader>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerSetLeader>>,
+        TError,
+        {teamId: string;membershipId: string},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerSetLeaderMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerRemoveLeaderUrl = (teamId: string,
+    membershipId: string,) => {
+
+
+
+
+  return `/api/v1/teams/${teamId}/leaders/${membershipId}`
+}
+
+/**
+ * @summary 팀장 권한 해제
+ */
+export const teamsControllerRemoveLeader = async (teamId: string,
+    membershipId: string, options?: RequestInit): Promise<TeamResponseDto> => {
+
+  return rivetFetch<TeamResponseDto>(getTeamsControllerRemoveLeaderUrl(teamId,membershipId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerRemoveLeaderMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRemoveLeader>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRemoveLeader>>, TError,{teamId: string;membershipId: string}, TContext> => {
+
+const mutationKey = ['teamsControllerRemoveLeader'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerRemoveLeader>>, {teamId: string;membershipId: string}> = (props) => {
+          const {teamId,membershipId} = props ?? {};
+
+          return  teamsControllerRemoveLeader(teamId,membershipId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerRemoveLeaderMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerRemoveLeader>>>
+
+    export type TeamsControllerRemoveLeaderMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 팀장 권한 해제
+ */
+export const useTeamsControllerRemoveLeader = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRemoveLeader>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerRemoveLeader>>,
+        TError,
+        {teamId: string;membershipId: string},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerRemoveLeaderMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerArchiveUrl = (teamId: string,) => {
+
+
+
+
+  return `/api/v1/teams/${teamId}/archive`
+}
+
+/**
+ * @summary 팀 보관
+ */
+export const teamsControllerArchive = async (teamId: string,
+    versionDto: VersionDto, options?: RequestInit): Promise<TeamResponseDto> => {
+
+  return rivetFetch<TeamResponseDto>(getTeamsControllerArchiveUrl(teamId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(versionDto)
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerArchiveMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerArchive>>, TError,{teamId: string;data: BodyType<VersionDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerArchive>>, TError,{teamId: string;data: BodyType<VersionDto>}, TContext> => {
+
+const mutationKey = ['teamsControllerArchive'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerArchive>>, {teamId: string;data: BodyType<VersionDto>}> = (props) => {
+          const {teamId,data} = props ?? {};
+
+          return  teamsControllerArchive(teamId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerArchiveMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerArchive>>>
+    export type TeamsControllerArchiveMutationBody = BodyType<VersionDto>
+    export type TeamsControllerArchiveMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 팀 보관
+ */
+export const useTeamsControllerArchive = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerArchive>>, TError,{teamId: string;data: BodyType<VersionDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerArchive>>,
+        TError,
+        {teamId: string;data: BodyType<VersionDto>},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerArchiveMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerListWorkflowStatesUrl = (teamId: string,
+    params?: TeamsControllerListWorkflowStatesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/teams/${teamId}/workflow-states?${stringifiedParams}` : `/api/v1/teams/${teamId}/workflow-states`
+}
+
+/**
+ * @summary 팀 워크플로 상태 조회
+ */
+export const teamsControllerListWorkflowStates = async (teamId: string,
+    params?: TeamsControllerListWorkflowStatesParams, options?: RequestInit): Promise<WorkflowStateListResponseDto> => {
+
+  return rivetFetch<WorkflowStateListResponseDto>(getTeamsControllerListWorkflowStatesUrl(teamId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerListWorkflowStatesQueryKey = (teamId: string,
+    params?: TeamsControllerListWorkflowStatesParams,) => {
+    return [
+    `/api/v1/teams/${teamId}/workflow-states`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getTeamsControllerListWorkflowStatesQueryOptions = <TData = Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError = ErrorType<ApiErrorResponseDto>>(teamId: string,
+    params?: TeamsControllerListWorkflowStatesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getTeamsControllerListWorkflowStatesQueryKey(teamId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>> = ({ signal }) => teamsControllerListWorkflowStates(teamId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: teamId !== null && teamId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type TeamsControllerListWorkflowStatesQueryResult = NonNullable<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>>
+export type TeamsControllerListWorkflowStatesQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useTeamsControllerListWorkflowStates<TData = Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError = ErrorType<ApiErrorResponseDto>>(
+ teamId: string,
+    params: undefined |  TeamsControllerListWorkflowStatesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>,
+          TError,
+          Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useTeamsControllerListWorkflowStates<TData = Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError = ErrorType<ApiErrorResponseDto>>(
+ teamId: string,
+    params?: TeamsControllerListWorkflowStatesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>,
+          TError,
+          Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useTeamsControllerListWorkflowStates<TData = Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError = ErrorType<ApiErrorResponseDto>>(
+ teamId: string,
+    params?: TeamsControllerListWorkflowStatesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 팀 워크플로 상태 조회
+ */
+
+export function useTeamsControllerListWorkflowStates<TData = Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError = ErrorType<ApiErrorResponseDto>>(
+ teamId: string,
+    params?: TeamsControllerListWorkflowStatesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getTeamsControllerListWorkflowStatesQueryOptions(teamId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getTeamsControllerCreateWorkflowStateUrl = (teamId: string,) => {
+
+
+
+
+  return `/api/v1/teams/${teamId}/workflow-states`
+}
+
+/**
+ * @summary 팀 워크플로 상태 생성
+ */
+export const teamsControllerCreateWorkflowState = async (teamId: string,
+    createWorkflowStateDto: CreateWorkflowStateDto, options?: RequestInit): Promise<WorkflowStateResponseDto> => {
+
+  return rivetFetch<WorkflowStateResponseDto>(getTeamsControllerCreateWorkflowStateUrl(teamId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createWorkflowStateDto)
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerCreateWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, TError,{teamId: string;data: BodyType<CreateWorkflowStateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, TError,{teamId: string;data: BodyType<CreateWorkflowStateDto>}, TContext> => {
+
+const mutationKey = ['teamsControllerCreateWorkflowState'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, {teamId: string;data: BodyType<CreateWorkflowStateDto>}> = (props) => {
+          const {teamId,data} = props ?? {};
+
+          return  teamsControllerCreateWorkflowState(teamId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerCreateWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>>
+    export type TeamsControllerCreateWorkflowStateMutationBody = BodyType<CreateWorkflowStateDto>
+    export type TeamsControllerCreateWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 팀 워크플로 상태 생성
+ */
+export const useTeamsControllerCreateWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, TError,{teamId: string;data: BodyType<CreateWorkflowStateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>,
+        TError,
+        {teamId: string;data: BodyType<CreateWorkflowStateDto>},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerCreateWorkflowStateMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerUpdateWorkflowStateUrl = (stateId: string,) => {
+
+
+
+
+  return `/api/v1/workflow-states/${stateId}`
+}
+
+/**
+ * @summary 워크플로 상태 이름 수정
+ */
+export const teamsControllerUpdateWorkflowState = async (stateId: string,
+    updateWorkflowStateDto: UpdateWorkflowStateDto, options?: RequestInit): Promise<WorkflowStateResponseDto> => {
+
+  return rivetFetch<WorkflowStateResponseDto>(getTeamsControllerUpdateWorkflowStateUrl(stateId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateWorkflowStateDto)
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerUpdateWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>, TError,{stateId: string;data: BodyType<UpdateWorkflowStateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>, TError,{stateId: string;data: BodyType<UpdateWorkflowStateDto>}, TContext> => {
+
+const mutationKey = ['teamsControllerUpdateWorkflowState'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>, {stateId: string;data: BodyType<UpdateWorkflowStateDto>}> = (props) => {
+          const {stateId,data} = props ?? {};
+
+          return  teamsControllerUpdateWorkflowState(stateId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerUpdateWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>>
+    export type TeamsControllerUpdateWorkflowStateMutationBody = BodyType<UpdateWorkflowStateDto>
+    export type TeamsControllerUpdateWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 워크플로 상태 이름 수정
+ */
+export const useTeamsControllerUpdateWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>, TError,{stateId: string;data: BodyType<UpdateWorkflowStateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>,
+        TError,
+        {stateId: string;data: BodyType<UpdateWorkflowStateDto>},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerUpdateWorkflowStateMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerDeleteWorkflowStateUrl = (stateId: string,
+    params: TeamsControllerDeleteWorkflowStateParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/workflow-states/${stateId}?${stringifiedParams}` : `/api/v1/workflow-states/${stateId}`
+}
+
+/**
+ * @summary 미사용 워크플로 상태 삭제
+ */
+export const teamsControllerDeleteWorkflowState = async (stateId: string,
+    params: TeamsControllerDeleteWorkflowStateParams, options?: RequestInit): Promise<void> => {
+
+  return rivetFetch<void>(getTeamsControllerDeleteWorkflowStateUrl(stateId,params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerDeleteWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>, TError,{stateId: string;params: TeamsControllerDeleteWorkflowStateParams}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>, TError,{stateId: string;params: TeamsControllerDeleteWorkflowStateParams}, TContext> => {
+
+const mutationKey = ['teamsControllerDeleteWorkflowState'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>, {stateId: string;params: TeamsControllerDeleteWorkflowStateParams}> = (props) => {
+          const {stateId,params} = props ?? {};
+
+          return  teamsControllerDeleteWorkflowState(stateId,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerDeleteWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>>
+
+    export type TeamsControllerDeleteWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 미사용 워크플로 상태 삭제
+ */
+export const useTeamsControllerDeleteWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>, TError,{stateId: string;params: TeamsControllerDeleteWorkflowStateParams}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>,
+        TError,
+        {stateId: string;params: TeamsControllerDeleteWorkflowStateParams},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerDeleteWorkflowStateMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerSetDefaultWorkflowStateUrl = (stateId: string,) => {
+
+
+
+
+  return `/api/v1/workflow-states/${stateId}/default`
+}
+
+/**
+ * @summary 팀 워크플로 기본 상태 지정
+ */
+export const teamsControllerSetDefaultWorkflowState = async (stateId: string,
+    setWorkflowStateDefaultDto: SetWorkflowStateDefaultDto, options?: RequestInit): Promise<WorkflowStateListResponseDto> => {
+
+  return rivetFetch<WorkflowStateListResponseDto>(getTeamsControllerSetDefaultWorkflowStateUrl(stateId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setWorkflowStateDefaultDto)
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerSetDefaultWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, TError,{stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, TError,{stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}, TContext> => {
+
+const mutationKey = ['teamsControllerSetDefaultWorkflowState'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, {stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}> = (props) => {
+          const {stateId,data} = props ?? {};
+
+          return  teamsControllerSetDefaultWorkflowState(stateId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerSetDefaultWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>>
+    export type TeamsControllerSetDefaultWorkflowStateMutationBody = BodyType<SetWorkflowStateDefaultDto>
+    export type TeamsControllerSetDefaultWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 팀 워크플로 기본 상태 지정
+ */
+export const useTeamsControllerSetDefaultWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, TError,{stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>,
+        TError,
+        {stateId: string;data: BodyType<SetWorkflowStateDefaultDto>},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerSetDefaultWorkflowStateMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerReorderWorkflowStatesUrl = (teamId: string,) => {
+
+
+
+
+  return `/api/v1/teams/${teamId}/workflow-states/order`
+}
+
+/**
+ * @summary 워크플로 상태 순서 교체
+ */
+export const teamsControllerReorderWorkflowStates = async (teamId: string,
+    reorderWorkflowStatesDto: ReorderWorkflowStatesDto, options?: RequestInit): Promise<WorkflowStateListResponseDto> => {
+
+  return rivetFetch<WorkflowStateListResponseDto>(getTeamsControllerReorderWorkflowStatesUrl(teamId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(reorderWorkflowStatesDto)
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerReorderWorkflowStatesMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>, TError,{teamId: string;data: BodyType<ReorderWorkflowStatesDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>, TError,{teamId: string;data: BodyType<ReorderWorkflowStatesDto>}, TContext> => {
+
+const mutationKey = ['teamsControllerReorderWorkflowStates'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>, {teamId: string;data: BodyType<ReorderWorkflowStatesDto>}> = (props) => {
+          const {teamId,data} = props ?? {};
+
+          return  teamsControllerReorderWorkflowStates(teamId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerReorderWorkflowStatesMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>>
+    export type TeamsControllerReorderWorkflowStatesMutationBody = BodyType<ReorderWorkflowStatesDto>
+    export type TeamsControllerReorderWorkflowStatesMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 워크플로 상태 순서 교체
+ */
+export const useTeamsControllerReorderWorkflowStates = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>, TError,{teamId: string;data: BodyType<ReorderWorkflowStatesDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>,
+        TError,
+        {teamId: string;data: BodyType<ReorderWorkflowStatesDto>},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerReorderWorkflowStatesMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerDisableWorkflowStateUrl = (stateId: string,) => {
+
+
+
+
+  return `/api/v1/workflow-states/${stateId}/disable`
+}
+
+/**
+ * @summary 워크플로 상태 사용 중지
+ */
+export const teamsControllerDisableWorkflowState = async (stateId: string,
+    versionDto: VersionDto, options?: RequestInit): Promise<WorkflowStateResponseDto> => {
+
+  return rivetFetch<WorkflowStateResponseDto>(getTeamsControllerDisableWorkflowStateUrl(stateId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(versionDto)
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerDisableWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerDisableWorkflowState>>, TError,{stateId: string;data: BodyType<VersionDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerDisableWorkflowState>>, TError,{stateId: string;data: BodyType<VersionDto>}, TContext> => {
+
+const mutationKey = ['teamsControllerDisableWorkflowState'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerDisableWorkflowState>>, {stateId: string;data: BodyType<VersionDto>}> = (props) => {
+          const {stateId,data} = props ?? {};
+
+          return  teamsControllerDisableWorkflowState(stateId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerDisableWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerDisableWorkflowState>>>
+    export type TeamsControllerDisableWorkflowStateMutationBody = BodyType<VersionDto>
+    export type TeamsControllerDisableWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 워크플로 상태 사용 중지
+ */
+export const useTeamsControllerDisableWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerDisableWorkflowState>>, TError,{stateId: string;data: BodyType<VersionDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerDisableWorkflowState>>,
+        TError,
+        {stateId: string;data: BodyType<VersionDto>},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerDisableWorkflowStateMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerRestoreWorkflowStateUrl = (stateId: string,) => {
+
+
+
+
+  return `/api/v1/workflow-states/${stateId}/restore`
+}
+
+/**
+ * @summary 사용 중지한 워크플로 상태 복구
+ */
+export const teamsControllerRestoreWorkflowState = async (stateId: string,
+    versionDto: VersionDto, options?: RequestInit): Promise<WorkflowStateResponseDto> => {
+
+  return rivetFetch<WorkflowStateResponseDto>(getTeamsControllerRestoreWorkflowStateUrl(stateId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(versionDto)
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerRestoreWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRestoreWorkflowState>>, TError,{stateId: string;data: BodyType<VersionDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRestoreWorkflowState>>, TError,{stateId: string;data: BodyType<VersionDto>}, TContext> => {
+
+const mutationKey = ['teamsControllerRestoreWorkflowState'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerRestoreWorkflowState>>, {stateId: string;data: BodyType<VersionDto>}> = (props) => {
+          const {stateId,data} = props ?? {};
+
+          return  teamsControllerRestoreWorkflowState(stateId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerRestoreWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerRestoreWorkflowState>>>
+    export type TeamsControllerRestoreWorkflowStateMutationBody = BodyType<VersionDto>
+    export type TeamsControllerRestoreWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 사용 중지한 워크플로 상태 복구
+ */
+export const useTeamsControllerRestoreWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRestoreWorkflowState>>, TError,{stateId: string;data: BodyType<VersionDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerRestoreWorkflowState>>,
+        TError,
+        {stateId: string;data: BodyType<VersionDto>},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerRestoreWorkflowStateMutationOptions(options), queryClient);
     }
 
 export const getCsvImportControllerMappingOptionsUrl = () => {
@@ -8429,1045 +9846,6 @@ export function useWorkspacesControllerGetCurrent<TData = Awaited<ReturnType<typ
 
 
 
-
-export const getTeamsControllerListUrl = (params?: TeamsControllerListParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/v1/teams?${stringifiedParams}` : `/api/v1/teams`
-}
-
-/**
- * @summary 팀 목록 조회
- */
-export const teamsControllerList = async (params?: TeamsControllerListParams, options?: RequestInit): Promise<TeamListResponseDto> => {
-
-  return rivetFetch<TeamListResponseDto>(getTeamsControllerListUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerListQueryKey = (params?: TeamsControllerListParams,) => {
-    return [
-    `/api/v1/teams`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getTeamsControllerListQueryOptions = <TData = Awaited<ReturnType<typeof teamsControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(params?: TeamsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getTeamsControllerListQueryKey(params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof teamsControllerList>>> = ({ signal }) => teamsControllerList(params, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type TeamsControllerListQueryResult = NonNullable<Awaited<ReturnType<typeof teamsControllerList>>>
-export type TeamsControllerListQueryError = ErrorType<ApiErrorResponseDto>
-
-
-export function useTeamsControllerList<TData = Awaited<ReturnType<typeof teamsControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
- params: undefined |  TeamsControllerListParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof teamsControllerList>>,
-          TError,
-          Awaited<ReturnType<typeof teamsControllerList>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useTeamsControllerList<TData = Awaited<ReturnType<typeof teamsControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
- params?: TeamsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof teamsControllerList>>,
-          TError,
-          Awaited<ReturnType<typeof teamsControllerList>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useTeamsControllerList<TData = Awaited<ReturnType<typeof teamsControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
- params?: TeamsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary 팀 목록 조회
- */
-
-export function useTeamsControllerList<TData = Awaited<ReturnType<typeof teamsControllerList>>, TError = ErrorType<ApiErrorResponseDto>>(
- params?: TeamsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getTeamsControllerListQueryOptions(params,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getTeamsControllerCreateUrl = () => {
-
-
-
-
-  return `/api/v1/teams`
-}
-
-/**
- * @summary 팀과 기본 워크플로 생성
- */
-export const teamsControllerCreate = async (createTeamDto: CreateTeamDto, options?: RequestInit): Promise<TeamResponseDto> => {
-
-  return rivetFetch<TeamResponseDto>(getTeamsControllerCreateUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(createTeamDto)
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerCreateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreate>>, TError,{data: BodyType<CreateTeamDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreate>>, TError,{data: BodyType<CreateTeamDto>}, TContext> => {
-
-const mutationKey = ['teamsControllerCreate'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerCreate>>, {data: BodyType<CreateTeamDto>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  teamsControllerCreate(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TeamsControllerCreateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerCreate>>>
-    export type TeamsControllerCreateMutationBody = BodyType<CreateTeamDto>
-    export type TeamsControllerCreateMutationError = ErrorType<ApiErrorResponseDto>
-
-    /**
- * @summary 팀과 기본 워크플로 생성
- */
-export const useTeamsControllerCreate = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreate>>, TError,{data: BodyType<CreateTeamDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof teamsControllerCreate>>,
-        TError,
-        {data: BodyType<CreateTeamDto>},
-        TContext
-      > => {
-      return useMutation(getTeamsControllerCreateMutationOptions(options), queryClient);
-    }
-
-export const getTeamsControllerGetUrl = (teamId: string,) => {
-
-
-
-
-  return `/api/v1/teams/${teamId}`
-}
-
-/**
- * @summary 팀 상세 조회
- */
-export const teamsControllerGet = async (teamId: string, options?: RequestInit): Promise<TeamResponseDto> => {
-
-  return rivetFetch<TeamResponseDto>(getTeamsControllerGetUrl(teamId),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerGetQueryKey = (teamId: string,) => {
-    return [
-    `/api/v1/teams/${teamId}`
-    ] as const;
-    }
-
-
-export const getTeamsControllerGetQueryOptions = <TData = Awaited<ReturnType<typeof teamsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getTeamsControllerGetQueryKey(teamId);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof teamsControllerGet>>> = ({ signal }) => teamsControllerGet(teamId, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: teamId !== null && teamId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type TeamsControllerGetQueryResult = NonNullable<Awaited<ReturnType<typeof teamsControllerGet>>>
-export type TeamsControllerGetQueryError = ErrorType<ApiErrorResponseDto>
-
-
-export function useTeamsControllerGet<TData = Awaited<ReturnType<typeof teamsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
- teamId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof teamsControllerGet>>,
-          TError,
-          Awaited<ReturnType<typeof teamsControllerGet>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useTeamsControllerGet<TData = Awaited<ReturnType<typeof teamsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
- teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof teamsControllerGet>>,
-          TError,
-          Awaited<ReturnType<typeof teamsControllerGet>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useTeamsControllerGet<TData = Awaited<ReturnType<typeof teamsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
- teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary 팀 상세 조회
- */
-
-export function useTeamsControllerGet<TData = Awaited<ReturnType<typeof teamsControllerGet>>, TError = ErrorType<ApiErrorResponseDto>>(
- teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerGet>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getTeamsControllerGetQueryOptions(teamId,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getTeamsControllerUpdateUrl = (teamId: string,) => {
-
-
-
-
-  return `/api/v1/teams/${teamId}`
-}
-
-/**
- * @summary 팀 이름과 키 수정
- */
-export const teamsControllerUpdate = async (teamId: string,
-    updateTeamDto: UpdateTeamDto, options?: RequestInit): Promise<TeamResponseDto> => {
-
-  return rivetFetch<TeamResponseDto>(getTeamsControllerUpdateUrl(teamId),
-  {
-    ...options,
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(updateTeamDto)
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerUpdateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdate>>, TError,{teamId: string;data: BodyType<UpdateTeamDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdate>>, TError,{teamId: string;data: BodyType<UpdateTeamDto>}, TContext> => {
-
-const mutationKey = ['teamsControllerUpdate'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerUpdate>>, {teamId: string;data: BodyType<UpdateTeamDto>}> = (props) => {
-          const {teamId,data} = props ?? {};
-
-          return  teamsControllerUpdate(teamId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TeamsControllerUpdateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerUpdate>>>
-    export type TeamsControllerUpdateMutationBody = BodyType<UpdateTeamDto>
-    export type TeamsControllerUpdateMutationError = ErrorType<ApiErrorResponseDto>
-
-    /**
- * @summary 팀 이름과 키 수정
- */
-export const useTeamsControllerUpdate = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdate>>, TError,{teamId: string;data: BodyType<UpdateTeamDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof teamsControllerUpdate>>,
-        TError,
-        {teamId: string;data: BodyType<UpdateTeamDto>},
-        TContext
-      > => {
-      return useMutation(getTeamsControllerUpdateMutationOptions(options), queryClient);
-    }
-
-export const getTeamsControllerAddMemberUrl = (teamId: string,
-    membershipId: string,) => {
-
-
-
-
-  return `/api/v1/teams/${teamId}/members/${membershipId}`
-}
-
-/**
- * @summary 활성 멤버를 팀에 추가하거나 복귀
- */
-export const teamsControllerAddMember = async (teamId: string,
-    membershipId: string, options?: RequestInit): Promise<TeamResponseDto> => {
-
-  return rivetFetch<TeamResponseDto>(getTeamsControllerAddMemberUrl(teamId,membershipId),
-  {
-    ...options,
-    method: 'PUT'
-
-
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerAddMemberMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerAddMember>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerAddMember>>, TError,{teamId: string;membershipId: string}, TContext> => {
-
-const mutationKey = ['teamsControllerAddMember'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerAddMember>>, {teamId: string;membershipId: string}> = (props) => {
-          const {teamId,membershipId} = props ?? {};
-
-          return  teamsControllerAddMember(teamId,membershipId,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TeamsControllerAddMemberMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerAddMember>>>
-
-    export type TeamsControllerAddMemberMutationError = ErrorType<ApiErrorResponseDto>
-
-    /**
- * @summary 활성 멤버를 팀에 추가하거나 복귀
- */
-export const useTeamsControllerAddMember = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerAddMember>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof teamsControllerAddMember>>,
-        TError,
-        {teamId: string;membershipId: string},
-        TContext
-      > => {
-      return useMutation(getTeamsControllerAddMemberMutationOptions(options), queryClient);
-    }
-
-export const getTeamsControllerRemoveMemberUrl = (teamId: string,
-    membershipId: string,) => {
-
-
-
-
-  return `/api/v1/teams/${teamId}/members/${membershipId}`
-}
-
-/**
- * @summary 팀 멤버 제거
- */
-export const teamsControllerRemoveMember = async (teamId: string,
-    membershipId: string, options?: RequestInit): Promise<void> => {
-
-  return rivetFetch<void>(getTeamsControllerRemoveMemberUrl(teamId,membershipId),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerRemoveMemberMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRemoveMember>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRemoveMember>>, TError,{teamId: string;membershipId: string}, TContext> => {
-
-const mutationKey = ['teamsControllerRemoveMember'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerRemoveMember>>, {teamId: string;membershipId: string}> = (props) => {
-          const {teamId,membershipId} = props ?? {};
-
-          return  teamsControllerRemoveMember(teamId,membershipId,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TeamsControllerRemoveMemberMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerRemoveMember>>>
-
-    export type TeamsControllerRemoveMemberMutationError = ErrorType<ApiErrorResponseDto>
-
-    /**
- * @summary 팀 멤버 제거
- */
-export const useTeamsControllerRemoveMember = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerRemoveMember>>, TError,{teamId: string;membershipId: string}, TContext>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof teamsControllerRemoveMember>>,
-        TError,
-        {teamId: string;membershipId: string},
-        TContext
-      > => {
-      return useMutation(getTeamsControllerRemoveMemberMutationOptions(options), queryClient);
-    }
-
-export const getTeamsControllerArchiveUrl = (teamId: string,) => {
-
-
-
-
-  return `/api/v1/teams/${teamId}/archive`
-}
-
-/**
- * @summary 팀 보관
- */
-export const teamsControllerArchive = async (teamId: string,
-    versionDto: VersionDto, options?: RequestInit): Promise<TeamResponseDto> => {
-
-  return rivetFetch<TeamResponseDto>(getTeamsControllerArchiveUrl(teamId),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(versionDto)
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerArchiveMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerArchive>>, TError,{teamId: string;data: BodyType<VersionDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerArchive>>, TError,{teamId: string;data: BodyType<VersionDto>}, TContext> => {
-
-const mutationKey = ['teamsControllerArchive'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerArchive>>, {teamId: string;data: BodyType<VersionDto>}> = (props) => {
-          const {teamId,data} = props ?? {};
-
-          return  teamsControllerArchive(teamId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TeamsControllerArchiveMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerArchive>>>
-    export type TeamsControllerArchiveMutationBody = BodyType<VersionDto>
-    export type TeamsControllerArchiveMutationError = ErrorType<ApiErrorResponseDto>
-
-    /**
- * @summary 팀 보관
- */
-export const useTeamsControllerArchive = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerArchive>>, TError,{teamId: string;data: BodyType<VersionDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof teamsControllerArchive>>,
-        TError,
-        {teamId: string;data: BodyType<VersionDto>},
-        TContext
-      > => {
-      return useMutation(getTeamsControllerArchiveMutationOptions(options), queryClient);
-    }
-
-export const getTeamsControllerListWorkflowStatesUrl = (teamId: string,) => {
-
-
-
-
-  return `/api/v1/teams/${teamId}/workflow-states`
-}
-
-/**
- * @summary 팀 워크플로 상태 조회
- */
-export const teamsControllerListWorkflowStates = async (teamId: string, options?: RequestInit): Promise<WorkflowStateListResponseDto> => {
-
-  return rivetFetch<WorkflowStateListResponseDto>(getTeamsControllerListWorkflowStatesUrl(teamId),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerListWorkflowStatesQueryKey = (teamId: string,) => {
-    return [
-    `/api/v1/teams/${teamId}/workflow-states`
-    ] as const;
-    }
-
-
-export const getTeamsControllerListWorkflowStatesQueryOptions = <TData = Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError = ErrorType<ApiErrorResponseDto>>(teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getTeamsControllerListWorkflowStatesQueryKey(teamId);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>> = ({ signal }) => teamsControllerListWorkflowStates(teamId, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: teamId !== null && teamId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type TeamsControllerListWorkflowStatesQueryResult = NonNullable<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>>
-export type TeamsControllerListWorkflowStatesQueryError = ErrorType<ApiErrorResponseDto>
-
-
-export function useTeamsControllerListWorkflowStates<TData = Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError = ErrorType<ApiErrorResponseDto>>(
- teamId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>,
-          TError,
-          Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useTeamsControllerListWorkflowStates<TData = Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError = ErrorType<ApiErrorResponseDto>>(
- teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>,
-          TError,
-          Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useTeamsControllerListWorkflowStates<TData = Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError = ErrorType<ApiErrorResponseDto>>(
- teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary 팀 워크플로 상태 조회
- */
-
-export function useTeamsControllerListWorkflowStates<TData = Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError = ErrorType<ApiErrorResponseDto>>(
- teamId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamsControllerListWorkflowStates>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getTeamsControllerListWorkflowStatesQueryOptions(teamId,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getTeamsControllerCreateWorkflowStateUrl = (teamId: string,) => {
-
-
-
-
-  return `/api/v1/teams/${teamId}/workflow-states`
-}
-
-/**
- * @summary 팀 워크플로 상태 생성
- */
-export const teamsControllerCreateWorkflowState = async (teamId: string,
-    createWorkflowStateDto: CreateWorkflowStateDto, options?: RequestInit): Promise<WorkflowStateResponseDto> => {
-
-  return rivetFetch<WorkflowStateResponseDto>(getTeamsControllerCreateWorkflowStateUrl(teamId),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(createWorkflowStateDto)
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerCreateWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, TError,{teamId: string;data: BodyType<CreateWorkflowStateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, TError,{teamId: string;data: BodyType<CreateWorkflowStateDto>}, TContext> => {
-
-const mutationKey = ['teamsControllerCreateWorkflowState'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, {teamId: string;data: BodyType<CreateWorkflowStateDto>}> = (props) => {
-          const {teamId,data} = props ?? {};
-
-          return  teamsControllerCreateWorkflowState(teamId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TeamsControllerCreateWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>>
-    export type TeamsControllerCreateWorkflowStateMutationBody = BodyType<CreateWorkflowStateDto>
-    export type TeamsControllerCreateWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
-
-    /**
- * @summary 팀 워크플로 상태 생성
- */
-export const useTeamsControllerCreateWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, TError,{teamId: string;data: BodyType<CreateWorkflowStateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>,
-        TError,
-        {teamId: string;data: BodyType<CreateWorkflowStateDto>},
-        TContext
-      > => {
-      return useMutation(getTeamsControllerCreateWorkflowStateMutationOptions(options), queryClient);
-    }
-
-export const getTeamsControllerUpdateWorkflowStateUrl = (stateId: string,) => {
-
-
-
-
-  return `/api/v1/workflow-states/${stateId}`
-}
-
-/**
- * @summary 워크플로 상태 이름 수정
- */
-export const teamsControllerUpdateWorkflowState = async (stateId: string,
-    updateWorkflowStateDto: UpdateWorkflowStateDto, options?: RequestInit): Promise<WorkflowStateResponseDto> => {
-
-  return rivetFetch<WorkflowStateResponseDto>(getTeamsControllerUpdateWorkflowStateUrl(stateId),
-  {
-    ...options,
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(updateWorkflowStateDto)
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerUpdateWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>, TError,{stateId: string;data: BodyType<UpdateWorkflowStateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>, TError,{stateId: string;data: BodyType<UpdateWorkflowStateDto>}, TContext> => {
-
-const mutationKey = ['teamsControllerUpdateWorkflowState'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>, {stateId: string;data: BodyType<UpdateWorkflowStateDto>}> = (props) => {
-          const {stateId,data} = props ?? {};
-
-          return  teamsControllerUpdateWorkflowState(stateId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TeamsControllerUpdateWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>>
-    export type TeamsControllerUpdateWorkflowStateMutationBody = BodyType<UpdateWorkflowStateDto>
-    export type TeamsControllerUpdateWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
-
-    /**
- * @summary 워크플로 상태 이름 수정
- */
-export const useTeamsControllerUpdateWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>, TError,{stateId: string;data: BodyType<UpdateWorkflowStateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof teamsControllerUpdateWorkflowState>>,
-        TError,
-        {stateId: string;data: BodyType<UpdateWorkflowStateDto>},
-        TContext
-      > => {
-      return useMutation(getTeamsControllerUpdateWorkflowStateMutationOptions(options), queryClient);
-    }
-
-export const getTeamsControllerDeleteWorkflowStateUrl = (stateId: string,
-    params: TeamsControllerDeleteWorkflowStateParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/v1/workflow-states/${stateId}?${stringifiedParams}` : `/api/v1/workflow-states/${stateId}`
-}
-
-/**
- * @summary 미사용 워크플로 상태 삭제
- */
-export const teamsControllerDeleteWorkflowState = async (stateId: string,
-    params: TeamsControllerDeleteWorkflowStateParams, options?: RequestInit): Promise<void> => {
-
-  return rivetFetch<void>(getTeamsControllerDeleteWorkflowStateUrl(stateId,params),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerDeleteWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>, TError,{stateId: string;params: TeamsControllerDeleteWorkflowStateParams}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>, TError,{stateId: string;params: TeamsControllerDeleteWorkflowStateParams}, TContext> => {
-
-const mutationKey = ['teamsControllerDeleteWorkflowState'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>, {stateId: string;params: TeamsControllerDeleteWorkflowStateParams}> = (props) => {
-          const {stateId,params} = props ?? {};
-
-          return  teamsControllerDeleteWorkflowState(stateId,params,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TeamsControllerDeleteWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>>
-
-    export type TeamsControllerDeleteWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
-
-    /**
- * @summary 미사용 워크플로 상태 삭제
- */
-export const useTeamsControllerDeleteWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>, TError,{stateId: string;params: TeamsControllerDeleteWorkflowStateParams}, TContext>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof teamsControllerDeleteWorkflowState>>,
-        TError,
-        {stateId: string;params: TeamsControllerDeleteWorkflowStateParams},
-        TContext
-      > => {
-      return useMutation(getTeamsControllerDeleteWorkflowStateMutationOptions(options), queryClient);
-    }
-
-export const getTeamsControllerSetDefaultWorkflowStateUrl = (stateId: string,) => {
-
-
-
-
-  return `/api/v1/workflow-states/${stateId}/default`
-}
-
-/**
- * @summary 팀 워크플로 기본 상태 지정
- */
-export const teamsControllerSetDefaultWorkflowState = async (stateId: string,
-    setWorkflowStateDefaultDto: SetWorkflowStateDefaultDto, options?: RequestInit): Promise<WorkflowStateListResponseDto> => {
-
-  return rivetFetch<WorkflowStateListResponseDto>(getTeamsControllerSetDefaultWorkflowStateUrl(stateId),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(setWorkflowStateDefaultDto)
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerSetDefaultWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, TError,{stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, TError,{stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}, TContext> => {
-
-const mutationKey = ['teamsControllerSetDefaultWorkflowState'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, {stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}> = (props) => {
-          const {stateId,data} = props ?? {};
-
-          return  teamsControllerSetDefaultWorkflowState(stateId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TeamsControllerSetDefaultWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>>
-    export type TeamsControllerSetDefaultWorkflowStateMutationBody = BodyType<SetWorkflowStateDefaultDto>
-    export type TeamsControllerSetDefaultWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
-
-    /**
- * @summary 팀 워크플로 기본 상태 지정
- */
-export const useTeamsControllerSetDefaultWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, TError,{stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>,
-        TError,
-        {stateId: string;data: BodyType<SetWorkflowStateDefaultDto>},
-        TContext
-      > => {
-      return useMutation(getTeamsControllerSetDefaultWorkflowStateMutationOptions(options), queryClient);
-    }
-
-export const getTeamsControllerReorderWorkflowStatesUrl = (teamId: string,) => {
-
-
-
-
-  return `/api/v1/teams/${teamId}/workflow-states/order`
-}
-
-/**
- * @summary 워크플로 상태 순서 교체
- */
-export const teamsControllerReorderWorkflowStates = async (teamId: string,
-    reorderWorkflowStatesDto: ReorderWorkflowStatesDto, options?: RequestInit): Promise<WorkflowStateListResponseDto> => {
-
-  return rivetFetch<WorkflowStateListResponseDto>(getTeamsControllerReorderWorkflowStatesUrl(teamId),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(reorderWorkflowStatesDto)
-  }
-);}
-
-
-
-
-
-export const getTeamsControllerReorderWorkflowStatesMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>, TError,{teamId: string;data: BodyType<ReorderWorkflowStatesDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>, TError,{teamId: string;data: BodyType<ReorderWorkflowStatesDto>}, TContext> => {
-
-const mutationKey = ['teamsControllerReorderWorkflowStates'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>, {teamId: string;data: BodyType<ReorderWorkflowStatesDto>}> = (props) => {
-          const {teamId,data} = props ?? {};
-
-          return  teamsControllerReorderWorkflowStates(teamId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TeamsControllerReorderWorkflowStatesMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>>
-    export type TeamsControllerReorderWorkflowStatesMutationBody = BodyType<ReorderWorkflowStatesDto>
-    export type TeamsControllerReorderWorkflowStatesMutationError = ErrorType<ApiErrorResponseDto>
-
-    /**
- * @summary 워크플로 상태 순서 교체
- */
-export const useTeamsControllerReorderWorkflowStates = <TError = ErrorType<ApiErrorResponseDto>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>, TError,{teamId: string;data: BodyType<ReorderWorkflowStatesDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof teamsControllerReorderWorkflowStates>>,
-        TError,
-        {teamId: string;data: BodyType<ReorderWorkflowStatesDto>},
-        TContext
-      > => {
-      return useMutation(getTeamsControllerReorderWorkflowStatesMutationOptions(options), queryClient);
-    }
 
 export const getTrashControllerListUrl = (params?: TrashControllerListParams,) => {
   const normalizedParams = new URLSearchParams();

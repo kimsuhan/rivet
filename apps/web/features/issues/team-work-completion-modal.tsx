@@ -64,7 +64,7 @@ export function TeamWorkCompletionModal({
     (key) => markdown(key as never),
     (key) => String(markdown.raw(key as never)),
   );
-  const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, {
+  const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, undefined, {
     query: { enabled: open, retry: false },
   });
   const project = useProjectsControllerGet(work.issue.project.id, {
@@ -140,35 +140,35 @@ export function TeamWorkCompletionModal({
           </Alert>
         ) : null}
         <FieldSet>
-            <FieldLegend variant="label">완료 방식</FieldLegend>
-            <div data-slot="radio-group" className="grid gap-2">
-              <label className="border-border bg-background hover:bg-muted focus-within:border-ring focus-within:ring-ring/50 has-[:checked]:border-primary/50 has-[:checked]:bg-primary/10 flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm outline-none focus-within:ring-2">
-                <input
-                  checked={completionMode === 'COMPLETE_ONLY'}
-                  className="sr-only"
-                  name="completionMode"
-                  onChange={() => setCompletionMode('COMPLETE_ONLY')}
-                  type="radio"
-                  value="COMPLETE_ONLY"
-                />
-                이 작업만 완료
-              </label>
-              <label className="border-border bg-background hover:bg-muted focus-within:border-ring focus-within:ring-ring/50 has-[:checked]:border-primary/50 has-[:checked]:bg-primary/10 flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm outline-none focus-within:ring-2">
-                <input
-                  checked={completionMode === 'HANDOFF_AND_COMPLETE'}
-                  className="sr-only"
-                  name="completionMode"
-                  onChange={() => {
-                    setCompletionMode('HANDOFF_AND_COMPLETE');
-                  }}
-                  disabled={destinationTeams.length === 0 || project.isError}
-                  type="radio"
-                  value="HANDOFF_AND_COMPLETE"
-                />
-                다른 팀에 전달 후 완료
-              </label>
-            </div>
-          </FieldSet>
+          <FieldLegend variant="label">완료 방식</FieldLegend>
+          <div data-slot="radio-group" className="grid gap-2">
+            <label className="border-border bg-background hover:bg-muted focus-within:border-ring focus-within:ring-ring/50 has-[:checked]:border-primary/50 has-[:checked]:bg-primary/10 flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm outline-none focus-within:ring-2">
+              <input
+                checked={completionMode === 'COMPLETE_ONLY'}
+                className="sr-only"
+                name="completionMode"
+                onChange={() => setCompletionMode('COMPLETE_ONLY')}
+                type="radio"
+                value="COMPLETE_ONLY"
+              />
+              이 작업만 완료
+            </label>
+            <label className="border-border bg-background hover:bg-muted focus-within:border-ring focus-within:ring-ring/50 has-[:checked]:border-primary/50 has-[:checked]:bg-primary/10 flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm outline-none focus-within:ring-2">
+              <input
+                checked={completionMode === 'HANDOFF_AND_COMPLETE'}
+                className="sr-only"
+                name="completionMode"
+                onChange={() => {
+                  setCompletionMode('HANDOFF_AND_COMPLETE');
+                }}
+                disabled={destinationTeams.length === 0 || project.isError}
+                type="radio"
+                value="HANDOFF_AND_COMPLETE"
+              />
+              다른 팀에 전달 후 완료
+            </label>
+          </div>
+        </FieldSet>
         {requiresHandoffFields ? (
           <>
             <fieldset className="grid gap-2">

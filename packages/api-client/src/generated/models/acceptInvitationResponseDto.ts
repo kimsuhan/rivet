@@ -11,5 +11,6 @@ import type { AcceptedInvitationWorkspaceDto } from './acceptedInvitationWorkspa
 export interface AcceptInvitationResponseDto {
   accepted: boolean;
   membership: AcceptedInvitationMembershipDto;
+  joinedTeamIds: string[];
   workspace: AcceptedInvitationWorkspaceDto;
 }

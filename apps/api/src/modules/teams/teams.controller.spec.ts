@@ -84,6 +84,7 @@ describe('TeamsController', () => {
     expect(teams.create).toHaveBeenCalledWith(
       {
         membershipId: membership.id,
+        role: membership.role,
         workspaceId: workspace.id,
       },
       dto,
@@ -120,19 +121,25 @@ describe('TeamsController', () => {
     await expect(
       controller.setDefaultWorkflowState(authentication, state.id, { version: 1 }),
     ).resolves.toMatchObject({ items: [expect.objectContaining({ isDefault: true })] });
-    expect(workflowStates.createWorkflowState).toHaveBeenCalledWith(workspace.id, response.id, {
-      category: 'COMPLETED',
-      name: '검증 완료',
-    });
-    expect(workflowStates.setDefaultWorkflowState).toHaveBeenCalledWith(workspace.id, state.id, {
-      version: 1,
-    });
+    expect(workflowStates.createWorkflowState).toHaveBeenCalledWith(
+      { membershipId: membership.id, role: membership.role, workspaceId: workspace.id },
+      response.id,
+      {
+        category: 'COMPLETED',
+        name: '검증 완료',
+      },
+    );
+    expect(workflowStates.setDefaultWorkflowState).toHaveBeenCalledWith(
+      { membershipId: membership.id, role: membership.role, workspaceId: workspace.id },
+      state.id,
+      { version: 1 },
+    );
     expect(
       Reflect.getMetadata(HTTP_CODE_METADATA, TeamsController.prototype.createWorkflowState),
     ).toBe(HttpStatus.CREATED);
     expect(
       Reflect.getMetadata(GUARDS_METADATA, TeamsController.prototype.setDefaultWorkflowState),
-    ).toContain(AdminGuard);
+    ).toBeUndefined();
   });
 
   const unsafeSessionPatches: Array<[string, Partial<AuthenticatedRequestContext['session']>]> = [

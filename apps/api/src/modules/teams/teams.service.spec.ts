@@ -5,6 +5,7 @@ import { Prisma } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { TeamRepository } from './team.repository';
+import { TeamManagementPolicy } from './team-management.policy';
 import { TeamsService } from './teams.service';
 
 function uniqueConflict(target: string[]): Prisma.PrismaClientKnownRequestError {
@@ -77,7 +78,12 @@ describe('TeamsService', () => {
     database.client.team.findUnique.mockResolvedValue(null);
 
     moduleRef = await Test.createTestingModule({
-      providers: [TeamRepository, TeamsService, { provide: DatabaseService, useValue: database }],
+      providers: [
+        TeamRepository,
+        TeamsService,
+        { provide: DatabaseService, useValue: database },
+        { provide: TeamManagementPolicy, useValue: { assertCanManageTeam: jest.fn() } },
+      ],
     }).compile();
     service = moduleRef.get(TeamsService);
   });

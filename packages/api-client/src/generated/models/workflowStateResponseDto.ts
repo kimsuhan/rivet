@@ -17,6 +17,8 @@ export interface WorkflowStateResponseDto {
   /** @minimum 0 */
   position: number;
   isDefault: boolean;
+  /** @nullable */
+  disabledAt: string | null;
   /** @minimum 1 */
   version: number;
 }

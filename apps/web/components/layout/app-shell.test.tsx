@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { AnchorHTMLAttributes, ReactNode } from 'react';
+import type { AnchorHTMLAttributes, ReactNode, RefObject } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppShell } from './app-shell';
@@ -11,13 +11,20 @@ vi.mock('@rivet/api-client', () => ({
   useAuthControllerGetSession: () => ({
     data: {
       authenticated: true,
-      membership: { id: 'membership-1', role: 'ADMIN', status: 'ACTIVE' },
+      membership: {
+        id: 'membership-1',
+        ledTeamIds: [],
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        teamIds: ['team-web'],
+      },
       user: {
         avatarFileId: null,
         displayName: '김리벳',
         email: 'kim@example.com',
         id: 'user-1',
       },
+      workspace: { id: 'workspace-1', name: '리벳 워크스페이스', slug: 'rivet', version: 1 },
     },
   }),
   useNotificationsControllerUnreadCount: () => ({ data: { count: 7 } }),
@@ -74,24 +81,38 @@ vi.mock('@/features/auth/user-menu', () => ({
   UserMenu: ({
     children,
     labels,
+    onOpenFeedback,
     onOpenChange,
     onOpenProfile,
     open,
+    triggerRef,
   }: {
     children: ReactNode;
-    labels: { open: string; profile: string };
+    labels: { feedback: string; open: string; profile: string };
+    onOpenFeedback: () => void;
     onOpenChange: (open: boolean) => void;
     onOpenProfile: () => void;
     open: boolean;
+    triggerRef?: RefObject<HTMLButtonElement | null>;
   }) => (
     <div>
-      <button type="button" aria-label={labels.open} onClick={() => onOpenChange(!open)}>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={labels.open}
+        onClick={() => onOpenChange(!open)}
+      >
         {children}
       </button>
       {open ? (
-        <button type="button" onClick={onOpenProfile}>
-          {labels.profile}
-        </button>
+        <>
+          <button type="button" onClick={onOpenProfile}>
+            {labels.profile}
+          </button>
+          <button type="button" onClick={onOpenFeedback}>
+            {labels.feedback}
+          </button>
+        </>
       ) : null}
     </div>
   ),
@@ -143,13 +164,29 @@ vi.mock('@/features/issues/global-issue-create', () => ({
 }));
 
 vi.mock('@/features/teams/team-selector', () => ({
-  DesktopTeamNavigation: () => null,
-  TeamSelector: () => null,
+  DesktopTeamNavigation: ({ memberTeamIds }: { memberTeamIds: string[] | null }) => (
+    <div data-testid="desktop-team-navigation-memberships">{memberTeamIds?.join(',')}</div>
+  ),
+  TeamSelector: ({ memberTeamIds }: { memberTeamIds: string[] | null }) => (
+    <div data-testid="team-selector-memberships">{memberTeamIds?.join(',')}</div>
+  ),
 }));
 
 vi.mock('@/features/feedback/feedback-dialog', () => ({
-  FeedbackDialog: ({ open }: { open: boolean }) =>
-    open ? <div role="dialog" aria-label="피드백 모달" /> : null,
+  FeedbackDialog: ({
+    onOpenChange,
+    open,
+  }: {
+    onOpenChange: (open: boolean) => void;
+    open: boolean;
+  }) =>
+    open ? (
+      <div role="dialog" aria-label="피드백 모달">
+        <button type="button" onClick={() => onOpenChange(false)}>
+          피드백 닫기
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock('@/i18n/navigation', () => ({
@@ -177,7 +214,6 @@ const labels = {
   inboxUnread: '알림함, 읽지 않은 알림 {count}개',
   mobileNavigation: '모바일 주 탐색',
   openIssueCreate: '이슈 만들기 열기',
-  openFeedback: '피드백 보내기',
   navigation: {
     inbox: '알림함',
     issues: '이슈',
@@ -186,9 +222,11 @@ const labels = {
     search: '검색',
     settings: '설정',
     teams: '팀',
+    workspace: '워크스페이스',
   },
   openSearch: '검색 열기',
   openTeamSelector: '팀 선택 열기',
+  openWorkspaceMenu: '워크스페이스 메뉴 열기',
   expandSection: '{section} 하위 목록 펼치기',
   collapseSection: '{section} 하위 목록 접기',
   profile: {
@@ -220,6 +258,7 @@ const labels = {
     uploading: '업로드 중',
   },
   userMenu: {
+    feedback: '피드백 보내기',
     loggingOut: '로그아웃 중',
     logout: '로그아웃',
     logoutError: '로그아웃 실패',
@@ -335,13 +374,23 @@ const labels = {
   },
   skipToContent: '본문으로 건너뛰기',
   teamSelector: {
+    allTeams: '모든 팀 보기',
     close: '팀 선택 닫기',
+    collapseSection: '{section} 구역 접기',
+    collapseTeam: '{team} 팀 메뉴 접기',
+    expandSection: '{section} 구역 펼치기',
+    expandTeam: '{team} 팀 메뉴 펼치기',
+    myTeamsEmpty: '참여 중인 팀이 없습니다',
+    teamBoard: '보드',
+    teamIssues: '이슈',
     description: '팀 선택 설명',
     emptyDescription: '팀 없음 설명',
     emptyTitle: '팀 없음',
     errorDescription: '팀 오류 설명',
     errorTitle: '팀 오류',
     loading: '팀 로딩',
+    myTeams: '내 팀',
+    otherTeams: '다른 팀',
     retry: '다시 시도',
     title: '팀',
   },
@@ -364,6 +413,13 @@ describe('AppShell', () => {
     vi.unstubAllGlobals();
   });
 
+  it('현재 멤버십의 소속 팀을 데스크톱과 모바일 팀 탐색에 전달한다', () => {
+    render(<AppShell labels={labels}>본문</AppShell>);
+
+    expect(screen.getByTestId('desktop-team-navigation-memberships')).toHaveTextContent('team-web');
+    expect(screen.getByTestId('team-selector-memberships')).toHaveTextContent('team-web');
+  });
+
   it('반복 탐색을 건너뛸 수 있는 본문 링크와 포커스 대상을 제공한다', () => {
     render(
       <AppShell labels={labels}>
@@ -379,25 +435,27 @@ describe('AppShell', () => {
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
   });
 
-  it('데스크톱과 모바일에서 내 작업, 알림함, 이슈, 프로젝트 순서를 유지한다', () => {
+  it('데스크톱은 개인·워크스페이스 구역으로 나누고 모바일은 기존 탭 순서를 유지한다', () => {
     render(
       <AppShell labels={labels}>
         <p>업무 내용</p>
       </AppShell>,
     );
 
-    const desktopLinks = within(
-      screen.getByRole('navigation', { name: labels.desktopNavigation }),
-    ).getAllByRole('link');
+    const desktopNavigation = screen.getByRole('navigation', { name: labels.desktopNavigation });
+    const desktopLinks = within(desktopNavigation).getAllByRole('link');
     expect(desktopLinks.map((link) => link.getAttribute('href'))).toEqual([
+      '/inbox',
       '/my-issues',
       '/my-issues?view=saved-my-work&sort=executionOrder&sortDirection=desc',
-      '/inbox',
       '/issues',
       '/issues?view=saved-issues&query=%EA%B8%B4%EA%B8%89&sort=priority&sortDirection=desc',
       '/projects',
       '/projects/project-1',
     ]);
+    expect(
+      within(desktopNavigation).getByRole('heading', { name: labels.navigation.workspace }),
+    ).toBeVisible();
 
     const mobileNavigation = screen.getByRole('navigation', { name: labels.mobileNavigation });
     expect(
@@ -414,6 +472,74 @@ describe('AppShell', () => {
       within(mobileNavigation).getByRole('button', { name: labels.openTeamSelector }),
     ).toBeVisible();
     expect(screen.getAllByRole('button', { name: labels.openSearch })).toHaveLength(2);
+  });
+
+  it('현재 워크스페이스 정보와 바로 보이는 설정 진입점을 제공한다', async () => {
+    const user = userEvent.setup();
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    expect(screen.getByRole('link', { name: labels.navigation.settings })).toHaveAttribute(
+      'href',
+      '/settings/members',
+    );
+
+    await user.click(screen.getByRole('button', { name: labels.openWorkspaceMenu }));
+
+    expect(screen.getAllByText('리벳 워크스페이스').length).toBeGreaterThan(0);
+  });
+
+  it('설정 화면에서는 사이드바 설정 진입점을 현재 위치로 표시한다', () => {
+    pathname = '/settings/members';
+    window.history.replaceState({}, '', '/ko/settings/members');
+    render(
+      <AppShell labels={labels}>
+        <p>설정 내용</p>
+      </AppShell>,
+    );
+
+    expect(screen.getByRole('link', { name: labels.navigation.settings })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  it('워크스페이스 구역 접기 상태를 브라우저 저장소에 기억한다', async () => {
+    const user = userEvent.setup();
+    const view = render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    const collapse = screen.getByRole('button', {
+      name: labels.collapseSection.replace('{section}', labels.navigation.workspace),
+    });
+    await user.click(collapse);
+
+    await waitFor(() =>
+      expect(window.localStorage.getItem('rivet:sidebar-collapsed-sections:v1')).toBe(
+        '["group:workspace"]',
+      ),
+    );
+
+    view.unmount();
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {
+          name: labels.expandSection.replace('{section}', labels.navigation.workspace),
+        }),
+      ).toHaveAttribute('aria-expanded', 'false'),
+    );
   });
 
   it('다른 목록을 거쳐도 membership별 이슈 저장된 보기 URL을 복원한다', async () => {
@@ -612,6 +738,23 @@ describe('AppShell', () => {
     fireEvent.keyDown(window, { code: 'KeyC', key: 'c' });
     expect(screen.queryByRole('dialog', { name: '검색 모달' })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '이슈 만들기 모달' })).not.toBeInTheDocument();
+  });
+
+  it('피드백 모달을 닫으면 열었던 사용자 메뉴 트리거로 포커스를 복원한다', async () => {
+    const user = userEvent.setup();
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    const trigger = screen.getAllByRole('button', { name: labels.userMenu.open })[0]!;
+    await user.click(trigger);
+    await user.click(screen.getByRole('button', { name: labels.userMenu.feedback }));
+    expect(screen.getByRole('dialog', { name: '피드백 모달' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: '피드백 닫기' }));
+    expect(trigger).toHaveFocus();
   });
 
   it('내 이슈 create 플래그를 소비해 만들기를 열고 다른 URL 상태는 유지한다', async () => {

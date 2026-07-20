@@ -147,6 +147,7 @@ export class TeamWorksService {
         const state = await transaction.workflowState.findFirst({
           select: { category: true, id: true, name: true },
           where: {
+            disabledAt: null,
             id: dto.workflowStateId,
             teamId: current.team.id,
             workspaceId: context.workspaceId,
