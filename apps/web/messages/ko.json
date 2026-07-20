@@ -151,6 +151,7 @@
       "title": "워크스페이스 초대",
       "description": "초대 내용을 확인하고 이 워크스페이스에 참여하세요.",
       "loading": "초대 링크를 확인하는 중입니다.",
+      "redirecting": "워크스페이스로 이동하는 중입니다.",
       "workspaceLabel": "워크스페이스",
       "invitedByLabel": "초대한 사람",
       "inviteEmailLabel": "초대받은 이메일",

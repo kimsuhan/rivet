@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   getAuthControllerGetSessionQueryKey,
@@ -39,6 +39,7 @@ type InviteLabels = AuthFrameLabels & {
   loginRequiredDescription: string;
   loginRequiredTitle: string;
   continuationDescription: string;
+  redirecting: string;
   retry: string;
   sessionErrorDescription: string;
   sessionErrorTitle: string;
@@ -110,6 +111,8 @@ export function InviteScreen({
   const rawToken = useRef<string | null>(null);
   const [previewSource, setPreviewSource] = useState<'loading' | 'start' | 'current'>('loading');
   const [isRecoveringSession, setIsRecoveringSession] = useState(false);
+  const [isAutoRecovering, setIsAutoRecovering] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
   const startContinuation = useInvitationAuthControllerStartContinuation();
   const currentContinuation = useInvitationAuthControllerGetContinuation({
     query: { enabled: previewSource === 'current', retry: false },
@@ -146,6 +149,11 @@ export function InviteScreen({
     });
   }, [startContinuation]);
 
+  const goToWorkspace = useCallback(() => {
+    setIsLeaving(true);
+    router.replace('/my-issues');
+  }, [router]);
+
   const preview =
     previewSource === 'start'
       ? startContinuation
@@ -159,14 +167,15 @@ export function InviteScreen({
     }
 
     didRecoverUsedPreview.current = true;
-    setIsRecoveringSession(true);
+    setIsAutoRecovering(true);
     void session.refetch().then((refreshedSession) => {
-      setIsRecoveringSession(false);
       if (refreshedSession.data?.authenticated && refreshedSession.data.membership) {
-        router.replace('/my-issues');
+        goToWorkspace();
+        return;
       }
+      setIsAutoRecovering(false);
     });
-  }, [previewErrorCode, router, session]);
+  }, [goToWorkspace, previewErrorCode, session]);
 
   const acceptInvitation = () => {
     if (accept.isPending) {
@@ -178,6 +187,7 @@ export function InviteScreen({
       undefined,
       {
         onSuccess: async () => {
+          setIsLeaving(true);
           await queryClient.invalidateQueries({
             queryKey: getAuthControllerGetSessionQueryKey(),
           });
@@ -193,10 +203,11 @@ export function InviteScreen({
 
           setIsRecoveringSession(true);
           const refreshedSession = await session.refetch();
-          setIsRecoveringSession(false);
           if (refreshedSession.data?.authenticated && refreshedSession.data.membership) {
-            router.replace('/my-issues');
+            goToWorkspace();
+            return;
           }
+          setIsRecoveringSession(false);
         },
       },
     );
@@ -205,10 +216,11 @@ export function InviteScreen({
   const recoverSession = async () => {
     setIsRecoveringSession(true);
     const refreshedSession = await session.refetch();
-    setIsRecoveringSession(false);
     if (refreshedSession.data?.authenticated && refreshedSession.data.membership) {
-      router.replace('/my-issues');
+      goToWorkspace();
+      return;
     }
+    setIsRecoveringSession(false);
   };
 
   const continueInCurrentWorkspace = () => {
@@ -217,6 +229,7 @@ export function InviteScreen({
     }
     dismissContinuation.mutate(undefined, {
       onSuccess: async () => {
+        setIsLeaving(true);
         await queryClient.invalidateQueries({ queryKey: getAuthControllerGetSessionQueryKey() });
         router.replace('/my-issues');
       },
@@ -224,6 +237,8 @@ export function InviteScreen({
   };
 
   if (
+    isLeaving ||
+    isAutoRecovering ||
     previewSource === 'loading' ||
     (preview && !preview.data && !preview.error)
   ) {
@@ -231,7 +246,11 @@ export function InviteScreen({
       <AuthFrame labels={labels}>
         <div role="status" className="text-muted-foreground flex items-center justify-center gap-2">
           <Spinner aria-hidden="true" />
-          {labels.loading}
+          {isLeaving
+            ? labels.redirecting
+            : isAutoRecovering
+              ? labels.sessionLoading
+              : labels.loading}
         </div>
       </AuthFrame>
     );
