@@ -1,7 +1,7 @@
 import { HttpStatus } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 
-import { ProjectRole, ProjectStatus } from '@rivet/database';
+import { MembershipRole, ProjectStatus } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ProjectRepository } from './project.repository';
@@ -11,6 +11,7 @@ import { ProjectsService } from './projects.service';
 describe('ProjectsService', () => {
   const context = {
     membershipId: '2e0792d5-eac3-44c1-87c7-56f07ebaa620',
+    membershipRole: MembershipRole.ADMIN,
     workspaceId: '3dc0b213-eafa-450c-ad12-49a7d927c7b8',
   };
   const projectId = '953685f0-4921-41cd-8422-d8a1ccc3f547';
@@ -19,6 +20,7 @@ describe('ProjectsService', () => {
   const leadMembershipId = 'dd151af4-f97e-4cf2-ab03-43be72bb2782';
   const teamId = 'fa0b2a20-4077-4e13-b04e-7ec7306cd988';
   const otherTeamId = 'd415fc6b-4531-459a-898f-82659e5f24bb';
+  const projectTeamId = '22846213-d248-492b-ac7c-652873531fb2';
   const project = {
     archivedAt: null,
     createdAt: new Date('2026-07-11T01:00:00.000Z'),
@@ -31,9 +33,11 @@ describe('ProjectsService', () => {
       user: { displayName: '프로젝트 리드', id: '896b0246-18d1-476b-b1d6-7ecfa6ea9f79' },
     },
     name: '결제 개편',
-    roleTeams: [
+    projectTeams: [
       {
-        role: ProjectRole.BACKEND,
+        deactivatedAt: null,
+        id: projectTeamId,
+        isActive: true,
         team: { archivedAt: null, id: teamId, key: 'API', name: 'API 팀' },
       },
     ],
@@ -61,10 +65,11 @@ describe('ProjectsService', () => {
     issue: { findMany: jest.fn() },
     outboxEvent: { create: jest.fn() },
     project: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
-    projectRoleTeam: {
+    projectTeam: {
       createMany: jest.fn(),
-      deleteMany: jest.fn(),
       findMany: jest.fn(),
+      updateMany: jest.fn(),
+      upsert: jest.fn(),
     },
     teamWork: { findMany: jest.fn() },
   };
@@ -87,9 +92,12 @@ describe('ProjectsService', () => {
     transaction.project.create.mockResolvedValue({ id: projectId });
     transaction.project.findFirst.mockResolvedValue(project);
     transaction.project.update.mockResolvedValue({ id: projectId });
-    transaction.projectRoleTeam.findMany.mockResolvedValue([{ role: ProjectRole.BACKEND, teamId }]);
-    transaction.projectRoleTeam.createMany.mockResolvedValue({ count: 1 });
-    transaction.projectRoleTeam.deleteMany.mockResolvedValue({ count: 1 });
+    transaction.projectTeam.findMany.mockResolvedValue([
+      { id: projectTeamId, isActive: true, teamId },
+    ]);
+    transaction.projectTeam.createMany.mockResolvedValue({ count: 1 });
+    transaction.projectTeam.updateMany.mockResolvedValue({ count: 1 });
+    transaction.projectTeam.upsert.mockResolvedValue({ id: projectTeamId });
     transaction.activityEvent.create.mockResolvedValue({ id: 'activity-1' });
     transaction.activityEvent.createMany.mockResolvedValue({ count: 1 });
     transaction.issue.findMany.mockResolvedValue([]);
@@ -142,7 +150,7 @@ describe('ProjectsService', () => {
     expect(result.nextCursor).not.toContain(secondProjectId);
     expect(database.client.project.findMany).toHaveBeenCalledWith({
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-      select: expect.objectContaining({ id: true, roleTeams: expect.any(Object) }),
+      select: expect.objectContaining({ id: true, projectTeams: expect.any(Object) }),
       take: 3,
       where: { archivedAt: null, deletedAt: null, workspaceId: context.workspaceId },
     });
@@ -208,7 +216,7 @@ describe('ProjectsService', () => {
     );
   });
 
-  it('normalizes input and creates role teams and activity atomically', async () => {
+  it('normalizes input and creates project teams and activity atomically', async () => {
     transaction.$queryRaw
       .mockResolvedValueOnce([{ id: context.workspaceId }])
       .mockResolvedValueOnce([{ id: leadMembershipId, status: 'ACTIVE' }])
@@ -218,7 +226,7 @@ describe('ProjectsService', () => {
       description: '  결제 흐름을 개편한다.  ',
       leadMembershipId,
       name: '  결제 개편  ',
-      roleTeams: [{ role: ProjectRole.BACKEND, teamId }],
+      teamIds: [teamId],
       startDate: '2026-07-15',
       targetDate: '2026-08-15',
     });
@@ -238,8 +246,8 @@ describe('ProjectsService', () => {
       },
       select: { id: true },
     });
-    expect(transaction.projectRoleTeam.createMany).toHaveBeenCalledWith({
-      data: [{ projectId, role: ProjectRole.BACKEND, teamId, workspaceId: context.workspaceId }],
+    expect(transaction.projectTeam.createMany).toHaveBeenCalledWith({
+      data: [{ projectId, teamId, workspaceId: context.workspaceId }],
     });
     expect(transaction.activityEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ eventType: 'PROJECT_CREATED', projectId }),
@@ -261,9 +269,8 @@ describe('ProjectsService', () => {
         id: expect.any(String),
         payload: {
           hasTargetDate: true,
-          roleCount: 1,
-          roles: [ProjectRole.BACKEND],
-          schemaVersion: 1,
+          schemaVersion: 2,
+          teamCount: 1,
         },
         workspaceId: context.workspaceId,
       },
@@ -274,7 +281,7 @@ describe('ProjectsService', () => {
     await expect(
       service.create(context, {
         name: '잘못된 일정',
-        roleTeams: [{ role: ProjectRole.BACKEND, teamId }],
+        teamIds: [teamId],
         startDate: '2026-08-01',
         targetDate: '2026-07-31',
       }),
@@ -299,7 +306,7 @@ describe('ProjectsService', () => {
     expect(transaction.project.update).not.toHaveBeenCalled();
   });
 
-  it('returns blocking issue details when replacing an in-use role team', async () => {
+  it('returns blocking issue details when excluding an in-use project team', async () => {
     transaction.$queryRaw
       .mockResolvedValueOnce([{ id: context.workspaceId }])
       .mockResolvedValueOnce([lockedProject])
@@ -309,34 +316,36 @@ describe('ProjectsService', () => {
         id: '33490c3c-433a-47eb-81b7-d6d7d85294cf',
         identifier: 'API-42',
         issue: { title: '결제 API' },
-        projectRole: ProjectRole.BACKEND,
-        teamId,
+        projectTeamId,
+        team: { id: teamId, key: 'API', name: 'API 팀' },
       },
     ]);
 
     await expect(
       service.update(context, projectId, {
-        roleTeams: [{ role: ProjectRole.BACKEND, teamId: otherTeamId }],
+        teamIds: [otherTeamId],
         version: 1,
       }),
     ).rejects.toMatchObject({
       response: {
-        code: 'PROJECT_ROLE_IN_USE',
+        code: 'PROJECT_TEAM_IN_USE',
         details: { issues: [expect.objectContaining({ identifier: 'API-42' })] },
       },
       status: HttpStatus.CONFLICT,
     });
-    expect(transaction.projectRoleTeam.deleteMany).not.toHaveBeenCalled();
+    expect(transaction.projectTeam.updateMany).not.toHaveBeenCalled();
     expect(transaction.project.update).not.toHaveBeenCalled();
   });
 
-  it('replaces only changed role rows and records project activities with the version update', async () => {
+  it('deactivates and reactivates only changed project teams and records activities atomically', async () => {
     const updatedProject = {
       ...project,
       name: '결제 전면 개편',
-      roleTeams: [
+      projectTeams: [
         {
-          role: ProjectRole.BACKEND,
+          deactivatedAt: null,
+          id: 'project-team-other',
+          isActive: true,
           team: { archivedAt: null, id: otherTeamId, key: 'BE', name: '백엔드 팀' },
         },
       ],
@@ -352,7 +361,7 @@ describe('ProjectsService', () => {
 
     const result = await service.update(context, projectId, {
       name: '결제 전면 개편',
-      roleTeams: [{ role: ProjectRole.BACKEND, teamId: otherTeamId }],
+      teamIds: [otherTeamId],
       status: ProjectStatus.IN_PROGRESS,
       version: 1,
     });
@@ -362,28 +371,25 @@ describe('ProjectsService', () => {
       progress: { completed: 1, percentage: 50, total: 2 },
       version: 2,
     });
-    expect(transaction.projectRoleTeam.deleteMany).toHaveBeenCalledWith({
+    expect(transaction.projectTeam.updateMany).toHaveBeenCalledWith({
+      data: { deactivatedAt: expect.any(Date), isActive: false },
       where: {
+        isActive: true,
         projectId,
-        role: { in: [ProjectRole.BACKEND] },
+        teamId: { notIn: [otherTeamId] },
         workspaceId: context.workspaceId,
       },
     });
-    expect(transaction.projectRoleTeam.createMany).toHaveBeenCalledWith({
-      data: [
-        {
-          projectId,
-          role: ProjectRole.BACKEND,
-          teamId: otherTeamId,
-          workspaceId: context.workspaceId,
-        },
-      ],
+    expect(transaction.projectTeam.upsert).toHaveBeenCalledWith({
+      create: { projectId, teamId: otherTeamId, workspaceId: context.workspaceId },
+      update: { deactivatedAt: null, isActive: true },
+      where: { projectId_teamId: { projectId, teamId: otherTeamId } },
     });
     expect(transaction.activityEvent.createMany).toHaveBeenCalledWith({
       data: expect.arrayContaining([
         expect.objectContaining({ eventType: 'PROJECT_UPDATED', fieldName: 'name' }),
         expect.objectContaining({ eventType: 'PROJECT_UPDATED', fieldName: 'status' }),
-        expect.objectContaining({ eventType: 'PROJECT_UPDATED', fieldName: 'roleTeams' }),
+        expect.objectContaining({ eventType: 'PROJECT_UPDATED', fieldName: 'projectTeams' }),
       ]),
     });
     const payload = transaction.$executeRaw.mock.calls[0]?.[2] as string;

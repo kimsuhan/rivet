@@ -15,13 +15,13 @@ import {
   ValidateIf,
 } from 'class-validator';
 
-import { IssuePriority, ProjectRole } from '@rivet/database';
+import { IssuePriority } from '@rivet/database';
 
 export const ISSUE_TEMPLATE_UNAVAILABLE_REASONS = [
   'ARCHIVED',
   'LABEL_UNAVAILABLE',
   'PROJECT_UNAVAILABLE',
-  'ROLE_UNAVAILABLE',
+  'PROJECT_TEAM_UNAVAILABLE',
   'TEAM_UNAVAILABLE',
 ] as const;
 
@@ -86,10 +86,11 @@ export class CreateIssueTemplateDto {
   @IsUUID('4', { message: '기본 프로젝트 ID가 올바르지 않습니다.' })
   projectId?: string | null;
 
-  @ApiPropertyOptional({ enum: ProjectRole, nullable: true })
+  @ApiPropertyOptional({ description: '기본 프로젝트의 활성 참여 팀 ID', format: 'uuid', nullable: true, type: String })
+  @Transform(({ value }) => normalizeUuid(value))
   @ValidateIf((_dto, value: unknown) => value !== null && value !== undefined)
-  @IsEnum(ProjectRole, { message: '최초 역할이 올바르지 않습니다.' })
-  initialRole?: ProjectRole | null;
+  @IsUUID('4', { message: '최초 팀 ID가 올바르지 않습니다.' })
+  initialProjectTeamId?: string | null;
 }
 
 export class UpdateIssueTemplateDto {
@@ -134,10 +135,11 @@ export class UpdateIssueTemplateDto {
   @IsUUID('4', { message: '기본 프로젝트 ID가 올바르지 않습니다.' })
   projectId?: string | null;
 
-  @ApiPropertyOptional({ enum: ProjectRole, nullable: true })
+  @ApiPropertyOptional({ description: '기본 프로젝트의 활성 참여 팀 ID', format: 'uuid', nullable: true, type: String })
+  @Transform(({ value }) => normalizeUuid(value))
   @ValidateIf((_dto, value: unknown) => value !== null && value !== undefined)
-  @IsEnum(ProjectRole, { message: '최초 역할이 올바르지 않습니다.' })
-  initialRole?: ProjectRole | null;
+  @IsUUID('4', { message: '최초 팀 ID가 올바르지 않습니다.' })
+  initialProjectTeamId?: string | null;
 }
 
 export class ArchiveIssueTemplateDto {
@@ -170,8 +172,8 @@ export class IssueTemplateResponseDto {
   @ApiProperty({ format: 'uuid', nullable: true, type: String })
   projectId!: string | null;
 
-  @ApiProperty({ enum: ProjectRole, nullable: true })
-  initialRole!: ProjectRole | null;
+  @ApiProperty({ format: 'uuid', nullable: true, type: String })
+  initialProjectTeamId!: string | null;
 
   @ApiProperty()
   archived!: boolean;

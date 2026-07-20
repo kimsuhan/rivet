@@ -11,7 +11,15 @@ import {
 type Session = { membership: { id: string } | null };
 type Team = { id: string; key: string };
 type TeamList = { items: Team[] };
-type Project = { id: string; name: string };
+type Project = {
+  id: string;
+  name: string;
+  projectTeams: Array<{
+    active: boolean;
+    id: string;
+    team: { id: string; key: string; name: string };
+  }>;
+};
 type IssueTemplate = {
   archived: boolean;
   descriptionMarkdown: string;
@@ -101,15 +109,17 @@ test('A4 템플릿 관리·적용·충돌·과거 이슈 불변성을 검증한�
     const membership = session.membership;
     const webTeam = teams.items.find((team) => team.key === 'WEB');
     if (!membership || !webTeam) throw new Error('A4 프로젝트 준비 정보를 찾지 못했습니다.');
-    await apiRequest<Project>(page, '/projects', {
+    const project = await apiRequest<Project>(page, '/projects', {
       body: {
         leadMembershipId: membership.id,
         name: projectName,
-        roleTeams: [{ role: 'WEB_FRONTEND', teamId: webTeam.id }],
+        teamIds: [webTeam.id],
         status: 'PLANNED',
       },
       method: 'POST',
     });
+    const webProjectTeam = project.projectTeams.find(({ team }) => team.id === webTeam.id);
+    if (!webProjectTeam) throw new Error('A4 프로젝트 참여 팀을 찾지 못했습니다.');
 
     await page.goto('/issues?create=1');
     const emptyTemplateDialog = page.getByRole('dialog', { name: '이슈 만들기' });
@@ -144,7 +154,7 @@ test('A4 템플릿 관리·적용·충돌·과거 이슈 불변성을 검증한�
     await createDialog.getByLabel('프로젝트 (선택)').click();
     await page.getByRole('option', { name: projectName, exact: true }).click();
     await createDialog.getByLabel('처음 작업할 팀 (선택)').click();
-    await page.getByRole('option', { name: '웹 프론트', exact: true }).click();
+    await page.getByRole('option', { name: '웹', exact: true }).click();
     await createDialog.getByRole('button', { name: '템플릿 저장' }).click();
     await expect(createDialog).toBeHidden();
     await expect(page.getByText(templateName, { exact: true })).toBeVisible();
@@ -235,8 +245,8 @@ test('A4 템플릿 관리·적용·충돌·과거 이슈 불변성을 검증한�
     await expect(editor).toContainText('서버에서 바뀐 설명');
     await expect(titleInput).toHaveValue(issueTitle);
     await expect(templateTrigger).toHaveAccessibleName(`템플릿: ${templateName}`);
-    await issueDialog.getByRole('button', { name: /^역할(?:$|:)/u }).click();
-    await expect(page.getByRole('checkbox', { name: '웹 프론트' })).toBeChecked();
+    await issueDialog.getByRole('button', { name: /^참여 팀(?:$|:)/u }).click();
+    await expect(page.getByRole('checkbox', { name: '웹' })).toBeChecked();
     await page.keyboard.press('Escape');
 
     await editor.fill('사용자가 적용 후 수정한 설명');
@@ -354,15 +364,17 @@ test('빈 템플릿 로딩과 적용 후 보관된 템플릿의 입력·포커�
       body: {
         leadMembershipId: membership.id,
         name: `A4 엣지 프로젝트 ${runId}`,
-        roleTeams: [{ role: 'WEB_FRONTEND', teamId: webTeam.id }],
+        teamIds: [webTeam.id],
         status: 'PLANNED',
       },
       method: 'POST',
     });
+    const projectTeam = project.projectTeams.find(({ team }) => team.id === webTeam.id);
+    if (!projectTeam) throw new Error('A4 엣지 프로젝트 참여 팀을 찾지 못했습니다.');
     const template = await apiRequest<IssueTemplate>(page, '/issue-templates', {
       body: {
         descriptionMarkdown: '보관 뒤에도 보존할 설명',
-        initialRole: 'WEB_FRONTEND',
+        initialProjectTeamId: projectTeam.id,
         labelIds: [],
         name: templateName,
         priority: 'MEDIUM',

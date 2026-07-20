@@ -47,13 +47,17 @@ const project = {
   },
   name: '첫 프로젝트',
   progress: { completed: 2, percentage: 50, total: 4 },
-  roleTeams: [
+  projectTeams: [
     {
-      role: 'BACKEND' as const,
+      active: true,
+      deactivatedAt: null,
+      id: 'project-team-api',
       team: { archived: false, id: 'team-api', key: 'API', name: 'API 팀' },
     },
     {
-      role: 'WEB_FRONTEND' as const,
+      active: true,
+      deactivatedAt: null,
+      id: 'project-team-web',
       team: { archived: false, id: 'team-web', key: 'WEB', name: '웹 팀' },
     },
   ],
@@ -87,7 +91,7 @@ describe('ProjectListScreen', () => {
 
   afterEach(cleanup);
 
-  it('프로젝트의 상태, 역할별 팀과 실제 진행률을 함께 표시한다', () => {
+  it('프로젝트의 상태, 참여 팀과 실제 진행률을 함께 표시한다', () => {
     render(<ProjectListScreen />, { wrapper: Wrapper });
 
     expect(useProjectsControllerList).toHaveBeenCalledWith(
@@ -105,8 +109,8 @@ describe('ProjectListScreen', () => {
       `/projects/${project.id}`,
     );
     expect(screen.getByText('진행 중')).toBeVisible();
-    expect(screen.getByText('백엔드')).toBeVisible();
-    expect(screen.getByText('웹 프론트')).toBeVisible();
+    expect(screen.getByText('API 팀')).toBeVisible();
+    expect(screen.getByText('웹 팀')).toBeVisible();
     expect(screen.getByRole('progressbar', { name: '완료 2 / 4 · 50%' })).toHaveValue(50);
   });
 

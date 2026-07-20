@@ -5,7 +5,6 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { IssueTemplateResponseDtoInitialRole } from './issueTemplateResponseDtoInitialRole';
 import type { IssueTemplateResponseDtoPriority } from './issueTemplateResponseDtoPriority';
 import type { IssueTemplateResponseDtoUnavailableReason } from './issueTemplateResponseDtoUnavailableReason';
 
@@ -18,7 +17,7 @@ export interface IssueTemplateResponseDto {
   /** @nullable */
   projectId: string | null;
   /** @nullable */
-  initialRole: IssueTemplateResponseDtoInitialRole;
+  initialProjectTeamId: string | null;
   archived: boolean;
   /** @minimum 1 */
   version: number;

@@ -20,8 +20,8 @@ if (process.env.NODE_ENV === 'test') {
 
   assertSafeTestDatabaseUrl(testEnvironment.parsed.DATABASE_URL);
 } else {
-  loadEnv({ path: resolve(rootDirectory, '.env'), quiet: true });
-  loadEnv({ path: resolve(rootDirectory, '.env.test.local'), override: false, quiet: true });
+  loadEnv({ path: resolve(rootDirectory, '.env.local'), quiet: true });
+  loadEnv({ path: resolve(rootDirectory, '.env'), override: false, quiet: true });
 }
 
 export default defineConfig({

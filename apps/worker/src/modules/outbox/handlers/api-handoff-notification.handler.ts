@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
 
-import { MembershipStatus, NotificationType, ProjectRole } from '@rivet/database';
+import { MembershipStatus, NotificationType } from '@rivet/database';
 import type { ApiHandoffCreatedOutboxPayload } from '@rivet/event-contracts';
 
 import { DatabaseService } from '../../../common/database/database.service';
@@ -60,7 +60,6 @@ export class ApiHandoffNotificationHandler {
           deletedAt: true,
           id: true,
           identifier: true,
-          projectRole: true,
           issue: {
             select: {
               subscriptions: {
@@ -71,6 +70,7 @@ export class ApiHandoffNotificationHandler {
           },
           team: {
             select: {
+              name: true,
               teamMembers: {
                 select: { membershipId: true },
                 where: {
@@ -87,18 +87,11 @@ export class ApiHandoffNotificationHandler {
         throw new PermanentOutboxError('OUTBOX_EVENT_CONTRACT_INVALID');
       }
 
-      const projectRoleOrder = new Map([
-        [ProjectRole.BACKEND, 0],
-        [ProjectRole.WEB_FRONTEND, 1],
-        [ProjectRole.APP_FRONTEND, 2],
-      ]);
       const orderedTargetTeamWorks = targetTeamWorks
         .filter(({ deletedAt }) => deletedAt === null)
         .sort((left, right) => {
-          const roleOrder = projectRoleOrder.get(left.projectRole) ?? projectRoleOrder.size;
-          const otherRoleOrder = projectRoleOrder.get(right.projectRole) ?? projectRoleOrder.size;
           return (
-            roleOrder - otherRoleOrder ||
+            left.team.name.localeCompare(right.team.name, 'ko') ||
             left.identifier.localeCompare(right.identifier) ||
             left.id.localeCompare(right.id)
           );

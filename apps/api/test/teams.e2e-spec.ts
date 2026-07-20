@@ -193,6 +193,9 @@ describe('M2 team and workflow management', () => {
       });
       await database.client.teamWork.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.issue.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+      await database.client.projectTeam.deleteMany({
+        where: { workspaceId: { in: workspaceIds } },
+      });
       await database.client.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.workflowState.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
@@ -333,20 +336,58 @@ describe('M2 team and workflow management', () => {
       .expect(200);
     expect(renamedState.body).toMatchObject({ name: '대기', version: 2 });
 
-    const statesForOrder = workflow.body.items.map((state: { id: string; version: number }) => ({
-      id: state.id,
-      version: state.id === renamedState.body.id ? renamedState.body.version : state.version,
-    }));
+    const statesForOrder = workflow.body.items.map(
+      (state: { category: string; id: string; version: number }) => ({
+        category: state.category,
+        id: state.id,
+        version: state.id === renamedState.body.id ? renamedState.body.version : state.version,
+      }),
+    );
+    const startedIndexes = statesForOrder
+      .map((state: { category: string }, index: number) =>
+        state.category === 'STARTED' ? index : -1,
+      )
+      .filter((index: number) => index >= 0);
+    const firstStartedIndex = startedIndexes[0] as number;
+    const secondStartedIndex = startedIndexes[1] as number;
+    [statesForOrder[firstStartedIndex], statesForOrder[secondStartedIndex]] = [
+      statesForOrder[secondStartedIndex],
+      statesForOrder[firstStartedIndex],
+    ];
     const reordered = await request(app.getHttpServer())
       .put(`/api/v1/teams/${teamId}/workflow-states/order`)
       .set('Cookie', adminCookie)
       .set('Origin', WEB_ORIGIN)
       .set('X-CSRF-Token', adminCsrfToken)
-      .send({ states: statesForOrder.reverse() })
+      .send({
+        states: statesForOrder.map(({ id, version }: { id: string; version: number }) => ({
+          id,
+          version,
+        })),
+      })
       .expect(200);
     expect(reordered.body.items.map((state: { position: number }) => state.position)).toEqual([
       0, 1, 2, 3, 4, 5, 6,
     ]);
+
+    const rejectedCrossCategoryOrder = await request(app.getHttpServer())
+      .put(`/api/v1/teams/${teamId}/workflow-states/order`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({
+        states: [...reordered.body.items]
+          .reverse()
+          .map((state: { id: string; version: number }) => ({
+            id: state.id,
+            version: state.version,
+          })),
+      })
+      .expect(422);
+    expect(rejectedCrossCategoryOrder.body).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      fieldErrors: { states: ['상태는 같은 시스템 범주 안에서만 순서를 바꿀 수 있습니다.'] },
+    });
 
     const deletableState = reordered.body.items.find(
       (state: { name: string }) => state.name === '보류',
@@ -442,6 +483,7 @@ describe('M2 team and workflow management', () => {
 
     await database.client.teamWork.deleteMany({ where: { issueId: issue.id } });
     await database.client.issue.delete({ where: { id: issue.id } });
+    await database.client.projectTeam.deleteMany({ where: { projectId: project.id } });
     await database.client.project.delete({ where: { id: project.id } });
     const compactedWorkflow = await request(app.getHttpServer())
       .get(`/api/v1/teams/${teamId}/workflow-states`)
@@ -450,6 +492,47 @@ describe('M2 team and workflow management', () => {
     expect(
       compactedWorkflow.body.items.map((state: { position: number }) => state.position),
     ).toEqual([0, 1, 2, 3, 4, 5]);
+
+    const createdState = await request(app.getHttpServer())
+      .post(`/api/v1/teams/${teamId}/workflow-states`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({ category: 'COMPLETED', name: '검증 완료' })
+      .expect(201);
+    expect(createdState.body).toMatchObject({
+      category: 'COMPLETED',
+      isDefault: false,
+      name: '검증 완료',
+      position: 5,
+      version: 1,
+    });
+
+    const changedDefault = await request(app.getHttpServer())
+      .post(`/api/v1/workflow-states/${createdState.body.id}/default`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({ version: createdState.body.version })
+      .expect(200);
+    expect(
+      changedDefault.body.items.filter((state: { isDefault: boolean }) => state.isDefault),
+    ).toEqual([
+      expect.objectContaining({
+        category: 'COMPLETED',
+        id: createdState.body.id,
+        name: '검증 완료',
+      }),
+    ]);
+
+    const staleDefault = await request(app.getHttpServer())
+      .post(`/api/v1/workflow-states/${createdState.body.id}/default`)
+      .set('Cookie', adminCookie)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({ version: createdState.body.version })
+      .expect(409);
+    expect(staleDefault.body.code).toBe('VERSION_CONFLICT');
 
     const hiddenForeignState = await request(app.getHttpServer())
       .patch(`/api/v1/workflow-states/${foreignStateId}`)

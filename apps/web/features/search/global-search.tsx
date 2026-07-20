@@ -51,7 +51,6 @@ export type GlobalSearchLabels = {
   issue: string;
   teamWork: string;
   noProject: string;
-  roles: Record<'APP_FRONTEND' | 'BACKEND' | 'WEB_FRONTEND', string>;
   issueStatuses: Record<
     'UNSORTED' | 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE' | 'PAUSED' | 'CANCELED',
     string
@@ -183,7 +182,7 @@ export function GlobalSearch({
                   <span className="text-muted-foreground mt-1 block truncate text-xs">
                     {result.issue.project.name}
                     {work
-                      ? ` · ${labels.roles[work.projectRole]} · ${work.team.name}`
+                      ? ` · ${work.projectTeam.team.key} · ${work.projectTeam.team.name}`
                       : ` · ${labels.issueStatuses[result.issue.status]}`}
                   </span>
                 </span>

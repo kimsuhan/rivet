@@ -19,7 +19,7 @@ import { shouldAutoStartOnAssignment } from './domain/team-work-transition';
 import type {
   AssignTeamWorksDto,
   ClaimTeamWorkDto,
-  InitialRoleAssignmentDto,
+  InitialTeamAssignmentDto,
   StartIssueDto,
 } from './dto/issue-request.dto';
 import type {
@@ -83,7 +83,7 @@ export class IssueAssignmentService {
         context,
         issueId,
         current.projectId,
-        dto.roleAssignments,
+        dto.teamAssignments,
         dto.requireCurrentUserTeamMembership,
       );
       await this.statuses.recalculate(transaction, context.workspaceId, issueId);
@@ -109,7 +109,7 @@ export class IssueAssignmentService {
         transaction,
         context.workspaceId,
         issueId,
-        dto.projectRole,
+        dto.projectTeamId,
         dto.teamWorkId,
       );
       if (candidates.length !== 1)
@@ -310,29 +310,43 @@ export class IssueAssignmentService {
     context: IssueMutationContext,
     issueId: string,
     projectId: string,
-    assignments: InitialRoleAssignmentDto[],
+    assignments: InitialTeamAssignmentDto[],
     requireCurrentUserTeamMembership = false,
   ): Promise<TeamWorkRow[]> {
     const created: TeamWorkRow[] = [];
     for (const assignment of assignments) {
-      const roleTeam = await transaction.projectRoleTeam.findUnique({
-        select: { teamId: true },
-        where: { projectId_role: { projectId, role: assignment.projectRole } },
+      const projectTeam = await transaction.projectTeam.findFirst({
+        select: {
+          id: true,
+          team: { select: { archivedAt: true, id: true, key: true, name: true } },
+          teamId: true,
+        },
+        where: {
+          id: assignment.projectTeamId,
+          isActive: true,
+          projectId,
+          team: { archivedAt: null },
+          workspaceId: context.workspaceId,
+        },
       });
-      if (!roleTeam)
-        unprocessable('INITIAL_ROLE_NOT_AVAILABLE', '프로젝트에 설정된 역할만 시작할 수 있습니다.');
+      if (!projectTeam) {
+        unprocessable(
+          'INITIAL_TEAM_NOT_AVAILABLE',
+          '현재 프로젝트의 활성 참여 팀만 시작할 수 있습니다.',
+        );
+      }
       if (requireCurrentUserTeamMembership)
         await this.assertTeamMember(
           transaction,
           context.workspaceId,
-          roleTeam.teamId,
+          projectTeam.teamId,
           context.membershipId,
         );
       if (assignment.assigneeMembershipId)
         await this.assertTeamMember(
           transaction,
           context.workspaceId,
-          roleTeam.teamId,
+          projectTeam.teamId,
           assignment.assigneeMembershipId,
         );
       const reusable = await transaction.teamWork.findFirst({
@@ -346,8 +360,8 @@ export class IssueAssignmentService {
         where: {
           deletedAt: null,
           issueId,
-          projectRole: assignment.projectRole,
-          teamId: roleTeam.teamId,
+          projectTeamId: projectTeam.id,
+          teamId: projectTeam.teamId,
           workflowState: { category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] } },
           workspaceId: context.workspaceId,
         },
@@ -366,7 +380,7 @@ export class IssueAssignmentService {
             ? await this.repository.firstUnstartedStateId(
                 transaction,
                 context.workspaceId,
-                roleTeam.teamId,
+                projectTeam.teamId,
               )
             : null;
           await transaction.teamWork.update({
@@ -424,12 +438,12 @@ export class IssueAssignmentService {
       }
       await transaction.$queryRaw`
         SELECT "id" FROM "teams"
-        WHERE "id" = ${roleTeam.teamId}::uuid AND "workspace_id" = ${context.workspaceId}::uuid
+        WHERE "id" = ${projectTeam.teamId}::uuid AND "workspace_id" = ${context.workspaceId}::uuid
         FOR UPDATE
       `;
       const team = await transaction.team.findFirst({
         select: { id: true, key: true, nextIssueNumber: true },
-        where: { archivedAt: null, id: roleTeam.teamId, workspaceId: context.workspaceId },
+        where: { archivedAt: null, id: projectTeam.teamId, workspaceId: context.workspaceId },
       });
       const workflowState = await transaction.workflowState.findFirst({
         orderBy: assignment.assigneeMembershipId
@@ -437,10 +451,8 @@ export class IssueAssignmentService {
           : [{ isDefault: 'desc' }, { position: 'asc' }, { id: 'asc' }],
         select: { id: true },
         where: {
-          ...(assignment.assigneeMembershipId
-            ? { category: StateCategory.UNSTARTED }
-            : { category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] } }),
-          teamId: roleTeam.teamId,
+          ...(assignment.assigneeMembershipId ? { category: StateCategory.UNSTARTED } : {}),
+          teamId: projectTeam.teamId,
           workspaceId: context.workspaceId,
         },
       });
@@ -456,7 +468,7 @@ export class IssueAssignmentService {
           createdByMembershipId: context.membershipId,
           identifier: `${team.key}-${team.nextIssueNumber}`,
           issueId,
-          projectRole: assignment.projectRole,
+          projectTeamId: projectTeam.id,
           sequenceNumber: team.nextIssueNumber,
           teamId: team.id,
           workflowStateId: workflowState.id,
@@ -480,7 +492,9 @@ export class IssueAssignmentService {
           actorMembershipId: context.membershipId,
           afterData: {
             identifier: `${team.key}-${team.nextIssueNumber}`,
-            projectRole: assignment.projectRole,
+            projectTeamId: projectTeam.id,
+            teamId: team.id,
+            teamKey: team.key,
           },
           eventType: 'TEAM_WORK_CREATED',
           issueId,

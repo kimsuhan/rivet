@@ -79,7 +79,7 @@ export class MemberTeamSummaryResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
 
-  @ApiProperty({ example: '프론트 웹' })
+  @ApiProperty({ example: '디자인' })
   name!: string;
 
   @ApiProperty({ example: 'WEB' })

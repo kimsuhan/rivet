@@ -5,10 +5,10 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { ClaimTeamWorkDtoProjectRole } from './claimTeamWorkDtoProjectRole';
 
 export interface ClaimTeamWorkDto {
-  projectRole: ClaimTeamWorkDtoProjectRole;
+  /** 프로젝트 참여 팀 ID */
+  projectTeamId: string;
   /** @nullable */
   teamWorkId?: string | null;
 }

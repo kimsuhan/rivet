@@ -202,6 +202,10 @@ export class ProjectRepository {
     teamIds: string[],
   ): Promise<void> {
     const uniqueTeamIds = [...new Set(teamIds)].sort();
+    if (uniqueTeamIds.length === 0) {
+      return;
+    }
+
     const rows = await transaction.$queryRaw<Array<{ archivedAt: Date | null; id: string }>>`
       SELECT "id", "archived_at" AS "archivedAt"
       FROM "teams"

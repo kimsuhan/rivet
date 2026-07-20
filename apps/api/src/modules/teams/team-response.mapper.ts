@@ -8,6 +8,7 @@ import type {
 
 export const WORKFLOW_STATE_SELECT = {
   category: true,
+  color: true,
   id: true,
   isDefault: true,
   name: true,

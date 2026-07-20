@@ -24,7 +24,7 @@ export class TeamListQueryDto {
 }
 
 export class UpdateTeamDto {
-  @ApiPropertyOptional({ example: '프론트 웹', maxLength: 100, minLength: 1 })
+  @ApiPropertyOptional({ example: '디자인', maxLength: 100, minLength: 1 })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString({ message: '팀 이름이 올바르지 않습니다.' })

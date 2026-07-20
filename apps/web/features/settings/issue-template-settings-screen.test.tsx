@@ -73,9 +73,17 @@ const label = {
 const project = {
   id: '47bb7f1b-6594-45ee-be42-877c7f1c8483',
   name: 'Rivet',
-  roleTeams: [
-    { role: 'BACKEND', team: { archived: false } },
-    { role: 'APP_FRONTEND', team: { archived: true } },
+  projectTeams: [
+    {
+      active: true,
+      id: 'project-team-backend',
+      team: { archived: false, key: 'API', name: '백엔드' },
+    },
+    {
+      active: false,
+      id: 'project-team-app',
+      team: { archived: true, key: 'APP', name: '앱 프론트' },
+    },
   ],
 };
 const activeTemplate = {
@@ -83,7 +91,7 @@ const activeTemplate = {
   available: true,
   descriptionMarkdown: '기존 설명',
   id: '75658d3c-1163-4652-8657-64c148723c3a',
-  initialRole: 'BACKEND',
+  initialProjectTeamId: 'project-team-backend',
   labelIds: [label.id],
   name: '버그 신고',
   priority: 'HIGH',
@@ -104,7 +112,7 @@ const repairTemplate = {
   ...activeTemplate,
   available: false,
   id: '46e71162-c52a-46a2-9186-a0fd70aa4e20',
-  initialRole: 'APP_FRONTEND',
+  initialProjectTeamId: 'project-team-app',
   labelIds: [label.id, 'e9124a51-f389-4e3b-a779-3d8c6cc3242d'],
   name: '대상 정리가 필요한 템플릿',
   unavailableReason: 'LABEL_UNAVAILABLE',
@@ -255,7 +263,7 @@ describe('IssueTemplateSettingsScreen', () => {
       {
         data: {
           descriptionMarkdown: '## 확인 목록',
-          initialRole: null,
+          initialProjectTeamId: null,
           labelIds: [label.id],
           name: '회귀 테스트',
           priority: 'NONE',
@@ -292,7 +300,7 @@ describe('IssueTemplateSettingsScreen', () => {
       within(dialog).getByRole('combobox', { name: labels.priorityLabel }),
       within(dialog).getByText(labels.labelsLabel),
       within(dialog).getByRole('combobox', { name: labels.projectLabel }),
-      within(dialog).getByRole('combobox', { name: labels.initialRoleLabel }),
+      within(dialog).getByRole('combobox', { name: labels.initialTeamLabel }),
     ];
 
     for (const [index, field] of fields.entries()) {
@@ -313,11 +321,17 @@ describe('IssueTemplateSettingsScreen', () => {
       ...project,
       id: '16cf2514-540c-42d0-b7ae-8e2822f25ed9',
       name: '101번째 프로젝트',
-      roleTeams: [{ role: 'WEB_FRONTEND', team: { archived: false } }],
+      projectTeams: [
+        {
+          active: true,
+          id: 'project-team-web-late',
+          team: { archived: false, key: 'WEB', name: '웹 프론트' },
+        },
+      ],
     };
     const lateTemplate = {
       ...activeTemplate,
-      initialRole: 'WEB_FRONTEND',
+      initialProjectTeamId: 'project-team-web-late',
       labelIds: [lateLabel.id],
       projectId: lateProject.id,
     };
@@ -354,15 +368,15 @@ describe('IssueTemplateSettingsScreen', () => {
     const dialog = screen.getByRole('dialog', { name: labels.editTitle });
     expect(within(dialog).getByRole('checkbox', { name: lateLabel.name })).toBeChecked();
     expect(within(dialog).getByLabelText(labels.projectLabel)).toHaveTextContent(lateProject.name);
-    expect(within(dialog).getByLabelText(labels.initialRoleLabel)).toHaveTextContent(
-      labels.projectRoles.WEB_FRONTEND,
+    expect(within(dialog).getByLabelText(labels.initialTeamLabel)).toHaveTextContent(
+      '웹 프론트 (WEB)',
     );
     await user.click(within(dialog).getByRole('button', { name: labels.save }));
 
     expect(mocks.update).toHaveBeenCalledWith(
       {
         data: expect.objectContaining({
-          initialRole: 'WEB_FRONTEND',
+          initialProjectTeamId: 'project-team-web-late',
           labelIds: [lateLabel.id],
           projectId: lateProject.id,
         }),
@@ -456,7 +470,7 @@ describe('IssueTemplateSettingsScreen', () => {
     expect(within(dialog).getByLabelText(labels.nameLabel)).toHaveValue(activeTemplate.name);
   });
 
-  it('사용할 수 없어진 라벨과 보관 팀의 프로젝트 역할을 편집 기본값에서 제거해 복구 저장한다', async () => {
+  it('사용할 수 없어진 라벨은 제거하되 비활성 기본 팀 입력은 재선택할 수 있도록 보존한다', async () => {
     const user = userEvent.setup();
     vi.mocked(useIssueTemplatesControllerList).mockReturnValue({
       data: { items: [repairTemplate] },
@@ -472,16 +486,16 @@ describe('IssueTemplateSettingsScreen', () => {
     const dialog = screen.getByRole('dialog', { name: labels.editTitle });
     expect(within(dialog).getByText(labels.repairDescription)).toBeVisible();
     expect(within(dialog).getByRole('checkbox', { name: label.name })).toBeChecked();
-    expect(
-      within(dialog).queryByRole('option', { name: labels.projectRoles.APP_FRONTEND }),
-    ).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText(labels.initialTeamLabel)).toHaveTextContent(
+      `앱 프론트 · ${labels.unavailable}`,
+    );
     await user.click(within(dialog).getByRole('button', { name: labels.save }));
 
     expect(mocks.update).toHaveBeenCalledWith(
       {
         data: {
           descriptionMarkdown: repairTemplate.descriptionMarkdown,
-          initialRole: null,
+          initialProjectTeamId: 'project-team-app',
           labelIds: [label.id],
           name: repairTemplate.name,
           priority: repairTemplate.priority,

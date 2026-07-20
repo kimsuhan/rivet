@@ -6,9 +6,9 @@ import {
   IssueStatus,
   MembershipRole,
   MembershipStatus,
-  ProjectRole,
   ProjectStatus,
   StateCategory,
+  WorkflowStateColor,
 } from '@rivet/database';
 
 export class IssueUserSummaryResponseDto {
@@ -31,10 +31,17 @@ export class IssueTeamSummaryResponseDto {
   @ApiProperty() archived!: boolean;
 }
 
+export class IssueProjectTeamSummaryResponseDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
+  @ApiProperty() active!: boolean;
+  @ApiProperty({ type: IssueTeamSummaryResponseDto }) team!: IssueTeamSummaryResponseDto;
+}
+
 export class IssueWorkflowStateSummaryResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() name!: string;
   @ApiProperty({ enum: StateCategory }) category!: StateCategory;
+  @ApiProperty({ enum: WorkflowStateColor, nullable: true }) color!: WorkflowStateColor | null;
   @ApiProperty({ minimum: 0 }) position!: number;
   @ApiProperty() isDefault!: boolean;
   @ApiProperty({ minimum: 1 }) version!: number;
@@ -93,8 +100,8 @@ export class TeamWorkIssueSummaryResponseDto {
 export class TeamWorkReferenceResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() identifier!: string;
-  @ApiProperty({ enum: ProjectRole }) projectRole!: ProjectRole;
-  @ApiProperty({ type: IssueTeamSummaryResponseDto }) team!: IssueTeamSummaryResponseDto;
+  @ApiProperty({ type: IssueProjectTeamSummaryResponseDto })
+  projectTeam!: IssueProjectTeamSummaryResponseDto;
   @ApiProperty({ type: IssueWorkflowStateSummaryResponseDto })
   workflowState!: IssueWorkflowStateSummaryResponseDto;
 }
@@ -103,11 +110,13 @@ export class TeamWorkSummaryResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ example: 'API-42-2' }) identifier!: string;
   @ApiProperty({ type: TeamWorkIssueSummaryResponseDto }) issue!: TeamWorkIssueSummaryResponseDto;
-  @ApiProperty({ enum: ProjectRole }) projectRole!: ProjectRole;
-  @ApiProperty({ type: IssueTeamSummaryResponseDto }) team!: IssueTeamSummaryResponseDto;
+  @ApiProperty({ type: IssueProjectTeamSummaryResponseDto })
+  projectTeam!: IssueProjectTeamSummaryResponseDto;
   @ApiProperty({ type: IssueWorkflowStateSummaryResponseDto })
   workflowState!: IssueWorkflowStateSummaryResponseDto;
   @ApiProperty({ enum: StateCategory }) stateCategory!: StateCategory;
+  @ApiProperty({ maximum: 1, minimum: 0, nullable: true, type: Number })
+  stateProgress!: number | null;
   @ApiProperty({ nullable: true, type: IssueMemberSummaryResponseDto })
   assignee!: IssueMemberSummaryResponseDto | null;
   @ApiProperty({ maxLength: 10000, nullable: true, type: String }) workNoteMarkdown!: string | null;
@@ -123,7 +132,8 @@ export class IssueWorkflowSummaryResponseDto {
   @ApiProperty({ minimum: 0 }) completedCount!: number;
   @ApiProperty({ minimum: 0 }) canceledCount!: number;
   @ApiProperty({ minimum: 0 }) unassignedCount!: number;
-  @ApiProperty({ enum: ProjectRole, isArray: true }) activeRoles!: ProjectRole[];
+  @ApiProperty({ isArray: true, type: IssueProjectTeamSummaryResponseDto })
+  activeTeams!: IssueProjectTeamSummaryResponseDto[];
   @ApiProperty() allTeamWorksCompleted!: boolean;
 }
 

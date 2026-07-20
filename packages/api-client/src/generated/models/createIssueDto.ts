@@ -7,7 +7,7 @@
  */
 import type { AppliedIssueTemplateDto } from './appliedIssueTemplateDto';
 import type { CreateIssueDtoPriority } from './createIssueDtoPriority';
-import type { InitialRoleAssignmentDto } from './initialRoleAssignmentDto';
+import type { InitialTeamAssignmentDto } from './initialTeamAssignmentDto';
 
 export interface CreateIssueDto {
   /**
@@ -27,10 +27,10 @@ export interface CreateIssueDto {
   /** @maxItems 100 */
   attachmentFileIds?: string[];
   /**
-     * 생성과 함께 시작할 프로젝트 역할
-     * @maxItems 3
+     * 생성과 함께 시작할 프로젝트 참여 팀
+     * @maxItems 100
      */
-  initialRoles?: InitialRoleAssignmentDto[];
+  initialTeams?: InitialTeamAssignmentDto[];
   /** 생성 입력을 채운 이슈 템플릿과 적용 당시 version */
   appliedTemplate?: AppliedIssueTemplateDto;
 }

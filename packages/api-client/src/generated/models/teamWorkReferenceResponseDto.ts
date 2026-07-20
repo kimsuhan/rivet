@@ -5,14 +5,12 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { IssueTeamSummaryResponseDto } from './issueTeamSummaryResponseDto';
+import type { IssueProjectTeamSummaryResponseDto } from './issueProjectTeamSummaryResponseDto';
 import type { IssueWorkflowStateSummaryResponseDto } from './issueWorkflowStateSummaryResponseDto';
-import type { TeamWorkReferenceResponseDtoProjectRole } from './teamWorkReferenceResponseDtoProjectRole';
 
 export interface TeamWorkReferenceResponseDto {
   id: string;
   identifier: string;
-  projectRole: TeamWorkReferenceResponseDtoProjectRole;
-  team: IssueTeamSummaryResponseDto;
+  projectTeam: IssueProjectTeamSummaryResponseDto;
   workflowState: IssueWorkflowStateSummaryResponseDto;
 }

@@ -13,6 +13,7 @@ import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
+import { WorkflowStateIcon, workflowStateProgress } from '@/components/workflow-state-icon';
 import { Link } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
@@ -80,7 +81,16 @@ export function IssueBoardScreen({ teamKey }: { teamKey: string }) {
                 aria-labelledby={`board-${state.id}`}
               >
                 <header className="mb-3 flex items-center justify-between">
-                  <h2 id={`board-${state.id}`} className="text-sm font-semibold">
+                  <h2
+                    id={`board-${state.id}`}
+                    className="flex items-center gap-2 text-sm font-semibold"
+                  >
+                    <WorkflowStateIcon
+                      category={state.category}
+                      color={state.color}
+                      progress={workflowStateProgress(states, state)}
+                      variant="swatch"
+                    />
                     {state.name}
                   </h2>
                   <Badge variant="secondary">{items.length}</Badge>

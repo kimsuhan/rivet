@@ -15,8 +15,9 @@ type Change = {
   assignee?: IssueMemberSummaryResponseDto | null;
   assigneeMembershipId?: string | null;
   completionMode?: 'COMPLETE_ONLY' | 'HANDOFF_AND_COMPLETE';
-  handoff?: { bodyMarkdown: string; destinationRoles?: Array<'APP_FRONTEND' | 'WEB_FRONTEND'> };
+  handoff?: { bodyMarkdown: string; destinationProjectTeamIds?: string[] };
   workNoteMarkdown?: string | null;
+  stateProgress?: number | null;
   workflowState?: TeamWorkSummaryResponseDto['workflowState'];
 };
 
@@ -26,7 +27,12 @@ function applyPatch(work: TeamWorkSummaryResponseDto, change: Change): TeamWorkS
     ...(change.assignee !== undefined ? { assignee: change.assignee } : {}),
     ...(change.workNoteMarkdown !== undefined ? { workNoteMarkdown: change.workNoteMarkdown } : {}),
     ...(change.workflowState
-      ? { stateCategory: change.workflowState.category, workflowState: change.workflowState }
+      ? {
+          stateCategory: change.workflowState.category,
+          stateProgress:
+            change.stateProgress !== undefined ? change.stateProgress : work.stateProgress,
+          workflowState: change.workflowState,
+        }
       : {}),
   };
 }

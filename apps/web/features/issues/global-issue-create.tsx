@@ -62,17 +62,15 @@ import { useIssueTemplateTargetOptions } from './issue-template-target-queries';
 import { issueWorkHref } from './issue-work-routing';
 
 const PRIORITIES = ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
-const PROJECT_ROLES = ['BACKEND', 'WEB_FRONTEND', 'APP_FRONTEND'] as const;
 const NO_TEMPLATE = 'NO_TEMPLATE';
 
-type ProjectRole = (typeof PROJECT_ROLES)[number];
-type TemplateTargetField = 'description' | 'initialRoles' | 'labels' | 'priority' | 'project';
+type TemplateTargetField = 'description' | 'initialTeams' | 'labels' | 'priority' | 'project';
 type IssueTemplateSnapshot = {
   archived: boolean;
   available: boolean;
   descriptionMarkdown: string;
   id: string;
-  initialRole: ProjectRole | null;
+  initialProjectTeamId: string | null;
   labelIds: string[];
   name: string;
   priority: (typeof PRIORITIES)[number];
@@ -93,11 +91,11 @@ export type IssueCreateLabels = {
   discardTitle: string;
   errorDescription: string;
   errorTitle: string;
-  initialRolesDescription: string;
-  initialRolesEmpty: string;
-  initialRolesLabel: string;
-  initialRolesNoProject: string;
-  initialRolesToolbarLabel: string;
+  initialTeamsDescription: string;
+  initialTeamsEmpty: string;
+  initialTeamsLabel: string;
+  initialTeamsNoProject: string;
+  initialTeamsToolbarLabel: string;
   labelsLabel: string;
   noLabels: string;
   optionsErrorDescription: string;
@@ -113,7 +111,6 @@ export type IssueCreateLabels = {
   projectLabel: string;
   projectPlaceholder: string;
   projectRequired: string;
-  projectRoles: Record<ProjectRole, string>;
   submit: string;
   submitting: string;
   templateApplying: string;
@@ -209,7 +206,7 @@ export function GlobalIssueCreate({
   const [descriptionMarkdown, setDescriptionMarkdown] = useState('');
   const [projectId, setProjectId] = useState(seed?.projectId ?? '');
   const [priority, setPriority] = useState<(typeof PRIORITIES)[number]>('MEDIUM');
-  const [initialRoles, setInitialRoles] = useState<ProjectRole[]>([]);
+  const [initialTeamIds, setInitialTeamIds] = useState<string[]>([]);
   const [labelIds, setLabelIds] = useState<string[]>([]);
   const [attachmentFileIds, setAttachmentFileIds] = useState<string[]>([]);
   const [filesReady, setFilesReady] = useState(true);
@@ -226,7 +223,7 @@ export function GlobalIssueCreate({
   const [templateApplyError, setTemplateApplyError] = useState(false);
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
   const [openPopover, setOpenPopover] = useState<
-    'initialRoles' | 'labels' | 'priority' | 'project' | 'template' | null
+    'initialTeams' | 'labels' | 'priority' | 'project' | 'template' | null
   >(null);
   const dirtyTemplateFields = useRef(
     new Set<TemplateTargetField>(seed?.projectId ? ['project'] : []),
@@ -263,16 +260,22 @@ export function GlobalIssueCreate({
   const templateItems = (templates.data?.items ?? []) as IssueTemplateSnapshot[];
   const hasTemplates = templateItems.length > 0;
   const selectedProject = projects.data?.items.find((project) => project.id === projectId);
-  const availableRoles = useMemo(
+  const projectTeamsById = useMemo(
+    () => new Map((selectedProject?.projectTeams ?? []).map((item) => [item.id, item])),
+    [selectedProject],
+  );
+  const availableProjectTeams = useMemo(
     () =>
-      new Set(
-        (selectedProject?.roleTeams ?? [])
-          .filter(({ team }) => !team.archived)
-          .map(({ role }) => role),
+      new Map(
+        (selectedProject?.projectTeams ?? [])
+          .filter(({ active, team }) => active && !team.archived)
+          .map((projectTeam) => [projectTeam.id, projectTeam]),
       ),
     [selectedProject],
   );
-  const unavailableSelectedRoles = initialRoles.filter((role) => !availableRoles.has(role));
+  const unavailableSelectedTeamIds = initialTeamIds.filter(
+    (projectTeamId) => !availableProjectTeams.has(projectTeamId),
+  );
   const setFileIds = useCallback((ids: string[]) => setAttachmentFileIds(ids), []);
 
   useEffect(() => {
@@ -341,7 +344,7 @@ export function GlobalIssueCreate({
     setDescriptionMarkdown('');
     setProjectId(seed?.projectId ?? '');
     setPriority('MEDIUM');
-    setInitialRoles([]);
+    setInitialTeamIds([]);
     setLabelIds([]);
     setAttachmentFileIds([]);
     setFilesReady(true);
@@ -367,7 +370,7 @@ export function GlobalIssueCreate({
     descriptionMarkdown.length > 0 ||
     projectId !== (seed?.projectId ?? '') ||
     priority !== 'MEDIUM' ||
-    initialRoles.length > 0 ||
+    initialTeamIds.length > 0 ||
     labelIds.length > 0 ||
     attachmentFileIds.length > 0 ||
     !filesReady ||
@@ -417,12 +420,12 @@ export function GlobalIssueCreate({
       else copiedTemplateFields.current.delete('labels');
       if (result.projectId) {
         setProjectId(result.projectId);
-        setInitialRoles(result.initialRole ? [result.initialRole] : []);
+        setInitialTeamIds(result.initialProjectTeamId ? [result.initialProjectTeamId] : []);
         dirtyTemplateFields.current.delete('project');
-        dirtyTemplateFields.current.delete('initialRoles');
+        dirtyTemplateFields.current.delete('initialTeams');
         copiedTemplateFields.current.add('project');
-        if (result.initialRole) copiedTemplateFields.current.add('initialRoles');
-        else copiedTemplateFields.current.delete('initialRoles');
+        if (result.initialProjectTeamId) copiedTemplateFields.current.add('initialTeams');
+        else copiedTemplateFields.current.delete('initialTeams');
       }
       setSelectedTemplateId(result.id);
       setAppliedTemplate({ id: result.id, version: result.version });
@@ -462,13 +465,15 @@ export function GlobalIssueCreate({
     if (appliedTemplate?.id === snapshot.id && appliedTemplate.version === snapshot.version) return;
 
     const targets: TemplateTargetField[] = ['description', 'priority', 'labels'];
-    if (snapshot.projectId) targets.push('project', 'initialRoles');
+    if (snapshot.projectId) targets.push('project', 'initialTeams');
     const changesCurrentValue: Record<TemplateTargetField, boolean> = {
       description: snapshot.descriptionMarkdown !== descriptionMarkdown,
-      initialRoles:
+      initialTeams:
         snapshot.projectId !== null &&
-        (initialRoles.length !== (snapshot.initialRole ? 1 : 0) ||
-          (snapshot.initialRole ? initialRoles[0] !== snapshot.initialRole : false)),
+        (initialTeamIds.length !== (snapshot.initialProjectTeamId ? 1 : 0) ||
+          (snapshot.initialProjectTeamId
+            ? initialTeamIds[0] !== snapshot.initialProjectTeamId
+            : false)),
       labels:
         labelIds.length !== snapshot.labelIds.length ||
         labelIds.some((id) => !snapshot.labelIds.includes(id)),
@@ -503,7 +508,7 @@ export function GlobalIssueCreate({
           ...(appliedTemplate ? { appliedTemplate } : {}),
           attachmentFileIds,
           descriptionMarkdown: descriptionMarkdown.trim() || null,
-          initialRoles: initialRoles.map((projectRole) => ({ projectRole })),
+          initialTeams: initialTeamIds.map((projectTeamId) => ({ projectTeamId })),
           labelIds,
           priority,
           projectId,
@@ -541,7 +546,9 @@ export function GlobalIssueCreate({
     iconClassName: PRIORITY_PRESENTATION[priority].iconClassName,
     label: labels.priorities[priority],
   };
-  const selectedRoleLabels = initialRoles.map((role) => labels.projectRoles[role]);
+  const selectedTeamLabels = initialTeamIds.map(
+    (projectTeamId) => projectTeamsById.get(projectTeamId)?.team.name ?? projectTeamId,
+  );
   const templateTriggerText = selectedTemplate
     ? `${labels.templateTrigger}: ${selectedTemplate.name}`
     : labels.templateTrigger;
@@ -552,12 +559,12 @@ export function GlobalIssueCreate({
   const labelsTriggerText = labelIds.length
     ? `${labels.labelsLabel}: ${labelIds.length}`
     : labels.labelsLabel;
-  const initialRolesTriggerText =
-    selectedRoleLabels.length === 1
-      ? `${labels.initialRolesToolbarLabel}: ${selectedRoleLabels[0]}`
-      : selectedRoleLabels.length > 1
-        ? `${labels.initialRolesToolbarLabel}: ${selectedRoleLabels.length}`
-        : labels.initialRolesToolbarLabel;
+  const initialTeamsTriggerText =
+    selectedTeamLabels.length === 1
+      ? `${labels.initialTeamsToolbarLabel}: ${selectedTeamLabels[0]}`
+      : selectedTeamLabels.length > 1
+        ? `${labels.initialTeamsToolbarLabel}: ${selectedTeamLabels.length}`
+        : labels.initialTeamsToolbarLabel;
   const toolbarTriggerClassName = buttonVariants({ size: 'sm', variant: 'outline' });
   const overwriteDescription = labels.overwriteDescription.replace(
     '{fields}',
@@ -893,7 +900,7 @@ export function GlobalIssueCreate({
                                 onClick={() => {
                                   markTemplateFieldDirty('project');
                                   setProjectId(option.value);
-                                  setInitialRoles([]);
+                                  setInitialTeamIds([]);
                                   setOpenPopover(null);
                                 }}
                               >
@@ -1012,78 +1019,79 @@ export function GlobalIssueCreate({
                     </PopoverContent>
                   </Popover>
 
-                  <span id="issue-create-initial-roles-label" className="sr-only">
-                    {initialRolesTriggerText}
+                  <span id="issue-create-initial-teams-label" className="sr-only">
+                    {initialTeamsTriggerText}
                   </span>
-                  <span id="issue-create-initial-roles-description" className="sr-only">
-                    {labels.initialRolesDescription}
+                  <span id="issue-create-initial-teams-description" className="sr-only">
+                    {labels.initialTeamsDescription}
                   </span>
                   <Popover
-                    open={openPopover === 'initialRoles'}
-                    onOpenChange={(next) => setOpenPopover(next ? 'initialRoles' : null)}
+                    open={openPopover === 'initialTeams'}
+                    onOpenChange={(next) => setOpenPopover(next ? 'initialTeams' : null)}
                   >
                     <PopoverTrigger
                       type="button"
-                      id="issue-create-initial-roles"
-                      aria-labelledby="issue-create-initial-roles-label"
-                      aria-describedby="issue-create-initial-roles-description"
+                      id="issue-create-initial-teams"
+                      aria-labelledby="issue-create-initial-teams-label"
+                      aria-describedby="issue-create-initial-teams-description"
                       className={toolbarTriggerClassName}
                       disabled={templateApplyPending}
                     >
                       <UsersIcon data-icon="inline-start" />
-                      {selectedRoleLabels.length === 1
-                        ? initialRolesTriggerText
-                        : labels.initialRolesToolbarLabel}
-                      {selectedRoleLabels.length > 1 ? (
-                        <Badge variant="secondary">{selectedRoleLabels.length}</Badge>
+                      {selectedTeamLabels.length === 1
+                        ? initialTeamsTriggerText
+                        : labels.initialTeamsToolbarLabel}
+                      {selectedTeamLabels.length > 1 ? (
+                        <Badge variant="secondary">{selectedTeamLabels.length}</Badge>
                       ) : null}
                     </PopoverTrigger>
                     <PopoverContent
                       align="start"
                       className="w-64 gap-1 p-1"
-                      aria-labelledby="issue-create-initial-roles-popover-title"
+                      aria-labelledby="issue-create-initial-teams-popover-title"
                     >
                       <PopoverTitle
-                        id="issue-create-initial-roles-popover-title"
+                        id="issue-create-initial-teams-popover-title"
                         className="sr-only"
                       >
-                        {labels.initialRolesLabel}
+                        {labels.initialTeamsLabel}
                       </PopoverTitle>
                       <p className="text-muted-foreground px-2 py-1 text-xs">
-                        {labels.initialRolesDescription}
+                        {labels.initialTeamsDescription}
                       </p>
-                      {!projectId && unavailableSelectedRoles.length === 0 ? (
+                      {!projectId && unavailableSelectedTeamIds.length === 0 ? (
                         <p className="text-muted-foreground px-2 py-2 text-sm">
-                          {labels.initialRolesNoProject}
+                          {labels.initialTeamsNoProject}
                         </p>
-                      ) : availableRoles.size === 0 && unavailableSelectedRoles.length === 0 ? (
+                      ) : availableProjectTeams.size === 0 && unavailableSelectedTeamIds.length === 0 ? (
                         <p className="text-muted-foreground px-2 py-2 text-sm">
-                          {labels.initialRolesEmpty}
+                          {labels.initialTeamsEmpty}
                         </p>
                       ) : (
                         <ul onKeyDown={handlePopoverOptionsKeyDown}>
-                          {PROJECT_ROLES.filter((role) => availableRoles.has(role)).map((role) => (
-                            <li key={role}>
+                          {[...availableProjectTeams.values()].map((projectTeam) => (
+                            <li key={projectTeam.id}>
                               <label className="hover:bg-accent flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm">
                                 <Checkbox
-                                  checked={initialRoles.includes(role)}
+                                  checked={initialTeamIds.includes(projectTeam.id)}
                                   disabled={templateApplyPending}
                                   data-issue-create-option
                                   onCheckedChange={(checked) => {
-                                    markTemplateFieldDirty('initialRoles');
-                                    setInitialRoles((current) =>
+                                    markTemplateFieldDirty('initialTeams');
+                                    setInitialTeamIds((current) =>
                                       checked
-                                        ? [...current, role]
-                                        : current.filter((item) => item !== role),
+                                        ? [...current, projectTeam.id]
+                                        : current.filter((item) => item !== projectTeam.id),
                                     );
                                   }}
                                 />
-                                {labels.projectRoles[role]}
+                                <span className="font-mono text-xs">{projectTeam.team.key}</span>
+                                <span className="truncate">{projectTeam.team.name}</span>
                               </label>
                             </li>
                           ))}
-                          {unavailableSelectedRoles.map((role) => (
-                            <li key={role}>
+                          {unavailableSelectedTeamIds.map((projectTeamId) => (
+                            <li key={projectTeamId}>
                               <label className="text-muted-foreground hover:bg-accent flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm">
                                 <Checkbox
                                   checked
@@ -1091,13 +1099,14 @@ export function GlobalIssueCreate({
                                   data-issue-create-option
                                   onCheckedChange={(checked) => {
                                     if (checked) return;
-                                    markTemplateFieldDirty('initialRoles');
-                                    setInitialRoles((current) =>
-                                      current.filter((item) => item !== role),
+                                    markTemplateFieldDirty('initialTeams');
+                                    setInitialTeamIds((current) =>
+                                      current.filter((item) => item !== projectTeamId),
                                     );
                                   }}
                                 />
-                                {labels.projectRoles[role]} · {labels.templateUnavailable}
+                                {projectTeamsById.get(projectTeamId)?.team.name ?? projectTeamId} ·{' '}
+                                {labels.templateUnavailable}
                               </label>
                             </li>
                           ))}

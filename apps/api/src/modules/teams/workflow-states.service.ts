@@ -10,15 +10,18 @@ import type {
   WorkflowStateResponseDto,
 } from './dto/team-response.dto';
 import type {
+  CreateWorkflowStateDto,
   DeleteWorkflowStateQueryDto,
   ReorderWorkflowStatesDto,
+  SetWorkflowStateDefaultDto,
   UpdateWorkflowStateDto,
 } from './dto/workflow-state-request.dto';
 import { teamResourceNotFound, teamVersionConflict } from './team.errors';
 import { TeamRepository } from './team.repository';
 import { normalizeTeamResourceName } from './team-input.policy';
-import { toWorkflowStateListResponse } from './team-response.mapper';
+import { toWorkflowStateListResponse, WORKFLOW_STATE_SELECT } from './team-response.mapper';
 import { teamUniqueConstraintTargets } from './team-unique.policy';
+import { workflowStateCategoryRank } from './workflow-state-order.policy';
 
 @Injectable()
 export class WorkflowStatesService {
@@ -26,6 +29,162 @@ export class WorkflowStatesService {
     private readonly database: DatabaseService,
     private readonly teams: TeamRepository,
   ) {}
+
+  async createWorkflowState(
+    workspaceId: string,
+    teamId: string,
+    dto: CreateWorkflowStateDto,
+  ): Promise<WorkflowStateResponseDto> {
+    const { name, normalizedName } = normalizeTeamResourceName(dto.name);
+
+    try {
+      return await this.database.client.$transaction(async (transaction) => {
+        const teams = await transaction.$queryRaw<Array<{ id: string }>>`
+          SELECT "id"
+          FROM "teams"
+          WHERE "workspace_id" = ${workspaceId}::uuid
+            AND "id" = ${teamId}::uuid
+            AND "archived_at" IS NULL
+          FOR UPDATE
+        `;
+        if (!teams[0]) {
+          throw teamResourceNotFound('팀을 찾을 수 없습니다.');
+        }
+
+        const states = await transaction.workflowState.findMany({
+          orderBy: [{ position: 'asc' }, { id: 'asc' }],
+          select: { category: true, id: true, position: true, version: true },
+          where: { teamId, workspaceId },
+        });
+        const categoryRank = workflowStateCategoryRank(dto.category);
+        const lastCategoryState = states.findLast((state) => state.category === dto.category);
+        const firstLaterState = states.find(
+          (state) => workflowStateCategoryRank(state.category) > categoryRank,
+        );
+        const position = lastCategoryState
+          ? lastCategoryState.position + 1
+          : (firstLaterState?.position ?? (states.at(-1)?.position ?? -1) + 1);
+
+        const shiftedStates: WorkflowStateResponseDto[] = [];
+        for (const state of states
+          .filter((candidate) => candidate.position >= position)
+          .sort((left, right) => right.position - left.position)) {
+          shiftedStates.push(
+            await transaction.workflowState.update({
+              data: { position: { increment: 1 }, version: { increment: 1 } },
+              select: WORKFLOW_STATE_SELECT,
+              where: { id: state.id },
+            }),
+          );
+        }
+        const created = await transaction.workflowState.create({
+          data: {
+            category: dto.category,
+            ...(dto.color ? { color: dto.color } : {}),
+            name,
+            normalizedName,
+            position,
+            teamId,
+            workspaceId,
+          },
+          select: WORKFLOW_STATE_SELECT,
+        });
+        for (const state of shiftedStates) {
+          await notifyResourceChanged(transaction, {
+            changeType: 'UPDATED',
+            resourceId: state.id,
+            resourceType: 'WORKFLOW_STATE',
+            version: state.version,
+            workspaceId,
+          });
+        }
+        await notifyResourceChanged(transaction, {
+          changeType: 'CREATED',
+          resourceId: created.id,
+          resourceType: 'WORKFLOW_STATE',
+          version: created.version,
+          workspaceId,
+        });
+        return created;
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002' &&
+        teamUniqueConstraintTargets(error).some((target) => target.includes('normalized_name'))
+      ) {
+        throw new ApiError({
+          code: 'VALIDATION_ERROR',
+          fieldErrors: { name: ['같은 이름의 워크플로 상태가 이미 있습니다.'] },
+          message: '같은 이름의 워크플로 상태가 이미 있습니다.',
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+        });
+      }
+      throw error;
+    }
+  }
+
+  setDefaultWorkflowState(
+    workspaceId: string,
+    stateId: string,
+    dto: SetWorkflowStateDefaultDto,
+  ): Promise<WorkflowStateListResponseDto> {
+    return this.database.client.$transaction(async (transaction) => {
+      const targets = await transaction.$queryRaw<
+        Array<{ id: string; isDefault: boolean; teamId: string; version: number }>
+      >`
+        SELECT state."id", state."is_default" AS "isDefault", state."team_id" AS "teamId",
+               state."version"
+        FROM "workflow_states" state
+        INNER JOIN "teams" team
+          ON team."workspace_id" = state."workspace_id"
+         AND team."id" = state."team_id"
+        WHERE state."workspace_id" = ${workspaceId}::uuid
+          AND state."id" = ${stateId}::uuid
+          AND team."archived_at" IS NULL
+        FOR UPDATE OF team, state
+      `;
+      const target = targets[0];
+      if (!target) {
+        throw teamResourceNotFound('워크플로 상태를 찾을 수 없습니다.');
+      }
+      if (target.version !== dto.version) {
+        throw teamVersionConflict(target.version);
+      }
+      if (target.isDefault) {
+        return toWorkflowStateListResponse(
+          await this.teams.findWorkflowStates(transaction, workspaceId, target.teamId),
+        );
+      }
+
+      const previousDefaults = await transaction.workflowState.updateManyAndReturn({
+        data: { isDefault: false, version: { increment: 1 } },
+        select: WORKFLOW_STATE_SELECT,
+        where: { isDefault: true, teamId: target.teamId, workspaceId },
+      });
+      const updated = await transaction.workflowState.update({
+        data: { isDefault: true, version: { increment: 1 } },
+        select: WORKFLOW_STATE_SELECT,
+        where: { id: target.id },
+      });
+      for (const state of [...previousDefaults, updated]) {
+        await notifyResourceChanged(transaction, {
+          changeType: 'UPDATED',
+          resourceId: state.id,
+          resourceType: 'WORKFLOW_STATE',
+          version: state.version,
+          workspaceId,
+        });
+      }
+
+      return toWorkflowStateListResponse(
+        await this.teams.findWorkflowStates(transaction, workspaceId, target.teamId),
+      );
+    });
+  }
 
   async updateWorkflowState(
     workspaceId: string,
@@ -36,14 +195,7 @@ export class WorkflowStatesService {
 
     try {
       const current = await this.database.client.workflowState.findFirst({
-        select: {
-          category: true,
-          id: true,
-          isDefault: true,
-          name: true,
-          position: true,
-          version: true,
-        },
+        select: WORKFLOW_STATE_SELECT,
         where: { id: stateId, team: { archivedAt: null }, workspaceId },
       });
       if (!current) {
@@ -52,21 +204,19 @@ export class WorkflowStatesService {
       if (current.version !== dto.version) {
         throw teamVersionConflict(current.version);
       }
-      if (current.name === name) {
+      if (current.name === name && (dto.color === undefined || current.color === dto.color)) {
         return current;
       }
 
       const updated = await this.database.client.$transaction(async (transaction) => {
         const [result] = await transaction.workflowState.updateManyAndReturn({
-          data: { name, normalizedName, version: { increment: 1 } },
-          select: {
-            category: true,
-            id: true,
-            isDefault: true,
-            name: true,
-            position: true,
-            version: true,
+          data: {
+            ...(dto.color !== undefined ? { color: dto.color } : {}),
+            name,
+            normalizedName,
+            version: { increment: 1 },
           },
+          select: WORKFLOW_STATE_SELECT,
           where: {
             id: stateId,
             team: { archivedAt: null },
@@ -141,9 +291,9 @@ export class WorkflowStatesService {
       }
 
       const states = await transaction.$queryRaw<
-        Array<{ id: string; position: number; version: number }>
+        Array<{ category: StateCategory; id: string; position: number; version: number }>
       >`
-        SELECT "id", "position", "version"
+        SELECT "category", "id", "position", "version"
         FROM "workflow_states"
         WHERE "workspace_id" = ${workspaceId}::uuid
           AND "team_id" = ${teamId}::uuid
@@ -155,7 +305,10 @@ export class WorkflowStatesService {
       if (dto.states.some((state) => !currentById.has(state.id))) {
         throw teamResourceNotFound('워크플로 상태를 찾을 수 없습니다.');
       }
-      if (dto.states.length !== states.length) {
+      if (
+        dto.states.length !== states.length ||
+        new Set(dto.states.map(({ id }) => id)).size !== states.length
+      ) {
         throw new ApiError({
           code: 'VALIDATION_ERROR',
           fieldErrors: { states: ['현재 팀의 모든 상태를 한 번씩 입력해 주세요.'] },
@@ -169,6 +322,25 @@ export class WorkflowStatesService {
         if (current && current.version !== requested.version) {
           throw teamVersionConflict(current.version);
         }
+      }
+
+      const requestedCategories = dto.states.map(({ id }) => currentById.get(id)?.category);
+      if (
+        requestedCategories.some((category, index) => {
+          const previousCategory = requestedCategories[index - 1];
+          return (
+            category !== undefined &&
+            previousCategory !== undefined &&
+            workflowStateCategoryRank(category) < workflowStateCategoryRank(previousCategory)
+          );
+        })
+      ) {
+        throw new ApiError({
+          code: 'VALIDATION_ERROR',
+          fieldErrors: { states: ['상태는 같은 시스템 범주 안에서만 순서를 바꿀 수 있습니다.'] },
+          message: '시스템 범주의 표시 순서는 변경할 수 없습니다.',
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+        });
       }
 
       const currentOrder = [...states]
@@ -193,14 +365,7 @@ export class WorkflowStatesService {
         updated.push(
           await transaction.workflowState.update({
             data: { position, version: { increment: 1 } },
-            select: {
-              category: true,
-              id: true,
-              isDefault: true,
-              name: true,
-              position: true,
-              version: true,
-            },
+            select: WORKFLOW_STATE_SELECT,
             where: { id: state.id },
           }),
         );
@@ -265,28 +430,33 @@ export class WorkflowStatesService {
 
       if (target.category === StateCategory.UNSTARTED) {
         const [usage] = await transaction.$queryRaw<
-          Array<{ activeRoleCount: number; unstartedCount: number }>
+          Array<{ activeProjectCount: number; unstartedCount: number }>
         >`
           SELECT
-            COUNT(DISTINCT role."project_id")::int AS "activeRoleCount",
-            COUNT(state."id")::int AS "unstartedCount"
-          FROM "workflow_states" state
-          LEFT JOIN "project_role_teams" role
-            ON role."workspace_id" = state."workspace_id"
-           AND role."team_id" = state."team_id"
-          LEFT JOIN "projects" project
-            ON project."workspace_id" = role."workspace_id"
-           AND project."id" = role."project_id"
-           AND project."archived_at" IS NULL
-           AND project."deleted_at" IS NULL
-          WHERE state."workspace_id" = ${context.workspaceId}::uuid
-            AND state."team_id" = ${target.teamId}::uuid
-            AND state."category" = 'UNSTARTED'::"StateCategory"
+            (
+              SELECT COUNT(*)::int
+              FROM "project_teams" project_team
+              INNER JOIN "projects" project
+                ON project."workspace_id" = project_team."workspace_id"
+               AND project."id" = project_team."project_id"
+               AND project."archived_at" IS NULL
+               AND project."deleted_at" IS NULL
+              WHERE project_team."workspace_id" = ${context.workspaceId}::uuid
+                AND project_team."team_id" = ${target.teamId}::uuid
+                AND project_team."is_active" = true
+            ) AS "activeProjectCount",
+            (
+              SELECT COUNT(*)::int
+              FROM "workflow_states" state
+              WHERE state."workspace_id" = ${context.workspaceId}::uuid
+                AND state."team_id" = ${target.teamId}::uuid
+                AND state."category" = 'UNSTARTED'::"StateCategory"
+            ) AS "unstartedCount"
         `;
-        if ((usage?.activeRoleCount ?? 0) > 0 && (usage?.unstartedCount ?? 0) <= 1) {
+        if ((usage?.activeProjectCount ?? 0) > 0 && (usage?.unstartedCount ?? 0) <= 1) {
           throw new ApiError({
             code: 'TEAM_UNSTARTED_STATE_REQUIRED',
-            message: '활성 프로젝트 역할에 연결된 팀은 시작 전 상태를 하나 이상 유지해야 합니다.',
+            message: '활성 프로젝트에 참여 중인 팀은 시작 전 상태를 하나 이상 유지해야 합니다.',
             status: HttpStatus.CONFLICT,
           });
         }

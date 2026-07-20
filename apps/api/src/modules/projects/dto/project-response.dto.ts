@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-import { MembershipRole, MembershipStatus, ProjectRole, ProjectStatus } from '@rivet/database';
+import { MembershipRole, MembershipStatus, ProjectStatus } from '@rivet/database';
 
 export class ProjectUserSummaryResponseDto {
   @ApiProperty({ format: 'uuid' })
@@ -41,9 +41,15 @@ export class ProjectTeamSummaryResponseDto {
   archived!: boolean;
 }
 
-export class ProjectRoleTeamResponseDto {
-  @ApiProperty({ enum: ProjectRole })
-  role!: ProjectRole;
+export class ProjectTeamResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty()
+  active!: boolean;
+
+  @ApiProperty({ format: 'date-time', nullable: true, type: String })
+  deactivatedAt!: string | null;
 
   @ApiProperty({ type: ProjectTeamSummaryResponseDto })
   team!: ProjectTeamSummaryResponseDto;
@@ -82,8 +88,8 @@ export class ProjectResponseDto {
   @ApiProperty({ format: 'date', nullable: true, type: String })
   targetDate!: string | null;
 
-  @ApiProperty({ isArray: true, type: ProjectRoleTeamResponseDto })
-  roleTeams!: ProjectRoleTeamResponseDto[];
+  @ApiProperty({ isArray: true, type: ProjectTeamResponseDto })
+  projectTeams!: ProjectTeamResponseDto[];
 
   @ApiProperty({ type: ProjectProgressResponseDto })
   progress!: ProjectProgressResponseDto;

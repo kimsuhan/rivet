@@ -86,6 +86,7 @@ model Project {
   leadMembership      WorkspaceMembership? @relation("ProjectLeadMembership", fields: [workspaceId, leadMembershipId], references: [workspaceId, id], onDelete: Restrict)
   deletedByMembership WorkspaceMembership? @relation("ProjectDeletedByMembership", fields: [workspaceId, deletedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
   roleTeams           ProjectRoleTeam[]
+  projectTeams        ProjectTeam[]
   issues              Issue[]
   issueTemplates      IssueTemplate[]
   activityEvents      ActivityEvent[]
@@ -119,23 +120,50 @@ model ProjectRoleTeam {
   @@map("project_role_teams")
 }
 
-model IssueTemplate {
-  id                  String        @id @default(uuid()) @db.Uuid
-  workspaceId         String        @map("workspace_id") @db.Uuid
-  name                String        @db.VarChar(100)
-  normalizedName      String        @map("normalized_name") @db.VarChar(100)
-  descriptionMarkdown String        @map("description_markdown") @db.Text
-  priority            IssuePriority @default(NONE)
-  projectId           String?       @map("project_id") @db.Uuid
-  initialRole         ProjectRole?  @map("initial_role")
-  archivedAt          DateTime?     @map("archived_at") @db.Timestamptz(3)
-  version             Int           @default(1)
-  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+model ProjectTeam {
+  id            String    @id @default(uuid()) @db.Uuid
+  workspaceId   String    @map("workspace_id") @db.Uuid
+  projectId     String    @map("project_id") @db.Uuid
+  teamId        String    @map("team_id") @db.Uuid
+  isActive      Boolean   @default(true) @map("is_active")
+  deactivatedAt DateTime? @map("deactivated_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  project   Project?             @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
-  labels    IssueTemplateLabel[]
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  project        Project         @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
+  team           Team            @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
+  teamWorks      TeamWork[]
+  issueTemplates IssueTemplate[] @relation("IssueTemplateInitialProjectTeam")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, projectId, id])
+  @@unique([workspaceId, teamId, id])
+  @@unique([projectId, teamId])
+  @@index([workspaceId, projectId, isActive, teamId])
+  @@index([workspaceId, teamId, isActive, projectId])
+  @@map("project_teams")
+}
+
+model IssueTemplate {
+  id                   String        @id @default(uuid()) @db.Uuid
+  workspaceId          String        @map("workspace_id") @db.Uuid
+  name                 String        @db.VarChar(100)
+  normalizedName       String        @map("normalized_name") @db.VarChar(100)
+  descriptionMarkdown  String        @map("description_markdown") @db.Text
+  priority             IssuePriority @default(NONE)
+  projectId            String?       @map("project_id") @db.Uuid
+  initialRole          ProjectRole?  @map("initial_role")
+  initialProjectTeamId String?       @map("initial_project_team_id") @db.Uuid
+  archivedAt           DateTime?     @map("archived_at") @db.Timestamptz(3)
+  version              Int           @default(1)
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace          Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  project            Project?             @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
+  initialProjectTeam ProjectTeam?         @relation("IssueTemplateInitialProjectTeam", fields: [workspaceId, projectId, initialProjectTeamId], references: [workspaceId, projectId, id], onDelete: Restrict)
+  labels             IssueTemplateLabel[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, archivedAt, updatedAt, id])
@@ -206,7 +234,8 @@ model TeamWork {
   issueId               String      @map("issue_id") @db.Uuid
   identifier            String      @db.VarChar(32)
   sequenceNumber        Int         @map("sequence_number")
-  projectRole           ProjectRole @map("project_role")
+  projectRole           ProjectRole @default(BACKEND) @map("project_role")
+  projectTeamId         String?     @map("project_team_id") @db.Uuid
   teamId                String      @map("team_id") @db.Uuid
   workflowStateId       String      @map("workflow_state_id") @db.Uuid
   assigneeMembershipId  String?     @map("assignee_membership_id") @db.Uuid
@@ -220,6 +249,7 @@ model TeamWork {
   workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   issue               Issue               @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
   team                Team                @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
+  projectTeam         ProjectTeam?        @relation(fields: [workspaceId, teamId, projectTeamId], references: [workspaceId, teamId, id], onDelete: Restrict)
   workflowState       WorkflowState       @relation(fields: [workspaceId, teamId, workflowStateId], references: [workspaceId, teamId, id], onDelete: Restrict)
   assigneeTeamMember  TeamMember?         @relation("TeamWorkAssigneeTeamMember", fields: [workspaceId, teamId, assigneeMembershipId], references: [workspaceId, teamId, membershipId], onDelete: Restrict)
   createdByMembership WorkspaceMembership @relation("TeamWorkCreatorMembership", fields: [workspaceId, createdByMembershipId], references: [workspaceId, id], onDelete: Restrict)
@@ -238,6 +268,7 @@ model TeamWork {
   @@index([workspaceId, assigneeMembershipId, deletedAt, updatedAt, id])
   @@index([workspaceId, workflowStateId, id])
   @@index([workspaceId, projectRole, id])
+  @@index([workspaceId, projectTeamId, deletedAt, updatedAt, id])
   @@map("team_works")
 }
 

@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+import { WorkflowStateColor } from '@rivet/database';
+
 export class WorkflowStateResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -9,6 +11,9 @@ export class WorkflowStateResponseDto {
 
   @ApiProperty({ enum: ['BACKLOG', 'UNSTARTED', 'STARTED', 'COMPLETED', 'CANCELED'] })
   category!: 'BACKLOG' | 'UNSTARTED' | 'STARTED' | 'COMPLETED' | 'CANCELED';
+
+  @ApiProperty({ enum: WorkflowStateColor, nullable: true })
+  color!: WorkflowStateColor | null;
 
   @ApiProperty({ minimum: 0 })
   position!: number;
@@ -24,7 +29,7 @@ export class TeamResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
 
-  @ApiProperty({ example: '프론트 웹' })
+  @ApiProperty({ example: '디자인' })
   name!: string;
 
   @ApiProperty({ example: 'WEB' })
@@ -47,7 +52,7 @@ export class TeamSummaryResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
 
-  @ApiProperty({ example: '프론트 웹' })
+  @ApiProperty({ example: '디자인' })
   name!: string;
 
   @ApiProperty({ example: 'WEB' })

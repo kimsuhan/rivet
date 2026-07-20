@@ -77,11 +77,7 @@ describe('TeamsService', () => {
     database.client.team.findUnique.mockResolvedValue(null);
 
     moduleRef = await Test.createTestingModule({
-      providers: [
-        TeamRepository,
-        TeamsService,
-        { provide: DatabaseService, useValue: database },
-      ],
+      providers: [TeamRepository, TeamsService, { provide: DatabaseService, useValue: database }],
     }).compile();
     service = moduleRef.get(TeamsService);
   });
@@ -125,6 +121,15 @@ describe('TeamsService', () => {
       name: '미분류',
       position: 0,
     });
+    expect(workflowData.map(({ name }: { name: string }) => name)).toEqual([
+      '미분류',
+      '보류',
+      '할 일',
+      '진행 중',
+      '검토',
+      '완료',
+      '취소',
+    ]);
     expect(result.workflowStates.map(({ position }) => position)).toEqual([0, 1]);
   });
 

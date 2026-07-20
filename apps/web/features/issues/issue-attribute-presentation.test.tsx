@@ -2,10 +2,13 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { WORKFLOW_STATE_PRESENTATION } from '@/components/workflow-state-icon';
+
 import {
   IssueStatusDisplay,
   PriorityDisplay,
   StatusTrigger,
+  TEAM_WORK_STATUS_PRESENTATION,
   TeamWorkStatusDisplay,
 } from './issue-attribute-presentation';
 
@@ -21,26 +24,33 @@ describe('이슈 속성 Compact 표현', () => {
   it('팀 작업 상태와 우선순위는 색상만이 아닌 아이콘과 이름으로 구분한다', () => {
     render(
       <>
-        <TeamWorkStatusDisplay category="COMPLETED" />
+        <TeamWorkStatusDisplay category="BACKLOG" name="미분류" />
         <PriorityDisplay priority="URGENT" />
       </>,
     );
-    expect(screen.getByText('완료')).toBeVisible();
+    expect(screen.getByText('미분류')).toBeVisible();
     expect(screen.getByText('긴급')).toBeVisible();
-    expect(document.querySelector('.lucide-circle-check')).toHaveClass('text-success');
+    expect(document.querySelector('[data-workflow-state-category="BACKLOG"]')).toHaveAttribute(
+      'data-workflow-state-color',
+      'GRAY',
+    );
     expect(document.querySelector('.lucide-circle-alert')).toHaveClass('text-destructive');
+  });
+
+  it('팀 작업 상태 표현은 워크플로 상태 아이콘 정본을 그대로 사용한다', () => {
+    expect(TEAM_WORK_STATUS_PRESENTATION).toBe(WORKFLOW_STATE_PRESENTATION);
   });
 
   it('상태 변경 메뉴는 범주 라벨이 아니라 실제 워크플로 상태 이름을 표시하고 같은 범주 중복 이름을 만들지 않는다', async () => {
     const user = userEvent.setup();
     const states = [
-      { category: 'BACKLOG' as const, id: 'state-backlog', name: '미분류' },
-      { category: 'UNSTARTED' as const, id: 'state-unstarted', name: '할 일' },
-      { category: 'STARTED' as const, id: 'state-started', name: '진행 중' },
-      { category: 'STARTED' as const, id: 'state-review', name: '검토' },
-      { category: 'COMPLETED' as const, id: 'state-completed', name: '완료' },
-      { category: 'BACKLOG' as const, id: 'state-paused', name: '보류' },
-      { category: 'CANCELED' as const, id: 'state-canceled', name: '취소' },
+      { category: 'BACKLOG' as const, color: null, id: 'state-backlog', name: '미분류', position: 0 },
+      { category: 'UNSTARTED' as const, color: null, id: 'state-unstarted', name: '할 일', position: 1 },
+      { category: 'STARTED' as const, color: 'INDIGO' as const, id: 'state-started', name: '진행 중', position: 2 },
+      { category: 'STARTED' as const, color: 'TEAL' as const, id: 'state-review', name: '검토', position: 3 },
+      { category: 'COMPLETED' as const, color: null, id: 'state-completed', name: '완료', position: 4 },
+      { category: 'BACKLOG' as const, color: null, id: 'state-paused', name: '보류', position: 5 },
+      { category: 'CANCELED' as const, color: null, id: 'state-canceled', name: '취소', position: 6 },
     ];
     render(
       <StatusTrigger

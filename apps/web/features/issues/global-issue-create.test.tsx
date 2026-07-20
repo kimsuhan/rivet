@@ -88,9 +88,19 @@ const labels = messages.IssueCreate satisfies IssueCreateLabels;
 const project = {
   id: 'c07fe75e-aa1a-4a77-840e-25ec034381c0',
   name: 'Rivet',
-  roleTeams: [
-    { role: 'BACKEND', team: { archived: false } },
-    { role: 'APP_FRONTEND', team: { archived: true } },
+  projectTeams: [
+    {
+      active: true,
+      deactivatedAt: null,
+      id: 'project-team-backend',
+      team: { archived: false, id: 'team-backend', key: 'API', name: '백엔드' },
+    },
+    {
+      active: false,
+      deactivatedAt: '2026-07-01T00:00:00.000Z',
+      id: 'project-team-app',
+      team: { archived: true, id: 'team-app', key: 'APP', name: '앱 프론트' },
+    },
   ],
 };
 const seedProjectId = '59a3ac63-ed97-4b08-91d1-463499ab3d8d';
@@ -105,7 +115,7 @@ const template = {
   available: true,
   descriptionMarkdown: '## 재현 절차\n',
   id: '64ba55b0-c7a0-47d3-bce5-5b6937653ae9',
-  initialRole: 'BACKEND',
+  initialProjectTeamId: 'project-team-backend',
   labelIds: [label.id],
   name: '버그 신고',
   priority: 'HIGH',
@@ -194,8 +204,8 @@ async function openLabels(user: ReturnType<typeof userEvent.setup>) {
   await user.click(getToolbarButton(labels.labelsLabel));
 }
 
-async function openRoles(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(getToolbarButton(labels.initialRolesToolbarLabel));
+async function openTeams(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(getToolbarButton(labels.initialTeamsToolbarLabel));
 }
 
 describe('GlobalIssueCreate issue template', () => {
@@ -265,8 +275,8 @@ describe('GlobalIssueCreate issue template', () => {
     expect(screen.getByLabelText('설명 편집기')).toHaveAttribute('data-bounded-height', 'true');
     await openLabels(user);
     expect(screen.getByRole('checkbox', { name: label.name })).toBeChecked();
-    await openRoles(user);
-    expect(screen.getByRole('checkbox', { name: labels.projectRoles.BACKEND })).toBeChecked();
+    await openTeams(user);
+    expect(screen.getByRole('checkbox', { name: /API.*백엔드/ })).toBeChecked();
 
     await user.clear(screen.getByLabelText('설명 편집기'));
     await user.type(screen.getByLabelText('설명 편집기'), '사용자가 바꾼 설명');
@@ -294,11 +304,18 @@ describe('GlobalIssueCreate issue template', () => {
       ...project,
       id: '138c73e3-043f-49fe-9725-6c16731bf118',
       name: '101번째 프로젝트',
-      roleTeams: [{ role: 'WEB_FRONTEND', team: { archived: false } }],
+      projectTeams: [
+        {
+          active: true,
+          deactivatedAt: null,
+          id: 'project-team-web-late',
+          team: { archived: false, id: 'team-web', key: 'WEB', name: '웹 프론트' },
+        },
+      ],
     };
     const lateTemplate = {
       ...template,
-      initialRole: 'WEB_FRONTEND',
+      initialProjectTeamId: 'project-team-web-late',
       labelIds: [lateLabel.id],
       projectId: lateProject.id,
     };
@@ -331,14 +348,14 @@ describe('GlobalIssueCreate issue template', () => {
     await chooseTemplate(user);
     await openLabels(user);
     expect(await screen.findByRole('checkbox', { name: lateLabel.name })).toBeChecked();
-    await openRoles(user);
-    expect(screen.getByRole('checkbox', { name: labels.projectRoles.WEB_FRONTEND })).toBeChecked();
+    await openTeams(user);
+    expect(screen.getByRole('checkbox', { name: /WEB.*웹 프론트/ })).toBeChecked();
     await user.type(screen.getByLabelText(labels.titleLabel), '101번째 대상 적용');
     await user.click(screen.getByRole('button', { name: labels.submit }));
 
     expect(mocks.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        initialRoles: [{ projectRole: 'WEB_FRONTEND' }],
+        initialTeams: [{ projectTeamId: 'project-team-web-late' }],
         labelIds: [lateLabel.id],
         projectId: lateProject.id,
       }),
@@ -391,7 +408,7 @@ describe('GlobalIssueCreate issue template', () => {
     expect(document.getElementById('issue-create-project')).toBeDisabled();
     expect(document.getElementById('issue-create-priority')).toBeDisabled();
     expect(document.getElementById('issue-create-labels')).toBeDisabled();
-    expect(document.getElementById('issue-create-initial-roles')).toBeDisabled();
+    expect(document.getElementById('issue-create-initial-teams')).toBeDisabled();
     expect(document.getElementById('issue-create-title')).toBeEnabled();
 
     await user.keyboard('{Escape}');
@@ -534,31 +551,39 @@ describe('GlobalIssueCreate issue template', () => {
     });
   });
 
-  it('적용 뒤 사용할 수 없어진 프로젝트 역할을 표시하고 제거할 수 있다', async () => {
+  it('적용 뒤 사용할 수 없어진 프로젝트 참여 팀 식별자를 보존해 표시하고 제거할 수 있다', async () => {
     const user = userEvent.setup();
-    const activeRoleProject = {
+    const activeTeamProject = {
       ...project,
-      roleTeams: [...project.roleTeams, { role: 'WEB_FRONTEND', team: { archived: false } }],
+      projectTeams: [
+        ...project.projectTeams,
+        {
+          active: true,
+          deactivatedAt: null,
+          id: 'project-team-web',
+          team: { archived: false, id: 'team-web', key: 'WEB', name: '웹 프론트' },
+        },
+      ],
     };
-    const roleTemplate = { ...template, initialRole: 'WEB_FRONTEND' };
+    const teamTemplate = { ...template, initialProjectTeamId: 'project-team-web' };
     vi.mocked(useIssueTemplateTargetOptions).mockReturnValue(
-      targetOptions({ projectItems: [activeRoleProject] }) as never,
+      targetOptions({ projectItems: [activeTeamProject] }) as never,
     );
     vi.mocked(useIssueTemplatesControllerList).mockReturnValue({
-      data: { items: [roleTemplate] },
+      data: { items: [teamTemplate] },
       error: null,
       isError: false,
       isPending: false,
       refetch: mocks.templateRefetch,
     } as never);
-    mocks.apply.mockResolvedValue(roleTemplate);
+    mocks.apply.mockResolvedValue(teamTemplate);
     const view = renderCreate();
 
     await chooseTemplate(user);
-    await openRoles(user);
+    await openTeams(user);
     await waitFor(() =>
       expect(
-        screen.getByRole('checkbox', { name: labels.projectRoles.WEB_FRONTEND }),
+        screen.getByRole('checkbox', { name: /WEB.*웹 프론트/ }),
       ).toBeChecked(),
     );
 
@@ -572,16 +597,16 @@ describe('GlobalIssueCreate issue template', () => {
         seed={null}
       />,
     );
-    const unavailableRole = screen.getByRole('checkbox', {
-      name: `${labels.projectRoles.WEB_FRONTEND} · ${labels.templateUnavailable}`,
+    const unavailableTeam = screen.getByRole('checkbox', {
+      name: `project-team-web · ${labels.templateUnavailable}`,
     });
-    expect(unavailableRole).toBeChecked();
-    await user.click(unavailableRole);
-    await user.type(screen.getByLabelText(labels.titleLabel), '누락 역할 제거');
+    expect(unavailableTeam).toBeChecked();
+    await user.click(unavailableTeam);
+    await user.type(screen.getByLabelText(labels.titleLabel), '누락 참여 팀 제거');
     await user.click(screen.getByRole('button', { name: labels.submit }));
 
     expect(mocks.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ initialRoles: [] }),
+      data: expect.objectContaining({ initialTeams: [] }),
     });
   });
 
@@ -602,8 +627,8 @@ describe('GlobalIssueCreate issue template', () => {
     ]) {
       expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey });
     }
-    await openRoles(user);
-    expect(screen.queryByRole('checkbox', { name: labels.projectRoles.APP_FRONTEND })).toBeNull();
+    await openTeams(user);
+    expect(screen.queryByRole('checkbox', { name: /APP.*앱 프론트/ })).toBeNull();
   });
 
   it('보관·권한·version 오류가 나면 현재 입력을 보존하고 템플릿 출처를 지운 뒤 재선택을 안내한다', async () => {
@@ -788,17 +813,22 @@ describe('GlobalIssueCreate issue template', () => {
       id: 'c51bb965-cf82-41b2-80f8-1ce682832f45',
       name: '회귀',
     };
-    const multiRoleProject = {
+    const multiTeamProject = {
       ...project,
-      roleTeams: [
-        { role: 'BACKEND', team: { archived: false } },
-        { role: 'WEB_FRONTEND', team: { archived: false } },
+      projectTeams: [
+        project.projectTeams[0],
+        {
+          active: true,
+          deactivatedAt: null,
+          id: 'project-team-web',
+          team: { archived: false, id: 'team-web', key: 'WEB', name: '웹 프론트' },
+        },
       ],
     };
     vi.mocked(useIssueTemplateTargetOptions).mockReturnValue(
       targetOptions({
         labelItems: [label, secondLabel],
-        projectItems: [multiRoleProject],
+        projectItems: [multiTeamProject],
       }) as never,
     );
     renderCreate();
@@ -810,11 +840,11 @@ describe('GlobalIssueCreate issue template', () => {
     await user.click(screen.getByRole('checkbox', { name: secondLabel.name }));
     expect(getToolbarButton(labels.labelsLabel)).toHaveAccessibleName(`${labels.labelsLabel}: 2`);
 
-    await openRoles(user);
-    await user.click(screen.getByRole('checkbox', { name: labels.projectRoles.BACKEND }));
-    await user.click(screen.getByRole('checkbox', { name: labels.projectRoles.WEB_FRONTEND }));
-    expect(getToolbarButton(labels.initialRolesToolbarLabel)).toHaveAccessibleName(
-      `${labels.initialRolesToolbarLabel}: 2`,
+    await openTeams(user);
+    await user.click(screen.getByRole('checkbox', { name: /API.*백엔드/ }));
+    await user.click(screen.getByRole('checkbox', { name: /WEB.*웹 프론트/ }));
+    expect(getToolbarButton(labels.initialTeamsToolbarLabel)).toHaveAccessibleName(
+      `${labels.initialTeamsToolbarLabel}: 2`,
     );
   });
 

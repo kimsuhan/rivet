@@ -74,13 +74,8 @@ vi.mock('./issue-attribute-presentation', () => ({
   CompactAssigneeTrigger: () => <button type="button">담당자</button>,
   IssueStatusDisplay: ({ status }: { status: string }) => <span>{status}</span>,
   PriorityDisplay: ({ priority }: { priority: string }) => <span>{priority}</span>,
-  PROJECT_ROLE_LABELS: {
-    APP_FRONTEND: '앱 프론트',
-    BACKEND: '백엔드',
-    WEB_FRONTEND: '웹 프론트',
-  },
   StatusTrigger: () => <button type="button">상태</button>,
-  TeamWorkStatusDisplay: ({ category }: { category: string }) => <span>{category}</span>,
+  TeamWorkStatusDisplay: ({ name }: { name: string }) => <span>{name}</span>,
 }));
 
 const project = {
@@ -100,7 +95,7 @@ function work(
   id: string,
   identifier: string,
   stateCategory: TeamWorkSummaryResponseDto['stateCategory'],
-  projectRole: TeamWorkSummaryResponseDto['projectRole'],
+  teamKey: string,
 ): TeamWorkSummaryResponseDto {
   return {
     assignee: null,
@@ -116,13 +111,18 @@ function work(
       status: 'TODO',
       title: '상세 화면 점검',
     },
-    projectRole,
+    projectTeam: {
+      active: true,
+      id: `project-team-${id}`,
+      team: { archived: false, id: `team-${id}`, key: teamKey, name: `${teamKey} 팀` },
+    },
     stateCategory,
-    team: { archived: false, id: `team-${id}`, key: identifier, name: `${identifier} 팀` },
+    stateProgress: stateCategory === 'STARTED' ? 0.5 : null,
     updatedAt: new Date(0).toISOString(),
     version: 1,
     workflowState: {
       category: stateCategory,
+      color: null,
       id: `state-${id}`,
       isDefault: true,
       name: stateCategory,
@@ -155,7 +155,7 @@ function issue(
     updatedAt: new Date(0).toISOString(),
     version: 1,
     workflowSummary: {
-      activeRoles: [],
+      activeTeams: [],
       allTeamWorksCompleted: false,
       canceledCount: 0,
       completedCount: 1,
@@ -211,10 +211,22 @@ describe('IssueDetailScreen', () => {
     } as never);
     vi.mocked(useProjectsControllerGet).mockReturnValue({
       data: {
-        roleTeams: [
-          { role: 'BACKEND', team: { archived: false } },
-          { role: 'WEB_FRONTEND', team: { archived: false } },
-          { role: 'APP_FRONTEND', team: { archived: false } },
+        projectTeams: [
+          {
+            active: true,
+            id: 'project-team-plan',
+            team: { archived: false, id: 'team-plan', key: 'PLAN', name: '기획' },
+          },
+          {
+            active: true,
+            id: 'project-team-design',
+            team: { archived: false, id: 'team-design', key: 'DESIGN', name: '디자인' },
+          },
+          {
+            active: true,
+            id: 'project-team-ops',
+            team: { archived: false, id: 'team-ops', key: 'OPS', name: '운영' },
+          },
         ],
       },
     } as never);
@@ -265,8 +277,8 @@ describe('IssueDetailScreen', () => {
 
   it('사용자가 접은 팀 작업 추가 패널은 재렌더에도 유지하고 다른 작업 선택 시 초기화한다', async () => {
     const user = userEvent.setup();
-    const first = work('work-1', 'WEB-1', 'UNSTARTED', 'BACKEND');
-    const second = work('work-2', 'WEB-2', 'UNSTARTED', 'APP_FRONTEND');
+    const first = work('work-1', 'WEB-1', 'UNSTARTED', 'PLAN');
+    const second = work('work-2', 'WEB-2', 'UNSTARTED', 'OPS');
     currentIssue = issue('IN_PROGRESS', [first, second]);
     search = 'tab=work&work=WEB-1';
     const view = renderDetail();

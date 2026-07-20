@@ -293,6 +293,7 @@ describe('Alpha A1 CSV import API', () => {
       await database.client.projectRoleTeam.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
       });
+      await database.client.projectTeam.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.workflowState.deleteMany({
         where: { workspaceId: { in: workspaceIds } },

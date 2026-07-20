@@ -118,6 +118,7 @@ async function cleanup(fixtures: Fixture[]) {
   await prisma.issue.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
   await prisma.issueTemplate.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
   await prisma.projectRoleTeam.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+  await prisma.projectTeam.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
   await prisma.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
   await prisma.workflowState.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
   await prisma.label.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
@@ -324,6 +325,7 @@ describe('issue templates PostgreSQL integration', () => {
       await prisma.$transaction(async (transaction) => {
         await transaction.issueTemplate.updateMany({
           data: {
+            initialProjectTeamId: null,
             initialRole: null,
             projectId: null,
             version: { increment: 1 },
@@ -331,6 +333,9 @@ describe('issue templates PostgreSQL integration', () => {
           where: { projectId: fixture.projectId, workspaceId: fixture.workspaceId },
         });
         await transaction.projectRoleTeam.deleteMany({
+          where: { projectId: fixture.projectId, workspaceId: fixture.workspaceId },
+        });
+        await transaction.projectTeam.deleteMany({
           where: { projectId: fixture.projectId, workspaceId: fixture.workspaceId },
         });
         const deleted = await transaction.project.deleteMany({

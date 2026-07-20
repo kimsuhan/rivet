@@ -23,6 +23,7 @@ describe('WorkflowSettingsPage', () => {
   it('클라이언트에서 채울 워크플로 상태 메시지의 자리표시자를 보존한다', async () => {
     await WorkflowSettingsPage({ params: Promise.resolve({ locale: 'ko', teamId: 'team-web' }) });
 
+    expect(translate).toHaveBeenCalledWith('createDescription', { category: '{category}' });
     expect(translate).toHaveBeenCalledWith('deleteDescription', { state: '{state}' });
     expect(translate).toHaveBeenCalledWith('reorderSuccess', {
       position: '{position}',

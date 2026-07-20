@@ -237,6 +237,7 @@ describe('M5 files and profile', () => {
       });
       await database.client.teamWork.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.issue.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+      await database.client.projectTeam.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.workflowState.deleteMany({
         where: { workspaceId: { in: workspaceIds } },

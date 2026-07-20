@@ -6,20 +6,24 @@
  * OpenAPI spec version: 1.0
  */
 import type { IssueMemberSummaryResponseDto } from './issueMemberSummaryResponseDto';
-import type { IssueTeamSummaryResponseDto } from './issueTeamSummaryResponseDto';
+import type { IssueProjectTeamSummaryResponseDto } from './issueProjectTeamSummaryResponseDto';
 import type { IssueWorkflowStateSummaryResponseDto } from './issueWorkflowStateSummaryResponseDto';
 import type { TeamWorkIssueSummaryResponseDto } from './teamWorkIssueSummaryResponseDto';
-import type { TeamWorkSummaryResponseDtoProjectRole } from './teamWorkSummaryResponseDtoProjectRole';
 import type { TeamWorkSummaryResponseDtoStateCategory } from './teamWorkSummaryResponseDtoStateCategory';
 
 export interface TeamWorkSummaryResponseDto {
   id: string;
   identifier: string;
   issue: TeamWorkIssueSummaryResponseDto;
-  projectRole: TeamWorkSummaryResponseDtoProjectRole;
-  team: IssueTeamSummaryResponseDto;
+  projectTeam: IssueProjectTeamSummaryResponseDto;
   workflowState: IssueWorkflowStateSummaryResponseDto;
   stateCategory: TeamWorkSummaryResponseDtoStateCategory;
+  /**
+     * @minimum 0
+     * @maximum 1
+     * @nullable
+     */
+  stateProgress: number | null;
   /** @nullable */
   assignee: IssueMemberSummaryResponseDto | null;
   /**

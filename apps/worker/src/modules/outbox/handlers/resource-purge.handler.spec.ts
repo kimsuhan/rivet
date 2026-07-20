@@ -52,6 +52,7 @@ describe('ResourcePurgeHandler', () => {
     mention: { deleteMany: jest.fn() },
     notification: { deleteMany: jest.fn() },
     project: { deleteMany: jest.fn() },
+    projectTeam: { deleteMany: jest.fn() },
     projectRoleTeam: { deleteMany: jest.fn() },
   };
   const database = { client: { $transaction: jest.fn() } };
@@ -148,6 +149,7 @@ describe('ResourcePurgeHandler', () => {
       ),
     ).rejects.toEqual(new RetryableOutboxError('PROJECT_PURGE_BLOCKED'));
     expect(transaction.issueTemplate.updateMany).not.toHaveBeenCalled();
+    expect(transaction.projectTeam.deleteMany).not.toHaveBeenCalled();
     expect(transaction.projectRoleTeam.deleteMany).not.toHaveBeenCalled();
   });
 
@@ -188,6 +190,7 @@ describe('ResourcePurgeHandler', () => {
     );
     expect(transaction.issueTemplate.updateMany).toHaveBeenCalledWith({
       data: {
+        initialProjectTeamId: null,
         initialRole: null,
         projectId: null,
         version: { increment: 1 },
@@ -208,10 +211,11 @@ describe('ResourcePurgeHandler', () => {
     expect(transaction.$queryRaw.mock.invocationCallOrder[2] ?? Infinity).toBeLessThan(
       transaction.issueTemplate.updateMany.mock.invocationCallOrder[0] ?? -Infinity,
     );
-    expect(transaction.projectRoleTeam.deleteMany).toHaveBeenCalled();
+    expect(transaction.projectTeam.deleteMany).toHaveBeenCalled();
     expect(
       transaction.issueTemplate.updateMany.mock.invocationCallOrder[0] ?? Infinity,
-    ).toBeLessThan(transaction.projectRoleTeam.deleteMany.mock.invocationCallOrder[0] ?? -Infinity);
+    ).toBeLessThan(transaction.projectTeam.deleteMany.mock.invocationCallOrder[0] ?? -Infinity);
+    expect(transaction.projectRoleTeam.deleteMany).toHaveBeenCalled();
     expect(transaction.activityEvent.deleteMany).toHaveBeenCalled();
     expect(transaction.project.deleteMany).toHaveBeenCalled();
     const signal = JSON.parse(transaction.$executeRaw.mock.calls[0]?.[1] as string) as Record<

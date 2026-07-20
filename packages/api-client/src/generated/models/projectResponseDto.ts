@@ -8,7 +8,7 @@
 import type { ProjectMemberSummaryResponseDto } from './projectMemberSummaryResponseDto';
 import type { ProjectProgressResponseDto } from './projectProgressResponseDto';
 import type { ProjectResponseDtoStatus } from './projectResponseDtoStatus';
-import type { ProjectRoleTeamResponseDto } from './projectRoleTeamResponseDto';
+import type { ProjectTeamResponseDto } from './projectTeamResponseDto';
 
 export interface ProjectResponseDto {
   id: string;
@@ -22,7 +22,7 @@ export interface ProjectResponseDto {
   startDate: string | null;
   /** @nullable */
   targetDate: string | null;
-  roleTeams: ProjectRoleTeamResponseDto[];
+  projectTeams: ProjectTeamResponseDto[];
   progress: ProjectProgressResponseDto;
   archived: boolean;
   /** @minimum 1 */

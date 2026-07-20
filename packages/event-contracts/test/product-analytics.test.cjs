@@ -15,16 +15,14 @@ test('accepts exact workspace and project analytics payloads', () => {
   assert.deepEqual(
     validateProjectCreatedOutboxPayload({
       hasTargetDate: true,
-      roleCount: 2,
-      roles: ['BACKEND', 'WEB_FRONTEND'],
-      schemaVersion: 1,
+      schemaVersion: 2,
+      teamCount: 2,
     }),
     {
       payload: {
         hasTargetDate: true,
-        roleCount: 2,
-        roles: ['BACKEND', 'WEB_FRONTEND'],
-        schemaVersion: 1,
+        schemaVersion: 2,
+        teamCount: 2,
       },
       success: true,
     },
@@ -43,6 +41,21 @@ test('accepts exact workspace and project analytics payloads', () => {
         schemaVersion: 1,
         toStatus: 'IN_PROGRESS',
       },
+      success: true,
+    },
+  );
+});
+
+test('normalizes the legacy project role payload during the worker-first rollout window', () => {
+  assert.deepEqual(
+    validateProjectCreatedOutboxPayload({
+      hasTargetDate: false,
+      roleCount: 2,
+      roles: ['BACKEND', 'WEB_FRONTEND'],
+      schemaVersion: 1,
+    }),
+    {
+      payload: { hasTargetDate: false, schemaVersion: 2, teamCount: 2 },
       success: true,
     },
   );

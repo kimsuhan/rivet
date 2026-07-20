@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { Archive, GitBranch, Pencil, Plus, ShieldX, UsersRound } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -61,6 +61,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMemberPages } from '@/features/members/member-settings-queries';
 import { Link } from '@/i18n/navigation';
+
+import { createTeamKey, normalizeTeamKey } from './team-key';
 
 export type TeamSettingsLabels = {
   activeEmptyDescription: string;
@@ -195,6 +197,7 @@ function TeamCreateDialog({
   onClose: () => void;
   onLoadMoreMembers: () => void;
 }) {
+  const hasEditedKey = useRef(false);
   const queryClient = useQueryClient();
   const mutation = useTeamsControllerCreate();
   const schema = z.object({
@@ -218,6 +221,8 @@ function TeamCreateDialog({
     resolver: zodResolver(schema),
   });
   const selectedMemberIds = useWatch({ control, name: 'memberIds' }) ?? [];
+  const nameField = register('name');
+  const keyField = register('key');
   const [unexpectedError, setUnexpectedError] = useState(false);
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
 
@@ -307,7 +312,19 @@ function TeamCreateDialog({
                   aria-errormessage={errors.name ? 'create-team-name-error' : undefined}
                   aria-invalid={Boolean(errors.name)}
                   placeholder={labels.namePlaceholder}
-                  {...register('name')}
+                  {...nameField}
+                  onChange={(event) => {
+                    nameField.onChange(event);
+
+                    if (hasEditedKey.current) {
+                      return;
+                    }
+
+                    setValue('key', createTeamKey(event.target.value), {
+                      shouldDirty: true,
+                      shouldValidate: Boolean(errors.key),
+                    });
+                  }}
                 />
                 <FieldError id="create-team-name-error" errors={[errors.name]} />
               </Field>
@@ -322,7 +339,24 @@ function TeamCreateDialog({
                   maxLength={5}
                   placeholder={labels.keyPlaceholder}
                   spellCheck={false}
-                  {...register('key')}
+                  {...keyField}
+                  onChange={(event) => {
+                    setValue('key', normalizeTeamKey(event.target.value), {
+                      shouldDirty: true,
+                      shouldValidate: Boolean(errors.key),
+                    });
+                    hasEditedKey.current = true;
+                  }}
+                  onClick={(event) => {
+                    if (!hasEditedKey.current) {
+                      event.currentTarget.select();
+                    }
+                  }}
+                  onFocus={(event) => {
+                    if (!hasEditedKey.current) {
+                      event.currentTarget.select();
+                    }
+                  }}
                 />
                 <FieldDescription>{labels.keyDescription}</FieldDescription>
                 <FieldError id="create-team-key-error" errors={[errors.key]} />
@@ -453,6 +487,7 @@ function TeamEditDialog({
     register,
     resetField,
     setError,
+    setValue,
   } = useForm<z.infer<typeof schema>>({
     defaultValues: { key: team.key, name: team.name },
     resolver: zodResolver(schema),
@@ -468,6 +503,7 @@ function TeamEditDialog({
   );
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
   const selectedMemberIds = new Set(team.memberIds);
+  const keyField = register('key');
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: getTeamsControllerGetQueryKey(team.id) });
@@ -636,7 +672,13 @@ function TeamEditDialog({
                   disabled={keyLocked}
                   maxLength={5}
                   spellCheck={false}
-                  {...register('key')}
+                  {...keyField}
+                  onChange={(event) => {
+                    setValue('key', normalizeTeamKey(event.target.value), {
+                      shouldDirty: true,
+                      shouldValidate: Boolean(errors.key),
+                    });
+                  }}
                 />
                 <FieldDescription>{labels.keyDescription}</FieldDescription>
                 <FieldError id="edit-team-key-error" errors={[errors.key]} />

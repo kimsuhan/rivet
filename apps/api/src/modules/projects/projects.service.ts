@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { HttpStatus, Injectable } from '@nestjs/common';
 
-import { Prisma, ProjectRole, ProjectStatus } from '@rivet/database';
+import { MembershipRole, Prisma, ProjectStatus, StateCategory } from '@rivet/database';
 import {
   PROJECT_CREATED,
   PROJECT_CREATED_SCHEMA_VERSION,
@@ -18,7 +18,7 @@ import {
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
 import { notifyResourceChanged } from '../../common/realtime/notify-resource-changed';
-import { normalizeProjectRoleTeams } from './domain/project-role';
+import { normalizeProjectTeamIds } from './domain/project-team';
 import type {
   ArchiveProjectDto,
   CreateProjectDto,
@@ -44,15 +44,27 @@ export class ProjectsService {
   ) {}
 
   async create(
-    context: { membershipId: string; workspaceId: string },
+    context: { membershipId: string; membershipRole: MembershipRole; workspaceId: string },
     dto: CreateProjectDto,
   ): Promise<ProjectResponseDto> {
     const name = normalizeProjectName(dto.name);
     const description = normalizeProjectDescription(dto.description) ?? null;
     const startDate = parseProjectDate(dto.startDate, 'startDate') ?? null;
     const targetDate = parseProjectDate(dto.targetDate, 'targetDate') ?? null;
-    const roleTeams = normalizeProjectRoleTeams(dto.roleTeams);
+    const teamIds = normalizeProjectTeamIds(dto.teamIds);
     validateProjectDateOrder(startDate, targetDate);
+
+    if (
+      teamIds.length > 0 &&
+      context.membershipRole !== MembershipRole.ADMIN &&
+      dto.leadMembershipId !== context.membershipId
+    ) {
+      throw new ApiError({
+        code: 'PROJECT_TEAM_MANAGE_FORBIDDEN',
+        message: '워크스페이스 관리자와 프로젝트 리드만 참여 팀을 설정할 수 있습니다.',
+        status: HttpStatus.FORBIDDEN,
+      });
+    }
 
     const result = await this.database.client.$transaction(async (transaction) => {
       await this.projects.lockWorkspace(transaction, context.workspaceId);
@@ -64,7 +76,7 @@ export class ProjectsService {
       await this.projects.lockActiveTeams(
         transaction,
         context.workspaceId,
-        roleTeams.map(({ teamId }) => teamId),
+        teamIds,
       );
 
       const project = await transaction.project.create({
@@ -79,20 +91,21 @@ export class ProjectsService {
         },
         select: { id: true },
       });
-      await transaction.projectRoleTeam.createMany({
-        data: roleTeams.map(({ role, teamId }) => ({
-          projectId: project.id,
-          role,
-          teamId,
-          workspaceId: context.workspaceId,
-        })),
-      });
+      if (teamIds.length > 0) {
+        await transaction.projectTeam.createMany({
+          data: teamIds.map((teamId) => ({
+            projectId: project.id,
+            teamId,
+            workspaceId: context.workspaceId,
+          })),
+        });
+      }
       await transaction.activityEvent.create({
         data: {
           actorMembershipId: context.membershipId,
           afterData: {
             name,
-            roleTeams: roleTeams.map(({ role, teamId }) => ({ role, teamId })),
+            teamIds,
             status: dto.status ?? ProjectStatus.PLANNED,
           },
           eventType: 'PROJECT_CREATED',
@@ -109,8 +122,7 @@ export class ProjectsService {
           id: randomUUID(),
           payload: {
             hasTargetDate: targetDate !== null,
-            roleCount: roleTeams.length,
-            roles: roleTeams.map(({ role }) => role),
+            teamCount: teamIds.length,
             schemaVersion: PROJECT_CREATED_SCHEMA_VERSION,
           } satisfies ProjectCreatedOutboxPayload,
           workspaceId: context.workspaceId,
@@ -131,7 +143,7 @@ export class ProjectsService {
   }
 
   async update(
-    context: { membershipId: string; workspaceId: string },
+    context: { membershipId: string; membershipRole: MembershipRole; workspaceId: string },
     projectId: string,
     dto: UpdateProjectDto,
   ): Promise<ProjectResponseDto> {
@@ -142,7 +154,7 @@ export class ProjectsService {
       dto.leadMembershipId === undefined &&
       dto.startDate === undefined &&
       dto.targetDate === undefined &&
-      dto.roleTeams === undefined
+      dto.teamIds === undefined
     ) {
       return projectValidationError('project', '변경할 프로젝트 정보를 입력해 주세요.');
     }
@@ -151,8 +163,8 @@ export class ProjectsService {
     const requestedDescription = normalizeProjectDescription(dto.description);
     const requestedStartDate = parseProjectDate(dto.startDate, 'startDate');
     const requestedTargetDate = parseProjectDate(dto.targetDate, 'targetDate');
-    const requestedRoleTeams =
-      dto.roleTeams === undefined ? undefined : normalizeProjectRoleTeams(dto.roleTeams);
+    const requestedTeamIds =
+      dto.teamIds === undefined ? undefined : normalizeProjectTeamIds(dto.teamIds);
 
     const outcome = await this.database.client.$transaction(async (transaction) => {
       await this.projects.lockWorkspace(transaction, context.workspaceId);
@@ -177,45 +189,64 @@ export class ProjectsService {
         );
       }
 
-      const currentRoleTeams = await transaction.projectRoleTeam.findMany({
-        orderBy: { role: 'asc' },
-        select: { role: true, teamId: true },
+      const currentProjectTeams = await transaction.projectTeam.findMany({
+        orderBy: [{ teamId: 'asc' }, { id: 'asc' }],
+        select: { id: true, isActive: true, teamId: true },
         where: { projectId, workspaceId: context.workspaceId },
       });
-      let changedRoles: ProjectRole[] = [];
-      if (requestedRoleTeams) {
+      const currentActiveTeamIds = currentProjectTeams
+        .filter(({ isActive }) => isActive)
+        .map(({ teamId }) => teamId)
+        .sort();
+      const changesProjectTeams =
+        requestedTeamIds !== undefined &&
+        (requestedTeamIds.length !== currentActiveTeamIds.length ||
+          requestedTeamIds.some((teamId, index) => teamId !== currentActiveTeamIds[index]));
+      if (changesProjectTeams && requestedTeamIds) {
+        if (
+          context.membershipRole !== MembershipRole.ADMIN &&
+          current.leadMembershipId !== context.membershipId
+        ) {
+          throw new ApiError({
+            code: 'PROJECT_TEAM_MANAGE_FORBIDDEN',
+            message: '워크스페이스 관리자와 프로젝트 리드만 참여 팀을 변경할 수 있습니다.',
+            status: HttpStatus.FORBIDDEN,
+          });
+        }
         await this.projects.lockActiveTeams(
           transaction,
           context.workspaceId,
-          requestedRoleTeams.map(({ teamId }) => teamId),
+          requestedTeamIds,
         );
-        const currentByRole = new Map(currentRoleTeams.map((item) => [item.role, item.teamId]));
-        const requestedByRole = new Map(requestedRoleTeams.map((item) => [item.role, item.teamId]));
-        changedRoles = Object.values(ProjectRole).filter(
-          (role) => currentByRole.get(role) !== requestedByRole.get(role),
-        );
+        const requestedTeamIdSet = new Set(requestedTeamIds);
+        const deactivatedProjectTeamIds = currentProjectTeams
+          .filter(({ isActive, teamId }) => isActive && !requestedTeamIdSet.has(teamId))
+          .map(({ id }) => id);
 
-        if (changedRoles.length > 0) {
+        if (deactivatedProjectTeamIds.length > 0) {
           const blockingIssues = await transaction.teamWork.findMany({
-            orderBy: [{ projectRole: 'asc' }, { identifier: 'asc' }, { id: 'asc' }],
+            orderBy: [{ identifier: 'asc' }, { id: 'asc' }],
             select: {
               id: true,
               identifier: true,
               issue: { select: { title: true } },
-              projectRole: true,
-              teamId: true,
+              projectTeamId: true,
+              team: { select: { id: true, key: true, name: true } },
             },
             where: {
-              issue: { projectId },
-              projectRole: { in: changedRoles },
+              deletedAt: null,
+              projectTeamId: { in: deactivatedProjectTeamIds },
+              workflowState: {
+                category: { notIn: [StateCategory.COMPLETED, StateCategory.CANCELED] },
+              },
               workspaceId: context.workspaceId,
             },
           });
           if (blockingIssues.length > 0) {
             throw new ApiError({
-              code: 'PROJECT_ROLE_IN_USE',
+              code: 'PROJECT_TEAM_IN_USE',
               details: { issues: blockingIssues },
-              message: '사용 중인 프로젝트 역할의 담당 팀은 변경할 수 없습니다.',
+              message: '진행 중인 팀 작업이 있는 참여 팀은 제외할 수 없습니다.',
               status: HttpStatus.CONFLICT,
             });
           }
@@ -232,8 +263,6 @@ export class ProjectsService {
       const changesTargetDate =
         requestedTargetDate !== undefined &&
         projectDateValue(requestedTargetDate) !== projectDateValue(current.targetDate);
-      const changesRoleTeams = changedRoles.length > 0;
-
       if (
         !changesName &&
         !changesDescription &&
@@ -241,7 +270,7 @@ export class ProjectsService {
         !changesLead &&
         !changesStartDate &&
         !changesTargetDate &&
-        !changesRoleTeams
+        !changesProjectTeams
       ) {
         const row = await this.projects.find(transaction, context.workspaceId, projectId);
         const progressByProject = await this.projects.progressByProject(
@@ -271,21 +300,30 @@ export class ProjectsService {
         where: { workspaceId_id: { id: projectId, workspaceId: context.workspaceId } },
       });
 
-      if (changesRoleTeams && requestedRoleTeams) {
-        await transaction.projectRoleTeam.deleteMany({
-          where: { projectId, role: { in: changedRoles }, workspaceId: context.workspaceId },
-        });
-        const changedRoleSet = new Set(changedRoles);
-        const replacements = requestedRoleTeams.filter(({ role }) => changedRoleSet.has(role));
-        if (replacements.length > 0) {
-          await transaction.projectRoleTeam.createMany({
-            data: replacements.map(({ role, teamId }) => ({
-              projectId,
-              role,
-              teamId,
-              workspaceId: context.workspaceId,
-            })),
+      if (changesProjectTeams && requestedTeamIds) {
+        const deactivatedAt = new Date();
+        if (requestedTeamIds.length === 0) {
+          await transaction.projectTeam.updateMany({
+            data: { deactivatedAt, isActive: false },
+            where: { isActive: true, projectId, workspaceId: context.workspaceId },
           });
+        } else {
+          await transaction.projectTeam.updateMany({
+            data: { deactivatedAt, isActive: false },
+            where: {
+              isActive: true,
+              projectId,
+              teamId: { notIn: requestedTeamIds },
+              workspaceId: context.workspaceId,
+            },
+          });
+          for (const teamId of requestedTeamIds) {
+            await transaction.projectTeam.upsert({
+              create: { projectId, teamId, workspaceId: context.workspaceId },
+              update: { deactivatedAt: null, isActive: true },
+              where: { projectId_teamId: { projectId, teamId } },
+            });
+          }
         }
       }
 
@@ -327,11 +365,11 @@ export class ProjectsService {
           projectDateValue(requestedTargetDate ?? null),
         );
       }
-      if (changesRoleTeams) {
+      if (changesProjectTeams) {
         addEvent(
-          'roleTeams',
-          currentRoleTeams.map(({ role, teamId }) => ({ role, teamId })),
-          requestedRoleTeams!.map(({ role, teamId }) => ({ role, teamId })),
+          'projectTeams',
+          currentActiveTeamIds,
+          requestedTeamIds!,
         );
       }
       await transaction.activityEvent.createMany({ data: events });
@@ -382,7 +420,7 @@ export class ProjectsService {
   }
 
   archive(
-    context: { membershipId: string; workspaceId: string },
+    context: { membershipId: string; membershipRole: MembershipRole; workspaceId: string },
     projectId: string,
     dto: ArchiveProjectDto,
   ): Promise<ProjectResponseDto> {
@@ -428,7 +466,7 @@ export class ProjectsService {
   }
 
   async trash(
-    context: { membershipId: string; workspaceId: string },
+    context: { membershipId: string; membershipRole: MembershipRole; workspaceId: string },
     projectId: string,
     version: number,
   ): Promise<void> {

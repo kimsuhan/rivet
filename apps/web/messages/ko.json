@@ -438,11 +438,6 @@
     "issue": "이슈",
     "teamWork": "팀 작업",
     "noProject": "프로젝트 없음",
-    "roles": {
-      "APP_FRONTEND": "앱 프론트",
-      "BACKEND": "백엔드",
-      "WEB_FRONTEND": "웹 프론트"
-    },
     "issueStatuses": {
       "UNSORTED": "접수됨",
       "TODO": "할 일",
@@ -606,16 +601,16 @@
       "priority": "우선순위",
       "labels": "라벨",
       "project": "프로젝트",
-      "initialRoles": "처음 작업할 팀"
+      "initialTeams": "처음 작업할 팀"
     },
     "overwriteCancel": "현재 값 유지",
     "overwriteConfirm": "템플릿 적용",
     "descriptionLabel": "설명",
-    "initialRolesLabel": "처음 작업할 팀 (선택)",
-    "initialRolesDescription": "아직 작업 범위가 정해지지 않았다면 선택하지 않아도 됩니다.",
-    "initialRolesNoProject": "프로젝트를 먼저 선택해 주세요.",
-    "initialRolesEmpty": "이 프로젝트에서 선택할 수 있는 팀이 아직 없습니다.",
-    "initialRolesToolbarLabel": "역할",
+    "initialTeamsLabel": "처음 작업할 팀 (선택)",
+    "initialTeamsDescription": "참여 팀은 순서 없이 병렬로 바로 시작할 수 있습니다.",
+    "initialTeamsNoProject": "프로젝트를 먼저 선택해 주세요.",
+    "initialTeamsEmpty": "이 프로젝트에 활성 참여 팀이 없습니다. 프로젝트 설정에서 팀을 추가해 주세요.",
+    "initialTeamsToolbarLabel": "참여 팀",
     "close": "이슈 만들기 닫기",
     "discardTitle": "작성 중인 변경을 버릴까요?",
     "discardDescription": "저장하지 않은 이슈 입력은 복구할 수 없습니다.",
@@ -626,11 +621,6 @@
     "projectLabel": "프로젝트",
     "projectPlaceholder": "프로젝트 선택",
     "projectRequired": "프로젝트를 선택해 주세요.",
-    "projectRoles": {
-      "BACKEND": "백엔드",
-      "WEB_FRONTEND": "웹 프론트",
-      "APP_FRONTEND": "앱 프론트"
-    },
     "priorityLabel": "우선순위",
     "priorities": {
       "NONE": "없음",
@@ -755,15 +745,10 @@
       "noLabels": "사용할 수 있는 활성 라벨이 없습니다.",
       "projectLabel": "프로젝트 (선택)",
       "noProject": "프로젝트 지정 안 함",
-      "initialRoleLabel": "처음 작업할 팀 (선택)",
-      "initialRoleNone": "팀 지정 안 함",
-      "projectRoles": {
-        "BACKEND": "백엔드",
-        "WEB_FRONTEND": "웹 프론트",
-        "APP_FRONTEND": "앱 프론트"
-      },
+      "initialTeamLabel": "처음 작업할 팀 (선택)",
+      "initialTeamNone": "팀 지정 안 함",
       "unavailable": "대상 확인 필요",
-      "repairDescription": "보관되었거나 권한이 사라진 대상은 입력에서 제외했습니다. 저장하면 현재 사용할 수 있는 라벨, 프로젝트와 팀 값만 유지됩니다.",
+      "repairDescription": "현재 사용할 수 없는 프로젝트 참여 팀 선택은 입력에 유지했습니다. 활성 참여 팀을 다시 선택해야 템플릿을 저장하고 적용할 수 있습니다.",
       "optionsErrorTitle": "템플릿 대상 일부를 불러오지 못했습니다",
       "optionsErrorDescription": "활성 라벨, 프로젝트와 팀 권한을 다시 확인한 뒤 저장해 주세요.",
       "save": "템플릿 저장",
@@ -960,7 +945,7 @@
     },
     "workflow": {
       "title": "워크플로 설정",
-      "description": "팀에서 사용하는 상태 이름과 표시 순서를 관리합니다.",
+      "description": "팀에서 사용하는 상태를 추가하고 이름, 기본값과 표시 순서를 관리합니다.",
       "backToTeams": "팀 목록",
       "teamLabel": "팀",
       "loading": "워크플로를 불러오는 중입니다.",
@@ -982,13 +967,37 @@
       "categoryCanceled": "취소됨",
       "categoryCanceledDescription": "진행하지 않기로 결정해 종료한 상태입니다.",
       "categoryEmpty": "이 구간에 등록된 상태가 없습니다.",
+      "categoryLabel": "시스템 범주",
+      "categoryImmutableDescription": "시스템 범주는 생성 후 변경할 수 없습니다.",
+      "create": "상태 추가",
+      "createTitle": "워크플로 상태 추가",
+      "createDescription": "{category} 구간의 끝에 새 상태를 추가합니다. 시스템 범주는 생성 후 변경할 수 없습니다.",
+      "creating": "추가하는 중",
       "defaultBadge": "기본",
+      "defaultSet": "기본값으로 지정",
+      "defaulting": "지정하는 중",
+      "defaultSuccess": "{state} 상태를 신규 작업 기본값으로 지정했습니다.",
+      "defaultErrorTitle": "기본값을 변경하지 못했습니다",
+      "defaultErrorDescription": "최신 워크플로를 확인한 뒤 다시 시도해 주세요.",
       "moveUp": "상태를 위로 이동",
       "moveDown": "상태를 아래로 이동",
+      "manage": "상태 관리",
       "rename": "이름 변경",
       "renameTitle": "상태 이름 변경",
       "renameDescription": "기존 이슈의 상태 연결은 유지됩니다.",
       "nameLabel": "상태 이름",
+      "colorLabel": "상태 색상",
+      "colors": {
+        "GRAY": "회색",
+        "COOL_GRAY": "청회색",
+        "INDIGO": "인디고",
+        "TEAL": "청록",
+        "GREEN": "초록",
+        "YELLOW": "노랑",
+        "ORANGE": "주황",
+        "BROWN": "갈색",
+        "RED": "빨강"
+      },
       "nameRequired": "상태 이름을 입력해 주세요.",
       "nameTooLong": "상태 이름은 100자 이하여야 합니다.",
       "nameInvalid": "상태 이름을 확인해 주세요.",
@@ -1008,8 +1017,11 @@
       "reorderErrorTitle": "상태 순서를 바꾸지 못했습니다",
       "reorderErrorDescription": "최신 워크플로를 확인한 뒤 다시 시도해 주세요.",
       "reorderSuccess": "{state} 상태를 {position}번째로 이동했습니다.",
+      "terminalDefaultTitle": "종료 상태를 기본값으로 지정할까요?",
+      "terminalDefaultDescription": "담당자 없는 새 작업과 새 전달 대상 작업이 완료 또는 취소 상태로 생성됩니다. 기존 작업의 상태는 바뀌지 않습니다.",
+      "terminalDefaultConfirm": "기본값으로 지정",
       "discardTitle": "작성 중인 변경을 버릴까요?",
-      "discardDescription": "저장하지 않은 상태 이름 변경은 복구할 수 없습니다.",
+      "discardDescription": "저장하지 않은 상태 이름과 색상은 복구할 수 없습니다.",
       "keepEditing": "계속 편집",
       "discardChanges": "변경 버리기",
       "cancel": "취소",
@@ -1098,13 +1110,13 @@
       "issues": {
         "title": "이슈 CSV",
         "description": "휴지통을 제외한 현재 이슈와 연결 관계를 한 파일로 내보냅니다.",
-        "fields": "유형, 상위 이슈, 표시 ID, 팀, 프로젝트 역할, 프로젝트, 제목, 설명, 상태, 담당자, 우선순위, 라벨, 작업 순서, 작업 전달, 첨부파일 메타데이터와 생성·수정 시각",
+        "fields": "유형, 상위 이슈, 표시 ID, 참여 팀, 프로젝트, 제목, 설명, 상태, 담당자, 우선순위, 라벨, 작업 순서, 작업 전달, 첨부파일 메타데이터와 생성·수정 시각",
         "sensitive": "설명과 작업 전달 본문, 첨부파일 이름과 참조가 포함됩니다. 파일 바이너리는 포함하지 않습니다."
       },
       "projects": {
         "title": "프로젝트 CSV",
-        "description": "휴지통을 제외한 현재 프로젝트와 역할별 팀 구성을 내보냅니다.",
-        "fields": "이름, 설명, 상태, 리드, 역할별 팀, 시작일, 목표일과 생성·수정 시각",
+        "description": "휴지통을 제외한 현재 프로젝트와 참여 팀 구성을 내보냅니다.",
+        "fields": "이름, 설명, 상태, 리드, 참여 팀, 시작일, 목표일과 생성·수정 시각",
         "sensitive": "프로젝트 설명, 리드와 팀 구성이 포함됩니다. 공유 범위를 확인해 주세요."
       },
       "ready": "버튼을 누르면 서버가 CSV를 생성하고 브라우저가 바로 파일을 받습니다.",
@@ -1175,7 +1187,7 @@
       },
       "values": {
         "title": "CSV 값을 현재 워크스페이스에 맞추세요",
-        "description": "보관된 대상은 선택 항목에서 제외됩니다. 새 프로젝트는 매핑한 한 팀의 백엔드 역할로 생성됩니다.",
+        "description": "보관된 대상은 선택 항목에서 제외됩니다. 새 프로젝트에는 매핑한 팀이 참여 팀으로 연결됩니다.",
         "teams": "팀",
         "teamsDescription": "CSV 팀을 활성 팀에 연결하거나 해당 팀의 행을 제외합니다.",
         "states": "상태",
@@ -1282,7 +1294,7 @@
         "IMPORT_STATE_TARGET_INVALID": "선택한 상태가 팀에 없거나 보관되었습니다.",
         "IMPORT_MEMBER_TARGET_INVALID": "선택한 담당자가 활성 상태가 아니거나 팀에 속하지 않습니다.",
         "IMPORT_PROJECT_TARGET_INVALID": "선택한 프로젝트가 보관되었거나 현재 워크스페이스에 없습니다.",
-        "IMPORT_PROJECT_TEAM_NOT_CONNECTED": "선택한 프로젝트에 매핑한 팀 역할이 없습니다.",
+        "IMPORT_PROJECT_TEAM_NOT_CONNECTED": "선택한 프로젝트에 매핑한 참여 팀이 없습니다.",
         "IMPORT_PROJECT_TEAM_AMBIGUOUS": "새 프로젝트 하나를 서로 다른 팀에 연결할 수 없습니다. 프로젝트 값을 나누거나 기존 프로젝트에 매핑해 주세요.",
         "IMPORT_PROJECT_NAME_INVALID": "새 프로젝트 이름은 200자 이하여야 합니다.",
         "IMPORT_LABEL_TARGET_INVALID": "선택한 라벨이 보관되었거나 현재 워크스페이스에 없습니다.",
@@ -1327,14 +1339,10 @@
       "purgeAt": "영구 삭제 예정일",
       "originalConnections": "원래 연결",
       "noConnections": "연결된 프로젝트 없음",
-      "noRoleTeams": "역할별 담당 팀 없음",
+      "noRoleTeams": "참여 팀 없음",
+      "inactive": "참여 종료",
       "projectConnection": "프로젝트 {name}",
       "archived": "보관됨",
-      "roles": {
-        "BACKEND": "백엔드",
-        "WEB_FRONTEND": "웹 프론트",
-        "APP_FRONTEND": "앱 프론트"
-      },
       "restore": "복구",
       "restoreNamed": "{name} 복구",
       "restoreTitle": "{name}을 복구할까요?",
@@ -1442,12 +1450,6 @@
     "optionsErrorDescription": "현재 값은 그대로 유지됩니다. 다시 불러와 주세요.",
     "team": "팀",
     "project": "프로젝트",
-    "projectRole": "프로젝트 역할",
-    "projectRoles": {
-      "BACKEND": "백엔드",
-      "WEB_FRONTEND": "웹 프론트",
-      "APP_FRONTEND": "앱 프론트"
-    },
     "state": "상태",
     "assignee": "담당자",
     "priority": "우선순위",
@@ -1497,9 +1499,9 @@
       "startClose": "작업 시작 닫기",
       "roleSelected": "선택됨",
       "startErrorTitle": "작업을 시작하지 못했습니다",
-      "startErrorDescription": "선택한 팀과 최신 프로젝트 역할을 확인한 뒤 다시 시도해 주세요.",
+      "startErrorDescription": "선택한 팀과 최신 프로젝트 참여 상태를 확인한 뒤 다시 시도해 주세요.",
       "projectErrorTitle": "예상 단계를 불러오지 못했습니다",
-      "projectErrorDescription": "현재 작업은 계속 확인할 수 있습니다. 프로젝트 역할을 다시 불러와 주세요.",
+      "projectErrorDescription": "현재 작업은 계속 확인할 수 있습니다. 프로젝트 참여 팀을 다시 불러와 주세요.",
       "allComplete": "모든 팀 작업이 완료되었습니다",
       "allCompleteDescription": "작업 흐름을 확인한 뒤 상위 이슈를 완료할 수 있습니다.",
       "completeIssue": "이슈 완료"
@@ -1538,34 +1540,34 @@
     },
     "handoff": {
       "title": "작업 전달",
-      "description": "프론트 작업에 필요한 API 변경 내용을 최초 전달과 추가 전달로 남깁니다.",
+      "description": "다음 팀에 필요한 작업 결과와 후속 정보를 최초 전달과 추가 전달로 남깁니다.",
       "count": "{count}건",
       "writeInitial": "작업 전달 작성",
       "addFollowUp": "추가 전달 작성",
       "receivedTitle": "전달받은 내용",
       "receivedDescription": "이 작업에 전달된 최초 내용과 추가 전달을 확인합니다.",
-      "sourceTask": "전달한 백엔드 작업",
+      "sourceTask": "전달한 팀 작업",
       "downstreamTasks": "전달받은 작업",
       "initial": "최초 전달",
       "followUp": "추가 전달",
       "initialTitle": "최초 작업 전달 작성",
       "followUpTitle": "추가 작업 전달 작성",
       "completeTitle": "작업 전달 후 완료",
-      "completeDescription": "프론트 작업에 필요한 최초 전달과 백엔드 완료를 같은 변경에서 저장합니다.",
+      "completeDescription": "다른 참여 팀에 전달하고 현재 팀 작업을 완료하는 변경을 함께 저장합니다.",
       "editorDescription": "일곱 개 H2 섹션을 순서대로 유지하고 각 섹션에 내용 또는 ‘해당 없음’을 입력해 주세요.",
       "mobileWrite": "작업 전달 작성과 전달을 포함한 완료는 데스크톱에서 사용할 수 있습니다.",
       "bodyLabel": "작업 전달 Markdown",
-      "destinationLabel": "전달 대상 역할",
-      "destinationDescription": "이번 최초 전달로 시작할 프론트 역할을 선택해 주세요.",
-      "destinationRequired": "전달 대상 역할을 하나 이상 선택해 주세요.",
+      "destinationLabel": "전달 대상 팀",
+      "destinationDescription": "이번 전달을 받을 활성 참여 팀을 선택해 주세요.",
+      "destinationRequired": "전달 대상 팀을 하나 이상 선택해 주세요.",
       "contentError": "일곱 개 섹션을 순서대로 유지하고 각 섹션의 내용을 채워 주세요.",
       "linkError": "API 명세 링크에는 HTTP(S) URL 또는 ‘해당 없음’을 입력해 주세요.",
       "fileError": "작업 전달 이미지가 아직 연결되지 않았거나 사용할 수 없습니다.",
       "completionRequiredError": "입력 내용은 유지했습니다. 현재 상태를 확인하고 완료 상태를 다시 선택한 뒤 ‘전달하고 완료’를 실행해 주세요.",
-      "projectRoleError": "프로젝트 역할이 변경되었습니다. 최신 전달 대상을 확인해 주세요.",
-      "scopeConflictError": "기존 후행 작업의 프로젝트, 팀 또는 역할이 현재 설정과 다릅니다. 영향 작업을 확인해 주세요.",
-      "closedTaskError": "대상 역할에는 완료되거나 취소된 기존 작업만 있습니다. 새 작업이 필요한지 확인해 주세요.",
-      "versionConflictError": "백엔드 작업이 이미 변경되었습니다. 입력은 유지했으니 최신 상태를 확인한 뒤 다시 실행해 주세요.",
+      "projectRoleError": "프로젝트 참여 팀이 변경되었습니다. 최신 전달 대상을 확인해 주세요.",
+      "scopeConflictError": "기존 후행 작업의 프로젝트 또는 팀이 현재 설정과 다릅니다. 영향 작업을 확인해 주세요.",
+      "closedTaskError": "대상 팀에는 완료되거나 취소된 기존 작업만 있습니다. 새 작업이 필요한지 확인해 주세요.",
+      "versionConflictError": "현재 팀 작업이 이미 변경되었습니다. 입력은 유지했으니 최신 상태를 확인한 뒤 다시 실행해 주세요.",
       "saveErrorTitle": "작업 전달을 저장하지 못했습니다",
       "saveErrorDescription": "입력 내용은 유지했습니다. 최신 상태를 확인한 뒤 다시 시도해 주세요.",
       "saving": "작업 전달 저장 중",
@@ -1700,7 +1702,7 @@
       "project": "프로젝트",
       "status": "이슈 상태",
       "priority": "우선순위",
-      "activeRole": "현재 작업 역할",
+      "activeRole": "현재 참여 팀",
       "unassigned": "담당자 없음",
       "label": "라벨",
       "createdBy": "만든 사람",
@@ -1749,11 +1751,6 @@
       "createdBy": "만든 사람",
       "updatedAt": "업데이트",
       "nextAction": "다음 행동"
-    },
-    "roles": {
-      "BACKEND": "백엔드",
-      "WEB_FRONTEND": "웹 프론트",
-      "APP_FRONTEND": "앱 프론트"
     },
     "statuses": {
       "UNSORTED": "접수됨",
@@ -1813,11 +1810,11 @@
       "close": "작업 창 닫기",
       "cancel": "취소",
       "loading": "최신 작업과 담당자 후보를 불러오는 중입니다.",
-      "roles": "프로젝트 역할",
+      "roles": "프로젝트 참여 팀",
       "existingTask": "기존 작업 재사용",
       "unassigned": "담당자 없음",
       "assigneeForRole": "{role} 담당자",
-      "selectRole": "역할 선택",
+      "selectRole": "참여 팀 선택",
       "selectAssignee": "담당자 선택",
       "optionsErrorTitle": "작업 정보와 담당자 후보를 불러오지 못했습니다",
       "optionsErrorDescription": "현재 선택은 유지했습니다. 최신 정보를 다시 불러와 주세요.",
@@ -1825,7 +1822,7 @@
       "conflictTitle": "다른 배정이 먼저 저장되었습니다",
       "errors": {
         "default": "최신 작업과 담당자 후보를 확인한 뒤 다시 시도해 주세요.",
-        "roleRequired": "하나 이상의 역할을 선택해 주세요.",
+        "roleRequired": "하나 이상의 참여 팀을 선택해 주세요.",
         "claimTargetRequired": "맡을 팀 작업을 선택해 주세요.",
         "assignmentRequired": "한 개 이상의 팀 작업에 담당자를 선택해 주세요.",
         "assignmentCandidateChanged": "사용할 수 없게 된 담당자 선택이 있습니다. 최신 후보에서 다시 선택해 주세요.",
@@ -1833,21 +1830,21 @@
       },
       "start": {
         "title": "작업 시작",
-        "description": "역할별 팀 작업을 만들거나 기존 미완료 작업을 재사용하고 담당자를 함께 지정합니다.",
-        "roleDescription": "하나 이상의 역할을 선택하세요. 담당자를 비워 둘 수 있습니다."
+        "description": "참여 팀 작업을 만들거나 기존 미완료 작업을 재사용하고 담당자를 함께 지정합니다.",
+        "roleDescription": "하나 이상의 참여 팀을 선택하세요. 담당자를 비워 둘 수 있습니다."
       },
       "teamStart": {
         "title": "우리 팀에서 시작",
-        "description": "현재 소속된 팀의 프로젝트 역할에서 담당자 없이 작업을 시작합니다.",
-        "roleDescription": "현재 소속 팀이 맡은 역할 중 아직 미완료 작업이 없는 역할만 선택할 수 있습니다."
+        "description": "현재 소속된 프로젝트 참여 팀에서 담당자 없이 작업을 시작합니다.",
+        "roleDescription": "현재 소속된 참여 팀 중 아직 미완료 작업이 없는 팀만 선택할 수 있습니다."
       },
       "claim": {
         "title": "내가 맡기",
-        "description": "현재 소속 팀 역할의 미할당 작업을 맡거나 새 작업을 만들어 자신에게 할당합니다.",
+        "description": "현재 소속된 참여 팀의 미할당 작업을 맡거나 새 작업을 만들어 자신에게 할당합니다.",
         "target": "팀 작업",
         "targetPlaceholder": "맡을 팀 작업 선택",
         "reuse": "{identifier} 미할당 작업을 자신에게 할당합니다.",
-        "create": "이 역할의 작업이 없어 새 팀 작업을 만들고 자신에게 할당합니다."
+        "create": "이 팀의 작업이 없어 새 팀 작업을 만들고 자신에게 할당합니다."
       },
       "assign": {
         "title": "담당자 지정",
@@ -1862,9 +1859,9 @@
       },
       "complete": {
         "title": "이슈 완료",
-        "description": "완료된 역할과 팀 작업, 제외된 취소 작업을 확인한 뒤 이슈를 완료합니다.",
+        "description": "완료된 참여 팀과 팀 작업, 제외된 취소 작업을 확인한 뒤 이슈를 완료합니다.",
         "notReadyTitle": "이슈를 바로 완료할 수 없습니다",
-        "roles": "완료된 역할",
+        "roles": "완료된 참여 팀",
         "tasks": "완료된 팀 작업",
         "canceled": "완료 대상에서 제외된 취소 작업"
       },
@@ -1925,7 +1922,7 @@
       "reapply": "내 변경 다시 적용",
       "noLabels": "라벨 없음",
       "blocked": "선행 작업 완료 대기",
-      "role": "프로젝트 역할"
+      "role": "프로젝트 참여 팀"
     },
     "loading": "이슈 목록을 불러오는 중입니다.",
     "errorTitle": "이슈 목록을 불러오지 못했습니다",
@@ -1969,11 +1966,6 @@
       "HIGH": "높음",
       "URGENT": "긴급"
     },
-    "projectRoles": {
-      "BACKEND": "백엔드",
-      "WEB_FRONTEND": "웹 프론트",
-      "APP_FRONTEND": "앱 프론트"
-    },
     "columns": {
       "issue": "이슈 · 라벨",
       "team": "팀",
@@ -2009,20 +2001,20 @@
     "backToProject": "프로젝트로 돌아가기",
     "list": {
       "title": "프로젝트",
-      "description": "역할별 팀과 연결된 작업의 진행을 결과물 단위로 확인합니다.",
+      "description": "프로젝트에 참여하는 실제 팀과 작업 진행을 결과물 단위로 확인합니다.",
       "noDescription": "설명 없음"
     },
     "create": {
       "action": "프로젝트 만들기",
       "title": "프로젝트 만들기",
-      "description": "프로젝트의 기본 정보와 함께할 역할별 팀을 정합니다.",
+      "description": "프로젝트의 기본 정보를 저장하고 참여할 워크스페이스 팀을 선택합니다. 팀은 나중에 추가해도 됩니다.",
       "save": "프로젝트 만들기",
       "mobileTitle": "프로젝트 만들기는 데스크톱에서 지원합니다"
     },
     "edit": {
       "action": "프로젝트 편집",
       "title": "{name} 편집",
-      "description": "기본 정보, 상태, 일정과 역할별 담당 팀을 변경합니다.",
+      "description": "기본 정보, 상태, 일정과 프로젝트 참여 팀을 변경합니다.",
       "save": "변경 저장",
       "mobileTitle": "프로젝트 편집은 데스크톱에서 지원합니다"
     },
@@ -2034,15 +2026,15 @@
     "detail": {
       "open": "프로젝트 열기",
       "readOnlyTitle": "보관된 프로젝트입니다",
-      "readOnlyDescription": "연결된 이슈와 역할 기록은 유지되며 프로젝트 정보는 읽기 전용입니다."
+      "readOnlyDescription": "연결된 이슈와 참여 팀 기록은 유지되며 프로젝트 정보는 읽기 전용입니다."
     },
     "filter": {
       "status": "프로젝트 상태",
       "allStatuses": "모든 상태",
       "includeArchived": "보관된 프로젝트 포함",
       "reset": "조건 초기화",
-      "role": "프로젝트 역할",
-      "allRoles": "모든 역할",
+      "role": "프로젝트 참여 팀",
+      "allRoles": "모든 참여 팀",
       "category": "작업 상태 범주",
       "allCategories": "모든 상태 범주"
     },
@@ -2080,19 +2072,18 @@
       "startDate": "시작일",
       "targetDate": "목표일",
       "noDate": "날짜 없음",
-      "roleTeams": "역할별 담당 팀",
-      "roleTeamsHint": "최소 한 역할에 활성 팀을 선택하세요. 같은 팀이 여러 역할을 맡을 수 있습니다.",
-      "noTeam": "선택 안 함"
-    },
-    "role": {
-      "BACKEND": "백엔드",
-      "WEB_FRONTEND": "웹 프론트",
-      "APP_FRONTEND": "앱 프론트"
-    },
-    "roleDescription": {
-      "BACKEND": "API와 서버 작업을 담당합니다.",
-      "WEB_FRONTEND": "웹 제품 작업을 담당합니다.",
-      "APP_FRONTEND": "모바일 앱 작업을 담당합니다."
+      "participatingTeams": "프로젝트 참여 팀",
+      "participatingTeamsHint": "활성 워크스페이스 팀을 검색해 추가하거나 제외합니다. 참여 팀 없이도 프로젝트를 저장할 수 있지만 작업을 시작하려면 하나 이상 필요합니다.",
+      "noTeam": "선택 안 함",
+      "teamSearchLabel": "프로젝트 참여 팀 검색",
+      "teamSearchPlaceholder": "팀 이름 또는 키로 검색",
+      "noMatchingTeams": "조건에 맞는 팀이 없습니다",
+      "noMatchingTeamsHint": "검색어를 바꾸거나 워크스페이스 팀 설정을 확인해 주세요.",
+      "archivedTeam": "보관된 팀 · 다시 참여시킬 수 없음",
+      "inactiveTeam": "과거 참여 팀 · 선택하면 다시 활성화",
+      "activeWorkspaceTeam": "활성 워크스페이스 팀",
+      "reactivate": "재활성화",
+      "noParticipatingTeams": "아직 참여 팀이 없습니다. 프로젝트는 지금 저장하고 나중에 팀을 추가할 수 있습니다."
     },
     "status": {
       "PLANNED": "계획",
@@ -2117,7 +2108,7 @@
       "nameRequired": "프로젝트 이름을 입력해 주세요.",
       "nameTooLong": "프로젝트 이름은 200자 이하여야 합니다.",
       "descriptionTooLong": "프로젝트 설명은 5,000자 이하여야 합니다.",
-      "roleRequired": "최소 한 역할에 담당 팀을 선택해 주세요.",
+      "teamManageForbidden": "워크스페이스 관리자와 현재 프로젝트 리드만 참여 팀을 변경할 수 있습니다.",
       "dateOrder": "목표일은 시작일과 같거나 이후여야 합니다."
     },
     "error": {
@@ -2142,14 +2133,18 @@
       "reapply": "내 변경 다시 적용",
       "restore": "최신값으로 복구"
     },
-    "roleInUse": {
-      "title": "사용 중인 역할의 팀은 바꿀 수 없습니다",
-      "description": "아래 작업을 프로젝트에서 제거하거나 새 담당 팀의 작업으로 다시 만든 뒤 변경해 주세요."
+    "teamPermission": {
+      "title": "참여 팀은 관리자 또는 프로젝트 리드가 관리합니다",
+      "description": "다른 프로젝트 정보는 저장할 수 있지만 참여 팀 선택은 현재 상태로 유지됩니다."
+    },
+    "teamInUse": {
+      "title": "진행 중인 작업이 있는 팀은 제외할 수 없습니다",
+      "description": "아래 팀 작업을 완료하거나 취소한 뒤 다시 제외해 주세요. 완료·취소 이력은 그대로 보존됩니다."
     },
     "archive": {
       "action": "프로젝트 보관",
       "title": "{name} 프로젝트를 보관할까요?",
-      "description": "기본 목록과 새 이슈의 선택 항목에서 제외되지만 연결된 이슈와 역할 기록은 유지됩니다.",
+      "description": "기본 목록과 새 이슈의 선택 항목에서 제외되지만 연결된 이슈와 참여 팀 기록은 유지됩니다.",
       "confirm": "프로젝트 보관",
       "conflictDescription": "프로젝트가 먼저 변경되었습니다. 최신 정보를 확인한 뒤 다시 보관해 주세요.",
       "errorTitle": "프로젝트를 보관하지 못했습니다",
@@ -2189,7 +2184,7 @@
       "emptyTitle": "연결된 작업이 없습니다",
       "emptyDescription": "이슈를 만들거나 단독 팀 작업을 프로젝트에 연결하세요.",
       "filteredEmptyTitle": "조건에 맞는 작업이 없습니다",
-      "filteredEmptyDescription": "역할 또는 상태 조건을 바꿔 주세요.",
+      "filteredEmptyDescription": "참여 팀 또는 상태 조건을 바꿔 주세요.",
       "errorTitle": "프로젝트 작업을 불러오지 못했습니다",
       "errorDescription": "프로젝트 정보는 유지했습니다. 잠시 후 다시 시도해 주세요."
     },
@@ -2216,7 +2211,7 @@
     },
     "projects": {
       "title": "프로젝트",
-      "description": "역할별 팀과 연결된 이슈의 진행을 확인합니다.",
+      "description": "참여 팀과 연결된 이슈의 진행을 확인합니다.",
       "emptyTitle": "프로젝트가 없습니다",
       "emptyDescription": "참여 중인 프로젝트가 생기면 이곳에 표시됩니다."
     }

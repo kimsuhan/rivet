@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 
-import { IssuePriority, Prisma, type ProjectRole } from '@rivet/database';
+import { IssuePriority, Prisma } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
@@ -20,7 +20,7 @@ const ISSUE_TEMPLATE_SELECT = {
   archivedAt: true,
   descriptionMarkdown: true,
   id: true,
-  initialRole: true,
+  initialProjectTeamId: true,
   labels: {
     orderBy: { labelId: 'asc' },
     select: { labelId: true },
@@ -37,9 +37,9 @@ const ISSUE_TEMPLATE_SELECT = {
 type IssueTemplateRow = Prisma.IssueTemplateGetPayload<{
   select: typeof ISSUE_TEMPLATE_SELECT;
 }>;
-type TargetReader = Pick<Prisma.TransactionClient, 'label' | 'project' | 'projectRoleTeam'>;
+type TargetReader = Pick<Prisma.TransactionClient, 'label' | 'project' | 'projectTeam'>;
 type TemplateTargets = {
-  initialRole: ProjectRole | null;
+  initialProjectTeamId: string | null;
   labelIds: string[];
   projectId: string | null;
 };
@@ -74,7 +74,7 @@ function targetUnavailable(reason: IssueTemplateUnavailableReason): never {
   throw new ApiError({
     code: 'ISSUE_TEMPLATE_TARGET_UNAVAILABLE',
     details: { unavailableReason: reason },
-    message: '템플릿의 기본 라벨, 프로젝트 또는 역할을 현재 사용할 수 없습니다.',
+    message: '템플릿의 기본 라벨, 프로젝트 또는 최초 팀을 현재 사용할 수 없습니다.',
     status: HttpStatus.UNPROCESSABLE_ENTITY,
   });
 }
@@ -122,7 +122,7 @@ function toResponse(
     available: unavailableReason === null,
     descriptionMarkdown: row.descriptionMarkdown,
     id: row.id,
-    initialRole: row.initialRole,
+    initialProjectTeamId: row.initialProjectTeamId,
     labelIds: row.labels.map(({ labelId }) => labelId),
     name: row.name,
     priority: row.priority,
@@ -165,11 +165,11 @@ export class IssueTemplatesService {
     const normalized = normalizeName(dto.name);
     const descriptionMarkdown = parseDescription(dto.descriptionMarkdown);
     const targets: TemplateTargets = {
-      initialRole: dto.initialRole ?? null,
+      initialProjectTeamId: dto.initialProjectTeamId ?? null,
       labelIds: stableIds(dto.labelIds ?? []),
       projectId: dto.projectId ?? null,
     };
-    this.assertRoleHasProject(targets);
+    this.assertTeamHasProject(targets);
 
     try {
       return await this.database.client.$transaction(async (transaction) => {
@@ -177,7 +177,7 @@ export class IssueTemplatesService {
         const created = await transaction.issueTemplate.create({
           data: {
             descriptionMarkdown,
-            initialRole: targets.initialRole,
+            initialProjectTeamId: targets.initialProjectTeamId,
             ...normalized,
             priority: dto.priority ?? IssuePriority.NONE,
             projectId: targets.projectId,
@@ -212,7 +212,7 @@ export class IssueTemplatesService {
       dto.priority === undefined &&
       dto.labelIds === undefined &&
       dto.projectId === undefined &&
-      dto.initialRole === undefined
+      dto.initialProjectTeamId === undefined
     ) {
       throw new ApiError({
         code: 'VALIDATION_ERROR',
@@ -233,14 +233,17 @@ export class IssueTemplatesService {
         if (locked.archivedAt !== null) templateUnavailable('ARCHIVED');
         const current = await this.findTemplate(transaction, workspaceId, templateId);
         const nextTargets: TemplateTargets = {
-          initialRole: dto.initialRole === undefined ? current.initialRole : dto.initialRole,
+          initialProjectTeamId:
+            dto.initialProjectTeamId === undefined
+              ? current.initialProjectTeamId
+              : dto.initialProjectTeamId,
           labelIds:
             dto.labelIds === undefined
               ? current.labels.map(({ labelId }) => labelId)
               : stableIds(dto.labelIds),
           projectId: dto.projectId === undefined ? current.projectId : dto.projectId,
         };
-        this.assertRoleHasProject(nextTargets);
+        this.assertTeamHasProject(nextTargets);
         await this.assertTargetsAvailable(transaction, workspaceId, nextTargets, true);
 
         const nameChanged = normalized !== undefined && normalized.name !== current.name;
@@ -248,8 +251,9 @@ export class IssueTemplatesService {
           description !== undefined && description !== current.descriptionMarkdown;
         const priorityChanged = dto.priority !== undefined && dto.priority !== current.priority;
         const projectChanged = dto.projectId !== undefined && dto.projectId !== current.projectId;
-        const roleChanged =
-          dto.initialRole !== undefined && dto.initialRole !== current.initialRole;
+        const initialTeamChanged =
+          dto.initialProjectTeamId !== undefined &&
+          dto.initialProjectTeamId !== current.initialProjectTeamId;
         const labelsChanged = !sameValues(
           stableIds(current.labels.map(({ labelId }) => labelId)),
           nextTargets.labelIds,
@@ -259,7 +263,7 @@ export class IssueTemplatesService {
           !descriptionChanged &&
           !priorityChanged &&
           !projectChanged &&
-          !roleChanged &&
+          !initialTeamChanged &&
           !labelsChanged
         ) {
           const availability = await this.resolveAvailability(transaction, workspaceId, [current]);
@@ -269,7 +273,9 @@ export class IssueTemplatesService {
         const [updated] = await transaction.issueTemplate.updateManyAndReturn({
           data: {
             ...(descriptionChanged ? { descriptionMarkdown: description } : {}),
-            ...(roleChanged ? { initialRole: dto.initialRole } : {}),
+            ...(initialTeamChanged
+              ? { initialProjectTeamId: dto.initialProjectTeamId }
+              : {}),
             ...(nameChanged ? normalized : {}),
             ...(priorityChanged ? { priority: dto.priority } : {}),
             ...(projectChanged ? { projectId: dto.projectId } : {}),
@@ -357,7 +363,7 @@ export class IssueTemplatesService {
           transaction,
           workspaceId,
           {
-            initialRole: current.initialRole,
+            initialProjectTeamId: current.initialProjectTeamId,
             labelIds: current.labels.map(({ labelId }) => labelId),
             projectId: current.projectId,
           },
@@ -418,7 +424,7 @@ export class IssueTemplatesService {
       transaction,
       workspaceId,
       {
-        initialRole: row.initialRole,
+        initialProjectTeamId: row.initialProjectTeamId,
         labelIds: row.labels.map(({ labelId }) => labelId),
         projectId: row.projectId,
       },
@@ -458,12 +464,14 @@ export class IssueTemplatesService {
     return row;
   }
 
-  private assertRoleHasProject(targets: TemplateTargets): void {
-    if (targets.initialRole !== null && targets.projectId === null) {
+  private assertTeamHasProject(targets: TemplateTargets): void {
+    if (targets.initialProjectTeamId !== null && targets.projectId === null) {
       throw new ApiError({
         code: 'VALIDATION_ERROR',
-        fieldErrors: { initialRole: ['최초 역할을 선택하려면 기본 프로젝트가 필요합니다.'] },
-        message: '템플릿의 기본 프로젝트와 최초 역할을 확인해 주세요.',
+        fieldErrors: {
+          initialProjectTeamId: ['최초 팀을 선택하려면 기본 프로젝트가 필요합니다.'],
+        },
+        message: '템플릿의 기본 프로젝트와 최초 팀을 확인해 주세요.',
         status: HttpStatus.UNPROCESSABLE_ENTITY,
       });
     }
@@ -520,43 +528,40 @@ export class IssueTemplatesService {
           },
         });
     if (projects.length !== 1) targetUnavailable('PROJECT_UNAVAILABLE');
-    if (targets.initialRole === null) return;
+    if (targets.initialProjectTeamId === null) return;
 
     if (lockTargets) {
-      const roleTeams = await transaction.$queryRaw<Array<{ teamId: string }>>(
+      const projectTeams = await transaction.$queryRaw<Array<{ teamId: string }>>(
         Prisma.sql`
-          SELECT role_team."team_id" AS "teamId"
-          FROM "project_role_teams" AS role_team
+          SELECT project_team."team_id" AS "teamId"
+          FROM "project_teams" AS project_team
           JOIN "teams" AS team
-            ON team."workspace_id" = role_team."workspace_id"
-           AND team."id" = role_team."team_id"
-          WHERE role_team."workspace_id" = ${workspaceId}::uuid
-            AND role_team."project_id" = ${targets.projectId}::uuid
-            AND role_team."role"::text = ${targets.initialRole}
+            ON team."workspace_id" = project_team."workspace_id"
+           AND team."id" = project_team."team_id"
+          WHERE project_team."workspace_id" = ${workspaceId}::uuid
+            AND project_team."project_id" = ${targets.projectId}::uuid
+            AND project_team."id" = ${targets.initialProjectTeamId}::uuid
+            AND project_team."is_active" = true
             AND team."archived_at" IS NULL
-          FOR UPDATE OF role_team, team
+          FOR UPDATE OF project_team, team
         `,
       );
-      if (roleTeams.length !== 1) {
-        const mapping = await transaction.projectRoleTeam.findFirst({
-          select: { teamId: true },
-          where: {
-            projectId: targets.projectId,
-            role: targets.initialRole,
-            workspaceId,
-          },
-        });
-        targetUnavailable(mapping ? 'TEAM_UNAVAILABLE' : 'ROLE_UNAVAILABLE');
+      if (projectTeams.length !== 1) {
+        targetUnavailable('PROJECT_TEAM_UNAVAILABLE');
       }
       return;
     }
 
-    const roleTeam = await transaction.projectRoleTeam.findFirst({
-      select: { team: { select: { archivedAt: true } } },
-      where: { projectId: targets.projectId, role: targets.initialRole, workspaceId },
+    const projectTeam = await transaction.projectTeam.findFirst({
+      select: { isActive: true, team: { select: { archivedAt: true } } },
+      where: {
+        id: targets.initialProjectTeamId,
+        projectId: targets.projectId,
+        workspaceId,
+      },
     });
-    if (!roleTeam) targetUnavailable('ROLE_UNAVAILABLE');
-    if (roleTeam.team.archivedAt !== null) targetUnavailable('TEAM_UNAVAILABLE');
+    if (!projectTeam || !projectTeam.isActive) targetUnavailable('PROJECT_TEAM_UNAVAILABLE');
+    if (projectTeam.team.archivedAt !== null) targetUnavailable('TEAM_UNAVAILABLE');
   }
 
   private async resolveAvailability(
@@ -568,7 +573,12 @@ export class IssueTemplatesService {
     const projectIds = stableIds(
       rows.flatMap((row) => (row.projectId === null ? [] : [row.projectId])),
     );
-    const [labels, projects, roleTeams] = await Promise.all([
+    const projectTeamIds = stableIds(
+      rows.flatMap((row) =>
+        row.initialProjectTeamId === null ? [] : [row.initialProjectTeamId],
+      ),
+    );
+    const [labels, projects, projectTeams] = await Promise.all([
       labelIds.length === 0
         ? []
         : reader.label.findMany({
@@ -581,22 +591,21 @@ export class IssueTemplatesService {
             select: { archivedAt: true, deletedAt: true, id: true },
             where: { id: { in: projectIds }, workspaceId },
           }),
-      projectIds.length === 0
+      projectTeamIds.length === 0
         ? []
-        : reader.projectRoleTeam.findMany({
+        : reader.projectTeam.findMany({
             select: {
+              id: true,
+              isActive: true,
               projectId: true,
-              role: true,
               team: { select: { archivedAt: true } },
             },
-            where: { projectId: { in: projectIds }, workspaceId },
+            where: { id: { in: projectTeamIds }, workspaceId },
           }),
     ]);
     const labelById = new Map(labels.map((label) => [label.id, label]));
     const projectById = new Map(projects.map((project) => [project.id, project]));
-    const roleTeamByKey = new Map(
-      roleTeams.map((roleTeam) => [`${roleTeam.projectId}:${roleTeam.role}`, roleTeam]),
-    );
+    const projectTeamById = new Map(projectTeams.map((projectTeam) => [projectTeam.id, projectTeam]));
 
     return new Map(
       rows.map((row) => {
@@ -614,13 +623,20 @@ export class IssueTemplatesService {
           const project = projectById.get(row.projectId);
           if (!project || project.archivedAt !== null || project.deletedAt !== null) {
             reason = 'PROJECT_UNAVAILABLE';
-          } else if (row.initialRole !== null) {
-            const roleTeam = roleTeamByKey.get(`${row.projectId}:${row.initialRole}`);
-            if (!roleTeam) reason = 'ROLE_UNAVAILABLE';
-            else if (roleTeam.team.archivedAt !== null) reason = 'TEAM_UNAVAILABLE';
+          } else if (row.initialProjectTeamId !== null) {
+            const projectTeam = projectTeamById.get(row.initialProjectTeamId);
+            if (
+              !projectTeam ||
+              projectTeam.projectId !== row.projectId ||
+              !projectTeam.isActive
+            ) {
+              reason = 'PROJECT_TEAM_UNAVAILABLE';
+            } else if (projectTeam.team.archivedAt !== null) {
+              reason = 'TEAM_UNAVAILABLE';
+            }
           }
-        } else if (row.initialRole !== null) {
-          reason = 'ROLE_UNAVAILABLE';
+        } else if (row.initialProjectTeamId !== null) {
+          reason = 'PROJECT_TEAM_UNAVAILABLE';
         }
         return [row.id, reason];
       }),

@@ -450,7 +450,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
               <>
                 <span>팀 작업</span>
                 <span>상위 이슈</span>
-                <span className="max-lg:hidden">프로젝트 · 역할 · 팀</span>
+                <span className="max-lg:hidden">프로젝트 · 참여 팀</span>
                 <span>상태</span>
                 <span>담당자</span>
                 <span className="max-lg:hidden">우선순위</span>

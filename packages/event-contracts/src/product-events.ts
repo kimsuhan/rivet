@@ -205,12 +205,9 @@ function validateProperties(name: ProductEventName, value: Record<string, unknow
       );
     case 'project_created':
       return (
-        exactKeys(value, ['hasTargetDate', 'roleCount', 'roles']) &&
+        exactKeys(value, ['hasTargetDate', 'teamCount']) &&
         typeof value.hasTargetDate === 'boolean' &&
-        isNonNegativeInteger(value.roleCount) &&
-        Array.isArray(value.roles) &&
-        value.roles.length === value.roleCount &&
-        value.roles.every((role) => isEnum(role, ['BACKEND', 'WEB_FRONTEND', 'APP_FRONTEND']))
+        isNonNegativeInteger(value.teamCount)
       );
     case 'project_status_changed':
       return (

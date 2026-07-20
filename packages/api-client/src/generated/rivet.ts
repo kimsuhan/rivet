@@ -53,6 +53,7 @@ import type {
   CreateProjectDto,
   CreateSavedViewDto,
   CreateTeamDto,
+  CreateWorkflowStateDto,
   CreateWorkspaceDto,
   CsvImportControllerExecuteBody,
   CsvImportControllerInspectBody,
@@ -118,6 +119,7 @@ import type {
   SearchIssueListResponseDto,
   SessionUserDto,
   SetSavedViewDefaultDto,
+  SetWorkflowStateDefaultDto,
   SignUpDto,
   StartIssueDto,
   StartIssueResponseDto,
@@ -7366,7 +7368,7 @@ export const getProjectsControllerUpdateUrl = (projectId: string,) => {
 }
 
 /**
- * @summary 프로젝트 기본 정보, 상태와 역할별 팀 수정
+ * @summary 프로젝트 기본 정보, 상태와 참여 팀 수정
  */
 export const projectsControllerUpdate = async (projectId: string,
     updateProjectDto: UpdateProjectDto, options?: RequestInit): Promise<ProjectResponseDto> => {
@@ -7416,7 +7418,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ProjectsControllerUpdateMutationError = ErrorType<ApiErrorResponseDto>
 
     /**
- * @summary 프로젝트 기본 정보, 상태와 역할별 팀 수정
+ * @summary 프로젝트 기본 정보, 상태와 참여 팀 수정
  */
 export const useProjectsControllerUpdate = <TError = ErrorType<ApiErrorResponseDto>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof projectsControllerUpdate>>, TError,{projectId: string;data: BodyType<UpdateProjectDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
@@ -9099,6 +9101,78 @@ export function useTeamsControllerListWorkflowStates<TData = Awaited<ReturnType<
 
 
 
+export const getTeamsControllerCreateWorkflowStateUrl = (teamId: string,) => {
+
+
+
+
+  return `/api/v1/teams/${teamId}/workflow-states`
+}
+
+/**
+ * @summary 팀 워크플로 상태 생성
+ */
+export const teamsControllerCreateWorkflowState = async (teamId: string,
+    createWorkflowStateDto: CreateWorkflowStateDto, options?: RequestInit): Promise<WorkflowStateResponseDto> => {
+
+  return rivetFetch<WorkflowStateResponseDto>(getTeamsControllerCreateWorkflowStateUrl(teamId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createWorkflowStateDto)
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerCreateWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, TError,{teamId: string;data: BodyType<CreateWorkflowStateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, TError,{teamId: string;data: BodyType<CreateWorkflowStateDto>}, TContext> => {
+
+const mutationKey = ['teamsControllerCreateWorkflowState'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, {teamId: string;data: BodyType<CreateWorkflowStateDto>}> = (props) => {
+          const {teamId,data} = props ?? {};
+
+          return  teamsControllerCreateWorkflowState(teamId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerCreateWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>>
+    export type TeamsControllerCreateWorkflowStateMutationBody = BodyType<CreateWorkflowStateDto>
+    export type TeamsControllerCreateWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 팀 워크플로 상태 생성
+ */
+export const useTeamsControllerCreateWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>, TError,{teamId: string;data: BodyType<CreateWorkflowStateDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerCreateWorkflowState>>,
+        TError,
+        {teamId: string;data: BodyType<CreateWorkflowStateDto>},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerCreateWorkflowStateMutationOptions(options), queryClient);
+    }
+
 export const getTeamsControllerUpdateWorkflowStateUrl = (stateId: string,) => {
 
 
@@ -9249,6 +9323,78 @@ export const useTeamsControllerDeleteWorkflowState = <TError = ErrorType<ApiErro
         TContext
       > => {
       return useMutation(getTeamsControllerDeleteWorkflowStateMutationOptions(options), queryClient);
+    }
+
+export const getTeamsControllerSetDefaultWorkflowStateUrl = (stateId: string,) => {
+
+
+
+
+  return `/api/v1/workflow-states/${stateId}/default`
+}
+
+/**
+ * @summary 팀 워크플로 기본 상태 지정
+ */
+export const teamsControllerSetDefaultWorkflowState = async (stateId: string,
+    setWorkflowStateDefaultDto: SetWorkflowStateDefaultDto, options?: RequestInit): Promise<WorkflowStateListResponseDto> => {
+
+  return rivetFetch<WorkflowStateListResponseDto>(getTeamsControllerSetDefaultWorkflowStateUrl(stateId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setWorkflowStateDefaultDto)
+  }
+);}
+
+
+
+
+
+export const getTeamsControllerSetDefaultWorkflowStateMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, TError,{stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, TError,{stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}, TContext> => {
+
+const mutationKey = ['teamsControllerSetDefaultWorkflowState'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, {stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}> = (props) => {
+          const {stateId,data} = props ?? {};
+
+          return  teamsControllerSetDefaultWorkflowState(stateId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TeamsControllerSetDefaultWorkflowStateMutationResult = NonNullable<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>>
+    export type TeamsControllerSetDefaultWorkflowStateMutationBody = BodyType<SetWorkflowStateDefaultDto>
+    export type TeamsControllerSetDefaultWorkflowStateMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 팀 워크플로 기본 상태 지정
+ */
+export const useTeamsControllerSetDefaultWorkflowState = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>, TError,{stateId: string;data: BodyType<SetWorkflowStateDefaultDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof teamsControllerSetDefaultWorkflowState>>,
+        TError,
+        {stateId: string;data: BodyType<SetWorkflowStateDefaultDto>},
+        TContext
+      > => {
+      return useMutation(getTeamsControllerSetDefaultWorkflowStateMutationOptions(options), queryClient);
     }
 
 export const getTeamsControllerReorderWorkflowStatesUrl = (teamId: string,) => {

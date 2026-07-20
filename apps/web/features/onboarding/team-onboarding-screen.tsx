@@ -20,6 +20,7 @@ import {
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
+import { createTeamKey, normalizeTeamKey } from '@/features/teams/team-key';
 
 import { OnboardingFrame, type OnboardingFrameLabels } from './onboarding-frame';
 
@@ -50,61 +51,6 @@ type TeamOnboardingLabels = OnboardingFrameLabels & {
   submitting: string;
   title: string;
 };
-
-function hashTeamName(name: string) {
-  let hash = 2_166_136_261;
-
-  for (const character of name) {
-    hash ^= character.codePointAt(0) ?? 0;
-    hash = Math.imul(hash, 16_777_619);
-  }
-
-  let letters = '';
-  let value = hash >>> 0;
-
-  for (let index = 0; index < 4; index += 1) {
-    letters += String.fromCharCode(65 + (value % 26));
-    value = Math.floor(value / 26);
-  }
-
-  return letters;
-}
-
-function createTeamKey(name: string) {
-  const trimmedName = name.trim();
-
-  if (!trimmedName) {
-    return '';
-  }
-
-  const words = trimmedName
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .match(/[A-Za-z]+/g);
-
-  if (!words?.length) {
-    return `T${hashTeamName(trimmedName)}`;
-  }
-
-  if (words.length === 1) {
-    const [word] = words;
-    const key = word?.slice(0, 5).toUpperCase() ?? '';
-    return key.length < 2 ? `${key}TEAM`.slice(0, 5) : key;
-  }
-
-  return words
-    .map((word) => word[0])
-    .join('')
-    .slice(0, 5)
-    .toUpperCase();
-}
-
-function normalizeTeamKey(value: string) {
-  return value
-    .toUpperCase()
-    .replace(/[^A-Z]/g, '')
-    .slice(0, 5);
-}
 
 export function TeamOnboardingScreen({ labels }: { labels: TeamOnboardingLabels }) {
   const hasEditedKey = useRef(false);
@@ -268,6 +214,16 @@ export function TeamOnboardingScreen({ labels }: { labels: TeamOnboardingLabels 
                           shouldValidate: Boolean(errors.key),
                         });
                         hasEditedKey.current = true;
+                      }}
+                      onClick={(event) => {
+                        if (!hasEditedKey.current) {
+                          event.currentTarget.select();
+                        }
+                      }}
+                      onFocus={(event) => {
+                        if (!hasEditedKey.current) {
+                          event.currentTarget.select();
+                        }
                       }}
                     />
                     <FieldDescription id="team-key-description">

@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 
-import { Prisma, ProjectRole, StateCategory } from '@rivet/database';
+import { Prisma, StateCategory } from '@rivet/database';
 
 import { ApiError } from '../../common/errors/api-error';
 import type { TeamWorkListQueryDto } from './dto/issue-request.dto';
@@ -66,14 +66,16 @@ export class TeamWorkQueryService {
   ): Promise<TeamWorkListResponseDto> {
     const teamIds = values(query.teamId);
     const projectIds = values(query.projectId);
-    const roles = values(query.projectRole);
+    const projectTeamIds = values(query.projectTeamId);
     const workflowStateIds = values(query.workflowStateId);
     const categories = values(query.stateCategory);
     const assignees = values(query.assigneeMembershipId).map((value) =>
       value === 'me' ? context.membershipId : value,
     );
     if (
-      [...teamIds, ...projectIds, ...workflowStateIds, ...assignees].some((id) => !isUUID(id, '4'))
+      [...teamIds, ...projectIds, ...projectTeamIds, ...workflowStateIds, ...assignees].some(
+        (id) => !isUUID(id, '4'),
+      )
     ) {
       throw new ApiError({
         code: 'INVALID_QUERY',
@@ -82,14 +84,13 @@ export class TeamWorkQueryService {
       });
     }
     if (
-      roles.some((role) => !Object.values(ProjectRole).includes(role as ProjectRole)) ||
       categories.some(
         (category) => !Object.values(StateCategory).includes(category as StateCategory),
       )
     ) {
       throw new ApiError({
         code: 'INVALID_QUERY',
-        message: '역할 또는 상태 범주 필터가 올바르지 않습니다.',
+        message: '상태 범주 필터가 올바르지 않습니다.',
         status: HttpStatus.BAD_REQUEST,
       });
     }
@@ -115,7 +116,7 @@ export class TeamWorkQueryService {
         : assignees.length
           ? { assigneeMembershipId: { in: assignees } }
           : {}),
-      ...(roles.length ? { projectRole: { in: roles as ProjectRole[] } } : {}),
+      ...(projectTeamIds.length ? { projectTeamId: { in: projectTeamIds } } : {}),
       ...(teamIds.length ? { teamId: { in: teamIds } } : {}),
       ...(categories.length
         ? { workflowState: { category: { in: categories as StateCategory[] } } }

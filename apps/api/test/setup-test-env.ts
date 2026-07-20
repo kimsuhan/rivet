@@ -5,11 +5,16 @@ import { join, resolve } from 'node:path';
 
 import { config as loadEnv } from 'dotenv';
 
+import { assertSafeTestDatabaseUrl } from '@rivet/database';
+
 loadEnv({
   path: resolve(process.cwd(), '../../.env.test.local'),
-  override: true,
+  override: false,
   quiet: true,
 });
+
+if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL 환경 변수가 필요합니다.');
+assertSafeTestDatabaseUrl(process.env.DATABASE_URL);
 
 process.env.API_PORT = '4000';
 process.env.CSRF_HMAC_KEY = 'test-csrf-hmac-key-with-at-least-32-bytes';

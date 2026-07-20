@@ -6,7 +6,6 @@ import {
   MembershipStatus,
   Prisma,
   type PrismaClient,
-  ProjectRole,
   StateCategory,
 } from '@rivet/database';
 
@@ -31,7 +30,7 @@ export type CsvImportTargetSnapshot = {
   projects: Array<{
     id: string;
     name: string;
-    roleTeams: Array<{ role: ProjectRole; teamId: string }>;
+    projectTeams: Array<{ active: boolean; id: string; teamId: string }>;
     version: number;
   }>;
   states: Array<{
@@ -80,7 +79,10 @@ export class CsvImportTargetRepository {
         select: {
           id: true,
           name: true,
-          roleTeams: { orderBy: { role: 'asc' }, select: { role: true, teamId: true } },
+          projectTeams: {
+            orderBy: [{ team: { name: 'asc' } }, { id: 'asc' }],
+            select: { id: true, isActive: true, teamId: true },
+          },
           version: true,
         },
         where: { archivedAt: null, deletedAt: null, workspaceId },
@@ -100,7 +102,13 @@ export class CsvImportTargetRepository {
         role,
         teamIds: teamMemberships.map(({ teamId }) => teamId).sort(),
       })),
-      projects,
+      projects: projects.map(({ projectTeams, ...project }) => ({
+        ...project,
+        projectTeams: projectTeams.map(({ isActive, ...projectTeam }) => ({
+          ...projectTeam,
+          active: isActive,
+        })),
+      })),
       states: teams.flatMap((team) =>
         team.workflowStates.map((state) => ({ ...state, teamId: team.id })),
       ),

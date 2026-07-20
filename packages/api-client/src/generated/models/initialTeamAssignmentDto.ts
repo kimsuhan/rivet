@@ -5,10 +5,10 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { InitialRoleAssignmentDtoProjectRole } from './initialRoleAssignmentDtoProjectRole';
 
-export interface InitialRoleAssignmentDto {
-  projectRole: InitialRoleAssignmentDtoProjectRole;
+export interface InitialTeamAssignmentDto {
+  /** 프로젝트 참여 팀 ID */
+  projectTeamId: string;
   /** @nullable */
   assigneeMembershipId?: string | null;
 }

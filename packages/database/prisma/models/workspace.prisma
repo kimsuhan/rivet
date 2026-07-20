@@ -16,6 +16,18 @@ enum StateCategory {
   CANCELED
 }
 
+enum WorkflowStateColor {
+  GRAY
+  COOL_GRAY
+  INDIGO
+  TEAL
+  GREEN
+  YELLOW
+  ORANGE
+  BROWN
+  RED
+}
+
 enum FeedbackCategory {
   BUG
   USABILITY
@@ -49,6 +61,7 @@ model Workspace {
   outboxEvents         OutboxEvent[]
   projects             Project[]
   projectRoles         ProjectRoleTeam[]
+  projectTeams         ProjectTeam[]
   issueTemplates       IssueTemplate[]
   issueTemplateLabels  IssueTemplateLabel[]
   issues               Issue[]
@@ -231,6 +244,7 @@ model Team {
   teamMembers    TeamMember[]
   workflowStates WorkflowState[]
   projectRoles   ProjectRoleTeam[]
+  projectTeams   ProjectTeam[]
   teamWorks      TeamWork[]
 
   @@unique([workspaceId, id])
@@ -257,17 +271,18 @@ model TeamMember {
 }
 
 model WorkflowState {
-  id             String        @id @default(uuid()) @db.Uuid
-  workspaceId    String        @map("workspace_id") @db.Uuid
-  teamId         String        @map("team_id") @db.Uuid
-  name           String        @db.VarChar(100)
-  normalizedName String        @map("normalized_name") @db.VarChar(100)
+  id             String              @id @default(uuid()) @db.Uuid
+  workspaceId    String              @map("workspace_id") @db.Uuid
+  teamId         String              @map("team_id") @db.Uuid
+  name           String              @db.VarChar(100)
+  normalizedName String              @map("normalized_name") @db.VarChar(100)
   category       StateCategory
+  color          WorkflowStateColor?
   position       Int
-  isDefault      Boolean       @default(false) @map("is_default")
-  version        Int           @default(1)
-  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  isDefault      Boolean             @default(false) @map("is_default")
+  version        Int                 @default(1)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   team      Team       @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
   teamWorks TeamWork[]

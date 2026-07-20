@@ -46,7 +46,7 @@ const issue: TrashItemResponseDto = {
   project: { id: 'de0f78b6-5711-4a98-9bd0-61c88577ea7a', name: 'MVP' },
   purgeAt: '2026-08-09T03:00:00.000Z',
   resourceType: 'ISSUE',
-  roleTeams: [],
+  projectTeams: [],
   version: 4,
 };
 
@@ -60,9 +60,10 @@ const project: TrashItemResponseDto = {
   project: null,
   purgeAt: '2026-08-08T03:00:00.000Z',
   resourceType: 'PROJECT',
-  roleTeams: [
+  projectTeams: [
     {
-      role: 'BACKEND',
+      active: true,
+      id: 'project-team-backend',
       teamArchived: true,
       teamId: 'ce708dad-552d-4709-98d5-6618e647fd01',
       teamName: '보관된 백엔드',

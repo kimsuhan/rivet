@@ -5,7 +5,7 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { IssueWorkflowSummaryResponseDtoActiveRolesItem } from './issueWorkflowSummaryResponseDtoActiveRolesItem';
+import type { IssueProjectTeamSummaryResponseDto } from './issueProjectTeamSummaryResponseDto';
 
 export interface IssueWorkflowSummaryResponseDto {
   /** @minimum 0 */
@@ -16,6 +16,6 @@ export interface IssueWorkflowSummaryResponseDto {
   canceledCount: number;
   /** @minimum 0 */
   unassignedCount: number;
-  activeRoles: IssueWorkflowSummaryResponseDtoActiveRolesItem[];
+  activeTeams: IssueProjectTeamSummaryResponseDto[];
   allTeamWorksCompleted: boolean;
 }

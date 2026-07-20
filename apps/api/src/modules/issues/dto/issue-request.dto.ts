@@ -22,7 +22,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-import { IssuePriority, IssueStatus, ProjectRole, StateCategory } from '@rivet/database';
+import { IssuePriority, IssueStatus, StateCategory } from '@rivet/database';
 
 export const ISSUE_STATUS_ACTIONS = ['PAUSE', 'RESUME', 'CANCEL', 'COMPLETE', 'REOPEN'] as const;
 export type IssueStatusAction = (typeof ISSUE_STATUS_ACTIONS)[number];
@@ -134,10 +134,11 @@ export class IssueListQueryDto {
   cursor?: string;
 }
 
-export class InitialRoleAssignmentDto {
-  @ApiProperty({ enum: ProjectRole })
-  @IsEnum(ProjectRole)
-  projectRole!: ProjectRole;
+export class InitialTeamAssignmentDto {
+  @ApiProperty({ description: '프로젝트 참여 팀 ID', format: 'uuid' })
+  @Transform(({ value }) => normalizeUuid(value))
+  @IsUUID('4')
+  projectTeamId!: string;
 
   @ApiPropertyOptional({ format: 'uuid', nullable: true, type: String })
   @Transform(({ value }) => normalizeUuid(value))
@@ -202,18 +203,18 @@ export class CreateIssueDto {
   attachmentFileIds?: string[];
 
   @ApiPropertyOptional({
-    description: '생성과 함께 시작할 프로젝트 역할',
+    description: '생성과 함께 시작할 프로젝트 참여 팀',
     isArray: true,
-    maxItems: 3,
-    type: InitialRoleAssignmentDto,
+    maxItems: 100,
+    type: InitialTeamAssignmentDto,
   })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(3)
-  @ArrayUnique((assignment: InitialRoleAssignmentDto) => assignment.projectRole)
+  @ArrayMaxSize(100)
+  @ArrayUnique((assignment: InitialTeamAssignmentDto) => assignment.projectTeamId)
   @ValidateNested({ each: true })
-  @Type(() => InitialRoleAssignmentDto)
-  initialRoles?: InitialRoleAssignmentDto[];
+  @Type(() => InitialTeamAssignmentDto)
+  initialTeams?: InitialTeamAssignmentDto[];
 
   @ApiPropertyOptional({
     description: '생성 입력을 채운 이슈 템플릿과 적용 당시 version',
@@ -226,25 +227,26 @@ export class CreateIssueDto {
 }
 
 export class StartIssueDto {
-  @ApiProperty({ isArray: true, maxItems: 3, minItems: 1, type: InitialRoleAssignmentDto })
+  @ApiProperty({ isArray: true, maxItems: 100, minItems: 1, type: InitialTeamAssignmentDto })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(3)
-  @ArrayUnique((assignment: InitialRoleAssignmentDto) => assignment.projectRole)
+  @ArrayMaxSize(100)
+  @ArrayUnique((assignment: InitialTeamAssignmentDto) => assignment.projectTeamId)
   @ValidateNested({ each: true })
-  @Type(() => InitialRoleAssignmentDto)
-  roleAssignments!: InitialRoleAssignmentDto[];
+  @Type(() => InitialTeamAssignmentDto)
+  teamAssignments!: InitialTeamAssignmentDto[];
 
-  @ApiPropertyOptional({ description: '선택 역할 팀에 현재 사용자가 활성 멤버인지 확인' })
+  @ApiPropertyOptional({ description: '선택 팀에 현재 사용자가 활성 멤버인지 확인' })
   @IsOptional()
   @IsBoolean()
   requireCurrentUserTeamMembership?: boolean;
 }
 
 export class ClaimTeamWorkDto {
-  @ApiProperty({ enum: ProjectRole })
-  @IsEnum(ProjectRole)
-  projectRole!: ProjectRole;
+  @ApiProperty({ description: '프로젝트 참여 팀 ID', format: 'uuid' })
+  @Transform(({ value }) => normalizeUuid(value))
+  @IsUUID('4')
+  projectTeamId!: string;
 
   @ApiPropertyOptional({ format: 'uuid', nullable: true, type: String })
   @Transform(({ value }) => normalizeUuid(value))
@@ -352,11 +354,11 @@ export class TeamWorkListQueryDto {
   @MaxLength(2048)
   projectId?: string;
 
-  @ApiPropertyOptional({ description: '쉼표로 구분한 프로젝트 역할' })
+  @ApiPropertyOptional({ description: '쉼표로 구분한 프로젝트 참여 팀 ID' })
   @IsOptional()
   @IsString()
-  @MaxLength(100)
-  projectRole?: string;
+  @MaxLength(2048)
+  projectTeamId?: string;
 
   @ApiPropertyOptional({ description: '쉼표로 구분한 워크플로 상태 ID' })
   @IsOptional()
@@ -417,15 +419,19 @@ export class InlineHandoffDto {
   bodyMarkdown!: string;
 
   @ApiPropertyOptional({
-    enum: [ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND],
+    description: '같은 프로젝트에서 전달할 활성 참여 팀 ID',
+    format: 'uuid',
     isArray: true,
+    type: String,
+    uniqueItems: true,
   })
+  @Transform(({ value }) => normalizeUuidArray(value))
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(2)
+  @ArrayMaxSize(100)
   @ArrayUnique()
-  @IsIn([ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND], { each: true })
-  destinationRoles?: (typeof ProjectRole.WEB_FRONTEND | typeof ProjectRole.APP_FRONTEND)[];
+  @IsUUID('4', { each: true })
+  destinationProjectTeamIds?: string[];
 }
 
 export const TEAM_WORK_COMPLETION_MODES = ['COMPLETE_ONLY', 'HANDOFF_AND_COMPLETE'] as const;

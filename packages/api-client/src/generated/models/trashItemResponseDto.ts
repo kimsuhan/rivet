@@ -8,7 +8,7 @@
 import type { TrashConnectionResponseDto } from './trashConnectionResponseDto';
 import type { TrashDeleterResponseDto } from './trashDeleterResponseDto';
 import type { TrashItemResponseDtoResourceType } from './trashItemResponseDtoResourceType';
-import type { TrashProjectRoleTeamResponseDto } from './trashProjectRoleTeamResponseDto';
+import type { TrashProjectTeamResponseDto } from './trashProjectTeamResponseDto';
 
 export interface TrashItemResponseDto {
   id: string;
@@ -23,5 +23,5 @@ export interface TrashItemResponseDto {
   version: number;
   /** @nullable */
   project?: TrashConnectionResponseDto | null;
-  roleTeams: TrashProjectRoleTeamResponseDto[];
+  projectTeams: TrashProjectTeamResponseDto[];
 }

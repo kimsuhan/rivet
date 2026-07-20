@@ -20,7 +20,6 @@ vi.mock('@/i18n/navigation', () => ({
 vi.mock('./issue-attribute-presentation', () => ({
   CompactAssigneeTrigger: () => <button type="button">담당자</button>,
   PriorityDisplay: () => <span>우선순위</span>,
-  PROJECT_ROLE_LABELS: { BACKEND: '백엔드' },
   StatusTrigger: () => <button type="button">상태</button>,
 }));
 
@@ -39,8 +38,11 @@ describe('TeamWorkListRow', () => {
         identifier: 'ISSUE-9',
         title: '팀 작업 상세',
       },
-      projectRole: 'BACKEND',
-      team: { id: 'team-id', name: '백엔드 팀' },
+      projectTeam: {
+        active: true,
+        id: 'project-team-id',
+        team: { id: 'team-id', key: 'PLAN', name: '기획 팀' },
+      },
       updatedAt: new Date().toISOString(),
       version: 1,
       workflowState: { id: 'state-id' },

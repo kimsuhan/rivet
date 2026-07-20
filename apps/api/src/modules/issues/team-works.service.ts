@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { HttpStatus, Injectable } from '@nestjs/common';
 
-import { HandoffKind, MembershipStatus, Prisma, ProjectRole, StateCategory } from '@rivet/database';
+import { HandoffKind, MembershipStatus, Prisma, StateCategory } from '@rivet/database';
 import {
   TEAM_WORK_CHANGED,
   TEAM_WORK_CHANGED_SCHEMA_VERSION,
@@ -215,21 +215,7 @@ export class TeamWorksService {
           if (!dto.handoff) {
             throw new ApiError({
               code: 'TEAM_WORK_HANDOFF_REQUIRED',
-              message: '프론트에 전달 후 완료하려면 전달 내용이 필요합니다.',
-              status: HttpStatus.UNPROCESSABLE_ENTITY,
-            });
-          }
-          const frontendRoleCount = await transaction.projectRoleTeam.count({
-            where: {
-              projectId: current.issue.project.id,
-              role: { in: [ProjectRole.WEB_FRONTEND, ProjectRole.APP_FRONTEND] },
-              workspaceId: context.workspaceId,
-            },
-          });
-          if (frontendRoleCount === 0) {
-            throw new ApiError({
-              code: 'TEAM_WORK_HANDOFF_NO_FRONTEND_ROLE',
-              message: '프로젝트에 프론트 역할이 없어 전달할 수 없습니다.',
+              message: '다른 팀에 전달 후 완료하려면 전달 내용이 필요합니다.',
               status: HttpStatus.UNPROCESSABLE_ENTITY,
             });
           }
@@ -365,8 +351,8 @@ export class TeamWorksService {
       const handoff = dto.handoff
         ? await this.handoffs.createHandoffInTransaction(transaction, context, teamWorkId, {
             bodyMarkdown: dto.handoff.bodyMarkdown,
-            ...(dto.handoff.destinationRoles
-              ? { destinationRoles: dto.handoff.destinationRoles }
+            ...(dto.handoff.destinationProjectTeamIds
+              ? { destinationProjectTeamIds: dto.handoff.destinationProjectTeamIds }
               : {}),
             kind: HandoffKind.INITIAL,
           })
@@ -522,7 +508,12 @@ export class TeamWorksService {
         await transaction.activityEvent.create({
           data: {
             actorMembershipId: context.membershipId,
-            beforeData: { identifier: current.identifier, projectRole: current.projectRole },
+            beforeData: {
+              identifier: current.identifier,
+              projectTeamId: current.projectTeam?.id ?? null,
+              teamId: current.team.id,
+              teamKey: current.team.key,
+            },
             eventType: 'TEAM_WORK_REMOVED',
             issueId: current.issue.id,
             teamWorkId,

@@ -15,10 +15,9 @@ import {
   Max,
   MaxLength,
   Min,
-  ValidateNested,
 } from 'class-validator';
 
-import { ProjectRole, ProjectStatus } from '@rivet/database';
+import { ProjectStatus } from '@rivet/database';
 
 function normalizeString(value: unknown): unknown {
   return typeof value === 'string' ? value.normalize('NFC').trim() : value;
@@ -26,17 +25,6 @@ function normalizeString(value: unknown): unknown {
 
 function normalizeUuid(value: unknown): unknown {
   return typeof value === 'string' ? value.toLowerCase() : value;
-}
-
-export class ProjectRoleTeamInputDto {
-  @ApiProperty({ enum: ProjectRole })
-  @IsEnum(ProjectRole, { message: '프로젝트 역할이 올바르지 않습니다.' })
-  role!: ProjectRole;
-
-  @ApiProperty({ format: 'uuid' })
-  @Transform(({ value }) => normalizeUuid(value))
-  @IsUUID('4', { message: '담당 팀 식별자가 올바르지 않습니다.' })
-  teamId!: string;
 }
 
 export class ProjectListQueryDto {
@@ -125,15 +113,14 @@ export class CreateProjectDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: '목표일은 YYYY-MM-DD 형식이어야 합니다.' })
   targetDate?: string | null;
 
-  @ApiProperty({ isArray: true, minItems: 1, type: ProjectRoleTeamInputDto })
-  @IsArray({ message: '역할별 담당 팀 목록이 올바르지 않습니다.' })
-  @ArrayMaxSize(3, { message: '역할별 담당 팀은 최대 3개입니다.' })
-  @ArrayUnique((item: ProjectRoleTeamInputDto) => item.role, {
-    message: '같은 프로젝트 역할을 중복 선택할 수 없습니다.',
-  })
-  @ValidateNested({ each: true })
-  @Type(() => ProjectRoleTeamInputDto)
-  roleTeams!: ProjectRoleTeamInputDto[];
+  @ApiPropertyOptional({ format: 'uuid', isArray: true, maxItems: 100, type: String })
+  @Transform(({ value }) => (Array.isArray(value) ? value.map(normalizeUuid) : value))
+  @IsOptional()
+  @IsArray({ message: '프로젝트 참여 팀 목록이 올바르지 않습니다.' })
+  @ArrayMaxSize(100, { message: '프로젝트 참여 팀은 최대 100개입니다.' })
+  @ArrayUnique({ message: '같은 팀을 프로젝트에 중복 추가할 수 없습니다.' })
+  @IsUUID('4', { each: true, message: '참여 팀 식별자가 올바르지 않습니다.' })
+  teamIds?: string[];
 }
 
 export class UpdateProjectDto {
@@ -179,16 +166,14 @@ export class UpdateProjectDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: '목표일은 YYYY-MM-DD 형식이어야 합니다.' })
   targetDate?: string | null;
 
-  @ApiPropertyOptional({ isArray: true, minItems: 1, type: ProjectRoleTeamInputDto })
+  @ApiPropertyOptional({ format: 'uuid', isArray: true, maxItems: 100, type: String })
+  @Transform(({ value }) => (Array.isArray(value) ? value.map(normalizeUuid) : value))
   @IsOptional()
-  @IsArray({ message: '역할별 담당 팀 목록이 올바르지 않습니다.' })
-  @ArrayMaxSize(3, { message: '역할별 담당 팀은 최대 3개입니다.' })
-  @ArrayUnique((item: ProjectRoleTeamInputDto) => item.role, {
-    message: '같은 프로젝트 역할을 중복 선택할 수 없습니다.',
-  })
-  @ValidateNested({ each: true })
-  @Type(() => ProjectRoleTeamInputDto)
-  roleTeams?: ProjectRoleTeamInputDto[];
+  @IsArray({ message: '프로젝트 참여 팀 목록이 올바르지 않습니다.' })
+  @ArrayMaxSize(100, { message: '프로젝트 참여 팀은 최대 100개입니다.' })
+  @ArrayUnique({ message: '같은 팀을 프로젝트에 중복 추가할 수 없습니다.' })
+  @IsUUID('4', { each: true, message: '참여 팀 식별자가 올바르지 않습니다.' })
+  teamIds?: string[];
 }
 
 export class ArchiveProjectDto {

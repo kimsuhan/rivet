@@ -4,7 +4,6 @@ import {
   ImportRunStatus,
   IssuePriority,
   MembershipRole,
-  ProjectRole,
   StateCategory,
 } from '@rivet/database';
 
@@ -57,17 +56,18 @@ export class CsvImportMemberOptionDto {
   @ApiProperty({ format: 'uuid', isArray: true, type: String }) teamIds!: string[];
 }
 
-export class CsvImportProjectRoleTeamOptionDto {
-  @ApiProperty({ enum: ProjectRole }) role!: ProjectRole;
+export class CsvImportProjectTeamOptionDto {
+  @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) teamId!: string;
+  @ApiProperty() active!: boolean;
 }
 
 export class CsvImportProjectOptionDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() name!: string;
   @ApiProperty({ minimum: 1 }) version!: number;
-  @ApiProperty({ isArray: true, type: CsvImportProjectRoleTeamOptionDto })
-  roleTeams!: CsvImportProjectRoleTeamOptionDto[];
+  @ApiProperty({ isArray: true, type: CsvImportProjectTeamOptionDto })
+  projectTeams!: CsvImportProjectTeamOptionDto[];
 }
 
 export class CsvImportLabelOptionDto {

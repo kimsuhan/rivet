@@ -43,8 +43,10 @@ import {
   WorkflowStateResponseDto,
 } from './dto/team-response.dto';
 import {
+  CreateWorkflowStateDto,
   DeleteWorkflowStateQueryDto,
   ReorderWorkflowStatesDto,
+  SetWorkflowStateDefaultDto,
   UpdateWorkflowStateDto,
 } from './dto/workflow-state-request.dto';
 import { TeamQueryService } from './team-query.service';
@@ -249,6 +251,30 @@ export class TeamsController {
     );
   }
 
+  @Post('teams/:teamId/workflow-states')
+  @UseGuards(AdminGuard)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: '팀 워크플로 상태 생성' })
+  @ApiCreatedResponse({ type: WorkflowStateResponseDto })
+  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({
+    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
+    type: ApiErrorResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  @ApiUnprocessableEntityResponse({ description: 'VALIDATION_ERROR', type: ApiErrorResponseDto })
+  createWorkflowState(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('teamId', new ParseUUIDPipe({ version: '4' })) teamId: string,
+    @Body() dto: CreateWorkflowStateDto,
+  ): Promise<WorkflowStateResponseDto> {
+    return this.workflowStates.createWorkflowState(
+      workspaceContext(authentication).workspaceId,
+      teamId,
+      dto,
+    );
+  }
+
   @Patch('workflow-states/:stateId')
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: '워크플로 상태 이름 수정' })
@@ -267,6 +293,30 @@ export class TeamsController {
     @Body() dto: UpdateWorkflowStateDto,
   ): Promise<WorkflowStateResponseDto> {
     return this.workflowStates.updateWorkflowState(
+      workspaceContext(authentication).workspaceId,
+      stateId,
+      dto,
+    );
+  }
+
+  @Post('workflow-states/:stateId/default')
+  @UseGuards(AdminGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '팀 워크플로 기본 상태 지정' })
+  @ApiOkResponse({ type: WorkflowStateListResponseDto })
+  @ApiUnauthorizedResponse({ description: 'SESSION_REQUIRED', type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({
+    description: 'EMAIL_NOT_VERIFIED, MEMBERSHIP_INACTIVE, CSRF_INVALID 또는 FORBIDDEN',
+    type: ApiErrorResponseDto,
+  })
+  @ApiConflictResponse({ description: 'VERSION_CONFLICT', type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ description: 'RESOURCE_NOT_FOUND', type: ApiErrorResponseDto })
+  setDefaultWorkflowState(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Param('stateId', new ParseUUIDPipe({ version: '4' })) stateId: string,
+    @Body() dto: SetWorkflowStateDefaultDto,
+  ): Promise<WorkflowStateListResponseDto> {
+    return this.workflowStates.setDefaultWorkflowState(
       workspaceContext(authentication).workspaceId,
       stateId,
       dto,
@@ -321,10 +371,6 @@ export class TeamsController {
     @Param('stateId', new ParseUUIDPipe({ version: '4' })) stateId: string,
     @Query() query: DeleteWorkflowStateQueryDto,
   ): Promise<void> {
-    await this.workflowStates.deleteWorkflowState(
-      workspaceContext(authentication),
-      stateId,
-      query,
-    );
+    await this.workflowStates.deleteWorkflowState(workspaceContext(authentication), stateId, query);
   }
 }

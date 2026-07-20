@@ -28,11 +28,8 @@ import { FieldLegend, FieldSet } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/spinner';
 import { HandoffEditor } from '@/features/collaboration/markdown-editor';
 
-import { PROJECT_ROLE_LABELS } from './issue-attribute-presentation';
 import { markdownEditorLabels } from './issue-collaboration-labels';
 import { HANDOFF_TEMPLATE, handoffBodyError } from './issue-handoff-validation';
-
-type FrontendRole = 'APP_FRONTEND' | 'WEB_FRONTEND';
 
 function errorMessage(error: unknown): string {
   const apiError = error as ApiError | undefined;
@@ -55,7 +52,7 @@ export function TeamWorkCompletionModal({
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: {
     completionMode: UpdateTeamWorkDtoCompletionMode;
-    handoff?: { bodyMarkdown: string; destinationRoles: FrontendRole[] };
+    handoff?: { bodyMarkdown: string; destinationProjectTeamIds: string[] };
     workflowStateId: string;
   }) => void;
   open: boolean;
@@ -67,11 +64,11 @@ export function TeamWorkCompletionModal({
     (key) => markdown(key as never),
     (key) => String(markdown.raw(key as never)),
   );
-  const states = useTeamsControllerListWorkflowStates(work.team.id, {
+  const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, {
     query: { enabled: open, retry: false },
   });
   const project = useProjectsControllerGet(work.issue.project.id, {
-    query: { enabled: open && work.projectRole === 'BACKEND', retry: false },
+    query: { enabled: open, retry: false },
   });
   const members = useMembersControllerList(
     { limit: 100, status: 'ACTIVE' },
@@ -80,7 +77,7 @@ export function TeamWorkCompletionModal({
   const [completionMode, setCompletionMode] =
     useState<UpdateTeamWorkDtoCompletionMode>('COMPLETE_ONLY');
   const [handoffBody, setHandoffBody] = useState('');
-  const [destinationRoles, setDestinationRoles] = useState<FrontendRole[]>([]);
+  const [destinationProjectTeamIds, setDestinationProjectTeamIds] = useState<string[]>([]);
   const [guideOpen, setGuideOpen] = useState(false);
   const mentionOptions = useMemo(
     () =>
@@ -91,26 +88,26 @@ export function TeamWorkCompletionModal({
     [members.data?.items],
   );
 
-  const isBackend = work.projectRole === 'BACKEND';
-  const frontRoles = (project.data?.roleTeams ?? []).flatMap(({ role }) =>
-    role === 'WEB_FRONTEND' || role === 'APP_FRONTEND' ? [role] : [],
+  const destinationTeams = (project.data?.projectTeams ?? []).filter(
+    ({ active, id, team }) => active && id !== work.projectTeam.id && !team.archived,
   );
   const completedState = [...(states.data?.items ?? [])]
     .filter((state) => state.category === 'COMPLETED')
     .sort((a, b) => a.position - b.position)[0];
   const handoffBodyInvalid = handoffBodyError(handoffBody) === 'content';
-  const requiresHandoffFields = isBackend && completionMode === 'HANDOFF_AND_COMPLETE';
+  const requiresHandoffFields = completionMode === 'HANDOFF_AND_COMPLETE';
   const canSubmit =
     Boolean(completedState) &&
     !submitting &&
-    (!requiresHandoffFields || (destinationRoles.length > 0 && !handoffBodyInvalid));
+    (!requiresHandoffFields ||
+      (destinationProjectTeamIds.length > 0 && !handoffBodyInvalid && !project.isError));
 
   function handleSubmit() {
     if (!completedState || !canSubmit) return;
     if (requiresHandoffFields) {
       onSubmit({
         completionMode: 'HANDOFF_AND_COMPLETE',
-        handoff: { bodyMarkdown: handoffBody, destinationRoles },
+        handoff: { bodyMarkdown: handoffBody, destinationProjectTeamIds },
         workflowStateId: completedState.id,
       });
       return;
@@ -132,9 +129,7 @@ export function TeamWorkCompletionModal({
         <DialogHeader>
           <DialogTitle>{work.identifier} 완료</DialogTitle>
           <DialogDescription>
-            {isBackend
-              ? '완료 방식을 선택해 주세요. 프론트에 전달할 때만 대상 역할과 전달 내용을 입력합니다.'
-              : '이 작업을 완료합니다. 작업 전달은 필요하지 않습니다.'}
+            이 작업만 완료하거나 같은 프로젝트의 다른 참여 팀에 전달한 뒤 완료할 수 있습니다.
           </DialogDescription>
         </DialogHeader>
         {error ? (
@@ -144,8 +139,7 @@ export function TeamWorkCompletionModal({
             <AlertDescription>{errorMessage(error)}</AlertDescription>
           </Alert>
         ) : null}
-        {isBackend ? (
-          <FieldSet>
+        <FieldSet>
             <FieldLegend variant="label">완료 방식</FieldLegend>
             <div data-slot="radio-group" className="grid gap-2">
               <label className="border-border bg-background hover:bg-muted focus-within:border-ring focus-within:ring-ring/50 has-[:checked]:border-primary/50 has-[:checked]:bg-primary/10 flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm outline-none focus-within:ring-2">
@@ -166,32 +160,34 @@ export function TeamWorkCompletionModal({
                   name="completionMode"
                   onChange={() => {
                     setCompletionMode('HANDOFF_AND_COMPLETE');
-                    setDestinationRoles((current) => (current.length > 0 ? current : frontRoles));
                   }}
+                  disabled={destinationTeams.length === 0 || project.isError}
                   type="radio"
                   value="HANDOFF_AND_COMPLETE"
                 />
-                프론트에 전달 후 완료
+                다른 팀에 전달 후 완료
               </label>
             </div>
           </FieldSet>
-        ) : null}
         {requiresHandoffFields ? (
           <>
             <fieldset className="grid gap-2">
               <legend className="text-sm font-medium">전달 대상</legend>
               <div className="flex flex-wrap gap-3">
-                {frontRoles.map((role) => (
-                  <label key={role} className="flex items-center gap-2 text-sm">
+                {destinationTeams.map((projectTeam) => (
+                  <label key={projectTeam.id} className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={destinationRoles.includes(role)}
+                      checked={destinationProjectTeamIds.includes(projectTeam.id)}
                       onCheckedChange={(checked) =>
-                        setDestinationRoles((current) =>
-                          checked ? [...current, role] : current.filter((item) => item !== role),
+                        setDestinationProjectTeamIds((current) =>
+                          checked
+                            ? [...current, projectTeam.id]
+                            : current.filter((item) => item !== projectTeam.id),
                         )
                       }
                     />
-                    {PROJECT_ROLE_LABELS[role]}
+                    <span className="font-mono text-xs">{projectTeam.team.key}</span>
+                    {projectTeam.team.name}
                   </label>
                 ))}
               </div>
@@ -214,8 +210,8 @@ export function TeamWorkCompletionModal({
               <summary className="cursor-pointer text-sm font-medium">작성 가이드 보기</summary>
               <div className="text-muted-foreground mt-2 space-y-2 text-sm">
                 <p>
-                  변경 요약, API 명세 링크, 사용 가능 환경, 요청·응답 변경, 프론트 주의사항을 필요한
-                  만큼만 적어 주세요.
+                  다음 팀이 바로 이어서 작업할 수 있도록 변경 요약, 결과물 위치, 사용 가능 환경과
+                  주의사항을 필요한 만큼만 적어 주세요.
                 </p>
                 <Button
                   size="sm"

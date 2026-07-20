@@ -8,14 +8,10 @@ import { notifyResourceChanged } from '../../common/realtime/notify-resource-cha
 import type { CreateTeamDto } from './dto/create-team.dto';
 import type { UpdateTeamDto, VersionDto } from './dto/team-request.dto';
 import type { TeamResponseDto } from './dto/team-response.dto';
-import {
-  teamOpenIssueConflict,
-  teamResourceNotFound,
-  teamVersionConflict,
-} from './team.errors';
+import { teamOpenIssueConflict, teamResourceNotFound, teamVersionConflict } from './team.errors';
 import { TeamRepository } from './team.repository';
 import { normalizeTeamResourceName } from './team-input.policy';
-import { toTeamResponse } from './team-response.mapper';
+import { toTeamResponse, WORKFLOW_STATE_SELECT } from './team-response.mapper';
 import { teamUniqueConstraintTargets } from './team-unique.policy';
 
 @Injectable()
@@ -100,11 +96,20 @@ export class TeamsService {
               workspaceId: context.workspaceId,
             },
             {
+              category: StateCategory.BACKLOG,
+              isDefault: false,
+              name: '보류',
+              normalizedName: '보류',
+              position: 1,
+              teamId: team.id,
+              workspaceId: context.workspaceId,
+            },
+            {
               category: StateCategory.UNSTARTED,
               isDefault: false,
               name: '할 일',
               normalizedName: '할 일',
-              position: 1,
+              position: 2,
               teamId: team.id,
               workspaceId: context.workspaceId,
             },
@@ -113,7 +118,7 @@ export class TeamsService {
               isDefault: false,
               name: '진행 중',
               normalizedName: '진행 중',
-              position: 2,
+              position: 3,
               teamId: team.id,
               workspaceId: context.workspaceId,
             },
@@ -122,7 +127,7 @@ export class TeamsService {
               isDefault: false,
               name: '검토',
               normalizedName: '검토',
-              position: 3,
+              position: 4,
               teamId: team.id,
               workspaceId: context.workspaceId,
             },
@@ -131,15 +136,6 @@ export class TeamsService {
               isDefault: false,
               name: '완료',
               normalizedName: '완료',
-              position: 4,
-              teamId: team.id,
-              workspaceId: context.workspaceId,
-            },
-            {
-              category: StateCategory.BACKLOG,
-              isDefault: false,
-              name: '보류',
-              normalizedName: '보류',
               position: 5,
               teamId: team.id,
               workspaceId: context.workspaceId,
@@ -154,14 +150,7 @@ export class TeamsService {
               workspaceId: context.workspaceId,
             },
           ],
-          select: {
-            category: true,
-            id: true,
-            isDefault: true,
-            name: true,
-            position: true,
-            version: true,
-          },
+          select: WORKFLOW_STATE_SELECT,
         });
         await notifyResourceChanged(transaction, {
           changeType: 'CREATED',
@@ -196,8 +185,7 @@ export class TeamsService {
       });
     }
 
-    const normalized =
-      dto.name === undefined ? undefined : normalizeTeamResourceName(dto.name);
+    const normalized = dto.name === undefined ? undefined : normalizeTeamResourceName(dto.name);
     const key = dto.key?.trim();
 
     try {
@@ -476,7 +464,6 @@ export class TeamsService {
       return team;
     });
   }
-
 
   private async throwTeamUniqueConflict(
     error: unknown,
