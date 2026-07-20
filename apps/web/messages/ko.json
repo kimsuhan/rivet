@@ -292,9 +292,9 @@
     "desktopNavigation": "주 탐색",
     "mobileNavigation": "모바일 주 탐색",
     "openIssueCreate": "이슈 만들기 열기",
-    "openFeedback": "피드백 보내기",
     "openSearch": "검색 열기",
     "openTeamSelector": "팀 선택 열기",
+    "openWorkspaceMenu": "워크스페이스 메뉴 열기",
     "inboxUnread": "알림함, 읽지 않은 알림 {count}개",
     "skipToContent": "본문으로 건너뛰기",
     "expandSection": "{section} 하위 목록 펼치기",
@@ -302,6 +302,7 @@
   },
   "UserMenu": {
     "open": "사용자 메뉴 열기",
+    "feedback": "피드백 보내기",
     "profile": "프로필 설정",
     "logout": "로그아웃",
     "loggingOut": "로그아웃 중",
@@ -413,7 +414,8 @@
     "teams": "팀",
     "projects": "프로젝트",
     "search": "검색",
-    "settings": "설정"
+    "settings": "설정",
+    "workspace": "워크스페이스"
   },
   "Search": {
     "title": "검색",
@@ -643,6 +645,14 @@
   },
   "TeamSelector": {
     "title": "팀",
+    "allTeams": "모든 팀 보기",
+    "collapseSection": "{section} 구역 접기",
+    "collapseTeam": "{team} 팀 메뉴 접기",
+    "expandSection": "{section} 구역 펼치기",
+    "expandTeam": "{team} 팀 메뉴 펼치기",
+    "myTeamsEmpty": "참여 중인 팀이 없습니다",
+    "teamBoard": "보드",
+    "teamIssues": "이슈",
     "description": "내 팀과 워크스페이스의 다른 팀으로 이동합니다.",
     "emptyTitle": "표시할 팀이 없습니다",
     "emptyDescription": "팀이 만들어지면 여기에서 팀 작업으로 이동할 수 있습니다.",

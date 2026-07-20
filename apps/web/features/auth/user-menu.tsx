@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { LogOutIcon, UserRoundIcon } from 'lucide-react';
+import { LogOutIcon, MessageSquarePlusIcon, UserRoundIcon } from 'lucide-react';
 import { type ReactNode, type RefObject, useState } from 'react';
 
 import { setCsrfToken, useAuthControllerLogout } from '@rivet/api-client';
@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { useRouter } from '@/i18n/navigation';
 
 export type UserMenuLabels = {
+  feedback: string;
   loggingOut: string;
   logout: string;
   logoutError: string;
@@ -25,6 +26,7 @@ export function UserMenu({
   className,
   labels,
   onOpenChange,
+  onOpenFeedback,
   onOpenProfile,
   open,
   side = 'top',
@@ -36,6 +38,7 @@ export function UserMenu({
   className?: string;
   labels: UserMenuLabels;
   onOpenChange: (open: boolean) => void;
+  onOpenFeedback: () => void;
   onOpenProfile: () => void;
   open: boolean;
   side?: 'bottom' | 'top';
@@ -92,6 +95,19 @@ export function UserMenu({
         >
           <UserRoundIcon data-icon="inline-start" />
           {labels.profile}
+        </Button>
+        <Button
+          className="w-full justify-start"
+          size="sm"
+          variant="ghost"
+          disabled={logout.isPending}
+          onClick={() => {
+            onOpenChange(false);
+            onOpenFeedback();
+          }}
+        >
+          <MessageSquarePlusIcon data-icon="inline-start" />
+          {labels.feedback}
         </Button>
         <Button
           className="text-destructive hover:text-destructive w-full justify-start"

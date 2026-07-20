@@ -2,12 +2,10 @@
 
 import {
   Bell,
-  ChevronRight,
   CircleDot,
   FolderKanban,
   ListTodo,
   type LucideIcon,
-  MessageSquarePlus,
   Plus,
   Search,
   Settings,
@@ -31,6 +29,18 @@ import {
 } from '@rivet/api-client';
 
 import { RivetSymbol, RivetWordmark } from '@/components/layout/brand';
+import {
+  SidebarDisclosureButton,
+  sidebarDisclosureRowClassName,
+  SidebarSectionHeading,
+} from '@/components/layout/sidebar-section';
+import {
+  readCollapsedSections,
+  readServerCollapsedSections,
+  rememberCollapsedSections,
+  subscribeCollapsedSections,
+} from '@/components/layout/sidebar-sections-storage';
+import { WorkspaceMenu } from '@/components/layout/workspace-menu';
 import { UserAvatar } from '@/components/user-avatar';
 import { UserMenu, type UserMenuLabels } from '@/features/auth/user-menu';
 import { FeedbackDialog } from '@/features/feedback/feedback-dialog';
@@ -68,9 +78,9 @@ type ShellLabels = {
   desktopNavigation: string;
   mobileNavigation: string;
   openIssueCreate: string;
-  openFeedback: string;
   openSearch: string;
   openTeamSelector: string;
+  openWorkspaceMenu: string;
   skipToContent: string;
   inboxUnread: string;
   expandSection: string;
@@ -83,6 +93,7 @@ type ShellLabels = {
     projects: string;
     search: string;
     settings: string;
+    workspace: string;
   };
   issueCreate: IssueCreateLabels;
   search: GlobalSearchLabels;
@@ -113,6 +124,9 @@ function NotificationCountBadge({ className, count }: { className?: string; coun
   );
 }
 
+const WORKSPACE_SECTION = 'group:workspace';
+const TEAMS_SECTION = 'group:teams';
+
 function isCurrentPath(pathname: string, href: NavigationItem['href']): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -139,10 +153,15 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
   const [teamSelectorOpen, setTeamSelectorOpen] = useState(false);
   const [issueCreateOpen, setIssueCreateOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState<'desktop' | 'mobile' | null>(null);
   const [issueCreateSeed, setIssueCreateSeed] = useState<IssueCreateSeed | null>(null);
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [sectionsWithItems, setSectionsWithItems] = useState<Record<string, boolean>>({});
+  const collapsedSections = useSyncExternalStore(
+    subscribeCollapsedSections,
+    readCollapsedSections,
+    readServerCollapsedSections,
+  );
   const storedTeamView = useSyncExternalStore(
     subscribeLastTeamView,
     readLastTeamView,
@@ -155,19 +174,39 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
       retry: false,
     },
   });
+  const lastFeedbackTrigger = useRef<HTMLElement | null>(null);
   const lastIssueCreateTrigger = useRef<HTMLElement | null>(null);
   const lastProfileTrigger = useRef<HTMLElement | null>(null);
   const lastSearchTrigger = useRef<HTMLElement | null>(null);
   const lastTeamSelectorTrigger = useRef<HTMLElement | null>(null);
+  const workspaceMenuTrigger = useRef<HTMLButtonElement>(null);
   const desktopUserMenuTrigger = useRef<HTMLButtonElement>(null);
   const mobileUserMenuTrigger = useRef<HTMLButtonElement>(null);
   const consumedIssueCreateRequest = useRef<string | null>(null);
-  const navigationItems: NavigationItem[] = [
-    { href: '/my-issues', label: labels.navigation.myIssues, icon: ListTodo },
-    { href: '/inbox', label: labels.navigation.inbox, icon: Bell },
-    { href: '/issues', label: labels.navigation.issues, icon: CircleDot },
-    { href: '/projects', label: labels.navigation.projects, icon: FolderKanban },
-  ];
+  const inboxItem: NavigationItem = {
+    href: '/inbox',
+    label: labels.navigation.inbox,
+    icon: Bell,
+  };
+  const myIssuesItem: NavigationItem = {
+    href: '/my-issues',
+    label: labels.navigation.myIssues,
+    icon: ListTodo,
+  };
+  const issuesItem: NavigationItem = {
+    href: '/issues',
+    label: labels.navigation.issues,
+    icon: CircleDot,
+  };
+  const projectsItem: NavigationItem = {
+    href: '/projects',
+    label: labels.navigation.projects,
+    icon: FolderKanban,
+  };
+  // 모바일 하단 탭은 기존 순서를 유지하고, 데스크톱만 개인·워크스페이스 구역으로 나눈다.
+  const navigationItems: NavigationItem[] = [myIssuesItem, inboxItem, issuesItem, projectsItem];
+  const personalItems: NavigationItem[] = [inboxItem, myIssuesItem];
+  const workspaceItems: NavigationItem[] = [issuesItem, projectsItem];
   const isWorkspaceAdmin = Boolean(
     session.data?.authenticated &&
     session.data.membership?.role === 'ADMIN' &&
@@ -179,6 +218,13 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
       session.data.membership?.status === 'ACTIVE' &&
       (session.data.membership.ledTeamIds?.length ?? 0) > 0),
   );
+  const settingsHref = canAccessSettings
+    ? isWorkspaceAdmin
+      ? '/settings/members'
+      : '/settings/teams'
+    : null;
+  const settingsActive = pathname === '/settings' || pathname.startsWith('/settings/');
+  const workspace = session.data?.authenticated ? session.data.workspace : null;
   const unreadNotificationCount = unreadNotifications.data?.count ?? 0;
   const inboxNavigationLabel =
     unreadNotificationCount > 0
@@ -213,8 +259,11 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
     return savedViewNavigationHref(membershipId, href, pathname, currentSearch);
   }
 
-  function toggleSection(href: string) {
-    setCollapsedSections((current) => ({ ...current, [href]: !current[href] }));
+  function toggleSection(section: string) {
+    rememberCollapsedSections({
+      ...collapsedSections,
+      [section]: !collapsedSections[section],
+    });
   }
 
   const setSectionHasItems = useCallback((href: string, hasItems: boolean) => {
@@ -242,6 +291,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
         !issueCreateOpen &&
         !teamSelectorOpen &&
         !profileOpen &&
+        !workspaceMenuOpen &&
         !userMenuOpen
       ) {
         event.preventDefault();
@@ -265,6 +315,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
         !searchOpen &&
         !teamSelectorOpen &&
         !profileOpen &&
+        !workspaceMenuOpen &&
         !userMenuOpen
       ) {
         event.preventDefault();
@@ -279,7 +330,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
 
     window.addEventListener('keydown', openGlobalOverlay);
     return () => window.removeEventListener('keydown', openGlobalOverlay);
-  }, [issueCreateOpen, profileOpen, searchOpen, teamSelectorOpen, userMenuOpen]);
+  }, [issueCreateOpen, profileOpen, searchOpen, teamSelectorOpen, userMenuOpen, workspaceMenuOpen]);
 
   useEffect(() => {
     if (searchParams.get('create') !== '1') return;
@@ -357,6 +408,19 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
     setProfileOpen(true);
   }
 
+  function openFeedbackFromUserMenu(trigger: HTMLButtonElement | null) {
+    lastFeedbackTrigger.current = trigger;
+    setFeedbackOpen(true);
+  }
+
+  function changeFeedbackOpen(open: boolean) {
+    setFeedbackOpen(open);
+
+    if (!open) {
+      requestAnimationFrame(() => lastFeedbackTrigger.current?.focus());
+    }
+  }
+
   function changeProfileOpen(open: boolean) {
     setProfileOpen(open);
 
@@ -373,6 +437,77 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
     }
   }
 
+  function renderNavigationItem({ href, label, icon: Icon }: NavigationItem) {
+    const active = isCurrentPath(pathname, href);
+    const sectionExpanded = !collapsedSections[href];
+    const showSectionToggle = Boolean(sectionsWithItems[href]);
+
+    return (
+      <div key={href} className="flex flex-col gap-0.5">
+        <div className={cn('flex items-center gap-0.5', sidebarDisclosureRowClassName)}>
+          <Link
+            href={navigationHref(href)}
+            aria-current={active ? 'page' : undefined}
+            aria-label={href === '/inbox' ? inboxNavigationLabel : label}
+            title={label}
+            className={cn(
+              'focus-visible:ring-sidebar-ring relative flex h-8 flex-1 items-center gap-2 rounded-md border-l-2 px-2 text-sm transition-colors outline-none focus-visible:ring-2',
+              active
+                ? 'border-primary bg-sidebar-accent text-sidebar-accent-foreground'
+                : 'text-sidebar-foreground hover:bg-surface-2 hover:text-foreground border-transparent',
+            )}
+          >
+            <span className="relative shrink-0">
+              <Icon aria-hidden="true" className="size-4" strokeWidth={1.75} />
+              {href === '/inbox' ? (
+                <NotificationCountBadge
+                  count={unreadNotificationCount}
+                  className="absolute -top-2 left-2 xl:hidden"
+                />
+              ) : null}
+            </span>
+            <span className="hidden truncate xl:inline">{label}</span>
+            {href === '/inbox' ? (
+              <NotificationCountBadge
+                count={unreadNotificationCount}
+                className="ml-auto hidden xl:flex"
+              />
+            ) : null}
+          </Link>
+          {showSectionToggle ? (
+            <SidebarDisclosureButton
+              className="h-8"
+              collapseLabel={labels.collapseSection.replace('{section}', label)}
+              expandLabel={labels.expandSection.replace('{section}', label)}
+              expanded={sectionExpanded}
+              onToggle={() => toggleSection(href)}
+            />
+          ) : null}
+        </div>
+        {session.data?.authenticated && href === '/issues' ? (
+          <SavedViewSidebarNavigation
+            resourceType="ISSUES"
+            expanded={sectionExpanded}
+            onHasItemsChange={(hasItems) => setSectionHasItems(href, hasItems)}
+          />
+        ) : null}
+        {session.data?.authenticated && href === '/my-issues' ? (
+          <SavedViewSidebarNavigation
+            resourceType="MY_WORK"
+            expanded={sectionExpanded}
+            onHasItemsChange={(hasItems) => setSectionHasItems(href, hasItems)}
+          />
+        ) : null}
+        {session.data?.authenticated && href === '/projects' ? (
+          <ProjectSidebarNavigation
+            expanded={sectionExpanded}
+            onHasItemsChange={(hasItems) => setSectionHasItems(href, hasItems)}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="bg-background min-h-dvh lg:pl-14 xl:pl-60">
       <a
@@ -385,15 +520,25 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
         aria-label={labels.desktopNavigation}
         className="app-sticky-layer bg-sidebar fixed inset-y-0 left-0 hidden w-14 flex-col border-r lg:flex xl:w-60"
       >
-        <div className="flex h-14 shrink-0 items-center border-b px-3 xl:px-4">
-          <Link
-            href="/my-issues"
-            aria-label={labels.brandLabel}
-            className="focus-visible:ring-ring flex items-center gap-2 rounded-md outline-none focus-visible:ring-2"
-          >
-            <RivetSymbol className="xl:hidden" />
-            <RivetWordmark className="hidden xl:block" />
-          </Link>
+        <div className="flex h-14 shrink-0 items-center border-b px-2 xl:px-3">
+          {workspace ? (
+            <WorkspaceMenu
+              labels={{ open: labels.openWorkspaceMenu }}
+              open={workspaceMenuOpen}
+              onOpenChange={setWorkspaceMenuOpen}
+              triggerRef={workspaceMenuTrigger}
+              workspace={workspace}
+            />
+          ) : (
+            <Link
+              href="/my-issues"
+              aria-label={labels.brandLabel}
+              className="focus-visible:ring-ring flex items-center gap-2 rounded-md px-1 outline-none focus-visible:ring-2"
+            >
+              <RivetSymbol className="xl:hidden" />
+              <RivetWordmark className="hidden xl:block" />
+            </Link>
+          )}
         </div>
 
         <div className="border-b p-2">
@@ -426,125 +571,70 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
           </button>
         </div>
 
-        <nav className="flex flex-col gap-1 p-2" aria-label={labels.desktopNavigation}>
-          {navigationItems.map(({ href, label, icon: Icon }) => {
-            const active = isCurrentPath(pathname, href);
-            const hasSection = href === '/issues' || href === '/my-issues' || href === '/projects';
-            const sectionExpanded = !collapsedSections[href];
-            const showSectionToggle = hasSection && Boolean(sectionsWithItems[href]);
-
-            return (
-              <div key={href} className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-0.5">
-                  <Link
-                    href={navigationHref(href)}
-                    aria-current={active ? 'page' : undefined}
-                    aria-label={href === '/inbox' ? inboxNavigationLabel : label}
-                    title={label}
-                    className={cn(
-                      'focus-visible:ring-sidebar-ring relative flex h-8 flex-1 items-center gap-2 rounded-md border-l-2 px-2 text-sm transition-colors outline-none focus-visible:ring-2',
-                      active
-                        ? 'border-primary bg-sidebar-accent text-sidebar-accent-foreground'
-                        : 'text-sidebar-foreground hover:bg-surface-2 hover:text-foreground border-transparent',
-                    )}
-                  >
-                    <span className="relative shrink-0">
-                      <Icon aria-hidden="true" className="size-4" strokeWidth={1.75} />
-                      {href === '/inbox' ? (
-                        <NotificationCountBadge
-                          count={unreadNotificationCount}
-                          className="absolute -top-2 left-2 xl:hidden"
-                        />
-                      ) : null}
-                    </span>
-                    <span className="hidden truncate xl:inline">{label}</span>
-                    {href === '/inbox' ? (
-                      <NotificationCountBadge
-                        count={unreadNotificationCount}
-                        className="ml-auto hidden xl:flex"
-                      />
-                    ) : null}
-                  </Link>
-                  {showSectionToggle ? (
-                    <button
-                      type="button"
-                      onClick={() => toggleSection(href)}
-                      aria-expanded={sectionExpanded}
-                      aria-label={(sectionExpanded
-                        ? labels.collapseSection
-                        : labels.expandSection
-                      ).replace('{section}', label)}
-                      title={(sectionExpanded
-                        ? labels.collapseSection
-                        : labels.expandSection
-                      ).replace('{section}', label)}
-                      className="text-sidebar-foreground hover:bg-surface-2 hover:text-foreground focus-visible:ring-sidebar-ring hidden h-8 w-6 shrink-0 items-center justify-center rounded-md outline-none focus-visible:ring-2 xl:flex"
-                    >
-                      <ChevronRight
-                        aria-hidden="true"
-                        className={cn(
-                          'size-3 transition-transform',
-                          sectionExpanded && 'rotate-90',
-                        )}
-                      />
-                    </button>
-                  ) : null}
-                </div>
-                {session.data?.authenticated && href === '/issues' ? (
-                  <SavedViewSidebarNavigation
-                    resourceType="ISSUES"
-                    expanded={sectionExpanded}
-                    onHasItemsChange={(hasItems) => setSectionHasItems(href, hasItems)}
-                  />
-                ) : null}
-                {session.data?.authenticated && href === '/my-issues' ? (
-                  <SavedViewSidebarNavigation
-                    resourceType="MY_WORK"
-                    expanded={sectionExpanded}
-                    onHasItemsChange={(hasItems) => setSectionHasItems(href, hasItems)}
-                  />
-                ) : null}
-                {session.data?.authenticated && href === '/projects' ? (
-                  <ProjectSidebarNavigation
-                    expanded={sectionExpanded}
-                    onHasItemsChange={(hasItems) => setSectionHasItems(href, hasItems)}
-                  />
-                ) : null}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <nav className="flex flex-col gap-2 p-2" aria-label={labels.desktopNavigation}>
+            <div className="flex flex-col gap-0.5">{personalItems.map(renderNavigationItem)}</div>
+            <div className="flex flex-col gap-0.5">
+              <SidebarSectionHeading
+                collapseLabel={labels.collapseSection.replace(
+                  '{section}',
+                  labels.navigation.workspace,
+                )}
+                expandLabel={labels.expandSection.replace('{section}', labels.navigation.workspace)}
+                expanded={!collapsedSections[WORKSPACE_SECTION]}
+                onToggle={() => toggleSection(WORKSPACE_SECTION)}
+              >
+                {labels.navigation.workspace}
+              </SidebarSectionHeading>
+              <div
+                className={cn(
+                  'flex flex-col gap-0.5',
+                  collapsedSections[WORKSPACE_SECTION] && 'xl:hidden',
+                )}
+              >
+                {workspaceItems.map(renderNavigationItem)}
               </div>
-            );
-          })}
-        </nav>
+            </div>
+          </nav>
 
-        <DesktopTeamNavigation
-          currentTeamKey={selectedTeamKey}
-          labels={labels.teamSelector}
-          memberTeamIds={memberTeamIds}
-          teamView={lastTeamView}
-        />
+          <DesktopTeamNavigation
+            currentTeamKey={selectedTeamKey}
+            currentTeamView={selectedTeamView}
+            expanded={!collapsedSections[TEAMS_SECTION]}
+            labels={labels.teamSelector}
+            memberTeamIds={memberTeamIds}
+            onOpenAllTeams={openTeamSelectorFromTrigger}
+            onToggleExpanded={() => toggleSection(TEAMS_SECTION)}
+            teamView={lastTeamView}
+          />
+        </div>
 
         {session.data?.authenticated ? (
           <div className="mt-auto flex flex-col gap-1 border-t p-2">
-            <button
-              type="button"
-              onClick={() => setFeedbackOpen(true)}
-              aria-label={labels.openFeedback}
-              aria-pressed={feedbackOpen}
-              title={labels.openFeedback}
-              className="text-sidebar-foreground hover:bg-surface-2 hover:text-foreground focus-visible:ring-sidebar-ring flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors outline-none focus-visible:ring-2"
-            >
-              <MessageSquarePlus
-                aria-hidden="true"
-                className="size-4 shrink-0"
-                strokeWidth={1.75}
-              />
-              <span className="hidden truncate xl:inline">{labels.openFeedback}</span>
-            </button>
+            {settingsHref ? (
+              <Link
+                href={settingsHref}
+                aria-current={settingsActive ? 'page' : undefined}
+                aria-label={labels.navigation.settings}
+                title={labels.navigation.settings}
+                className={cn(
+                  'focus-visible:ring-sidebar-ring relative flex h-8 items-center gap-2 rounded-md border-l-2 px-2 text-sm transition-colors outline-none focus-visible:ring-2',
+                  settingsActive
+                    ? 'border-primary bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                    : 'text-sidebar-foreground hover:bg-surface-2 hover:text-foreground border-transparent',
+                )}
+              >
+                <Settings aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.75} />
+                <span className="hidden truncate xl:inline">{labels.navigation.settings}</span>
+              </Link>
+            ) : null}
             <UserMenu
               align="start"
               side="top"
               labels={labels.userMenu}
               open={userMenuOpen === 'desktop'}
               onOpenChange={(open) => setUserMenuOpen(open ? 'desktop' : null)}
+              onOpenFeedback={() => openFeedbackFromUserMenu(desktopUserMenuTrigger.current)}
               onOpenProfile={() => openProfileFromUserMenu(desktopUserMenuTrigger.current)}
               triggerRef={desktopUserMenuTrigger}
               user={session.data.user}
@@ -559,23 +649,6 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
                 {session.data.user.displayName}
               </span>
             </UserMenu>
-            {canAccessSettings ? (
-              <Link
-                href={isWorkspaceAdmin ? '/settings/members' : '/settings/teams'}
-                aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
-                aria-label={labels.navigation.settings}
-                title={labels.navigation.settings}
-                className={cn(
-                  'focus-visible:ring-sidebar-ring flex h-8 items-center gap-2 rounded-md border-l-2 px-2 text-sm transition-colors outline-none focus-visible:ring-2',
-                  pathname.startsWith('/settings')
-                    ? 'border-primary bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground hover:bg-surface-2 hover:text-foreground border-transparent',
-                )}
-              >
-                <Settings aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.75} />
-                <span className="hidden truncate xl:inline">{labels.navigation.settings}</span>
-              </Link>
-            ) : null}
           </div>
         ) : null}
       </aside>
@@ -589,20 +662,6 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
           <RivetWordmark />
         </Link>
         <div className="flex items-center gap-1">
-          {session.data?.authenticated ? (
-            <button
-              type="button"
-              onClick={() => setFeedbackOpen(true)}
-              aria-label={labels.openFeedback}
-              aria-pressed={feedbackOpen}
-              className={cn(
-                'focus-visible:ring-ring flex size-10 items-center justify-center rounded-md outline-none focus-visible:ring-2',
-                feedbackOpen ? 'text-primary' : 'text-muted-foreground',
-              )}
-            >
-              <MessageSquarePlus aria-hidden="true" className="size-5" strokeWidth={1.75} />
-            </button>
-          ) : null}
           <button
             type="button"
             onClick={openSearchFromTrigger}
@@ -622,6 +681,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
               labels={labels.userMenu}
               open={userMenuOpen === 'mobile'}
               onOpenChange={(open) => setUserMenuOpen(open ? 'mobile' : null)}
+              onOpenFeedback={() => openFeedbackFromUserMenu(mobileUserMenuTrigger.current)}
               onOpenProfile={() => openProfileFromUserMenu(mobileUserMenuTrigger.current)}
               triggerRef={mobileUserMenuTrigger}
               user={session.data.user}
@@ -713,7 +773,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
 
       <GlobalSearch open={searchOpen} onOpenChange={changeSearchOpen} labels={labels.search} />
       {session.data?.authenticated ? (
-        <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+        <FeedbackDialog open={feedbackOpen} onOpenChange={changeFeedbackOpen} />
       ) : null}
       <GlobalIssueCreate
         key={issueCreateOpen ? (issueCreateSeed?.projectId ?? 'new') : 'closed'}

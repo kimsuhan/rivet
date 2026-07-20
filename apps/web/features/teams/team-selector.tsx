@@ -1,9 +1,18 @@
 'use client';
 
-import { RefreshCw, Users } from 'lucide-react';
+import { Dot, RefreshCw, Users } from 'lucide-react';
+import { type MouseEvent as ReactMouseEvent, useState } from 'react';
 
 import { useTeamsControllerList } from '@rivet/api-client';
 
+import {
+  SidebarDisclosureButton,
+  sidebarDisclosureRowClassName,
+  SidebarSectionHeading,
+  sidebarSubGroupClassName,
+  sidebarSubItemClassName,
+  sidebarSubItemStateClassName,
+} from '@/components/layout/sidebar-section';
 import { ContentEmpty } from '@/components/states/content-empty';
 import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
@@ -22,16 +31,24 @@ import { cn } from '@/lib/utils';
 import { rememberTeamKey, rememberTeamView, type TeamView } from './team-selector-storage';
 
 export type TeamSelectorLabels = {
+  allTeams: string;
   close: string;
+  collapseSection: string;
+  collapseTeam: string;
   description: string;
   emptyDescription: string;
   emptyTitle: string;
   errorDescription: string;
   errorTitle: string;
+  expandSection: string;
+  expandTeam: string;
   loading: string;
   myTeams: string;
+  myTeamsEmpty: string;
   otherTeams: string;
   retry: string;
+  teamBoard: string;
+  teamIssues: string;
   title: string;
 };
 
@@ -41,48 +58,48 @@ function teamHref(teamKey: string, teamView: TeamView): string {
 
 export function DesktopTeamNavigation({
   currentTeamKey,
+  currentTeamView,
+  expanded,
   labels,
   memberTeamIds,
+  onOpenAllTeams,
+  onToggleExpanded,
   teamView,
 }: {
   currentTeamKey: string | null;
+  currentTeamView: TeamView | null;
+  expanded: boolean;
   labels: TeamSelectorLabels;
   memberTeamIds: string[] | null;
+  onOpenAllTeams: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onToggleExpanded: () => void;
   teamView: TeamView;
 }) {
+  const [expandedTeamKeys, setExpandedTeamKeys] = useState<Record<string, boolean>>({});
   const teams = useTeamsControllerList({ includeArchived: false }, { query: { retry: false } });
-  const items = (teams.data?.items ?? []).filter((team) => !team.archived);
   const memberTeamIdSet = new Set(memberTeamIds ?? []);
-  const groups =
-    memberTeamIds === null
-      ? [{ id: 'all', label: null, teams: items }]
-      : [
-          {
-            id: 'mine',
-            label: labels.myTeams,
-            teams: items.filter((team) => memberTeamIdSet.has(team.id)),
-          },
-          {
-            id: 'other',
-            label: labels.otherTeams,
-            teams: items.filter((team) => !memberTeamIdSet.has(team.id)),
-          },
-        ].filter((group) => group.teams.length > 0);
+  // 사이드바에는 소속 팀만 두고 워크스페이스의 나머지 팀은 팀 선택 대화상자에서 찾는다.
+  const items = (teams.data?.items ?? []).filter(
+    (team) => !team.archived && (memberTeamIds === null || memberTeamIdSet.has(team.id)),
+  );
 
   return (
     <section
       aria-labelledby="desktop-team-navigation-title"
-      className="flex min-h-0 flex-1 flex-col border-t p-2"
+      className="flex flex-col gap-0.5 border-t p-2"
     >
-      <h2
+      <SidebarSectionHeading
         id="desktop-team-navigation-title"
-        className="text-muted-foreground mb-1 hidden px-2 text-xs font-medium xl:block"
+        collapseLabel={labels.collapseSection.replace('{section}', labels.myTeams)}
+        expandLabel={labels.expandSection.replace('{section}', labels.myTeams)}
+        expanded={expanded}
+        onToggle={onToggleExpanded}
       >
-        {labels.title}
-      </h2>
+        {labels.myTeams}
+      </SidebarSectionHeading>
 
       {teams.isPending ? (
-        <div className="flex h-9 items-center justify-center" aria-label={labels.loading}>
+        <div className="flex h-8 items-center justify-center" aria-label={labels.loading}>
           <Spinner aria-label={labels.loading} />
         </div>
       ) : null}
@@ -102,62 +119,119 @@ export function DesktopTeamNavigation({
         </Button>
       ) : null}
 
-      {!teams.isPending && !teams.isError && items.length === 0 ? (
-        <p className="text-muted-foreground hidden px-2 py-2 text-xs xl:block">
-          {labels.emptyTitle}
-        </p>
-      ) : null}
+      {!teams.isPending && !teams.isError ? (
+        <div className={cn('flex flex-col gap-0.5', !expanded && 'xl:hidden')}>
+          {items.length === 0 ? (
+            <p className="text-muted-foreground hidden px-2 py-1 text-xs xl:block">
+              {labels.myTeamsEmpty}
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-0.5">
+              {items.map((team) => {
+                const active = currentTeamKey === team.key;
+                const teamExpanded = expandedTeamKeys[team.key] ?? active;
+                const views = [
+                  { label: labels.teamIssues, view: 'issues' as const },
+                  { label: labels.teamBoard, view: 'board' as const },
+                ];
 
-      {items.length > 0 ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-          {groups.map((group) => (
-            <div key={group.id}>
-              {group.label ? (
-                <h3 className="text-muted-foreground mb-1 hidden px-2 text-[11px] font-medium xl:block">
-                  {group.label}
-                </h3>
-              ) : null}
-              <ul className="flex flex-col gap-1">
-                {group.teams.map((team) => {
-                  const active = currentTeamKey === team.key;
-
-                  return (
-                    <li key={team.id}>
+                return (
+                  <li key={team.id} className="flex flex-col gap-0.5">
+                    <div className={cn('flex items-center gap-0.5', sidebarDisclosureRowClassName)}>
                       <Link
                         href={teamHref(team.key, teamView)}
                         aria-current={active ? 'page' : undefined}
                         aria-label={`${team.name} (${team.key})`}
-                        title={`${team.name} (${team.key})${memberTeamIdSet.has(team.id) ? ` · ${labels.myTeams}` : ''}`}
+                        title={`${team.name} (${team.key})`}
                         onClick={() => {
                           rememberTeamKey(team.key);
                           rememberTeamView(teamView);
                         }}
                         className={cn(
-                          'focus-visible:ring-sidebar-ring flex h-8 items-center gap-2 rounded-md border-l-2 px-2 text-sm transition-colors outline-none focus-visible:ring-2',
+                          'focus-visible:ring-sidebar-ring flex h-8 flex-1 items-center gap-2 rounded-md border-l-2 px-2 text-sm transition-colors outline-none focus-visible:ring-2',
                           active
                             ? 'border-primary bg-sidebar-accent text-sidebar-accent-foreground'
                             : 'text-sidebar-foreground hover:bg-surface-2 hover:text-foreground border-transparent',
                         )}
                       >
-                        <code
+                        <span
+                          aria-hidden="true"
                           className={cn(
-                            'w-4 shrink-0 truncate rounded text-center text-xs xl:w-8',
-                            active
-                              ? 'text-sidebar-accent-foreground'
-                              : 'bg-surface-2 text-muted-foreground',
+                            'w-4 shrink-0 text-center text-[11px] font-medium',
+                            active ? 'text-sidebar-accent-foreground' : 'text-muted-foreground',
                           )}
                         >
-                          <span className="xl:hidden">{team.key.slice(0, 1)}</span>
-                          <span className="hidden xl:inline">{team.key}</span>
-                        </code>
+                          {team.key.slice(0, 1)}
+                        </span>
                         <span className="hidden min-w-0 truncate xl:inline">{team.name}</span>
                       </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+                      <SidebarDisclosureButton
+                        className="h-8"
+                        collapseLabel={labels.collapseTeam.replace('{team}', team.name)}
+                        expandLabel={labels.expandTeam.replace('{team}', team.name)}
+                        expanded={teamExpanded}
+                        onToggle={() =>
+                          setExpandedTeamKeys((current) => ({
+                            ...current,
+                            [team.key]: !(current[team.key] ?? active),
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {teamExpanded ? (
+                      <div
+                        role="group"
+                        aria-label={`${team.name} ${labels.title}`}
+                        className={sidebarSubGroupClassName}
+                      >
+                        {views.map(({ label, view }) => {
+                          const viewActive = active && currentTeamView === view;
+
+                          return (
+                            <Link
+                              key={view}
+                              href={teamHref(team.key, view)}
+                              aria-current={viewActive ? 'location' : undefined}
+                              onClick={() => {
+                                rememberTeamKey(team.key);
+                                rememberTeamView(view);
+                              }}
+                              className={cn(
+                                sidebarSubItemClassName,
+                                sidebarSubItemStateClassName(viewActive),
+                              )}
+                            >
+                              <Dot
+                                aria-hidden="true"
+                                className={cn(
+                                  'size-4 shrink-0',
+                                  viewActive ? 'text-primary' : 'text-transparent',
+                                )}
+                                strokeWidth={3}
+                              />
+                              <span className="min-w-0 flex-1 truncate">{label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <button
+            type="button"
+            onClick={onOpenAllTeams}
+            aria-label={labels.allTeams}
+            title={labels.allTeams}
+            className="text-muted-foreground hover:bg-surface-2 hover:text-foreground focus-visible:ring-sidebar-ring flex h-8 items-center gap-2 rounded-md border-l-2 border-transparent px-2 text-sm transition-colors outline-none focus-visible:ring-2"
+          >
+            <Users aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.75} />
+            <span className="hidden truncate xl:inline">{labels.allTeams}</span>
+          </button>
         </div>
       ) : null}
     </section>
