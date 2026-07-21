@@ -299,6 +299,23 @@ describe('IssueDetailScreen', () => {
     );
   });
 
+  it('팀 작업 목록의 담당자에 프로필 사진을 표시한다', () => {
+    const assignedWork = work('work-1', 'WEB-1', 'STARTED', 'PLAN');
+    assignedWork.assignee = {
+      id: 'member-1',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      user: { avatarFileId: 'avatar-1', displayName: '김리벳', id: 'user-1' },
+    };
+    currentIssue = issue('IN_PROGRESS', [assignedWork]);
+    search = 'tab=work&work=WEB-1';
+
+    renderDetail();
+
+    const assignedWorkLink = screen.getByRole('link', { name: /WEB-1.*김리벳/u });
+    expect(assignedWorkLink.querySelector('[data-slot="avatar"]')).toBeInTheDocument();
+  });
+
   it('저장된 내 작업 보기에서 진입하면 복귀와 작업 전환에 보기 문맥을 유지한다', () => {
     currentIssue = issue('IN_PROGRESS', [
       work('work-1', 'WEB-1', 'STARTED', 'PLAN'),

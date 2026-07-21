@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WORKFLOW_STATE_PRESENTATION } from '@/components/workflow-state-icon';
 
 import {
+  CompactAssigneeTrigger,
   IssueStatusDisplay,
   PriorityDisplay,
   StatusTrigger,
@@ -55,6 +56,39 @@ describe('이슈 속성 Compact 표현', () => {
 
   it('팀 작업 상태 표현은 워크플로 상태 아이콘 정본을 그대로 사용한다', () => {
     expect(TEAM_WORK_STATUS_PRESENTATION).toBe(WORKFLOW_STATE_PRESENTATION);
+  });
+
+  it('담당자 선택값과 메뉴에 프로필 사진을 표시한다', async () => {
+    const user = userEvent.setup();
+    render(
+      <CompactAssigneeTrigger
+        assignee={{
+          id: 'member-1',
+          role: 'MEMBER',
+          status: 'ACTIVE',
+          user: { avatarFileId: 'avatar-1', displayName: '김리벳', id: 'user-1' },
+        }}
+        identifier="API-1"
+        members={[
+          {
+            id: 'member-1',
+            role: 'MEMBER',
+            status: 'ACTIVE',
+            user: { avatarFileId: 'avatar-1', displayName: '김리벳', id: 'user-1' },
+          },
+        ]}
+        onValueChange={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox', {
+      name: '팀 작업 담당자 (API-1): 김리벳',
+    });
+    expect(trigger.querySelectorAll('[data-slot="avatar"]')).toHaveLength(1);
+    expect(screen.getByLabelText('김리벳')).toBeVisible();
+
+    await user.click(trigger);
+    expect(document.querySelectorAll('[data-slot="avatar"]')).toHaveLength(2);
   });
 
   it('상태 변경 메뉴는 범주 라벨이 아니라 실제 워크플로 상태 이름을 표시하고 같은 범주 중복 이름을 만들지 않는다', async () => {

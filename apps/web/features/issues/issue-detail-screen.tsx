@@ -51,6 +51,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { UserAvatar } from '@/components/user-avatar';
 import { workflowStateProgress } from '@/components/workflow-state-icon';
 import {
   HandoffEditor,
@@ -388,9 +389,6 @@ function TeamWorkPanel({
                   });
                 }}
               />
-              {assigneeMutation.isPending ? (
-                <span className="text-muted-foreground text-xs">담당자 저장 중…</span>
-              ) : null}
             </dd>
           </div>
         </dl>
@@ -1230,9 +1228,21 @@ export function IssueDetailScreen(props: IssueDetailScreenProps) {
                         <span className="font-mono text-xs">{work.projectTeam.team.key}</span>
                         {work.projectTeam.team.name}
                       </span>
-                      <span className="text-muted-foreground mt-1 block truncate text-xs">
-                        {work.assignee?.user.displayName ?? '담당자 없음'}
-                      </span>
+                      {work.assignee ? (
+                        <span className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1.5 text-xs">
+                          <UserAvatar
+                            avatarFileId={work.assignee.user.avatarFileId}
+                            className="data-[size=sm]:size-4 [&_[data-slot=avatar-fallback]]:text-[9px]"
+                            displayName={work.assignee.user.displayName}
+                            size="sm"
+                          />
+                          <span className="truncate">{work.assignee.user.displayName}</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground mt-1 block truncate text-xs">
+                          담당자 없음
+                        </span>
+                      )}
                     </Link>
                   );
                 })}

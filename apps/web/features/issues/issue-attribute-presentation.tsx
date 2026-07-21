@@ -23,6 +23,7 @@ import type {
   TeamWorkSummaryResponseDto,
 } from '@rivet/api-client';
 
+import { UserAvatar } from '@/components/user-avatar';
 import {
   WORKFLOW_STATE_PRESENTATION,
   type WorkflowStateCategory,
@@ -268,8 +269,14 @@ export function CompactAssigneeTrigger({
   const options: IssueInlineSelectOption[] = [
     { icon: UserRound, iconClassName: 'text-muted-foreground', label: '담당자 없음', value: '' },
     ...members.map((member) => ({
-      icon: UserRound,
-      iconClassName: 'text-muted-foreground',
+      iconElement: (
+        <UserAvatar
+          avatarFileId={member.user.avatarFileId}
+          className="data-[size=sm]:size-4 [&_[data-slot=avatar-fallback]]:text-[9px]"
+          displayName={member.user.displayName}
+          size="sm"
+        />
+      ),
       label: member.user.displayName,
       value: member.id,
     })),

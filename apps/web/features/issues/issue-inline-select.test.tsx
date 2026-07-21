@@ -129,6 +129,29 @@ describe('IssueInlineSelect', () => {
     expect(onValueChange).toHaveBeenCalledWith('TODO');
   });
 
+  it('빈 문자열 옵션도 유효한 값으로 전달한다', async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(
+      <IssueInlineSelect
+        appearance="comfortable"
+        ariaLabel="팀 작업 담당자: saixox40"
+        disabled={false}
+        onValueChange={onValueChange}
+        options={[
+          { label: '담당자 없음', value: '' },
+          { label: 'saixox40', value: 'membership-id' },
+        ]}
+        value="membership-id"
+      />,
+    );
+
+    await user.click(screen.getByRole('combobox', { name: '팀 작업 담당자: saixox40' }));
+    await user.click(await screen.findByRole('option', { name: '담당자 없음' }));
+
+    expect(onValueChange).toHaveBeenCalledWith('');
+  });
+
   it('Space·방향키·Enter로 선택하고 Escape로 닫으면 트리거에 포커스를 돌려준다', async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
