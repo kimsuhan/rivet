@@ -21,6 +21,22 @@ describe('이슈 속성 Compact 표현', () => {
     expect(document.querySelector('.lucide-circle-pause')).toHaveClass('text-warning');
   });
 
+  it('진행 중과 완료 확인은 워크플로 파이 아이콘의 단계로 구분한다', () => {
+    const { rerender } = render(<IssueStatusDisplay status="IN_PROGRESS" />);
+
+    expect(document.querySelector('[data-workflow-state-category="STARTED"]')).toHaveAttribute(
+      'data-workflow-state-progress',
+      String(1 / 3),
+    );
+
+    rerender(<IssueStatusDisplay status="REVIEW" />);
+
+    expect(document.querySelector('[data-workflow-state-category="STARTED"]')).toHaveAttribute(
+      'data-workflow-state-progress',
+      String(2 / 3),
+    );
+  });
+
   it('팀 작업 상태와 우선순위는 색상만이 아닌 아이콘과 이름으로 구분한다', () => {
     render(
       <>
