@@ -12,6 +12,7 @@ describe('ProjectsService', () => {
   const context = {
     membershipId: '2e0792d5-eac3-44c1-87c7-56f07ebaa620',
     membershipRole: MembershipRole.ADMIN,
+    userId: '896b0246-18d1-476b-b1d6-7ecfa6ea9f79',
     workspaceId: '3dc0b213-eafa-450c-ad12-49a7d927c7b8',
   };
   const projectId = '953685f0-4921-41cd-8422-d8a1ccc3f547';
@@ -30,8 +31,13 @@ describe('ProjectsService', () => {
       id: leadMembershipId,
       role: 'MEMBER' as const,
       status: 'ACTIVE' as const,
-      user: { displayName: '프로젝트 리드', id: '896b0246-18d1-476b-b1d6-7ecfa6ea9f79' },
+      user: {
+        avatarFileId: null,
+        displayName: '프로젝트 리드',
+        id: '896b0246-18d1-476b-b1d6-7ecfa6ea9f79',
+      },
     },
+    logoFileId: null,
     name: '결제 개편',
     projectTeams: [
       {
@@ -52,6 +58,7 @@ describe('ProjectsService', () => {
     description: project.description,
     id: projectId,
     leadMembershipId,
+    logoFileId: null,
     name: project.name,
     startDate: project.startDate,
     status: ProjectStatus.PLANNED,
@@ -62,6 +69,7 @@ describe('ProjectsService', () => {
     $executeRaw: jest.fn(),
     $queryRaw: jest.fn(),
     activityEvent: { create: jest.fn(), createMany: jest.fn() },
+    file: { update: jest.fn() },
     issue: { findMany: jest.fn() },
     outboxEvent: { create: jest.fn() },
     project: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
@@ -238,6 +246,7 @@ describe('ProjectsService', () => {
       data: {
         description: '결제 흐름을 개편한다.',
         leadMembershipId,
+        logoFileId: null,
         name: '결제 개편',
         startDate: new Date('2026-07-15T00:00:00.000Z'),
         status: ProjectStatus.PLANNED,
@@ -274,6 +283,35 @@ describe('ProjectsService', () => {
         },
         workspaceId: context.workspaceId,
       },
+    });
+  });
+
+  it('links an available workspace image when creating a project', async () => {
+    const logoFileId = '4d2a92e1-a418-43bf-a1ef-17b26af71629';
+    transaction.$queryRaw
+      .mockResolvedValueOnce([{ id: context.workspaceId }])
+      .mockResolvedValueOnce([
+        {
+          attachmentLinked: false,
+          avatarLinked: false,
+          detectedMimeType: 'image/webp',
+          id: logoFileId,
+          logoLinked: false,
+          scope: 'WORKSPACE',
+          unlinkedAt: new Date(),
+          uploadedByUserId: context.userId,
+          workspaceId: context.workspaceId,
+        },
+      ]);
+
+    await service.create(context, { logoFileId, name: '로고 프로젝트' });
+
+    expect(transaction.project.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ logoFileId }) }),
+    );
+    expect(transaction.file.update).toHaveBeenCalledWith({
+      data: { unlinkedAt: null },
+      where: { id: logoFileId },
     });
   });
 

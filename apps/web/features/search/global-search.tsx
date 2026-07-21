@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 
 import { useSearchControllerIssues } from '@rivet/api-client';
 
+import { ProjectLogo } from '@/components/project-logo';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -179,8 +180,13 @@ export function GlobalSearch({
                     </span>
                     {result.issue.title}
                   </span>
-                  <span className="text-muted-foreground mt-1 block truncate text-xs">
-                    {result.issue.project.name}
+                  <span className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1.5 text-xs">
+                    <ProjectLogo
+                      logoFileId={result.issue.project.logoFileId}
+                      name={result.issue.project.name}
+                      size="xs"
+                    />
+                    <span className="truncate">{result.issue.project.name}</span>
                     {work
                       ? ` · ${work.projectTeam.team.key} · ${work.projectTeam.team.name}`
                       : ` · ${labels.issueStatuses[result.issue.status]}`}

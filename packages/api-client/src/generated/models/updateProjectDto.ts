@@ -10,6 +10,8 @@ import type { UpdateProjectDtoStatus } from './updateProjectDtoStatus';
 export interface UpdateProjectDto {
   /** @minimum 1 */
   version: number;
+  /** @nullable */
+  logoFileId?: string | null;
   /**
      * @minLength 1
      * @maxLength 200

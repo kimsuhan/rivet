@@ -14,6 +14,8 @@ export interface ProjectResponseDto {
   id: string;
   name: string;
   /** @nullable */
+  logoFileId: string | null;
+  /** @nullable */
   description: string | null;
   status: ProjectResponseDtoStatus;
   /** @nullable */

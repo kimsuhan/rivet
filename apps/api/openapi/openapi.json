@@ -11785,6 +11785,11 @@
           "name": {
             "type": "string"
           },
+          "logoFileId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
           "status": {
             "enum": [
               "PLANNED",
@@ -11801,6 +11806,7 @@
         "required": [
           "id",
           "name",
+          "logoFileId",
           "status",
           "archived"
         ]
@@ -14004,6 +14010,11 @@
           "name": {
             "type": "string"
           },
+          "logoFileId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
           "description": {
             "type": "string",
             "nullable": true
@@ -14064,6 +14075,7 @@
         "required": [
           "id",
           "name",
+          "logoFileId",
           "description",
           "status",
           "lead",
@@ -14099,6 +14111,11 @@
       "CreateProjectDto": {
         "type": "object",
         "properties": {
+          "logoFileId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
           "name": {
             "type": "string",
             "maxLength": 200,
@@ -14156,6 +14173,11 @@
           "version": {
             "type": "number",
             "minimum": 1
+          },
+          "logoFileId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
           },
           "name": {
             "type": "string",

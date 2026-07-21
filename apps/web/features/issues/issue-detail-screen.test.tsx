@@ -81,6 +81,7 @@ vi.mock('./issue-attribute-presentation', () => ({
 const project = {
   archived: false,
   id: 'project-1',
+  logoFileId: null,
   name: 'Rivet',
   status: 'IN_PROGRESS' as const,
 };

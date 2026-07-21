@@ -26,6 +26,7 @@ import {
   useTeamWorksControllerGet,
 } from '@rivet/api-client';
 
+import { ProjectLogo } from '@/components/project-logo';
 import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -1006,13 +1007,19 @@ export function IssueDetailScreen({
               {isMyWorkEntry ? (
                 <>
                   <span className="font-mono">{issue.identifier}</span>
-                  <span>{issue.project.name}</span>
+                  <span className="inline-flex items-center gap-2">
+                    <ProjectLogo logoFileId={issue.project.logoFileId} name={issue.project.name} size="xs" />
+                    {issue.project.name}
+                  </span>
                   {selectedWork ? <span>{selectedWork.projectTeam.team.name}</span> : null}
                   <IssueLabelChips emptyLabel="" labels={issue.labels} />
                 </>
               ) : (
                 <>
-                  <span>{issue.project.name}</span>
+                  <span className="inline-flex items-center gap-2">
+                    <ProjectLogo logoFileId={issue.project.logoFileId} name={issue.project.name} size="xs" />
+                    {issue.project.name}
+                  </span>
                   {issue.priority === 'NONE' ? (
                     <span>우선순위 없음</span>
                   ) : (

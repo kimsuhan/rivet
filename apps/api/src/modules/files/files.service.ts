@@ -163,6 +163,7 @@ export class FilesService {
         !file ||
         file.uploadedByUserId !== context.userId ||
         file.avatarLinked ||
+        file.projectLogoLinked ||
         file.attachmentId !== null
       ) {
         fileResourceNotFound();
@@ -228,7 +229,7 @@ export class FilesService {
       ) {
         fileResourceNotFound();
       }
-      if (file.avatarLinked || file.attachmentId !== null) {
+      if (file.avatarLinked || file.projectLogoLinked || file.attachmentId !== null) {
         fileError('FILE_ALREADY_LINKED', '파일이 이미 연결되어 있습니다.', HttpStatus.CONFLICT);
       }
       await this.storage.assertAvailable(file.storageKey);
@@ -334,7 +335,7 @@ export class FilesService {
       if (user.avatarFileId === fileId) {
         return { avatarFileId: fileId, displayName: user.displayName, id: user.id };
       }
-      if (next.avatarLinked || next.attachmentId !== null) {
+      if (next.avatarLinked || next.projectLogoLinked || next.attachmentId !== null) {
         fileError('FILE_ALREADY_LINKED', '파일이 이미 연결되어 있습니다.', HttpStatus.CONFLICT);
       }
 
@@ -453,7 +454,7 @@ export class FilesService {
           HttpStatus.UNSUPPORTED_MEDIA_TYPE,
         );
       }
-      if (file.avatarLinked || file.attachmentId !== null) {
+      if (file.avatarLinked || file.projectLogoLinked || file.attachmentId !== null) {
         fileError(
           'FILE_ALREADY_LINKED',
           '파일이 이미 다른 리소스에 연결되어 있습니다.',

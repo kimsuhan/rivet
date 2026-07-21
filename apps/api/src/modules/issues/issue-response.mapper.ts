@@ -81,6 +81,7 @@ export function toTeamWorkSummary(row: TeamWorkRow): TeamWorkSummaryResponseDto 
       project: {
         archived: row.issue.project.archivedAt !== null,
         id: row.issue.project.id,
+        logoFileId: row.issue.project.logoFileId,
         name: row.issue.project.name,
         status: row.issue.project.status,
       },
@@ -165,6 +166,7 @@ export function toIssueSummary(row: IssueRow): IssueSummaryResponseDto {
     project: {
       archived: row.project.archivedAt !== null,
       id: row.project.id,
+      logoFileId: row.project.logoFileId,
       name: row.project.name,
       status: row.project.status,
     },

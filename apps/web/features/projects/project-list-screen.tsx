@@ -7,6 +7,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useProjectsControllerList } from '@rivet/api-client';
 
 import { PageHeading } from '@/components/layout/page-heading';
+import { ProjectLogo } from '@/components/project-logo';
 import { ContentEmpty } from '@/components/states/content-empty';
 import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
@@ -221,10 +222,11 @@ export function ProjectListScreen() {
           {items.map((project) => (
             <Card key={project.id} size="sm">
               <CardHeader>
-                <CardTitle className="min-w-0">
+                <CardTitle className="flex min-w-0 items-center gap-2">
+                  <ProjectLogo logoFileId={project.logoFileId} name={project.name} size="md" />
                   <Link
                     href={`/projects/${project.id}`}
-                    className="focus-visible:ring-ring block truncate rounded-sm outline-none focus-visible:ring-2"
+                    className="focus-visible:ring-ring min-w-0 truncate rounded-sm outline-none focus-visible:ring-2"
                   >
                     {project.name}
                   </Link>

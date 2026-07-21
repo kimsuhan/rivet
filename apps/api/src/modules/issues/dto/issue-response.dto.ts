@@ -50,6 +50,7 @@ export class IssueWorkflowStateSummaryResponseDto {
 export class IssueProjectSummaryResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() name!: string;
+  @ApiProperty({ format: 'uuid', nullable: true, type: String }) logoFileId!: string | null;
   @ApiProperty({ enum: ProjectStatus }) status!: ProjectStatus;
   @ApiProperty() archived!: boolean;
 }

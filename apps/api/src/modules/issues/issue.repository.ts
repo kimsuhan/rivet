@@ -27,7 +27,9 @@ const TEAM_WORK_SELECT = {
         select: { label: { select: { archivedAt: true, color: true, id: true, name: true } } },
       },
       priority: true,
-      project: { select: { archivedAt: true, id: true, name: true, status: true } },
+      project: {
+        select: { archivedAt: true, id: true, logoFileId: true, name: true, status: true },
+      },
       status: true,
       teamWorks: {
         select: { projectTeamId: true },
@@ -167,7 +169,9 @@ const ISSUE_SELECT = {
     select: { label: { select: { archivedAt: true, color: true, id: true, name: true } } },
   },
   priority: true,
-  project: { select: { archivedAt: true, id: true, name: true, status: true } },
+  project: {
+    select: { archivedAt: true, id: true, logoFileId: true, name: true, status: true },
+  },
   status: true,
   teamWorks: {
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],

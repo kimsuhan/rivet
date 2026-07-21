@@ -16,6 +16,7 @@ export const PROJECT_SELECT = {
       user: { select: { avatarFileId: true, displayName: true, id: true } },
     },
   },
+  logoFileId: true,
   name: true,
   projectTeams: {
     orderBy: [{ isActive: 'desc' }, { team: { name: 'asc' } }, { id: 'asc' }],
@@ -64,6 +65,7 @@ export function toProjectResponse(
           },
         }
       : null,
+    logoFileId: row.logoFileId,
     name: row.name,
     progress,
     projectTeams: row.projectTeams.map(({ deactivatedAt, id, isActive, team }) => ({

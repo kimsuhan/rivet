@@ -14,6 +14,7 @@ export function projectFormSchema(labels: {
     .object({
       description: z.string().trim().max(5000, labels.descriptionTooLong),
       leadMembershipId: z.string(),
+      logoFileId: z.union([z.string().uuid(), z.literal('')]),
       name: z.string().trim().min(1, labels.nameRequired).max(200, labels.nameTooLong),
       startDate: z.string(),
       status: z.enum(PROJECT_FORM_STATUSES),
@@ -34,6 +35,7 @@ export function projectFormDefaults(project?: ProjectResponseDto): ProjectFormVa
   return {
     description: project?.description ?? '',
     leadMembershipId: project?.lead?.id ?? '',
+    logoFileId: project?.logoFileId ?? '',
     name: project?.name ?? '',
     startDate: project?.startDate ?? '',
     status: project?.status ?? 'PLANNED',
@@ -46,6 +48,7 @@ export function createProjectPayload(values: ProjectFormValues): CreateProjectDt
   return {
     description: values.description || null,
     leadMembershipId: values.leadMembershipId || null,
+    logoFileId: values.logoFileId || null,
     name: values.name,
     startDate: values.startDate || null,
     status: values.status,

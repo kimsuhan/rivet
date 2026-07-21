@@ -2059,6 +2059,8 @@
     },
     "detail": {
       "open": "프로젝트 열기",
+      "moreActions": "프로젝트 더보기",
+      "menuLabel": "프로젝트",
       "readOnlyTitle": "보관된 프로젝트입니다",
       "readOnlyDescription": "연결된 이슈와 참여 팀 기록은 유지되며 프로젝트 정보는 읽기 전용입니다."
     },
@@ -2096,6 +2098,13 @@
     },
     "field": {
       "name": "프로젝트 이름",
+      "logo": "프로젝트 로고",
+      "logoHint": "JPG, PNG 또는 WebP 이미지를 선택하면 정사각형으로 맞춰 저장합니다.",
+      "logoSelect": "로고 이미지 선택",
+      "logoReplace": "로고 이미지 바꾸기",
+      "logoRemove": "로고 제거",
+      "logoUploading": "로고를 업로드하는 중입니다.",
+      "logoUploadError": "로고를 업로드하지 못했습니다. 다른 이미지를 선택해 주세요.",
       "description": "설명",
       "descriptionHint": "프로젝트의 결과물과 범위를 일반 텍스트로 적습니다.",
       "status": "상태",
@@ -2180,6 +2189,7 @@
       "title": "{name} 프로젝트를 보관할까요?",
       "description": "기본 목록과 새 이슈의 선택 항목에서 제외되지만 연결된 이슈와 참여 팀 기록은 유지됩니다.",
       "confirm": "프로젝트 보관",
+      "archiving": "프로젝트를 보관하는 중입니다.",
       "conflictDescription": "프로젝트가 먼저 변경되었습니다. 최신 정보를 확인한 뒤 다시 보관해 주세요.",
       "errorTitle": "프로젝트를 보관하지 못했습니다",
       "errorDescription": "프로젝트 상태를 확인한 뒤 다시 시도해 주세요."

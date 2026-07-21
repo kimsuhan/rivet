@@ -17,6 +17,7 @@ type DatabaseClient = Transaction | DatabaseService['client'];
 export type LockedFile = {
   attachmentId: string | null;
   avatarLinked: boolean;
+  projectLogoLinked: boolean;
   createdAt: Date;
   detectedMimeType: string;
   id: string;
@@ -67,7 +68,10 @@ export class FileRepository {
              attachment."id" AS "attachmentId",
              EXISTS (
                SELECT 1 FROM "users" account WHERE account."avatar_file_id" = file."id"
-             ) AS "avatarLinked"
+             ) AS "avatarLinked",
+             EXISTS (
+               SELECT 1 FROM "projects" project WHERE project."logo_file_id" = file."id"
+             ) AS "projectLogoLinked"
       FROM "files" file
       LEFT JOIN "issue_file_attachments" attachment ON attachment."file_id" = file."id"
       WHERE file."id" IN (${Prisma.join(fileIds.map((fileId) => Prisma.sql`${fileId}::uuid`))})

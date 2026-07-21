@@ -77,6 +77,12 @@ export class ProjectListQueryDto {
 }
 
 export class CreateProjectDto {
+  @ApiPropertyOptional({ format: 'uuid', nullable: true, type: String })
+  @Transform(({ value }) => normalizeUuid(value))
+  @IsOptional()
+  @IsUUID('4', { message: '프로젝트 로고 파일 식별자가 올바르지 않습니다.' })
+  logoFileId?: string | null;
+
   @ApiProperty({ maxLength: 200, minLength: 1 })
   @Transform(({ value }) => normalizeString(value))
   @IsString({ message: '프로젝트 이름을 입력해 주세요.' })
@@ -128,6 +134,12 @@ export class UpdateProjectDto {
   @IsInt({ message: '프로젝트 버전이 올바르지 않습니다.' })
   @Min(1, { message: '프로젝트 버전이 올바르지 않습니다.' })
   version!: number;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true, type: String })
+  @Transform(({ value }) => normalizeUuid(value))
+  @IsOptional()
+  @IsUUID('4', { message: '프로젝트 로고 파일 식별자가 올바르지 않습니다.' })
+  logoFileId?: string | null;
 
   @ApiPropertyOptional({ maxLength: 200, minLength: 1 })
   @Transform(({ value }) => normalizeString(value))

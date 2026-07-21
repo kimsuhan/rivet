@@ -8,6 +8,8 @@
 import type { CreateProjectDtoStatus } from './createProjectDtoStatus';
 
 export interface CreateProjectDto {
+  /** @nullable */
+  logoFileId?: string | null;
   /**
      * @minLength 1
      * @maxLength 200

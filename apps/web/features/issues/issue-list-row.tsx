@@ -14,6 +14,7 @@ import {
   type IssueSummaryResponseDto,
 } from '@rivet/api-client';
 
+import { ProjectLogo } from '@/components/project-logo';
 import { buttonVariants } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Link } from '@/i18n/navigation';
@@ -105,6 +106,7 @@ export function IssueListRow({
           <span className="text-muted-foreground mr-2 font-mono text-xs">{issue.identifier}</span>
           <span className="font-medium">{issue.title}</span>
           <span className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1.5 truncate text-xs">
+            <ProjectLogo logoFileId={issue.project.logoFileId} name={issue.project.name} size="xs" />
             <span className="truncate">{issue.project.name}</span>
             <IssueLabelChips emptyLabel="" labels={issue.labels} />
           </span>

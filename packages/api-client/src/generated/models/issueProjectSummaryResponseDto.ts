@@ -10,6 +10,8 @@ import type { IssueProjectSummaryResponseDtoStatus } from './issueProjectSummary
 export interface IssueProjectSummaryResponseDto {
   id: string;
   name: string;
+  /** @nullable */
+  logoFileId: string | null;
   status: IssueProjectSummaryResponseDtoStatus;
   archived: boolean;
 }

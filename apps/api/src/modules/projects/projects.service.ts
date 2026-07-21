@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { HttpStatus, Injectable } from '@nestjs/common';
 
-import { MembershipRole, Prisma, ProjectStatus, StateCategory } from '@rivet/database';
+import { FileScope, MembershipRole, Prisma, ProjectStatus, StateCategory } from '@rivet/database';
 import {
   PROJECT_CREATED,
   PROJECT_CREATED_SCHEMA_VERSION,
@@ -44,7 +44,12 @@ export class ProjectsService {
   ) {}
 
   async create(
-    context: { membershipId: string; membershipRole: MembershipRole; workspaceId: string },
+    context: {
+      membershipId: string;
+      membershipRole: MembershipRole;
+      userId: string;
+      workspaceId: string;
+    },
     dto: CreateProjectDto,
   ): Promise<ProjectResponseDto> {
     const name = normalizeProjectName(dto.name);
@@ -78,11 +83,15 @@ export class ProjectsService {
         context.workspaceId,
         teamIds,
       );
+      if (dto.logoFileId) {
+        await this.requireAvailableLogoFile(transaction, context, dto.logoFileId);
+      }
 
       const project = await transaction.project.create({
         data: {
           description,
           leadMembershipId: dto.leadMembershipId ?? null,
+          logoFileId: dto.logoFileId ?? null,
           name,
           startDate,
           status: dto.status ?? ProjectStatus.PLANNED,
@@ -91,6 +100,12 @@ export class ProjectsService {
         },
         select: { id: true },
       });
+      if (dto.logoFileId) {
+        await transaction.file.update({
+          data: { unlinkedAt: null },
+          where: { id: dto.logoFileId },
+        });
+      }
       if (teamIds.length > 0) {
         await transaction.projectTeam.createMany({
           data: teamIds.map((teamId) => ({
@@ -143,7 +158,12 @@ export class ProjectsService {
   }
 
   async update(
-    context: { membershipId: string; membershipRole: MembershipRole; workspaceId: string },
+    context: {
+      membershipId: string;
+      membershipRole: MembershipRole;
+      userId: string;
+      workspaceId: string;
+    },
     projectId: string,
     dto: UpdateProjectDto,
   ): Promise<ProjectResponseDto> {
@@ -154,7 +174,8 @@ export class ProjectsService {
       dto.leadMembershipId === undefined &&
       dto.startDate === undefined &&
       dto.targetDate === undefined &&
-      dto.teamIds === undefined
+      dto.teamIds === undefined &&
+      dto.logoFileId === undefined
     ) {
       return projectValidationError('project', '변경할 프로젝트 정보를 입력해 주세요.');
     }
@@ -187,6 +208,10 @@ export class ProjectsService {
           context.workspaceId,
           dto.leadMembershipId ?? undefined,
         );
+      }
+      const changesLogo = dto.logoFileId !== undefined && dto.logoFileId !== current.logoFileId;
+      if (changesLogo && dto.logoFileId) {
+        await this.requireAvailableLogoFile(transaction, context, dto.logoFileId);
       }
 
       const currentProjectTeams = await transaction.projectTeam.findMany({
@@ -270,7 +295,8 @@ export class ProjectsService {
         !changesLead &&
         !changesStartDate &&
         !changesTargetDate &&
-        !changesProjectTeams
+        !changesProjectTeams &&
+        !changesLogo
       ) {
         const row = await this.projects.find(transaction, context.workspaceId, projectId);
         const progressByProject = await this.projects.progressByProject(
@@ -291,6 +317,7 @@ export class ProjectsService {
         data: {
           ...(changesDescription ? { description: requestedDescription } : {}),
           ...(changesLead ? { leadMembershipId: dto.leadMembershipId } : {}),
+          ...(changesLogo ? { logoFileId: dto.logoFileId } : {}),
           ...(changesName ? { name: requestedName } : {}),
           ...(changesStartDate ? { startDate: requestedStartDate } : {}),
           ...(changesStatus ? { status: dto.status } : {}),
@@ -299,6 +326,21 @@ export class ProjectsService {
         },
         where: { workspaceId_id: { id: projectId, workspaceId: context.workspaceId } },
       });
+
+      if (changesLogo) {
+        if (current.logoFileId) {
+          await transaction.file.update({
+            data: { unlinkedAt: new Date() },
+            where: { id: current.logoFileId },
+          });
+        }
+        if (dto.logoFileId) {
+          await transaction.file.update({
+            data: { unlinkedAt: null },
+            where: { id: dto.logoFileId },
+          });
+        }
+      }
 
       if (changesProjectTeams && requestedTeamIds) {
         const deactivatedAt = new Date();
@@ -351,6 +393,7 @@ export class ProjectsService {
       if (changesLead) {
         addEvent('leadMembershipId', current.leadMembershipId, dto.leadMembershipId ?? null);
       }
+      if (changesLogo) addEvent('logoFileId', current.logoFileId, dto.logoFileId ?? null);
       if (changesStartDate) {
         addEvent(
           'startDate',
@@ -417,6 +460,29 @@ export class ProjectsService {
       };
     });
     return outcome.response;
+  }
+
+  private async requireAvailableLogoFile(
+    transaction: Prisma.TransactionClient,
+    context: { userId: string; workspaceId: string },
+    fileId: string,
+  ): Promise<void> {
+    const file = await this.projects.lockLogoFile(transaction, fileId);
+    if (
+      !file ||
+      file.scope !== FileScope.WORKSPACE ||
+      file.workspaceId !== context.workspaceId ||
+      file.uploadedByUserId !== context.userId ||
+      file.unlinkedAt === null
+    ) {
+      return projectValidationError('logoFileId', '사용할 수 있는 프로젝트 로고 파일이 아닙니다.');
+    }
+    if (file.avatarLinked || file.attachmentLinked || file.logoLinked) {
+      return projectValidationError('logoFileId', '이미 연결된 파일은 프로젝트 로고로 사용할 수 없습니다.');
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.detectedMimeType)) {
+      return projectValidationError('logoFileId', '프로젝트 로고는 JPG, PNG, WebP만 사용할 수 있습니다.');
+    }
   }
 
   archive(

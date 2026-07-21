@@ -70,6 +70,7 @@ model Project {
   workspaceId           String        @map("workspace_id") @db.Uuid
   name                  String        @db.VarChar(200)
   description           String?       @db.VarChar(5000)
+  logoFileId            String?       @map("logo_file_id") @db.Uuid
   status                ProjectStatus @default(PLANNED)
   leadMembershipId      String?       @map("lead_membership_id") @db.Uuid
   startDate             DateTime?     @map("start_date") @db.Date
@@ -83,6 +84,7 @@ model Project {
   updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  logoFile            File?                @relation("ProjectLogoFile", fields: [workspaceId, logoFileId], references: [workspaceId, id], onDelete: Restrict)
   leadMembership      WorkspaceMembership? @relation("ProjectLeadMembership", fields: [workspaceId, leadMembershipId], references: [workspaceId, id], onDelete: Restrict)
   deletedByMembership WorkspaceMembership? @relation("ProjectDeletedByMembership", fields: [workspaceId, deletedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
   roleTeams           ProjectRoleTeam[]
@@ -93,6 +95,7 @@ model Project {
   importSourceRows    ImportSourceRow[]
 
   @@unique([workspaceId, id])
+  @@unique([workspaceId, logoFileId])
   @@index([workspaceId, archivedAt, updatedAt, id])
   @@index([workspaceId, status, updatedAt, id])
   @@index([workspaceId, leadMembershipId, updatedAt, id])
