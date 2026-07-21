@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ComponentProps, ReactNode } from 'react';
@@ -38,6 +38,12 @@ vi.mock('@rivet/api-client', async (importOriginal) => ({
 }));
 
 let search = 'tab=work';
+let pathname = '/issues/F-2';
+const navigationMocks = vi.hoisted(() => ({
+  back: vi.fn(),
+  push: vi.fn(),
+  replace: vi.fn(),
+}));
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(search),
@@ -52,8 +58,8 @@ vi.mock('@/i18n/navigation', () => ({
       </a>
     );
   },
-  usePathname: () => '/issues/F-2',
-  useRouter: () => ({ back: vi.fn(), push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => pathname,
+  useRouter: () => navigationMocks,
 }));
 
 vi.mock('@/features/collaboration/markdown-editor', () => ({
@@ -185,6 +191,7 @@ function renderDetail() {
 
 describe('IssueDetailScreen', () => {
   beforeEach(() => {
+    pathname = '/issues/F-2';
     search = 'tab=work';
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     currentIssue = issue('TODO');
@@ -273,6 +280,76 @@ describe('IssueDetailScreen', () => {
     expect(screen.getByRole('progressbar', { name: '작업 진행률 25%' })).toHaveAttribute(
       'aria-valuenow',
       '25',
+    );
+  });
+
+  it('저장된 이슈 보기에서 진입하면 복귀와 상세 내부 이동에 보기 문맥을 유지한다', () => {
+    currentIssue = issue('IN_PROGRESS', [work('work-1', 'WEB-1', 'STARTED', 'PLAN')]);
+    search = 'tab=work&work=WEB-1&view=saved-issues';
+
+    renderDetail();
+
+    expect(screen.getByRole('link', { name: '이슈 목록' })).toHaveAttribute(
+      'href',
+      '/issues?view=saved-issues',
+    );
+    expect(screen.getByRole('link', { name: '활동' })).toHaveAttribute(
+      'href',
+      '/issues/F-2?tab=activity&work=WEB-1&view=saved-issues',
+    );
+  });
+
+  it('저장된 내 작업 보기에서 진입하면 복귀와 작업 전환에 보기 문맥을 유지한다', () => {
+    currentIssue = issue('IN_PROGRESS', [
+      work('work-1', 'WEB-1', 'STARTED', 'PLAN'),
+      work('work-2', 'WEB-2', 'UNSTARTED', 'OPS'),
+    ]);
+    pathname = '/my-issues/WEB-1';
+    search = 'tab=work&view=saved-my-work';
+
+    render(<IssueDetailScreen entry="my-work" issueRef="WEB-1" />, { wrapper: Wrapper });
+
+    expect(screen.getByRole('link', { name: '내 작업' })).toHaveAttribute(
+      'href',
+      '/my-issues?view=saved-my-work',
+    );
+    expect(screen.getByRole('link', { name: /WEB-2/ })).toHaveAttribute(
+      'href',
+      '/my-issues/WEB-2?tab=work&view=saved-my-work',
+    );
+  });
+
+  it('프로젝트 진입은 프로젝트 이름과 상세 경로를 이동 문맥으로 유지한다', () => {
+    currentIssue = issue('IN_PROGRESS', [work('work-1', 'WEB-1', 'STARTED', 'PLAN')]);
+    pathname = '/projects/project-1/issues/F-2';
+    search = 'tab=work&work=WEB-1';
+
+    render(<IssueDetailScreen entry="project" issueRef="F-2" projectId="project-1" />, {
+      wrapper: Wrapper,
+    });
+
+    expect(screen.getByRole('link', { name: 'Rivet' })).toHaveAttribute(
+      'href',
+      '/projects/project-1',
+    );
+    expect(screen.getByRole('link', { name: '활동' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/issues/F-2?tab=activity&work=WEB-1',
+    );
+  });
+
+  it('경로의 프로젝트와 이슈 소속이 다르면 전역 정본 주소로 복구한다', async () => {
+    search = 'tab=activity&work=WEB-1';
+
+    render(<IssueDetailScreen entry="project" issueRef="F-2" projectId="project-2" />, {
+      wrapper: Wrapper,
+    });
+
+    expect(screen.getByText('올바른 이슈 주소로 이동 중입니다')).toBeVisible();
+    await waitFor(() =>
+      expect(navigationMocks.replace).toHaveBeenCalledWith('/issues/F-2?tab=activity&work=WEB-1', {
+        scroll: false,
+      }),
     );
   });
 

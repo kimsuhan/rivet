@@ -82,6 +82,7 @@ import {
   issueWorkHref,
   matchesRequestedTeamWork,
   myWorkHref,
+  projectIssueWorkHref,
 } from './issue-work-routing';
 import { TeamWorkCompletionModal } from './team-work-completion-modal';
 import { TeamWorkPrimaryAction } from './team-work-primary-action';
@@ -761,13 +762,15 @@ function HandoffHistoryItem({
   );
 }
 
-export function IssueDetailScreen({
-  entry = 'issue',
-  issueRef,
-}: {
-  entry?: 'issue' | 'my-work';
-  issueRef: string;
-}) {
+type IssueDetailScreenProps =
+  | { entry?: 'issue'; issueRef: string; projectId?: never }
+  | { entry: 'my-work'; issueRef: string; projectId?: never }
+  | { entry: 'project'; issueRef: string; projectId: string };
+
+export function IssueDetailScreen(props: IssueDetailScreenProps) {
+  const { issueRef } = props;
+  const entry = props.entry ?? 'issue';
+  const projectId = props.entry === 'project' ? props.projectId : null;
   const markdown = useTranslations('Markdown');
   const editorLabels = markdownEditorLabels(
     (key) => markdown(key as never),
@@ -778,6 +781,8 @@ export function IssueDetailScreen({
   const router = useRouter();
   const queryClient = useQueryClient();
   const isMyWorkEntry = entry === 'my-work';
+  const isProjectEntry = entry === 'project';
+  const savedViewId = isProjectEntry ? null : searchParams.get('view');
   const requestedWork = isMyWorkEntry ? issueRef : searchParams.get('work');
   const requestedHandoff = searchParams.get('handoff');
   const tab =
@@ -800,6 +805,9 @@ export function IssueDetailScreen({
     },
   });
   const issue = issueQuery.data;
+  const projectMismatch = Boolean(
+    isProjectEntry && issue && projectId && issue.project.id !== projectId,
+  );
   const selectedWork =
     issue?.teamWorks.find((work) => matchesRequestedTeamWork(work.identifier, requestedWork)) ??
     issue?.teamWorks[0];
@@ -836,17 +844,34 @@ export function IssueDetailScreen({
   useEffect(() => {
     if (isMyWorkEntry || !issueQuery.isError || !legacyWork.data) return;
     router.replace(
-      `${issueWorkHref(legacyWork.data.issue.identifier, legacyWork.data.identifier)}${window.location.hash}`,
+      `${issueWorkHref(legacyWork.data.issue.identifier, legacyWork.data.identifier, savedViewId)}${window.location.hash}`,
       { scroll: false },
     );
-  }, [isMyWorkEntry, issueQuery.isError, legacyWork.data, router]);
+  }, [isMyWorkEntry, issueQuery.isError, legacyWork.data, router, savedViewId]);
   useEffect(() => {
-    if (isMyWorkEntry || !issue || requestedWork || !selectedWork) return;
+    if (!projectMismatch || !issue) return;
+    const query = searchParams.toString();
+    router.replace(
+      `/issues/${encodeURIComponent(issue.identifier)}${query ? `?${query}` : ''}${window.location.hash}`,
+      { scroll: false },
+    );
+  }, [issue, projectMismatch, router, searchParams]);
+  useEffect(() => {
+    if (projectMismatch || isMyWorkEntry || !issue || requestedWork || !selectedWork) return;
     const next = new URLSearchParams(searchParams.toString());
     next.set('tab', 'work');
     next.set('work', selectedWork.identifier);
     router.replace(`${pathname}?${next.toString()}${window.location.hash}`, { scroll: false });
-  }, [isMyWorkEntry, issue, pathname, requestedWork, router, searchParams, selectedWork]);
+  }, [
+    isMyWorkEntry,
+    issue,
+    pathname,
+    projectMismatch,
+    requestedWork,
+    router,
+    searchParams,
+    selectedWork,
+  ]);
   useEffect(() => {
     if (!issue) return;
     const anchor = requestedHandoff ? `handoff-${requestedHandoff}` : window.location.hash.slice(1);
@@ -888,15 +913,32 @@ export function IssueDetailScreen({
       />
     );
   if (!issue) return <ContentLoading label="정본 주소로 이동 중입니다" />;
+  if (projectMismatch) return <ContentLoading label="올바른 이슈 주소로 이동 중입니다" />;
 
   const currentIssue = issue;
   const detailHref = (teamWorkIdentifier: string, nextTab = 'work') =>
     isMyWorkEntry
-      ? myWorkHref(teamWorkIdentifier, nextTab)
-      : issueWorkHref(currentIssue.identifier, teamWorkIdentifier).replace(
-          'tab=work',
-          `tab=${nextTab}`,
-        );
+      ? myWorkHref(teamWorkIdentifier, nextTab, savedViewId)
+      : isProjectEntry && projectId
+        ? projectIssueWorkHref(projectId, currentIssue.identifier, teamWorkIdentifier, nextTab)
+        : issueWorkHref(currentIssue.identifier, teamWorkIdentifier, savedViewId).replace(
+            'tab=work',
+            `tab=${nextTab}`,
+          );
+  const backHref = isMyWorkEntry
+    ? savedViewId
+      ? `/my-issues?view=${encodeURIComponent(savedViewId)}`
+      : '/my-issues'
+    : isProjectEntry && projectId
+      ? `/projects/${encodeURIComponent(projectId)}`
+      : savedViewId
+        ? `/issues?view=${encodeURIComponent(savedViewId)}`
+        : '/issues';
+  const backLabel = isMyWorkEntry
+    ? '내 작업'
+    : isProjectEntry
+      ? currentIssue.project.name
+      : '이슈 목록';
   const myWorkIsExcluded =
     isMyWorkEntry && selectedWork
       ? isExcludedFromMyWork(
@@ -976,7 +1018,7 @@ export function IssueDetailScreen({
     <article className="mx-auto max-w-[1440px] space-y-6">
       <header className="space-y-4">
         <Link
-          href={isMyWorkEntry ? '/my-issues' : '/issues'}
+          href={backHref}
           className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
           onClick={(event) => {
             if (!isMyWorkEntry) return;
@@ -993,7 +1035,7 @@ export function IssueDetailScreen({
           }}
         >
           <ArrowLeft className="size-4" />
-          {isMyWorkEntry ? '내 작업' : '이슈 목록'}
+          {backLabel}
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">

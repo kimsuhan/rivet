@@ -25,16 +25,18 @@ export const MY_WORK_GRID_COLUMNS =
 export function MyWorkListRow({
   work,
   density = 'comfortable',
+  savedViewId,
 }: {
   work: TeamWorkSummaryResponseDto;
   density?: 'compact' | 'comfortable';
+  savedViewId?: string | null;
 }) {
   const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, undefined, {
     query: { retry: false },
   });
   const stateMutation = useTeamWorkInlineMutation(work, 'workflowState');
   const [completionModalOpen, setCompletionModalOpen] = useState(false);
-  const href = myWorkHref(work.identifier);
+  const href = myWorkHref(work.identifier, 'work', savedViewId);
   const retry = () => {
     if (stateMutation.variables) stateMutation.mutate(stateMutation.variables);
   };

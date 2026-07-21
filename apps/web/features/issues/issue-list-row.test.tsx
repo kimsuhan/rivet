@@ -75,6 +75,21 @@ describe('IssueListRow', () => {
     expect(action.className).not.toContain('border');
   });
 
+  it('상세 주소를 지정하면 제목과 다음 행동이 같은 문맥 경로를 사용한다', () => {
+    const detailHref = '/projects/project-1/issues/API-1?tab=work';
+    const { container } = render(
+      <ul>
+        <IssueListRow
+          detailHref={detailHref}
+          issue={issue({ workflowSummary: { teamWorkCount: 2, unassignedCount: 0 } })}
+          queryKey={['issues']}
+        />
+      </ul>,
+    );
+
+    expect(container.querySelectorAll(`a[href="${detailHref}"]`)).toHaveLength(2);
+  });
+
   it('compact 밀도는 comfortable보다 낮은 최소 높이와 좁은 패딩을 적용한다', () => {
     const { container: compactContainer } = render(
       <ul>

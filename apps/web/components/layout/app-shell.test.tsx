@@ -615,6 +615,40 @@ describe('AppShell', () => {
     );
   });
 
+  it('저장된 보기에서 연 이슈 상세에서도 해당 보기를 활성 상태로 유지한다', () => {
+    pathname = '/issues/F-1';
+    window.history.replaceState({}, '', '/ko/issues/F-1?tab=work&view=saved-issues');
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    const desktopNavigation = screen.getByRole('navigation', { name: labels.desktopNavigation });
+    const issueView = within(
+      within(desktopNavigation).getByRole('group', { name: '이슈 저장된 보기' }),
+    ).getByRole('link', { name: /긴급 이슈/u });
+
+    expect(issueView).toHaveAttribute('aria-current', 'location');
+  });
+
+  it('저장된 보기에서 연 내 작업 상세에서도 해당 보기를 활성 상태로 유지한다', () => {
+    pathname = '/my-issues/WEB-12';
+    window.history.replaceState({}, '', '/ko/my-issues/WEB-12?tab=work&view=saved-my-work');
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    const desktopNavigation = screen.getByRole('navigation', { name: labels.desktopNavigation });
+    const myWorkView = within(
+      within(desktopNavigation).getByRole('group', { name: '내 작업 저장된 보기' }),
+    ).getByRole('link', { name: '오늘 할 일' });
+
+    expect(myWorkView).toHaveAttribute('aria-current', 'location');
+  });
+
   it('데스크톱 사이드바에서 프로젝트를 하위 메뉴로 표시하고 해당 이슈 화면으로 연결한다', () => {
     pathname = '/projects/project-1';
     window.history.replaceState({}, '', '/ko/projects/project-1');

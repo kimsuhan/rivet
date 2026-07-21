@@ -47,6 +47,7 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
 import { IssueListRow } from '@/features/issues/issue-list-row';
+import { projectIssueWorkHref } from '@/features/issues/issue-work-routing';
 import { Link, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
@@ -277,7 +278,12 @@ export function ProjectDetailScreen({ projectId }: { projectId: string }) {
         {issues.data && issues.data.items.length ? (
           <ul className="border-y">
             {issues.data.items.map((issue) => (
-              <IssueListRow key={issue.id} issue={issue} queryKey={issues.queryKey} />
+              <IssueListRow
+                key={issue.id}
+                detailHref={projectIssueWorkHref(item.id, issue.identifier)}
+                issue={issue}
+                queryKey={issues.queryKey}
+              />
             ))}
           </ul>
         ) : null}

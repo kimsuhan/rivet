@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@tanstack/react-query', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
+  useMutation: () => ({ isPending: false, mutate: vi.fn() }),
   useQueryClient: () => ({
     invalidateQueries: mocks.invalidateQueries,
     removeQueries: mocks.removeQueries,
@@ -188,6 +189,41 @@ describe('ProjectDetailScreen actions', () => {
 
     expect(screen.getByRole('button', { name: '프로젝트 보관' })).toBeVisible();
     expect(screen.queryByRole('button', { name: '휴지통으로 이동' })).not.toBeInTheDocument();
+  });
+
+  it('프로젝트 이슈는 프로젝트 문맥을 유지하는 상세 주소로 연결한다', () => {
+    vi.mocked(useIssuesControllerList).mockReturnValue({
+      data: {
+        items: [
+          {
+            id: 'issue-1',
+            identifier: 'F-3',
+            labels: [],
+            priority: 'MEDIUM',
+            progress: { completed: 1, percentage: 20, total: 5 },
+            project: { id: project.id, logoFileId: null, name: project.name },
+            status: 'IN_PROGRESS',
+            title: '이슈 1',
+            updatedAt: '2026-07-20T00:00:00.000Z',
+            version: 1,
+            workflowSummary: { teamWorkCount: 5, unassignedCount: 0 },
+          },
+        ],
+        nextCursor: null,
+        totalCount: 1,
+      },
+      isError: false,
+      isPending: false,
+      queryKey: ['/api/v1/issues'],
+      refetch: mocks.issuesRefetch,
+    } as never);
+
+    render(<ProjectDetailScreen projectId={project.id} />, { wrapper: Wrapper });
+
+    expect(screen.getByRole('link', { name: /F-3.*이슈 1/ })).toHaveAttribute(
+      'href',
+      `/projects/${project.id}/issues/F-3?tab=work`,
+    );
   });
 
   it('휴지통 이동이 성공하면 프로젝트 캐시를 제거하고 목록으로 이동한다', async () => {

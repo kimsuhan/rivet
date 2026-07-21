@@ -1,5 +1,22 @@
-export function issueWorkHref(issueIdentifier: string, teamWorkIdentifier?: string): string {
+export function issueWorkHref(
+  issueIdentifier: string,
+  teamWorkIdentifier?: string,
+  savedViewId?: string | null,
+): string {
   const base = `/issues/${encodeURIComponent(issueIdentifier)}?tab=work`;
+  const workHref = teamWorkIdentifier
+    ? `${base}&work=${encodeURIComponent(teamWorkIdentifier)}`
+    : base;
+  return savedViewId ? `${workHref}&view=${encodeURIComponent(savedViewId)}` : workHref;
+}
+
+export function projectIssueWorkHref(
+  projectId: string,
+  issueIdentifier: string,
+  teamWorkIdentifier?: string,
+  tab = 'work',
+): string {
+  const base = `/projects/${encodeURIComponent(projectId)}/issues/${encodeURIComponent(issueIdentifier)}?tab=${encodeURIComponent(tab)}`;
   return teamWorkIdentifier ? `${base}&work=${encodeURIComponent(teamWorkIdentifier)}` : base;
 }
 
@@ -19,8 +36,13 @@ export function issueNotificationHref(
   return issueHref;
 }
 
-export function myWorkHref(teamWorkIdentifier: string, tab = 'work'): string {
-  return `/my-issues/${encodeURIComponent(teamWorkIdentifier)}?tab=${encodeURIComponent(tab)}`;
+export function myWorkHref(
+  teamWorkIdentifier: string,
+  tab = 'work',
+  savedViewId?: string | null,
+): string {
+  const base = `/my-issues/${encodeURIComponent(teamWorkIdentifier)}?tab=${encodeURIComponent(tab)}`;
+  return savedViewId ? `${base}&view=${encodeURIComponent(savedViewId)}` : base;
 }
 
 export function isExcludedFromMyWork(
