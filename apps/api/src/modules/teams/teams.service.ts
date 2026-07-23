@@ -36,6 +36,15 @@ export class TeamsService {
     const { name, normalizedName } = normalizeTeamResourceName(dto.name);
     const key = dto.key.trim();
 
+    if (dto.leaderId && !dto.memberIds.includes(dto.leaderId)) {
+      throw new ApiError({
+        code: 'VALIDATION_ERROR',
+        fieldErrors: { leaderId: ['팀장은 초기 팀 멤버 중에서 선택해 주세요.'] },
+        message: '팀장은 초기 팀 멤버 중에서 선택해 주세요.',
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+      });
+    }
+
     try {
       return await this.database.client.$transaction(async (transaction) => {
         const membershipIds = [...new Set([context.membershipId, ...dto.memberIds])].sort();
@@ -60,8 +69,7 @@ export class TeamsService {
 
         if (
           requester?.role !== MembershipRole.ADMIN ||
-          requester.status !== MembershipStatus.ACTIVE ||
-          !dto.memberIds.includes(context.membershipId)
+          requester.status !== MembershipStatus.ACTIVE
         ) {
           throw new ApiError({
             code: 'FORBIDDEN',
@@ -87,6 +95,7 @@ export class TeamsService {
         await transaction.teamMember.createMany({
           data: dto.memberIds.map((membershipId) => ({
             membershipId,
+            role: membershipId === dto.leaderId ? TeamMemberRole.LEAD : TeamMemberRole.MEMBER,
             teamId: team.id,
             workspaceId: context.workspaceId,
           })),
@@ -174,7 +183,7 @@ export class TeamsService {
           description: null,
           id: team.id,
           key: team.key,
-          leaderIds: [],
+          leaderIds: dto.leaderId ? [dto.leaderId] : [],
           memberIds: [...dto.memberIds].sort(),
           name: team.name,
           version: team.version,

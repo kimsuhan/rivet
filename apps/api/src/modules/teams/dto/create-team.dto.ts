@@ -5,6 +5,7 @@ import {
   ArrayUnique,
   IsArray,
   IsNotEmpty,
+  IsOptional,
   IsString,
   IsUUID,
   Matches,
@@ -34,4 +35,10 @@ export class CreateTeamDto {
   @ArrayUnique({ message: '같은 팀 멤버를 중복 선택할 수 없습니다.' })
   @IsUUID('all', { each: true, message: '팀 멤버 식별자가 올바르지 않습니다.' })
   memberIds!: string[];
+
+  @ApiProperty({ format: 'uuid', required: false, type: String })
+  @Transform(({ value }) => (typeof value === 'string' ? value.toLowerCase() : value))
+  @IsOptional()
+  @IsUUID('all', { message: '팀장 식별자가 올바르지 않습니다.' })
+  leaderId?: string;
 }

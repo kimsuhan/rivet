@@ -20,4 +20,5 @@ export interface CreateTeamDto {
   key: string;
   /** @minItems 1 */
   memberIds: string[];
+  leaderId?: string;
 }

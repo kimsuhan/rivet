@@ -10674,6 +10674,10 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "leaderId": {
+            "type": "string",
+            "format": "uuid"
           }
         },
         "required": [

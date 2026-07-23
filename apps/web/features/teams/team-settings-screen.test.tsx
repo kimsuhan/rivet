@@ -283,6 +283,35 @@ describe('TeamSettingsScreen', () => {
     );
   });
 
+  it('팀 편집 상세를 불러오는 동안 목록에 로딩 안내를 삽입하지 않는다', async () => {
+    const user = userEvent.setup();
+    let detailResult = {
+      data: undefined,
+      error: null,
+      isError: false,
+      isFetching: true,
+      isPending: true,
+      refetch: vi.fn(),
+    };
+    vi.mocked(useTeamsControllerGet).mockImplementation(() => detailResult as never);
+    const view = renderScreen();
+
+    await user.click(screen.getByRole('button', { name: labels.edit }));
+
+    expect(screen.getByText(activeTeam.name)).toBeVisible();
+    expect(screen.queryByText(labels.loading)).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: labels.editTitle })).not.toBeInTheDocument();
+
+    detailResult = queryResult(teamDetail) as typeof detailResult;
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <TeamSettingsScreen labels={labels} />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('dialog', { name: labels.editTitle })).toBeVisible();
+  });
+
   it('관리 중인 팀으로 이메일 초대를 보낸다', async () => {
     const user = userEvent.setup();
     renderScreen();
@@ -298,7 +327,7 @@ describe('TeamSettingsScreen', () => {
     );
   });
 
-  it('팀 생성 시 현재 관리자를 초기 멤버로 고정하고 선택한 활성 멤버를 전송한다', async () => {
+  it('팀 생성 시 현재 관리자를 자동 선택하지 않고 선택한 팀원과 팀장을 전송한다', async () => {
     const user = userEvent.setup();
     renderScreen();
 
@@ -306,9 +335,13 @@ describe('TeamSettingsScreen', () => {
 
     const dialog = await screen.findByRole('dialog');
     const adminCheckbox = within(dialog).getByRole('checkbox', { name: /관리자/ });
-    expect(adminCheckbox).toBeChecked();
-    expect(adminCheckbox).toHaveAttribute('aria-disabled', 'true');
+    expect(adminCheckbox).not.toBeChecked();
+    expect(adminCheckbox).toBeEnabled();
     await user.click(within(dialog).getByRole('checkbox', { name: /팀원/ }));
+    const leaderSelect = within(dialog).getByRole('combobox', { name: labels.leadersLabel });
+    await user.click(leaderSelect);
+    await waitFor(() => expect(leaderSelect).toHaveAttribute('data-popup-open'));
+    await user.click(screen.getByRole('option', { name: activeMember.user.displayName }));
     await user.type(within(dialog).getByLabelText(labels.nameLabel), '모바일');
     const keyInput = within(dialog).getByLabelText(labels.keyLabel);
     await user.clear(keyInput);
@@ -320,7 +353,8 @@ describe('TeamSettingsScreen', () => {
         {
           data: {
             key: 'APP',
-            memberIds: [activeAdmin.id, activeMember.id],
+            leaderId: activeMember.id,
+            memberIds: [activeMember.id],
             name: '모바일',
           },
         },
@@ -371,6 +405,7 @@ describe('TeamSettingsScreen', () => {
     await user.click(screen.getByRole('button', { name: labels.create }));
     const dialog = await screen.findByRole('dialog', { name: labels.createTitle });
     const nameInput = within(dialog).getByLabelText(labels.nameLabel);
+    await user.click(within(dialog).getByRole('checkbox', { name: /팀원/ }));
     await user.type(nameInput, '중복 팀');
     await user.type(within(dialog).getByLabelText(labels.keyLabel), 'DUP');
     await user.click(within(dialog).getByRole('button', { name: labels.create }));
