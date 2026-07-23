@@ -101,15 +101,30 @@ export function IssueListRow({
   return (
     <li className="group border-b last:border-b-0">
       <div
-        className={`grid ${density === 'compact' ? 'min-h-11 gap-2 py-1.5' : 'min-h-16 gap-3 py-2.5'} ${ISSUE_LIST_GRID_COLUMNS} items-center px-3 text-sm`}
+        className={`grid ${density === 'compact' ? 'min-h-11 gap-2 py-0 text-[13px]' : 'min-h-16 gap-3 py-2.5 text-sm'} ${ISSUE_LIST_GRID_COLUMNS} items-center px-3`}
       >
         <Link
           href={href}
-          className="focus-visible:ring-ring min-w-0 rounded-sm outline-none focus-visible:ring-2"
+          className={cn(
+            'focus-visible:ring-ring min-w-0 rounded-sm outline-none focus-visible:ring-2',
+            density === 'compact' && 'flex items-center gap-2 overflow-hidden',
+          )}
         >
-          <span className="text-muted-foreground mr-2 font-mono text-xs">{issue.identifier}</span>
-          <span className="font-medium">{issue.title}</span>
-          <span className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1.5 truncate text-xs">
+          <span
+            className={cn(
+              'text-muted-foreground shrink-0 font-mono text-xs tabular-nums',
+              density === 'comfortable' && 'mr-2',
+            )}
+          >
+            {issue.identifier}
+          </span>
+          <span className="min-w-0 truncate font-medium">{issue.title}</span>
+          <span
+            className={cn(
+              'text-muted-foreground flex min-w-0 items-center gap-1.5 truncate text-xs',
+              density === 'compact' ? 'shrink' : 'mt-1',
+            )}
+          >
             <ProjectLogo
               logoFileId={issue.project.logoFileId}
               name={issue.project.name}
@@ -125,6 +140,7 @@ export function IssueListRow({
           priority={issue.priority}
           busy={mutation.isPending}
           disabled={mutation.isPending}
+          iconOnly={density === 'compact'}
           onValueChange={(priority) => mutation.mutate(priority)}
         />
         <span className="text-muted-foreground truncate max-lg:hidden">
@@ -143,9 +159,12 @@ export function IssueListRow({
           href={nextActionHref}
           className={cn(
             'max-lg:hidden',
-            nextActionIsDecision
+            nextActionIsDecision && density === 'comfortable'
               ? cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'gap-1.5')
-              : 'text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium',
+              : cn(
+                  'hover:text-foreground inline-flex items-center gap-1 text-xs font-medium',
+                  nextActionIsDecision ? 'text-foreground' : 'text-muted-foreground',
+                ),
           )}
         >
           {issue.workflowSummary.unassignedCount ? (

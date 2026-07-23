@@ -60,6 +60,13 @@ const defaultView = {
   name: '기본 보기',
 };
 
+function getDesktopManageButton(viewName: string): HTMLElement {
+  const viewLink = screen.getByRole('link', { current: 'page' });
+  const viewTab = viewLink.parentElement;
+  if (!viewTab) throw new Error(`${viewName} 탭을 찾지 못했습니다.`);
+  return within(viewTab).getByRole('button', { name: `${viewName} 보기 관리` });
+}
+
 describe('SavedViewControls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,6 +108,25 @@ describe('SavedViewControls', () => {
     expect(selectedView).toHaveAttribute('aria-current', 'page');
     expect(selectedView).toHaveClass('text-foreground', 'after:bottom-0', 'after:bg-primary');
     expect(screen.getByRole('link', { name: '전체' })).toHaveClass('text-muted-foreground');
+    expect(getDesktopManageButton('긴급 보기').querySelector('.lucide-ellipsis-vertical')).not.toBe(
+      null,
+    );
+  });
+
+  it('보기 도구 모음을 탭과 같은 줄에 배치하고 빈 보조 줄은 만들지 않는다', () => {
+    render(
+      <SavedViewControls
+        configuration={view.configuration as Record<string, string>}
+        resourceType="ISSUES"
+        toolbar={<button type="button">도구 모음</button>}
+      />,
+    );
+
+    const controls = screen.getByLabelText('저장된 보기');
+    expect(
+      within(controls.children[0] as HTMLElement).getByRole('button', { name: '도구 모음' }),
+    ).toBeVisible();
+    expect(controls.children).toHaveLength(1);
   });
 
   it('다른 보기에서 전체로 이동해도 기본 보기를 다시 적용하지 않는다', () => {
@@ -178,7 +204,7 @@ describe('SavedViewControls', () => {
     });
     render(<SavedViewControls configuration={{ query: '긴급' }} resourceType="ISSUES" />);
 
-    await user.click(screen.getByRole('button', { name: '긴급 보기 보기 관리' }));
+    await user.click(getDesktopManageButton('긴급 보기'));
     await user.click(screen.getByRole('button', { name: '이름 변경' }));
     const dialog = screen.getByRole('dialog', { name: '저장된 보기 이름 변경' });
     await user.clear(within(dialog).getByLabelText('새 저장된 보기 이름'));
@@ -210,8 +236,12 @@ describe('SavedViewControls', () => {
       />,
     );
 
-    expect(screen.getAllByText('변경됨').length).toBeGreaterThan(0);
-    await user.click(screen.getByRole('button', { name: '변경 저장' }));
+    expect(screen.getByLabelText('저장되지 않은 변경')).toBeVisible();
+    await user.click(
+      within(screen.getByRole('navigation', { name: '이슈 보기' })).getByRole('button', {
+        name: '긴급 보기 변경 저장',
+      }),
+    );
 
     expect(mocks.updateMutate).toHaveBeenCalledWith(
       {
@@ -223,6 +253,22 @@ describe('SavedViewControls', () => {
       },
       expect.objectContaining({ onError: expect.any(Function), onSuccess: expect.any(Function) }),
     );
+  });
+
+  it('변경 취소와 새 보기 저장은 현재 보기 관리 메뉴에서 제공한다', async () => {
+    const user = userEvent.setup();
+    mocks.search = `view=view-1&query=%EB%B3%80%EA%B2%BD&projectId=${view.configuration.projectId}`;
+    render(
+      <SavedViewControls
+        configuration={{ projectId: view.configuration.projectId, query: '변경' }}
+        resourceType="ISSUES"
+      />,
+    );
+
+    await user.click(getDesktopManageButton('긴급 보기'));
+
+    expect(screen.getByRole('button', { name: '초기화' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '새 보기로 저장' })).toBeVisible();
   });
 
   it('삭제는 관리 메뉴에서 확인한 뒤 실행한다', async () => {
@@ -239,7 +285,7 @@ describe('SavedViewControls', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: '긴급 보기 보기 관리' }));
+    await user.click(getDesktopManageButton('긴급 보기'));
     await user.click(screen.getByRole('button', { name: '보기 삭제' }));
     expect(screen.getByRole('alertdialog', { name: '이 보기를 삭제할까요?' })).toBeVisible();
     expect(removeMutate).not.toHaveBeenCalled();

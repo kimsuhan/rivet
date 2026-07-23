@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleDot, Filter, Plus, Search, X } from 'lucide-react';
+import { CircleDot, Plus, Search, X } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
@@ -11,7 +11,6 @@ import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -24,7 +23,8 @@ import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
 import { getIssuePagesQueryKey, useIssuePages } from './issue-list-queries';
-import { ISSUE_LIST_GRID_COLUMNS, IssueListRow } from './issue-list-row';
+import { IssueListRow } from './issue-list-row';
+import { IssueListToolbar } from './issue-list-toolbar';
 import { issueSortsFromSearchParams, serializeIssueSorts } from './issue-multi-sort';
 import { IssueMultiSortControls } from './issue-multi-sort-controls';
 import { issueWorkHref } from './issue-work-routing';
@@ -44,6 +44,7 @@ export function FeatureIssueListScreen() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
+  const [searchOpen, setSearchOpen] = useState(false);
   const query = searchParams.get('query') ?? '';
   const savedViewId = searchParams.get('view');
   const projectId = searchParams.get('projectId') ?? '';
@@ -109,7 +110,7 @@ export function FeatureIssueListScreen() {
         </div>
         <Link
           href={`${pathname}?create=1`}
-          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-2')}
+          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-2 md:hidden')}
         >
           <Plus className="size-4" />
           이슈 만들기
@@ -119,6 +120,96 @@ export function FeatureIssueListScreen() {
         resourceType="ISSUES"
         configuration={viewConfiguration}
         defaultConfiguration={defaultConfiguration}
+        toolbar={
+          <IssueListToolbar
+            activeFilterCount={activeFilterCount}
+            filterTitle="이슈 필터"
+            query={query}
+            searchOpen={searchOpen}
+            onSearchOpenChange={setSearchOpen}
+            filterContent={
+              <>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-muted-foreground text-xs">프로젝트</span>
+                  <Select
+                    items={[
+                      { label: '모든 프로젝트', value: '' },
+                      ...(projects.data?.items ?? []).map((project) => ({
+                        label: project.name,
+                        value: project.id,
+                      })),
+                    ]}
+                    value={projectId}
+                    onValueChange={(value) => replace('projectId', value ?? '')}
+                  >
+                    <SelectTrigger className="w-full" size="sm" aria-label="프로젝트 필터">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="">모든 프로젝트</SelectItem>
+                        {(projects.data?.items ?? []).map((project) => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-muted-foreground text-xs">상태</span>
+                  <Select
+                    items={[
+                      { label: '모든 상태', value: '' },
+                      ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ label, value })),
+                    ]}
+                    value={status}
+                    onValueChange={(value) => replace('status', value ?? '')}
+                  >
+                    <SelectTrigger className="w-full" size="sm" aria-label="상태 필터">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="">모든 상태</SelectItem>
+                        {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {activeFilterCount ? (
+                  <Button
+                    className="w-full"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => replaceMany({ projectId: '', status: '' })}
+                  >
+                    필터 초기화
+                  </Button>
+                ) : null}
+              </>
+            }
+            sortAndViewControls={
+              <IssueMultiSortControls
+                density={density}
+                sorts={sorts}
+                onSortsChange={(value) =>
+                  replaceMany({
+                    sort: '',
+                    sortDirection: '',
+                    sorts: serializeIssueSorts(value),
+                  })
+                }
+                onDensityChange={(value) => replace('density', value)}
+              />
+            }
+          />
+        }
         activeFilters={
           query || projectId || status ? (
             <>
@@ -145,7 +236,7 @@ export function FeatureIssueListScreen() {
                 variant="ghost"
                 onClick={() => replaceMany({ projectId: '', query: '', status: '' })}
               >
-                필터 초기화
+                모두 지우기
               </Button>
             </>
           ) : undefined
@@ -157,104 +248,16 @@ export function FeatureIssueListScreen() {
             }
           : {})}
       >
-        <IssueSearchInput
-          key={query}
-          initialQuery={query}
-          onSubmit={(value) => replace('query', value)}
-        />
-        <Popover>
-          <PopoverTrigger
-            type="button"
-            aria-label={activeFilterCount ? `필터 ${activeFilterCount}개` : '필터'}
-            className={buttonVariants({ size: 'sm', variant: 'ghost' })}
-          >
-            <Filter data-icon="inline-start" />
-            필터
-            {activeFilterCount ? (
-              <span className="bg-secondary text-secondary-foreground min-w-5 rounded-full px-1.5 text-center text-xs">
-                {activeFilterCount}
-              </span>
-            ) : null}
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-64 gap-2.5 p-3">
-            <PopoverTitle className="text-sm">이슈 필터</PopoverTitle>
-            <div className="flex flex-col gap-1.5">
-              <span className="text-muted-foreground text-xs">프로젝트</span>
-              <Select
-                items={[
-                  { label: '모든 프로젝트', value: '' },
-                  ...(projects.data?.items ?? []).map((project) => ({
-                    label: project.name,
-                    value: project.id,
-                  })),
-                ]}
-                value={projectId}
-                onValueChange={(value) => replace('projectId', value ?? '')}
-              >
-                <SelectTrigger className="w-full" size="sm" aria-label="프로젝트 필터">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="">모든 프로젝트</SelectItem>
-                    {(projects.data?.items ?? []).map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <span className="text-muted-foreground text-xs">상태</span>
-              <Select
-                items={[
-                  { label: '모든 상태', value: '' },
-                  ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ label, value })),
-                ]}
-                value={status}
-                onValueChange={(value) => replace('status', value ?? '')}
-              >
-                <SelectTrigger className="w-full" size="sm" aria-label="상태 필터">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="">모든 상태</SelectItem>
-                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-            {activeFilterCount ? (
-              <Button
-                className="w-full"
-                size="sm"
-                variant="ghost"
-                onClick={() => replaceMany({ projectId: '', status: '' })}
-              >
-                필터 초기화
-              </Button>
-            ) : null}
-          </PopoverContent>
-        </Popover>
-        <IssueMultiSortControls
-          density={density}
-          sorts={sorts}
-          onSortsChange={(value) =>
-            replaceMany({
-              sort: '',
-              sortDirection: '',
-              sorts: serializeIssueSorts(value),
-            })
-          }
-          onDensityChange={(value) => replace('density', value)}
-        />
+        {searchOpen ? (
+          <IssueSearchInput
+            key={query}
+            initialQuery={query}
+            onSubmit={(value) => {
+              replace('query', value);
+              setSearchOpen(false);
+            }}
+          />
+        ) : null}
       </SavedViewControls>
       {issues.isPending ? <ContentLoading label="이슈를 불러오는 중입니다" /> : null}
       {issues.isError && !issues.data ? (
@@ -274,33 +277,17 @@ export function FeatureIssueListScreen() {
         />
       ) : null}
       {issueItems.length ? (
-        <div>
-          <div
-            className={cn(
-              'text-muted-foreground grid gap-3 border-b px-3 py-2 text-xs font-medium max-md:hidden',
-              ISSUE_LIST_GRID_COLUMNS,
-            )}
-          >
-            <span>이슈</span>
-            <span>상태</span>
-            <span>우선순위</span>
-            <span className="max-lg:hidden">현재 팀 작업</span>
-            <span>진행률</span>
-            <span className="max-xl:hidden">최근 수정</span>
-            <span className="max-lg:hidden">다음 행동</span>
-          </div>
-          <ul>
-            {issueItems.map((issue) => (
-              <IssueListRow
-                key={issue.id}
-                detailHref={issueWorkHref(issue.identifier, undefined, savedViewId)}
-                issue={issue}
-                queryKey={issueQueryKey}
-                density={density as 'compact' | 'comfortable'}
-              />
-            ))}
-          </ul>
-        </div>
+        <ul className="!-mt-3">
+          {issueItems.map((issue) => (
+            <IssueListRow
+              key={issue.id}
+              detailHref={issueWorkHref(issue.identifier, undefined, savedViewId)}
+              issue={issue}
+              queryKey={issueQueryKey}
+              density={density as 'compact' | 'comfortable'}
+            />
+          ))}
+        </ul>
       ) : null}
       {issues.isFetchNextPageError ? (
         <ContentError
@@ -350,6 +337,7 @@ function IssueSearchInput({
       <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
       <Input
         aria-label="이슈 검색"
+        autoFocus
         className="hover:bg-muted/50 focus-visible:bg-background h-8 border-transparent bg-transparent pl-8 shadow-none"
         placeholder="표시 ID 또는 제목 검색"
         value={draft}

@@ -1,8 +1,9 @@
 'use client';
 
-import { ArrowDown, ArrowDownUp, ArrowUp, Rows3 } from 'lucide-react';
+import { ArrowDown, ArrowDownUp, ArrowUp, Check, Rows3, Settings2 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -11,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 
 export function IssueListDisplayControls({
   density,
@@ -35,50 +35,105 @@ export function IssueListDisplayControls({
   const descending = sortDirection === 'desc';
   const compact = density === 'compact';
   const directionLabel = descending ? '내림차순' : '오름차순';
-  const nextDensityLabel = compact ? '여유 보기' : '촘촘히 보기';
+  const sortOption = sortOptions.find((option) => option.value === sort);
 
   return (
-    <div className="bg-background flex shrink-0 items-center rounded-lg border p-0.5">
-      <Select items={sortOptions} value={sort} onValueChange={(value) => onSortChange(value ?? '')}>
-        <SelectTrigger
-          size="sm"
-          aria-label={sortLabel}
-          className="max-w-40 border-transparent bg-transparent"
+    <div className="flex shrink-0 items-center gap-1">
+      <Popover>
+        <PopoverTrigger
+          type="button"
+          aria-label={`${sortLabel}: ${sortOption?.label ?? sort}, ${directionLabel}`}
+          title={`${sortOption?.label ?? sort} · ${directionLabel}`}
+          className={buttonVariants({ size: 'icon-sm', variant: 'ghost' })}
         >
-          <ArrowDownUp data-icon="inline-start" />
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {sortOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-      <Button
-        type="button"
-        size="icon-sm"
-        variant="ghost"
-        aria-label={`${directionLabel} 정렬. ${descending ? '오름차순' : '내림차순'}으로 변경`}
-        title={`${directionLabel} 정렬`}
-        onClick={() => onSortDirectionChange(descending ? 'asc' : 'desc')}
-      >
-        {descending ? <ArrowDown /> : <ArrowUp />}
-      </Button>
-      <Separator orientation="vertical" className="mx-0.5 -my-0.5" />
-      <Button
-        type="button"
-        size="icon-sm"
-        variant={compact ? 'secondary' : 'ghost'}
-        aria-label={`${compact ? '촘촘히 보기' : '여유 보기'}. ${nextDensityLabel}로 변경`}
-        title={`${compact ? '촘촘히 보기' : '여유 보기'} · 클릭하여 ${nextDensityLabel}로 변경`}
-        onClick={() => onDensityChange(compact ? 'comfortable' : 'compact')}
-      >
-        <Rows3 />
-      </Button>
+          <ArrowDownUp />
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-64 gap-3 p-3">
+          <PopoverTitle className="text-sm">정렬</PopoverTitle>
+          <Select
+            items={sortOptions}
+            value={sort}
+            onValueChange={(value) => onSortChange(value ?? '')}
+          >
+            <SelectTrigger size="sm" aria-label={sortLabel} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {sortOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <div className="space-y-1" aria-label="정렬 방향">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => onSortDirectionChange('desc')}
+            >
+              <ArrowDown data-icon="inline-start" />
+              내림차순
+              {descending ? <Check className="ml-auto" aria-label="선택됨" /> : null}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => onSortDirectionChange('asc')}
+            >
+              <ArrowUp data-icon="inline-start" />
+              오름차순
+              {!descending ? <Check className="ml-auto" aria-label="선택됨" /> : null}
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+      <Popover>
+        <PopoverTrigger
+          type="button"
+          aria-label={`보기 설정: ${compact ? '촘촘히 보기' : '여유 보기'}`}
+          title="보기 설정"
+          className={buttonVariants({
+            size: 'icon-sm',
+            variant: compact ? 'secondary' : 'ghost',
+          })}
+        >
+          <Settings2 />
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-56 gap-2 p-3">
+          <PopoverTitle className="text-sm">보기 설정</PopoverTitle>
+          <div className="space-y-1" aria-label="목록 밀도">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => onDensityChange('comfortable')}
+            >
+              <Rows3 data-icon="inline-start" />
+              여유 보기
+              {!compact ? <Check className="ml-auto" aria-label="선택됨" /> : null}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => onDensityChange('compact')}
+            >
+              <Rows3 data-icon="inline-start" className="scale-y-75" />
+              촘촘히 보기
+              {compact ? <Check className="ml-auto" aria-label="선택됨" /> : null}
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

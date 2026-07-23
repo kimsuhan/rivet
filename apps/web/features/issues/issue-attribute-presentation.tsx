@@ -151,16 +151,25 @@ export function TeamWorkStatusDisplay({
 export function PriorityDisplay({
   priority,
   className,
+  iconOnly = false,
 }: {
   priority: IssueSummaryResponseDto['priority'];
   className?: string;
+  iconOnly?: boolean;
 }) {
-  return (
-    <AttributeDisplay
-      presentation={PRIORITY_PRESENTATION[priority]}
-      {...(className ? { className } : {})}
-    />
-  );
+  const presentation = PRIORITY_PRESENTATION[priority];
+
+  if (iconOnly) {
+    const Icon = presentation.icon;
+    return (
+      <span className={cn('inline-flex size-7 items-center justify-center', className)}>
+        <Icon aria-hidden="true" className={cn('size-4', presentation.iconClassName)} />
+        <span className="sr-only">{presentation.label}</span>
+      </span>
+    );
+  }
+
+  return <AttributeDisplay presentation={presentation} {...(className ? { className } : {})} />;
 }
 
 export function PriorityTrigger({
@@ -168,6 +177,7 @@ export function PriorityTrigger({
   disabled = false,
   error,
   identifier,
+  iconOnly = false,
   onValueChange,
   priority,
   className,
@@ -177,6 +187,7 @@ export function PriorityTrigger({
   disabled?: boolean;
   error?: Parameters<typeof IssueInlineSelect>[0]['error'];
   identifier: string;
+  iconOnly?: boolean;
   onValueChange: (value: IssueSummaryResponseDto['priority']) => void;
   priority: IssueSummaryResponseDto['priority'];
 }) {
@@ -187,13 +198,16 @@ export function PriorityTrigger({
       busy={busy}
       disabled={disabled}
       error={error}
-      labelClassName="text-sm"
+      labelClassName={cn('text-sm', iconOnly && 'sr-only')}
       onValueChange={(value) => onValueChange(value as IssueSummaryResponseDto['priority'])}
       options={Object.entries(PRIORITY_PRESENTATION).map(([value, option]) => ({
         ...option,
         value,
       }))}
-      triggerClassName={cn('w-24', className)}
+      triggerClassName={cn(
+        iconOnly ? 'w-7 justify-center px-0 [&>svg:last-child]:hidden' : 'w-24',
+        className,
+      )}
       value={priority}
     />
   );

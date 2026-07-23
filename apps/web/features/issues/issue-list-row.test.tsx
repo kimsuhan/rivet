@@ -19,7 +19,11 @@ vi.mock('@/i18n/navigation', () => ({
 
 vi.mock('./issue-attribute-presentation', () => ({
   IssueStatusDisplay: ({ status }: { status: string }) => <span>{status}</span>,
-  PriorityTrigger: () => <button type="button">우선순위</button>,
+  PriorityTrigger: ({ iconOnly }: { iconOnly?: boolean }) => (
+    <button type="button" data-icon-only={iconOnly || undefined}>
+      우선순위
+    </button>
+  ),
 }));
 
 vi.mock('./issue-label-chips', () => ({ IssueLabelChips: () => null }));
@@ -109,7 +113,7 @@ describe('IssueListRow', () => {
     );
   });
 
-  it('compact 밀도는 comfortable보다 낮은 최소 높이와 좁은 패딩을 적용한다', () => {
+  it('compact 밀도는 이슈 정보를 한 줄로 정렬하고 우선순위를 아이콘 형태로 축약한다', () => {
     const { container: compactContainer } = render(
       <ul>
         <IssueListRow issue={issue({})} queryKey={['issues']} density="compact" />
@@ -125,9 +129,13 @@ describe('IssueListRow', () => {
     const comfortableRow = comfortableContainer.querySelector('li > div');
 
     expect(compactRow?.className).toContain('min-h-11');
-    expect(compactRow?.className).toContain('py-1.5');
+    expect(compactRow?.className).toContain('py-0');
+    expect(compactRow?.className).toContain('text-[13px]');
+    expect(compactContainer.querySelector('a')?.className).toContain('flex');
+    expect(compactContainer.querySelector('[data-icon-only="true"]')).not.toBeNull();
     expect(comfortableRow?.className).toContain('min-h-16');
     expect(comfortableRow?.className).toContain('py-2.5');
+    expect(comfortableContainer.querySelector('[data-icon-only]')).toBeNull();
     expect(compactRow?.className).not.toEqual(comfortableRow?.className);
   });
 });

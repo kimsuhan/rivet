@@ -20,7 +20,7 @@ import { TeamWorkPrimaryAction } from './team-work-primary-action';
 import { useTeamWorkInlineMutation } from './use-team-work-inline-mutation';
 
 export const MY_WORK_GRID_COLUMNS =
-  'grid-cols-[6.5rem_minmax(18rem,30rem)_minmax(15rem,20rem)_8.5rem_8rem] max-xl:grid-cols-[6rem_minmax(15rem,24rem)_minmax(12rem,16rem)_7.5rem_7rem] max-md:grid-cols-1';
+  'grid-cols-[minmax(0,1fr)_10rem_8rem] max-xl:grid-cols-[minmax(0,1fr)_9rem_7rem] max-md:grid-cols-1';
 
 export function MyWorkListRow({
   work,
@@ -62,31 +62,30 @@ export function MyWorkListRow({
       <div
         className={`pointer-events-none relative z-10 grid ${density === 'compact' ? 'min-h-11 gap-2 py-1.5' : 'min-h-16 gap-3 py-2.5'} ${MY_WORK_GRID_COLUMNS} items-center px-3 text-sm max-md:gap-2 max-md:py-3`}
       >
-        <div className="min-w-0">
-          <PriorityDisplay priority={work.issue.priority} />
-        </div>
-        <div className="min-w-0">
-          <p className="truncate font-medium" title={work.issue.title}>
-            {work.issue.title}
-          </p>
-          <p className="text-muted-foreground mt-1 truncate text-xs">
-            <span className="font-mono">{work.identifier}</span> ·{' '}
-            <span className="font-mono">{work.issue.identifier}</span> ·{' '}
-            <span className="font-mono">{work.projectTeam.team.key}</span> ·{' '}
-            {work.projectTeam.team.name}
-          </p>
-        </div>
-        <div className="min-w-0">
-          <p className="text-muted-foreground flex min-w-0 items-center gap-2">
-            <ProjectLogo
-              logoFileId={work.issue.project.logoFileId}
-              name={work.issue.project.name}
-              size="xs"
-            />
-            <span className="truncate">{work.issue.project.name}</span>
-          </p>
-          <div className="mt-1 min-w-0">
-            <IssueLabelChips emptyLabel="" labels={work.issue.labels} />
+        <div className="flex min-w-0 items-center gap-2">
+          <PriorityDisplay iconOnly priority={work.issue.priority} />
+          <div className="min-w-0">
+            <p className="flex min-w-0 items-baseline gap-2">
+              <span className="text-muted-foreground shrink-0 font-mono text-xs">
+                {work.identifier}
+              </span>
+              <span className="truncate font-medium" title={work.issue.title}>
+                {work.issue.title}
+              </span>
+            </p>
+            <div
+              className={`text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs ${density === 'compact' ? '' : 'mt-1'}`}
+            >
+              <ProjectLogo
+                logoFileId={work.issue.project.logoFileId}
+                name={work.issue.project.name}
+                size="xs"
+              />
+              <span className="truncate">{work.issue.project.name}</span>
+              <span aria-hidden="true">·</span>
+              <span className="truncate">{work.projectTeam.team.name}</span>
+              <IssueLabelChips emptyLabel="" labels={work.issue.labels} />
+            </div>
           </div>
         </div>
         <div

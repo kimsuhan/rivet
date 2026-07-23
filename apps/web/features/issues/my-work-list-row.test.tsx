@@ -10,12 +10,16 @@ vi.mock('@rivet/api-client', () => ({
 
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ children, href, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a href={href} {...props}>{children}</a>
+    <a href={href} {...props}>
+      {children}
+    </a>
   ),
 }));
 
 vi.mock('./issue-attribute-presentation', () => ({
-  PriorityDisplay: () => <span>우선순위</span>,
+  PriorityDisplay: ({ iconOnly }: { iconOnly?: boolean }) => (
+    <span data-icon-only={String(Boolean(iconOnly))}>우선순위</span>
+  ),
   StatusTrigger: () => <button type="button">상태</button>,
 }));
 
@@ -33,24 +37,26 @@ describe('MyWorkListRow', () => {
     render(
       <ul>
         <MyWorkListRow
-          work={{
-            id: 'team-work-id',
-            identifier: 'WEB-12',
-            issue: {
-              identifier: 'ISSUE-9',
-              labels: [],
-              priority: 'HIGH',
-              project: { name: 'Rivet' },
-              title: '내 작업 상세 진입',
-            },
-            projectTeam: {
-              active: true,
-              id: 'project-team-id',
-              team: { id: 'team-id', key: 'PLAN', name: '기획' },
-            },
-            version: 1,
-            workflowState: { id: 'state-id' },
-          } as never}
+          work={
+            {
+              id: 'team-work-id',
+              identifier: 'WEB-12',
+              issue: {
+                identifier: 'ISSUE-9',
+                labels: [],
+                priority: 'HIGH',
+                project: { name: 'Rivet' },
+                title: '내 작업 상세 진입',
+              },
+              projectTeam: {
+                active: true,
+                id: 'project-team-id',
+                team: { id: 'team-id', key: 'PLAN', name: '기획' },
+              },
+              version: 1,
+              workflowState: { id: 'state-id' },
+            } as never
+          }
         />
       </ul>,
     );
@@ -66,24 +72,26 @@ describe('MyWorkListRow', () => {
       <ul>
         <MyWorkListRow
           savedViewId="saved-my-work"
-          work={{
-            id: 'team-work-id',
-            identifier: 'WEB-12',
-            issue: {
-              identifier: 'ISSUE-9',
-              labels: [],
-              priority: 'HIGH',
-              project: { name: 'Rivet' },
-              title: '내 작업 상세 진입',
-            },
-            projectTeam: {
-              active: true,
-              id: 'project-team-id',
-              team: { id: 'team-id', key: 'PLAN', name: '기획' },
-            },
-            version: 1,
-            workflowState: { id: 'state-id' },
-          } as never}
+          work={
+            {
+              id: 'team-work-id',
+              identifier: 'WEB-12',
+              issue: {
+                identifier: 'ISSUE-9',
+                labels: [],
+                priority: 'HIGH',
+                project: { name: 'Rivet' },
+                title: '내 작업 상세 진입',
+              },
+              projectTeam: {
+                active: true,
+                id: 'project-team-id',
+                team: { id: 'team-id', key: 'PLAN', name: '기획' },
+              },
+              version: 1,
+              workflowState: { id: 'state-id' },
+            } as never
+          }
         />
       </ul>,
     );
@@ -133,5 +141,11 @@ describe('MyWorkListRow', () => {
     expect(comfortableRow?.className).toContain('min-h-16');
     expect(comfortableRow?.className).toContain('py-2.5');
     expect(compactRow?.className).not.toEqual(comfortableRow?.className);
+    expect(compactContainer.querySelector('[data-icon-only="true"]')).not.toBeNull();
+    expect(comfortableContainer.querySelector('[data-icon-only="true"]')).not.toBeNull();
+    expect(compactContainer).toHaveTextContent('WEB-12내 작업 상세 진입');
+    expect(compactContainer).toHaveTextContent('Rivet·기획');
+    expect(compactContainer).not.toHaveTextContent('ISSUE-9');
+    expect(compactContainer).not.toHaveTextContent('PLAN');
   });
 });

@@ -8,6 +8,7 @@ import {
   CompactAssigneeTrigger,
   IssueStatusDisplay,
   PriorityDisplay,
+  PriorityTrigger,
   StatusTrigger,
   TEAM_WORK_STATUS_PRESENTATION,
   TeamWorkStatusDisplay,
@@ -57,6 +58,24 @@ describe('이슈 속성 Compact 표현', () => {
 
   it('팀 작업 상태 표현은 워크플로 상태 아이콘 정본을 그대로 사용한다', () => {
     expect(TEAM_WORK_STATUS_PRESENTATION).toBe(WORKFLOW_STATE_PRESENTATION);
+  });
+
+  it('아이콘 전용 우선순위 선택은 텍스트와 화살표를 시각적으로 숨기고 접근성 이름을 유지한다', () => {
+    render(
+      <PriorityTrigger iconOnly identifier="API-1" onValueChange={vi.fn()} priority="MEDIUM" />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: 'API-1 우선순위: 보통' });
+    expect(trigger).toHaveClass('w-7', '[&>svg:last-child]:hidden');
+    expect(trigger.querySelector('[data-slot="inline-select-label"]')).toHaveClass('sr-only');
+    expect(trigger.querySelector('.lucide-signal-medium')).not.toBeNull();
+  });
+
+  it('아이콘 전용 우선순위 표시는 이름을 보조 기술에 남긴다', () => {
+    render(<PriorityDisplay iconOnly priority="MEDIUM" />);
+
+    expect(screen.getByText('보통')).toHaveClass('sr-only');
+    expect(document.querySelector('.lucide-signal-medium')).not.toBeNull();
   });
 
   it('담당자 선택값과 메뉴에 프로필 사진을 표시한다', async () => {

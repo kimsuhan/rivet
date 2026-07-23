@@ -16,7 +16,6 @@ import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -30,7 +29,8 @@ import { cn } from '@/lib/utils';
 
 import { IssueListDisplayControls } from './issue-list-display-controls';
 import { useTeamWorkPages } from './issue-list-queries';
-import { MY_WORK_GRID_COLUMNS, MyWorkListRow } from './my-work-list-row';
+import { IssueListToolbar } from './issue-list-toolbar';
+import { MyWorkListRow } from './my-work-list-row';
 import { SavedViewControls } from './saved-view-controls';
 import { TEAM_WORK_GRID_COLUMNS, TeamWorkListRow } from './team-work-list-row';
 
@@ -49,6 +49,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
+  const [searchOpen, setSearchOpen] = useState(false);
   const teams = useTeamsControllerList({ includeArchived: false }, { query: { retry: false } });
   const projects = useProjectsControllerList(
     { limit: 100 },
@@ -133,11 +134,6 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
             <h1 id="team-work-list-title" className="text-2xl font-semibold tracking-tight">
               {title}
             </h1>
-            {mode === 'my' && totalCount !== undefined ? (
-              <span className="text-muted-foreground text-sm">
-                {totalCount.toLocaleString('ko-KR')}
-              </span>
-            ) : null}
           </div>
           <p className="text-muted-foreground mt-1 text-sm">
             {mode === 'my' ? '내가 맡은 미완료 작업' : '이슈에 연결된 현재 실행 단위입니다.'}
@@ -145,7 +141,11 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
         </div>
         <Link
           href={`${pathname}?create=1`}
-          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-2')}
+          className={cn(
+            buttonVariants({ variant: 'outline', size: 'sm' }),
+            'gap-2',
+            mode === 'my' && 'md:hidden',
+          )}
         >
           <Plus className="size-4" />
           이슈 만들기
@@ -156,6 +156,102 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           resourceType="MY_WORK"
           configuration={myWorkConfiguration}
           defaultConfiguration={defaultMyWorkConfiguration}
+          toolbar={
+            <IssueListToolbar
+              activeFilterCount={activeFilterCount}
+              filterTitle="내 작업 필터"
+              query={query}
+              searchOpen={searchOpen}
+              onSearchOpenChange={setSearchOpen}
+              filterContent={
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-muted-foreground text-xs">상태</span>
+                    <Select
+                      items={[
+                        { label: '모든 상태', value: '' },
+                        ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({
+                          label,
+                          value,
+                        })),
+                      ]}
+                      value={selectedCategory}
+                      onValueChange={(value) => replace('stateCategory', value ?? '')}
+                    >
+                      <SelectTrigger className="w-full" size="sm" aria-label="작업 상태 필터">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="">모든 상태</SelectItem>
+                          {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-muted-foreground text-xs">프로젝트</span>
+                    <Select
+                      items={[
+                        { label: '모든 프로젝트', value: '' },
+                        ...(projects.data?.items ?? []).map((project) => ({
+                          label: project.name,
+                          value: project.id,
+                        })),
+                      ]}
+                      value={projectId}
+                      onValueChange={(value) => replace('projectId', value ?? '')}
+                    >
+                      <SelectTrigger className="w-full" size="sm" aria-label="프로젝트 필터">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="">모든 프로젝트</SelectItem>
+                          {(projects.data?.items ?? []).map((project) => (
+                            <SelectItem key={project.id} value={project.id}>
+                              {project.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {activeFilterCount ? (
+                    <Button
+                      className="w-full"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => replaceMany({ projectId: '', stateCategory: '' })}
+                    >
+                      필터 초기화
+                    </Button>
+                  ) : null}
+                </>
+              }
+              sortAndViewControls={
+                <IssueListDisplayControls
+                  density={density}
+                  sort={sort}
+                  sortDirection={sortDirection}
+                  sortLabel="내 작업 정렬 기준"
+                  sortOptions={[
+                    { label: '실행 순서', value: 'executionOrder' },
+                    { label: '우선순위', value: 'priority' },
+                    { label: '생성일', value: 'createdAt' },
+                    { label: '최근 수정일', value: 'updatedAt' },
+                  ]}
+                  onSortChange={(value) => replace('sort', value)}
+                  onSortDirectionChange={(value) => replace('sortDirection', value)}
+                  onDensityChange={(value) => replace('density', value)}
+                />
+              }
+            />
+          }
           activeFilters={
             query || projectId || selectedCategory ? (
               <>
@@ -188,7 +284,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
                   variant="ghost"
                   onClick={() => replaceMany({ projectId: '', query: '', stateCategory: '' })}
                 >
-                  필터 초기화
+                  모두 지우기
                 </Button>
               </>
             ) : undefined
@@ -200,108 +296,18 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
               }
             : {})}
         >
-          <WorkSearchInput
-            key={query}
-            initialQuery={query}
-            mode={mode}
-            onSubmit={(value) => replace('query', value)}
-          />
-          <Popover>
-            <PopoverTrigger
-              type="button"
-              aria-label={activeFilterCount ? `필터 ${activeFilterCount}개` : '필터'}
-              className={buttonVariants({ size: 'sm', variant: 'ghost' })}
-            >
-              <Filter data-icon="inline-start" />
-              필터
-              {activeFilterCount ? (
-                <span className="bg-secondary text-secondary-foreground min-w-5 rounded-full px-1.5 text-center text-xs">
-                  {activeFilterCount}
-                </span>
-              ) : null}
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-64 gap-2.5 p-3">
-              <PopoverTitle className="text-sm">내 작업 필터</PopoverTitle>
-              <div className="flex flex-col gap-1.5">
-                <span className="text-muted-foreground text-xs">상태</span>
-                <Select
-                  items={[
-                    { label: '모든 상태', value: '' },
-                    ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ label, value })),
-                  ]}
-                  value={selectedCategory}
-                  onValueChange={(value) => replace('stateCategory', value ?? '')}
-                >
-                  <SelectTrigger className="w-full" size="sm" aria-label="작업 상태 필터">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="">모든 상태</SelectItem>
-                      {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <span className="text-muted-foreground text-xs">프로젝트</span>
-                <Select
-                  items={[
-                    { label: '모든 프로젝트', value: '' },
-                    ...(projects.data?.items ?? []).map((project) => ({
-                      label: project.name,
-                      value: project.id,
-                    })),
-                  ]}
-                  value={projectId}
-                  onValueChange={(value) => replace('projectId', value ?? '')}
-                >
-                  <SelectTrigger className="w-full" size="sm" aria-label="프로젝트 필터">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="">모든 프로젝트</SelectItem>
-                      {(projects.data?.items ?? []).map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-              {activeFilterCount ? (
-                <Button
-                  className="w-full"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => replaceMany({ projectId: '', stateCategory: '' })}
-                >
-                  필터 초기화
-                </Button>
-              ) : null}
-            </PopoverContent>
-          </Popover>
-          <IssueListDisplayControls
-            density={density}
-            sort={sort}
-            sortDirection={sortDirection}
-            sortLabel="내 작업 정렬 기준"
-            sortOptions={[
-              { label: '실행 순서', value: 'executionOrder' },
-              { label: '우선순위', value: 'priority' },
-              { label: '생성일', value: 'createdAt' },
-              { label: '최근 수정일', value: 'updatedAt' },
-            ]}
-            onSortChange={(value) => replace('sort', value)}
-            onSortDirectionChange={(value) => replace('sortDirection', value)}
-            onDensityChange={(value) => replace('density', value)}
-          />
+          {searchOpen ? (
+            <WorkSearchInput
+              key={query}
+              autoFocus
+              initialQuery={query}
+              mode={mode}
+              onSubmit={(value) => {
+                replace('query', value);
+                setSearchOpen(false);
+              }}
+            />
+          ) : null}
         </SavedViewControls>
       ) : (
         <div className="border-b pb-3">
@@ -432,22 +438,25 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
         </ContentEmpty>
       ) : null}
       {works?.length ? (
-        <div>
-          <div
-            className={cn(
-              'text-muted-foreground grid gap-3 border-b px-3 py-2 text-xs font-medium max-md:hidden',
-              mode === 'my' ? MY_WORK_GRID_COLUMNS : TEAM_WORK_GRID_COLUMNS,
-            )}
-          >
-            {mode === 'my' ? (
-              <>
-                <span>우선순위</span>
-                <span>작업</span>
-                <span>프로젝트</span>
-                <span>상태</span>
-                <span />
-              </>
-            ) : (
+        mode === 'my' ? (
+          <ul className="!-mt-3">
+            {works.map((work) => (
+              <MyWorkListRow
+                key={work.id}
+                work={work}
+                density={density as 'compact' | 'comfortable'}
+                savedViewId={savedViewId}
+              />
+            ))}
+          </ul>
+        ) : (
+          <div>
+            <div
+              className={cn(
+                'text-muted-foreground grid gap-3 border-b px-3 py-2 text-xs font-medium max-md:hidden',
+                TEAM_WORK_GRID_COLUMNS,
+              )}
+            >
               <>
                 <span>팀 작업</span>
                 <span>상위 이슈</span>
@@ -458,27 +467,18 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
                 <span>주요 행동</span>
                 <span className="max-xl:hidden">업데이트</span>
               </>
-            )}
-          </div>
-          <ul>
-            {works.map((work) =>
-              mode === 'my' ? (
-                <MyWorkListRow
-                  key={work.id}
-                  work={work}
-                  density={density as 'compact' | 'comfortable'}
-                  savedViewId={savedViewId}
-                />
-              ) : (
+            </div>
+            <ul>
+              {works.map((work) => (
                 <TeamWorkListRow
                   key={work.id}
                   work={work}
                   density={density as 'compact' | 'comfortable'}
                 />
-              ),
-            )}
-          </ul>
-        </div>
+              ))}
+            </ul>
+          </div>
+        )
       ) : null}
       {mode === 'my' && myWorks.hasNextPage ? (
         <Button
@@ -489,15 +489,22 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           {myWorks.isFetchingNextPage ? '불러오는 중' : '작업 더 불러오기'}
         </Button>
       ) : null}
+      {mode === 'my' && totalCount !== undefined ? (
+        <p className="text-muted-foreground text-right text-xs">
+          총 {totalCount.toLocaleString('ko-KR')}개
+        </p>
+      ) : null}
     </section>
   );
 }
 
 function WorkSearchInput({
+  autoFocus = false,
   initialQuery,
   mode,
   onSubmit,
 }: {
+  autoFocus?: boolean;
   initialQuery: string;
   mode: IssueListMode;
   onSubmit: (value: string) => void;
@@ -515,7 +522,11 @@ function WorkSearchInput({
       <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
       <Input
         aria-label={mode === 'my' ? '내 작업 검색' : '팀 작업 검색'}
-        className="hover:bg-muted/50 focus-visible:bg-background h-10 border-transparent bg-transparent pl-8 shadow-none"
+        autoFocus={autoFocus}
+        className={cn(
+          'hover:bg-muted/50 focus-visible:bg-background border-transparent bg-transparent pl-8 shadow-none',
+          mode === 'my' ? 'h-8' : 'h-10',
+        )}
         placeholder={
           mode === 'my' ? '작업 코드, 이슈 또는 프로젝트 검색' : '작업 ID 또는 이슈 제목 검색'
         }

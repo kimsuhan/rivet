@@ -3,7 +3,7 @@
 import {
   Bookmark,
   Check,
-  MoreHorizontal,
+  EllipsisVertical,
   Pencil,
   Plus,
   RotateCcw,
@@ -52,6 +52,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
@@ -86,6 +87,7 @@ export function SavedViewControls({
   defaultConfiguration = {},
   resourceType,
   staleValueMessage,
+  toolbar,
 }: {
   activeFilters?: ReactNode;
   children?: ReactNode;
@@ -93,6 +95,7 @@ export function SavedViewControls({
   defaultConfiguration?: Record<string, unknown>;
   resourceType: 'ISSUES' | 'MY_WORK';
   staleValueMessage?: string;
+  toolbar?: ReactNode;
 }) {
   const pathname = usePathname() as '/issues' | '/my-issues';
   const router = useRouter();
@@ -107,7 +110,8 @@ export function SavedViewControls({
   const [renameOpen, setRenameOpen] = useState<SavedViewResponseDto | null>(null);
   const [rename, setRename] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<SavedViewResponseDto | null>(null);
-  const [manageOpen, setManageOpen] = useState(false);
+  const [desktopManageOpen, setDesktopManageOpen] = useState(false);
+  const [mobileManageOpen, setMobileManageOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const appliedViewId = useRef<string | null>(null);
   const initialViewResolved = useRef(false);
@@ -164,6 +168,140 @@ export function SavedViewControls({
     setCreateOpen(true);
   }
 
+  function saveSelected(): void {
+    if (!selected) return;
+
+    setError(null);
+    update.mutate(
+      {
+        savedViewId: selected.id,
+        data: { configuration, version: selected.version },
+      },
+      {
+        onError: (reason) => {
+          setError(errorMessage(reason));
+          refreshViews();
+        },
+        onSuccess: (view) => {
+          refreshViews();
+          apply(view);
+        },
+      },
+    );
+  }
+
+  function renderManagePopover({
+    align,
+    className,
+    open,
+    onOpenChange,
+  }: {
+    align: 'start' | 'end';
+    className?: string;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+  }): ReactNode {
+    if (!selected) return null;
+
+    return (
+      <Popover open={open} onOpenChange={onOpenChange}>
+        <PopoverTrigger
+          type="button"
+          aria-label={`${selected.name} 보기 관리`}
+          className={cn(buttonVariants({ size: 'icon-xs', variant: 'ghost' }), className)}
+        >
+          <EllipsisVertical />
+        </PopoverTrigger>
+        <PopoverContent align={align} className="w-52 gap-1 p-1">
+          <PopoverTitle className="px-2 py-1.5 text-sm">{selected.name}</PopoverTitle>
+          {dirty ? (
+            <>
+              <Button
+                className="w-full justify-start"
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  onOpenChange(false);
+                  apply(selected);
+                }}
+              >
+                <RotateCcw data-icon="inline-start" /> 초기화
+              </Button>
+              <Button
+                className="w-full justify-start"
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  onOpenChange(false);
+                  openCreate();
+                }}
+              >
+                <Save data-icon="inline-start" /> 새 보기로 저장
+              </Button>
+              <Separator className="my-1" />
+            </>
+          ) : null}
+          <Button
+            className="w-full justify-start"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              onOpenChange(false);
+              setRename(selected.name);
+              setRenameOpen(selected);
+            }}
+          >
+            <Pencil data-icon="inline-start" /> 이름 변경
+          </Button>
+          <Button
+            className="w-full justify-start"
+            size="sm"
+            variant="ghost"
+            disabled={busy || selected.isDefault}
+            title={selected.isDefault ? '이미 기본 보기입니다' : undefined}
+            onClick={() => {
+              setError(null);
+              setDefault.mutate(
+                { savedViewId: selected.id, data: { version: selected.version } },
+                {
+                  onError: (reason) => {
+                    setError(errorMessage(reason));
+                    refreshViews();
+                  },
+                  onSuccess: () => {
+                    onOpenChange(false);
+                    refreshViews();
+                  },
+                },
+              );
+            }}
+          >
+            {selected.isDefault ? (
+              <Check data-icon="inline-start" />
+            ) : (
+              <Star data-icon="inline-start" />
+            )}
+            {selected.isDefault ? '기본 보기' : '기본 보기로 지정'}
+          </Button>
+          <Button
+            className="w-full justify-start"
+            size="sm"
+            variant="destructive"
+            disabled={busy}
+            onClick={() => {
+              onOpenChange(false);
+              setDeleteTarget(selected);
+            }}
+          >
+            <Trash2 data-icon="inline-start" /> 보기 삭제
+          </Button>
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3 border-b pb-3" aria-label="저장된 보기">
       <div className="flex min-w-0 items-center justify-between gap-2">
@@ -185,38 +323,67 @@ export function SavedViewControls({
             전체
           </Link>
           {temporary ? (
-            <span
-              aria-current="page"
-              className={cn(
-                buttonVariants({ size: 'sm', variant: 'ghost' }),
-                'text-foreground after:bg-primary relative after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full',
-              )}
-            >
-              임시 보기
-              <span className="bg-primary size-1.5 rounded-full" aria-label="저장되지 않은 변경" />
-            </span>
-          ) : null}
-          {(views.data?.items ?? []).map((view) => (
-            <Link
-              key={view.id}
-              href={savedViewHref(pathname, view)}
-              aria-current={selected?.id === view.id ? 'page' : undefined}
-              className={cn(
-                buttonVariants({ size: 'sm', variant: 'ghost' }),
-                'text-muted-foreground relative max-w-48',
-                selected?.id === view.id &&
-                  'text-foreground after:bg-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full',
-              )}
-            >
-              {view.isDefault ? <Star data-icon="inline-start" aria-label="기본 보기" /> : null}
-              <span className="truncate">{view.name}</span>
-              {selected?.id === view.id && dirty ? (
+            <span className="flex shrink-0 items-center gap-0.5">
+              <span
+                aria-current="page"
+                className={cn(
+                  buttonVariants({ size: 'sm', variant: 'ghost' }),
+                  'text-foreground after:bg-primary relative after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full',
+                )}
+              >
+                임시 보기
                 <span
                   className="bg-primary size-1.5 rounded-full"
                   aria-label="저장되지 않은 변경"
                 />
+              </span>
+              <Button size="xs" disabled={busy} onClick={openCreate}>
+                저장
+              </Button>
+            </span>
+          ) : null}
+          {(views.data?.items ?? []).map((view) => (
+            <span key={view.id} className="flex shrink-0 items-center">
+              <Link
+                href={savedViewHref(pathname, view)}
+                aria-current={selected?.id === view.id ? 'page' : undefined}
+                className={cn(
+                  buttonVariants({ size: 'sm', variant: 'ghost' }),
+                  'text-muted-foreground relative max-w-48',
+                  selected?.id === view.id &&
+                    'text-foreground after:bg-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full',
+                )}
+              >
+                {view.isDefault ? <Star data-icon="inline-start" aria-label="기본 보기" /> : null}
+                <span className="truncate">{view.name}</span>
+                {selected?.id === view.id && dirty ? (
+                  <span
+                    className="bg-primary size-1.5 rounded-full"
+                    aria-label="저장되지 않은 변경"
+                  />
+                ) : null}
+              </Link>
+              {selected?.id === view.id ? (
+                <>
+                  {renderManagePopover({
+                    align: 'start',
+                    className: '-ml-1',
+                    open: desktopManageOpen,
+                    onOpenChange: setDesktopManageOpen,
+                  })}
+                  {dirty ? (
+                    <Button
+                      size="xs"
+                      disabled={busy}
+                      aria-label={`${selected.name} 변경 저장`}
+                      onClick={saveSelected}
+                    >
+                      저장
+                    </Button>
+                  ) : null}
+                </>
               ) : null}
-            </Link>
+            </span>
           ))}
           <Button className="text-muted-foreground" size="sm" variant="ghost" onClick={openCreate}>
             <Plus data-icon="inline-start" /> 새 보기
@@ -262,6 +429,28 @@ export function SavedViewControls({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          {toolbar}
+          {selected && dirty ? (
+            <Button
+              className="md:hidden"
+              size="icon-sm"
+              disabled={busy}
+              aria-label={`${selected.name} 변경 저장`}
+              onClick={saveSelected}
+            >
+              <Save />
+            </Button>
+          ) : temporary ? (
+            <Button
+              className="md:hidden"
+              size="icon-sm"
+              disabled={busy}
+              aria-label="임시 보기 저장"
+              onClick={openCreate}
+            >
+              <Save />
+            </Button>
+          ) : null}
           <Button
             className="md:hidden"
             size="icon-sm"
@@ -271,122 +460,20 @@ export function SavedViewControls({
           >
             <Plus />
           </Button>
-          {selected ? (
-            <Popover open={manageOpen} onOpenChange={setManageOpen}>
-              <PopoverTrigger
-                type="button"
-                aria-label={`${selected.name} 보기 관리`}
-                className={buttonVariants({ size: 'icon-sm', variant: 'ghost' })}
-              >
-                <MoreHorizontal />
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-52 gap-1 p-1">
-                <PopoverTitle className="px-2 py-1.5 text-sm">{selected.name}</PopoverTitle>
-                <Button
-                  className="w-full justify-start"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setManageOpen(false);
-                    setRename(selected.name);
-                    setRenameOpen(selected);
-                  }}
-                >
-                  <Pencil data-icon="inline-start" /> 이름 변경
-                </Button>
-                <Button
-                  className="w-full justify-start"
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy || selected.isDefault}
-                  title={selected.isDefault ? '이미 기본 보기입니다' : undefined}
-                  onClick={() => {
-                    setError(null);
-                    setDefault.mutate(
-                      { savedViewId: selected.id, data: { version: selected.version } },
-                      {
-                        onError: (reason) => {
-                          setError(errorMessage(reason));
-                          refreshViews();
-                        },
-                        onSuccess: () => {
-                          setManageOpen(false);
-                          refreshViews();
-                        },
-                      },
-                    );
-                  }}
-                >
-                  {selected.isDefault ? (
-                    <Check data-icon="inline-start" />
-                  ) : (
-                    <Star data-icon="inline-start" />
-                  )}
-                  {selected.isDefault ? '기본 보기' : '기본 보기로 지정'}
-                </Button>
-                <Button
-                  className="w-full justify-start"
-                  size="sm"
-                  variant="destructive"
-                  disabled={busy}
-                  onClick={() => {
-                    setManageOpen(false);
-                    setDeleteTarget(selected);
-                  }}
-                >
-                  <Trash2 data-icon="inline-start" /> 보기 삭제
-                </Button>
-              </PopoverContent>
-            </Popover>
-          ) : null}
+          {renderManagePopover({
+            align: 'end',
+            className: 'md:hidden',
+            open: mobileManageOpen,
+            onOpenChange: setMobileManageOpen,
+          })}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">{children}</div>
-        <div className="flex shrink-0 items-center gap-1">
-          {selected && dirty ? (
-            <>
-              <span className="text-muted-foreground mr-1 hidden text-xs sm:inline">변경됨</span>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => apply(selected)}>
-                <RotateCcw data-icon="inline-start" /> 초기화
-              </Button>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={openCreate}>
-                새 보기로 저장
-              </Button>
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => {
-                  setError(null);
-                  update.mutate(
-                    {
-                      savedViewId: selected.id,
-                      data: { configuration, version: selected.version },
-                    },
-                    {
-                      onError: (reason) => {
-                        setError(errorMessage(reason));
-                        refreshViews();
-                      },
-                      onSuccess: (view) => {
-                        refreshViews();
-                        apply(view);
-                      },
-                    },
-                  );
-                }}
-              >
-                <Save data-icon="inline-start" /> 변경 저장
-              </Button>
-            </>
-          ) : temporary ? (
-            <Button size="sm" variant="outline" disabled={busy} onClick={openCreate}>
-              <Save data-icon="inline-start" /> 보기 저장
-            </Button>
-          ) : null}
+      {children ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">{children}</div>
         </div>
-      </div>
+      ) : null}
 
       {activeFilters ? (
         <div className="flex flex-wrap items-center gap-1">{activeFilters}</div>
