@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowDownUp, Filter, ListTodo, Plus, Search, X } from 'lucide-react';
+import { ListTodo, Plus, Search, X } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
@@ -32,7 +32,7 @@ import { useTeamWorkPages } from './issue-list-queries';
 import { IssueListToolbar } from './issue-list-toolbar';
 import { MyWorkListRow } from './my-work-list-row';
 import { SavedViewControls } from './saved-view-controls';
-import { TEAM_WORK_GRID_COLUMNS, TeamWorkListRow } from './team-work-list-row';
+import { TeamWorkListRow } from './team-work-list-row';
 
 const CATEGORY_LABELS = {
   BACKLOG: '백로그',
@@ -117,15 +117,14 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
     router.push(`${pathname}${next.size ? `?${next.toString()}` : ''}`, { scroll: false });
   }
 
-  function reset() {
-    router.push(pathname, { scroll: false });
-  }
-
   const pending = teams.isPending || (mode === 'my' ? myWorks.isPending : teamWorks.isPending);
   const errored = teams.isError || (mode === 'my' ? myWorks.isError : teamWorks.isError);
   const selectedCategory = mode === 'my' && category === MY_WORK_CATEGORIES ? '' : category;
   const activeProjectName = projects.data?.items.find((project) => project.id === projectId)?.name;
-  const activeFilterCount = Number(Boolean(projectId)) + Number(Boolean(selectedCategory));
+  const activeFilterCount =
+    mode === 'my'
+      ? Number(Boolean(projectId)) + Number(Boolean(selectedCategory))
+      : Number(Boolean(selectedCategory));
   return (
     <section className="mx-auto max-w-[1440px] space-y-5" aria-labelledby="team-work-list-title">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -141,11 +140,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
         </div>
         <Link
           href={`${pathname}?create=1`}
-          className={cn(
-            buttonVariants({ variant: 'outline', size: 'sm' }),
-            'gap-2',
-            mode === 'my' && 'md:hidden',
-          )}
+          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-2 md:hidden')}
         >
           <Plus className="size-4" />
           이슈 만들기
@@ -310,89 +305,114 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           ) : null}
         </SavedViewControls>
       ) : (
-        <div className="border-b pb-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <WorkSearchInput
-              key={query}
-              initialQuery={query}
-              mode={mode}
-              onSubmit={(value) => replace('query', value)}
-            />
-            <Select
-              items={[
-                { label: '모든 상태', value: '' },
-                ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ label, value })),
-              ]}
-              value={category}
-              onValueChange={(value) => replace('stateCategory', value ?? '')}
-            >
-              <SelectTrigger size="sm" aria-label="작업 상태 필터">
-                <Filter data-icon="inline-start" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="">모든 상태</SelectItem>
-                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <Select
-              items={['priority', 'createdAt', 'updatedAt', 'status'].map((value) => ({
-                value,
-                label:
-                  {
-                    priority: '우선순위',
-                    createdAt: '생성일',
-                    updatedAt: '최근 수정일',
-                    status: '상태',
-                  }[value] ?? value,
-              }))}
-              value={sort}
-              onValueChange={(value) => replace('sort', value ?? '')}
-            >
-              <SelectTrigger size="sm" aria-label="정렬 기준">
-                <ArrowDownUp data-icon="inline-start" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {['priority', 'createdAt', 'updatedAt', 'status'].map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {
-                        {
-                          priority: '우선순위',
-                          createdAt: '생성일',
-                          updatedAt: '최근 수정일',
-                          status: '상태',
-                        }[value]
-                      }
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <Button
-              aria-label={sortDirection === 'desc' ? '내림차순 정렬' : '오름차순 정렬'}
-              onClick={() => replace('sortDirection', sortDirection === 'desc' ? 'asc' : 'desc')}
-              size="sm"
-              variant="ghost"
-            >
-              {sortDirection === 'desc' ? '↓' : '↑'}
-            </Button>
-            {query ||
-            searchParams.get('stateCategory') ||
-            searchParams.get('sort') ||
-            searchParams.get('sortDirection') ? (
-              <Button onClick={reset} size="sm" variant="ghost">
-                초기화
-              </Button>
+        <div className="flex flex-col gap-3 border-b pb-3">
+          <div className="flex min-h-8 min-w-0 items-center justify-end gap-1">
+            {searchOpen ? (
+              <div className="mr-auto min-w-0">
+                <WorkSearchInput
+                  key={query}
+                  autoFocus
+                  initialQuery={query}
+                  mode={mode}
+                  onSubmit={(value) => {
+                    replace('query', value);
+                    setSearchOpen(false);
+                  }}
+                />
+              </div>
             ) : null}
+            <IssueListToolbar
+              activeFilterCount={activeFilterCount}
+              filterTitle="팀 작업 필터"
+              query={query}
+              searchOpen={searchOpen}
+              onSearchOpenChange={setSearchOpen}
+              filterContent={
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-muted-foreground text-xs">상태</span>
+                    <Select
+                      items={[
+                        { label: '모든 상태', value: '' },
+                        ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({
+                          label,
+                          value,
+                        })),
+                      ]}
+                      value={selectedCategory}
+                      onValueChange={(value) => replace('stateCategory', value ?? '')}
+                    >
+                      <SelectTrigger className="w-full" size="sm" aria-label="작업 상태 필터">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="">모든 상태</SelectItem>
+                          {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {selectedCategory ? (
+                    <Button
+                      className="w-full"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => replace('stateCategory', '')}
+                    >
+                      필터 초기화
+                    </Button>
+                  ) : null}
+                </>
+              }
+              sortAndViewControls={
+                <IssueListDisplayControls
+                  density={density}
+                  sort={sort}
+                  sortDirection={sortDirection}
+                  sortLabel="팀 작업 정렬 기준"
+                  sortOptions={[
+                    { label: '우선순위', value: 'priority' },
+                    { label: '생성일', value: 'createdAt' },
+                    { label: '최근 수정일', value: 'updatedAt' },
+                    { label: '상태', value: 'status' },
+                  ]}
+                  onSortChange={(value) => replace('sort', value)}
+                  onSortDirectionChange={(value) => replace('sortDirection', value)}
+                  onDensityChange={(value) => replace('density', value)}
+                />
+              }
+            />
           </div>
+          {query || selectedCategory ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {query ? (
+                <Button size="xs" variant="secondary" onClick={() => replace('query', '')}>
+                  검색: {query}
+                  <X data-icon="inline-end" aria-label="검색어 제거" />
+                </Button>
+              ) : null}
+              {selectedCategory ? (
+                <Button size="xs" variant="secondary" onClick={() => replace('stateCategory', '')}>
+                  상태:{' '}
+                  {CATEGORY_LABELS[selectedCategory as keyof typeof CATEGORY_LABELS] ??
+                    selectedCategory}
+                  <X data-icon="inline-end" aria-label="상태 필터 제거" />
+                </Button>
+              ) : null}
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => replaceMany({ query: '', stateCategory: '' })}
+              >
+                모두 지우기
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
       {pending ? <ContentLoading label="팀 작업을 불러오는 중입니다" /> : null}
@@ -450,34 +470,15 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
             ))}
           </ul>
         ) : (
-          <div>
-            <div
-              className={cn(
-                'text-muted-foreground grid gap-3 border-b px-3 py-2 text-xs font-medium max-md:hidden',
-                TEAM_WORK_GRID_COLUMNS,
-              )}
-            >
-              <>
-                <span>팀 작업</span>
-                <span>상위 이슈</span>
-                <span className="max-lg:hidden">프로젝트 · 참여 팀</span>
-                <span>상태</span>
-                <span>담당자</span>
-                <span className="max-lg:hidden">우선순위</span>
-                <span>주요 행동</span>
-                <span className="max-xl:hidden">업데이트</span>
-              </>
-            </div>
-            <ul>
-              {works.map((work) => (
-                <TeamWorkListRow
-                  key={work.id}
-                  work={work}
-                  density={density as 'compact' | 'comfortable'}
-                />
-              ))}
-            </ul>
-          </div>
+          <ul className="!-mt-3">
+            {works.map((work) => (
+              <TeamWorkListRow
+                key={work.id}
+                work={work}
+                density={density as 'compact' | 'comfortable'}
+              />
+            ))}
+          </ul>
         )
       ) : null}
       {mode === 'my' && myWorks.hasNextPage ? (
@@ -489,7 +490,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           {myWorks.isFetchingNextPage ? '불러오는 중' : '작업 더 불러오기'}
         </Button>
       ) : null}
-      {mode === 'my' && totalCount !== undefined ? (
+      {totalCount !== undefined ? (
         <p className="text-muted-foreground text-right text-xs">
           총 {totalCount.toLocaleString('ko-KR')}개
         </p>
@@ -523,10 +524,7 @@ function WorkSearchInput({
       <Input
         aria-label={mode === 'my' ? '내 작업 검색' : '팀 작업 검색'}
         autoFocus={autoFocus}
-        className={cn(
-          'hover:bg-muted/50 focus-visible:bg-background border-transparent bg-transparent pl-8 shadow-none',
-          mode === 'my' ? 'h-8' : 'h-10',
-        )}
+        className="hover:bg-muted/50 focus-visible:bg-background h-8 border-transparent bg-transparent pl-8 shadow-none"
         placeholder={
           mode === 'my' ? '작업 코드, 이슈 또는 프로젝트 검색' : '작업 ID 또는 이슈 제목 검색'
         }

@@ -160,7 +160,9 @@ function NotificationRow({
                   size="sm"
                 />
               ) : null}
-              <span className="truncate">{actorName}</span>
+              <span className="min-w-0 flex-1 truncate" title={actorName}>
+                {actorName}
+              </span>
               <time dateTime={notification.createdAt} className="tabular-nums">
                 {format.dateTime(createdAt, {
                   day: 'numeric',
@@ -172,7 +174,7 @@ function NotificationRow({
             </span>
           </span>
 
-          <span className="text-muted-foreground hidden w-40 shrink-0 items-center gap-2 text-xs sm:flex">
+          <span className="text-muted-foreground hidden min-w-40 shrink-0 items-center gap-2 text-xs sm:flex">
             {notification.actor ? (
               <UserAvatar
                 avatarFileId={notification.actor.avatarFileId}
@@ -180,7 +182,9 @@ function NotificationRow({
                 size="sm"
               />
             ) : null}
-            <span className="min-w-0 flex-1 truncate">{actorName}</span>
+            <span className="max-w-24 truncate md:max-w-48" title={actorName}>
+              {actorName}
+            </span>
             <time dateTime={notification.createdAt} className="shrink-0 tabular-nums">
               {format.dateTime(createdAt, {
                 day: 'numeric',

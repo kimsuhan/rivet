@@ -19,12 +19,12 @@ vi.mock('@/i18n/navigation', () => ({
 
 vi.mock('./issue-attribute-presentation', () => ({
   CompactAssigneeTrigger: () => <button type="button">담당자</button>,
-  PriorityDisplay: () => <span>우선순위</span>,
+  PriorityDisplay: ({ iconOnly }: { iconOnly?: boolean }) => (
+    <span data-icon-only={String(Boolean(iconOnly))}>우선순위</span>
+  ),
   StatusTrigger: () => <button type="button">상태</button>,
 }));
 
-vi.mock('./team-work-completion-modal', () => ({ TeamWorkCompletionModal: () => null }));
-vi.mock('./team-work-primary-action', () => ({ TeamWorkPrimaryAction: () => null }));
 vi.mock('./use-team-work-inline-mutation', () => ({
   useTeamWorkInlineMutation: () => ({ isPending: false, isError: false, mutate: vi.fn() }),
 }));
@@ -36,6 +36,8 @@ describe('TeamWorkListRow', () => {
       identifier: 'WEB-12',
       issue: {
         identifier: 'ISSUE-9',
+        priority: 'HIGH',
+        project: { name: 'Rivet' },
         title: '팀 작업 상세',
       },
       projectTeam: {
@@ -67,5 +69,14 @@ describe('TeamWorkListRow', () => {
     expect(comfortableRow?.className).toContain('min-h-16');
     expect(comfortableRow?.className).toContain('py-2.5');
     expect(compactRow?.className).not.toEqual(comfortableRow?.className);
+    expect(compactContainer.querySelector('[data-icon-only="true"]')).not.toBeNull();
+    expect(comfortableContainer.querySelector('[data-icon-only="true"]')).not.toBeNull();
+    expect(compactContainer).toHaveTextContent('WEB-12팀 작업 상세');
+    expect(compactContainer).toHaveTextContent('Rivet·ISSUE-9');
+    expect(compactContainer).toHaveTextContent('상태');
+    expect(compactContainer).toHaveTextContent('담당자');
+    expect(compactContainer).not.toHaveTextContent('완료');
+    expect(compactContainer).not.toHaveTextContent('PLAN');
+    expect(compactContainer).not.toHaveTextContent('기획 팀');
   });
 });
