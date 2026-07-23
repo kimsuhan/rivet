@@ -135,6 +135,12 @@ export class InvitationPreviewResponseDto {
 
   @ApiProperty({ format: 'date-time' })
   expiresAt!: string;
+
+  @ApiProperty({
+    description: '유효한 초대 이메일의 계정 상태에 따른 다음 인증 행동',
+    enum: ['LOGIN', 'SIGN_UP'],
+  })
+  nextAction!: 'LOGIN' | 'SIGN_UP';
 }
 
 export class InvitationContinuationResponseDto extends InvitationPreviewResponseDto {

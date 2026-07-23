@@ -29,7 +29,7 @@ export default async function SignUpPage({
     <SignUpScreen
       forgotPasswordHref="/forgot-password"
       isInvitationSignUp={query.invitation === '1'}
-      loginHref="/login"
+      loginHref={query.invitation === '1' ? '/login?invitation=1' : '/login'}
       labels={{
         productName: t('productName'),
         title: t('title'),
@@ -40,8 +40,10 @@ export default async function SignUpPage({
         invitationDescription: t('invitationDescription'),
         invitationEmailDescription: t('invitationEmailDescription'),
         invitationEmailFixed: t('invitationEmailFixed'),
+        invitationCompleting: t('invitationCompleting'),
         invitationErrorTitle: t('invitationErrorTitle'),
         invitationErrorDescription: t('invitationErrorDescription'),
+        invitationSubmit: t('invitationSubmit'),
         password: t('password'),
         confirmPassword: t('confirmPassword'),
         passwordHelp: t('passwordHelp'),
@@ -54,9 +56,6 @@ export default async function SignUpPage({
         acceptedTitle: t('acceptedTitle'),
         acceptedDescription: t('acceptedDescription'),
         acceptedEmailLabel: t('acceptedEmailLabel'),
-        invitationAcceptedTitle: t('invitationAcceptedTitle'),
-        invitationAcceptedDescription: t('invitationAcceptedDescription'),
-        continueToLogin: t('continueToLogin'),
         resend: t('resend'),
         resending: t('resending'),
         resentTitle: t('resentTitle'),

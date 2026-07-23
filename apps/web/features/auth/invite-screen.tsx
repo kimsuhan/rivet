@@ -16,7 +16,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { useRouter } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 
 import { AuthFrame, type AuthFrameLabels, AuthLink } from './auth-frame';
 
@@ -38,13 +38,14 @@ type InviteLabels = AuthFrameLabels & {
   loginLink: string;
   loginRequiredDescription: string;
   loginRequiredTitle: string;
-  continuationDescription: string;
   redirecting: string;
   retry: string;
   sessionErrorDescription: string;
   sessionErrorTitle: string;
   sessionLoading: string;
   signUpLink: string;
+  signUpRequiredDescription: string;
+  signUpRequiredTitle: string;
   unexpectedDescription: string;
   unexpectedTitle: string;
   usedDescription: string;
@@ -183,34 +184,31 @@ export function InviteScreen({
     }
 
     accept.reset();
-    accept.mutate(
-      undefined,
-      {
-        onSuccess: async () => {
-          setIsLeaving(true);
-          await queryClient.invalidateQueries({
-            queryKey: getAuthControllerGetSessionQueryKey(),
-          });
-          router.replace('/my-issues');
-        },
-        onError: async (error) => {
-          if (
-            error.body?.code !== 'TOKEN_ALREADY_USED' &&
-            error.body?.code !== 'WORKSPACE_LIMIT_REACHED'
-          ) {
-            return;
-          }
-
-          setIsRecoveringSession(true);
-          const refreshedSession = await session.refetch();
-          if (refreshedSession.data?.authenticated && refreshedSession.data.membership) {
-            goToWorkspace();
-            return;
-          }
-          setIsRecoveringSession(false);
-        },
+    accept.mutate(undefined, {
+      onSuccess: async () => {
+        setIsLeaving(true);
+        await queryClient.invalidateQueries({
+          queryKey: getAuthControllerGetSessionQueryKey(),
+        });
+        router.replace('/my-issues');
       },
-    );
+      onError: async (error) => {
+        if (
+          error.body?.code !== 'TOKEN_ALREADY_USED' &&
+          error.body?.code !== 'WORKSPACE_LIMIT_REACHED'
+        ) {
+          return;
+        }
+
+        setIsRecoveringSession(true);
+        const refreshedSession = await session.refetch();
+        if (refreshedSession.data?.authenticated && refreshedSession.data.membership) {
+          goToWorkspace();
+          return;
+        }
+        setIsRecoveringSession(false);
+      },
+    });
   };
 
   const recoverSession = async () => {
@@ -260,8 +258,7 @@ export function InviteScreen({
     const code = preview?.error?.body?.code;
     const isUsed = code === 'TOKEN_ALREADY_USED';
     const isExpired = code === 'TOKEN_EXPIRED';
-    const isInvalid =
-      code === 'TOKEN_INVALID' || code === 'INVITATION_CONTINUATION_NOT_FOUND';
+    const isInvalid = code === 'TOKEN_INVALID' || code === 'INVITATION_CONTINUATION_NOT_FOUND';
     const isUnexpected = Boolean(preview?.error && !isUsed && !isExpired && !isInvalid);
 
     return (
@@ -378,16 +375,28 @@ export function InviteScreen({
         ) : !authenticatedSession ? (
           <>
             <Alert>
-              <AlertTitle>{labels.loginRequiredTitle}</AlertTitle>
-              <AlertDescription className="flex flex-col gap-2">
-                <span>{labels.loginRequiredDescription}</span>
-                <span>{labels.continuationDescription}</span>
+              <AlertTitle>
+                {preview.data.nextAction === 'SIGN_UP'
+                  ? labels.signUpRequiredTitle
+                  : labels.loginRequiredTitle}
+              </AlertTitle>
+              <AlertDescription>
+                {preview.data.nextAction === 'SIGN_UP'
+                  ? labels.signUpRequiredDescription
+                  : labels.loginRequiredDescription}
               </AlertDescription>
             </Alert>
-            <p className="text-muted-foreground flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm">
-              <AuthLink href={loginHref}>{labels.loginLink}</AuthLink>
-              <AuthLink href={invitationSignUpHref}>{labels.signUpLink}</AuthLink>
-            </p>
+            <Button
+              render={
+                <Link
+                  href={preview.data.nextAction === 'SIGN_UP' ? invitationSignUpHref : loginHref}
+                />
+              }
+              size="lg"
+              className="w-full"
+            >
+              {preview.data.nextAction === 'SIGN_UP' ? labels.signUpLink : labels.loginLink}
+            </Button>
           </>
         ) : hasWorkspace ? (
           <>

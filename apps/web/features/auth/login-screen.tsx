@@ -9,6 +9,7 @@ import {
   getAuthControllerGetSessionQueryKey,
   setCsrfToken,
   useAuthControllerLogin,
+  useInvitationAuthControllerAccept,
 } from '@rivet/api-client';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -35,6 +36,7 @@ type LoginLabels = AuthFrameLabels & {
   passwordRequired: string;
   invalidCredentialsTitle: string;
   invalidCredentialsDescription: string;
+  invitationCompleting: string;
   emailNotVerifiedTitle: string;
   emailNotVerifiedDescription: string;
   verifyEmailLink: string;
@@ -50,12 +52,14 @@ export function LoginScreen({
   signUpHref,
   verifyEmailHref,
   returnTo,
+  acceptInvitationOnLogin = false,
 }: {
   labels: LoginLabels;
   forgotPasswordHref: string;
   signUpHref: string;
   verifyEmailHref: string;
   returnTo?: string | null;
+  acceptInvitationOnLogin?: boolean;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -68,22 +72,37 @@ export function LoginScreen({
     ),
     defaultValues: { email: '', password: '' },
   });
+  const acceptInvitation = useInvitationAuthControllerAccept();
   const login = useAuthControllerLogin({
     mutation: {
       onSuccess: (session) => {
         form.clearErrors();
         setCsrfToken(session.csrfToken);
         queryClient.setQueryData(getAuthControllerGetSessionQueryKey(), session);
+        if (acceptInvitationOnLogin && session.onboardingStep === 'ACCEPT_INVITATION') {
+          acceptInvitation.mutate(undefined, {
+            onSuccess: async () => {
+              await queryClient.invalidateQueries({
+                queryKey: getAuthControllerGetSessionQueryKey(),
+              });
+              router.replace('/my-issues');
+            },
+            onError: () => router.replace('/invite'),
+          });
+          return;
+        }
         router.replace(
           session.onboardingStep === 'ACCEPT_INVITATION'
             ? '/invite'
             : session.onboardingStep === 'CREATE_WORKSPACE'
-            ? '/onboarding/workspace'
-            : session.onboardingStep === 'CREATE_TEAM'
-              ? '/onboarding/team'
-              : returnTo?.startsWith('/') && !returnTo.startsWith('//') && !returnTo.includes('\\')
-                ? returnTo
-                : '/my-issues',
+              ? '/onboarding/workspace'
+              : session.onboardingStep === 'CREATE_TEAM'
+                ? '/onboarding/team'
+                : returnTo?.startsWith('/') &&
+                    !returnTo.startsWith('//') &&
+                    !returnTo.includes('\\')
+                  ? returnTo
+                  : '/my-issues',
         );
       },
       onError: (error) => {
@@ -101,6 +120,17 @@ export function LoginScreen({
   });
 
   const errorCode = login.error?.body.code;
+
+  if (acceptInvitation.isPending) {
+    return (
+      <AuthFrame labels={labels}>
+        <div role="status" className="text-muted-foreground flex items-center justify-center gap-2">
+          <Spinner aria-hidden="true" />
+          {labels.invitationCompleting}
+        </div>
+      </AuthFrame>
+    );
+  }
 
   return (
     <AuthFrame labels={labels}>

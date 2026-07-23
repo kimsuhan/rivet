@@ -10316,13 +10316,22 @@
           "expiresAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "nextAction": {
+            "enum": [
+              "LOGIN",
+              "SIGN_UP"
+            ],
+            "type": "string",
+            "description": "유효한 초대 이메일의 계정 상태에 따른 다음 인증 행동"
           }
         },
         "required": [
           "workspaceName",
           "emailMasked",
           "invitedByDisplayName",
-          "expiresAt"
+          "expiresAt",
+          "nextAction"
         ]
       },
       "InvitationContinuationResponseDto": {
@@ -10344,6 +10353,14 @@
             "type": "string",
             "format": "date-time"
           },
+          "nextAction": {
+            "enum": [
+              "LOGIN",
+              "SIGN_UP"
+            ],
+            "type": "string",
+            "description": "유효한 초대 이메일의 계정 상태에 따른 다음 인증 행동"
+          },
           "email": {
             "type": "string",
             "description": "유효한 초대 진행 상태에서 가입·로그인 계정을 고정하는 원문 이메일",
@@ -10355,6 +10372,7 @@
           "emailMasked",
           "invitedByDisplayName",
           "expiresAt",
+          "nextAction",
           "email"
         ]
       },
