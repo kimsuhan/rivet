@@ -26,11 +26,46 @@ const ISSUE_STATUSES = new Set([
   'PAUSED',
   'CANCELED',
 ]);
+const ISSUE_PRIORITIES = new Set(['NONE', 'LOW', 'MEDIUM', 'HIGH', 'URGENT']);
 const STATE_CATEGORIES = new Set(['BACKLOG', 'UNSTARTED', 'STARTED', 'COMPLETED', 'CANCELED']);
 const ISSUE_SORTS = new Set(['updatedAt', 'createdAt', 'priority', 'status', 'progress']);
 const MY_WORK_SORTS = new Set(['executionOrder', 'priority', 'createdAt', 'updatedAt', 'status']);
 const SORT_DIRECTIONS = new Set(['asc', 'desc']);
 const MAX_ISSUE_SORTS = 3;
+const ISSUE_VISIBLE_FIELDS = [
+  'project',
+  'labels',
+  'status',
+  'priority',
+  'teamWorkCount',
+  'progress',
+  'createdBy',
+  'createdAt',
+  'updatedAt',
+] as const;
+const MY_WORK_VISIBLE_FIELDS = [
+  'project',
+  'team',
+  'labels',
+  'status',
+  'priority',
+  'createdAt',
+  'updatedAt',
+] as const;
+const ISSUE_GROUP_FIELDS = new Set([
+  'assigneeMembershipId',
+  'projectId',
+  'status',
+  'priority',
+  'createdByMembershipId',
+]);
+const MY_WORK_GROUP_FIELDS = new Set([
+  'projectId',
+  'teamId',
+  'stateCategory',
+  'workflowStateId',
+  'priority',
+]);
 
 type NormalizedConfiguration = Record<string, SavedViewConfigurationValue>;
 
@@ -64,14 +99,77 @@ function normalizeName(value: string): { name: string; normalizedName: string } 
   return { name, normalizedName: name.toLocaleLowerCase('ko-KR') };
 }
 
+function normalizeCsv(
+  value: unknown,
+  message: string,
+  valid: (candidate: string) => boolean,
+): string {
+  if (typeof value !== 'string') invalidConfiguration(message);
+  const candidates = [
+    ...new Set(
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (candidates.length === 0 || candidates.some((candidate) => !valid(candidate))) {
+    invalidConfiguration(message);
+  }
+  return candidates.sort().join(',');
+}
+
+function normalizeVisibleFields(value: unknown, resourceType: ResourceType): string[] {
+  const allowed = new Set(
+    resourceType === 'ISSUES' ? ISSUE_VISIBLE_FIELDS : MY_WORK_VISIBLE_FIELDS,
+  );
+  if (
+    !Array.isArray(value) ||
+    value.some((field) => typeof field !== 'string' || !allowed.has(field as never))
+  ) {
+    invalidConfiguration('표시 필드 구성을 저장할 수 없습니다.');
+  }
+  const selected = new Set(value as string[]);
+  return [...allowed].filter((field) => selected.has(field));
+}
+
 function normalizeConfiguration(
   resourceType: ResourceType,
   value: Record<string, unknown>,
 ): NormalizedConfiguration {
   const allowed =
     resourceType === 'ISSUES'
-      ? new Set(['query', 'projectId', 'status', 'sort', 'sortDirection', 'sorts', 'density'])
-      : new Set(['query', 'projectId', 'stateCategory', 'sort', 'sortDirection', 'density']);
+      ? new Set([
+          'query',
+          'projectId',
+          'status',
+          'priority',
+          'labelId',
+          'createdByMembershipId',
+          'assigneeMembershipId',
+          'unassigned',
+          'sort',
+          'sortDirection',
+          'sorts',
+          'density',
+          'visibleFields',
+          'groupBy',
+          'subGroupBy',
+        ])
+      : new Set([
+          'query',
+          'projectId',
+          'teamId',
+          'workflowStateId',
+          'stateCategory',
+          'priority',
+          'sort',
+          'sortDirection',
+          'density',
+          'visibleFields',
+          'groupBy',
+          'subGroupBy',
+        ]);
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) invalidConfiguration('지원하지 않는 보기 설정이 포함되어 있습니다.');
   }
@@ -85,35 +183,56 @@ function normalizeConfiguration(
     if (query) configuration.query = query;
   }
   if (value.projectId !== undefined) {
-    if (typeof value.projectId !== 'string' || !isUUID(value.projectId, '4')) {
-      invalidConfiguration('프로젝트 필터 형식이 올바르지 않습니다.');
-    }
-    configuration.projectId = value.projectId.toLowerCase();
+    configuration.projectId = normalizeCsv(
+      value.projectId,
+      '프로젝트 필터 형식이 올바르지 않습니다.',
+      (candidate) => isUUID(candidate, '4'),
+    ).toLowerCase();
   }
   if (value.status !== undefined) {
-    if (
-      resourceType !== 'ISSUES' ||
-      typeof value.status !== 'string' ||
-      !ISSUE_STATUSES.has(value.status)
-    ) {
+    if (resourceType !== 'ISSUES') {
       invalidConfiguration('이슈 상태 필터를 저장할 수 없습니다.');
     }
-    configuration.status = value.status;
+    configuration.status = normalizeCsv(
+      value.status,
+      '이슈 상태 필터를 저장할 수 없습니다.',
+      (candidate) => ISSUE_STATUSES.has(candidate),
+    );
   }
   if (value.stateCategory !== undefined) {
-    if (resourceType !== 'MY_WORK' || typeof value.stateCategory !== 'string') {
+    if (resourceType !== 'MY_WORK') {
       invalidConfiguration('작업 상태 필터를 저장할 수 없습니다.');
     }
-    const categories = [
-      ...new Set(value.stateCategory.split(',').filter((item) => STATE_CATEGORIES.has(item))),
-    ].sort();
-    if (
-      categories.length === 0 ||
-      categories.join(',') !== value.stateCategory.split(',').filter(Boolean).sort().join(',')
-    ) {
-      invalidConfiguration('작업 상태 필터를 저장할 수 없습니다.');
+    configuration.stateCategory = normalizeCsv(
+      value.stateCategory,
+      '작업 상태 필터를 저장할 수 없습니다.',
+      (candidate) => STATE_CATEGORIES.has(candidate),
+    );
+  }
+  if (value.priority !== undefined) {
+    configuration.priority = normalizeCsv(
+      value.priority,
+      '우선순위 필터를 저장할 수 없습니다.',
+      (candidate) => ISSUE_PRIORITIES.has(candidate),
+    );
+  }
+  for (const key of [
+    'labelId',
+    'createdByMembershipId',
+    'assigneeMembershipId',
+    'teamId',
+    'workflowStateId',
+  ] as const) {
+    if (value[key] === undefined) continue;
+    configuration[key] = normalizeCsv(value[key], 'ID 필터를 저장할 수 없습니다.', (candidate) =>
+      isUUID(candidate, '4'),
+    ).toLowerCase();
+  }
+  if (value.unassigned !== undefined) {
+    if (resourceType !== 'ISSUES' || value.unassigned !== 'true') {
+      invalidConfiguration('담당자 없음 필터를 저장할 수 없습니다.');
     }
-    configuration.stateCategory = categories.join(',');
+    configuration.unassigned = 'true';
   }
   if (resourceType === 'ISSUES') {
     if (
@@ -183,6 +302,27 @@ function normalizeConfiguration(
     if (value.density !== 'comfortable' && value.density !== 'compact')
       invalidConfiguration('표시 옵션을 저장할 수 없습니다.');
     configuration.density = value.density;
+  }
+  if (value.visibleFields !== undefined) {
+    configuration.visibleFields = normalizeVisibleFields(value.visibleFields, resourceType);
+  }
+  const groupFields = resourceType === 'ISSUES' ? ISSUE_GROUP_FIELDS : MY_WORK_GROUP_FIELDS;
+  if (value.groupBy !== undefined) {
+    if (typeof value.groupBy !== 'string' || !groupFields.has(value.groupBy)) {
+      invalidConfiguration('메인 그룹 구성을 저장할 수 없습니다.');
+    }
+    configuration.groupBy = value.groupBy;
+  }
+  if (value.subGroupBy !== undefined) {
+    if (
+      typeof value.subGroupBy !== 'string' ||
+      !groupFields.has(value.subGroupBy) ||
+      configuration.groupBy === undefined ||
+      configuration.groupBy === value.subGroupBy
+    ) {
+      invalidConfiguration('서브 그룹 구성을 저장할 수 없습니다.');
+    }
+    configuration.subGroupBy = value.subGroupBy;
   }
   return configuration;
 }

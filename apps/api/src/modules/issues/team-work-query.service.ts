@@ -1,14 +1,19 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 
-import { Prisma, StateCategory } from '@rivet/database';
+import { IssuePriority, Prisma, StateCategory } from '@rivet/database';
 
 import { ApiError } from '../../common/errors/api-error';
-import type { TeamWorkListQueryDto } from './dto/issue-request.dto';
-import type { TeamWorkDetailResponseDto, TeamWorkListResponseDto } from './dto/issue-response.dto';
+import type { TeamWorkGroupQueryDto, TeamWorkListQueryDto } from './dto/issue-request.dto';
+import type {
+  ListGroupSummaryResponseDto,
+  TeamWorkDetailResponseDto,
+  TeamWorkListResponseDto,
+} from './dto/issue-response.dto';
 import type { IssueMutationContext } from './issue.context';
 import { issueResourceNotFound } from './issue.errors';
 import { IssueRepository } from './issue.repository';
+import type { TeamWorkGroupField } from './issue-list.policy';
 import { toTeamWorkDetail, toTeamWorkSummary } from './issue-response.mapper';
 
 function values(value: string | undefined): string[] {
@@ -56,6 +61,100 @@ function encodeCursor(id: string): string {
   return Buffer.from(JSON.stringify({ id }), 'utf8').toString('base64url');
 }
 
+function teamWorkWhere(
+  context: IssueMutationContext,
+  query: TeamWorkListQueryDto | TeamWorkGroupQueryDto,
+): Prisma.TeamWorkWhereInput {
+  const teamIds = values(query.teamId);
+  const projectIds = values(query.projectId);
+  const projectTeamIds = values(query.projectTeamId);
+  const workflowStateIds = values(query.workflowStateId);
+  const categories = values(query.stateCategory);
+  const priorities = values(query.priority);
+  const assignees = values(query.assigneeMembershipId).map((value) =>
+    value === 'me' ? context.membershipId : value,
+  );
+  if (
+    [...teamIds, ...projectIds, ...projectTeamIds, ...workflowStateIds, ...assignees].some(
+      (id) => !isUUID(id, '4'),
+    )
+  ) {
+    throw new ApiError({
+      code: 'INVALID_QUERY',
+      message: '팀 작업 필터가 올바르지 않습니다.',
+      status: HttpStatus.BAD_REQUEST,
+    });
+  }
+  if (
+    categories.some(
+      (category) => !Object.values(StateCategory).includes(category as StateCategory),
+    ) ||
+    priorities.some((priority) => !Object.values(IssuePriority).includes(priority as IssuePriority))
+  ) {
+    throw new ApiError({
+      code: 'INVALID_QUERY',
+      message: '상태 또는 우선순위 필터가 올바르지 않습니다.',
+      status: HttpStatus.BAD_REQUEST,
+    });
+  }
+  return {
+    deletedAt: null,
+    issue: {
+      deletedAt: null,
+      ...(priorities.length ? { priority: { in: priorities as IssuePriority[] } } : {}),
+      ...(projectIds.length ? { projectId: { in: projectIds } } : {}),
+    },
+    workspaceId: context.workspaceId,
+    ...(query.query
+      ? {
+          OR: [
+            { identifier: { contains: query.query, mode: 'insensitive' } },
+            { issue: { identifier: { contains: query.query, mode: 'insensitive' } } },
+            { issue: { title: { contains: query.query, mode: 'insensitive' } } },
+            { issue: { project: { name: { contains: query.query, mode: 'insensitive' } } } },
+          ],
+        }
+      : {}),
+    ...(query.unassigned === 'true'
+      ? { assigneeMembershipId: null }
+      : assignees.length
+        ? { assigneeMembershipId: { in: assignees } }
+        : {}),
+    ...(projectTeamIds.length ? { projectTeamId: { in: projectTeamIds } } : {}),
+    ...(teamIds.length ? { teamId: { in: teamIds } } : {}),
+    ...(categories.length
+      ? { workflowState: { category: { in: categories as StateCategory[] } } }
+      : {}),
+    ...(workflowStateIds.length ? { workflowStateId: { in: workflowStateIds } } : {}),
+  };
+}
+
+function teamWorkGroupValue(
+  row: Awaited<ReturnType<IssueRepository['listTeamWorkGroupRows']>>[number],
+  field: TeamWorkGroupField,
+): { imageFileId: string | null; label: string; value: string } {
+  switch (field) {
+    case 'priority':
+      return { imageFileId: null, label: row.issue.priority, value: row.issue.priority };
+    case 'projectId':
+      return {
+        imageFileId: row.issue.project.logoFileId,
+        label: row.issue.project.name,
+        value: row.issue.project.id,
+      };
+    case 'stateCategory':
+      return {
+        imageFileId: null,
+        label: row.workflowState.category,
+        value: row.workflowState.category,
+      };
+    case 'teamId':
+      return { imageFileId: null, label: row.projectTeam.team.name, value: row.teamId };
+    case 'workflowStateId':
+      return { imageFileId: null, label: row.workflowState.name, value: row.workflowState.id };
+  }
+}
+
 @Injectable()
 export class TeamWorkQueryService {
   constructor(private readonly repository: IssueRepository) {}
@@ -64,65 +163,7 @@ export class TeamWorkQueryService {
     context: IssueMutationContext,
     query: TeamWorkListQueryDto,
   ): Promise<TeamWorkListResponseDto> {
-    const teamIds = values(query.teamId);
-    const projectIds = values(query.projectId);
-    const projectTeamIds = values(query.projectTeamId);
-    const workflowStateIds = values(query.workflowStateId);
-    const categories = values(query.stateCategory);
-    const assignees = values(query.assigneeMembershipId).map((value) =>
-      value === 'me' ? context.membershipId : value,
-    );
-    if (
-      [...teamIds, ...projectIds, ...projectTeamIds, ...workflowStateIds, ...assignees].some(
-        (id) => !isUUID(id, '4'),
-      )
-    ) {
-      throw new ApiError({
-        code: 'INVALID_QUERY',
-        message: '팀 작업 필터가 올바르지 않습니다.',
-        status: HttpStatus.BAD_REQUEST,
-      });
-    }
-    if (
-      categories.some(
-        (category) => !Object.values(StateCategory).includes(category as StateCategory),
-      )
-    ) {
-      throw new ApiError({
-        code: 'INVALID_QUERY',
-        message: '상태 범주 필터가 올바르지 않습니다.',
-        status: HttpStatus.BAD_REQUEST,
-      });
-    }
-    const where: Prisma.TeamWorkWhereInput = {
-      deletedAt: null,
-      issue: {
-        deletedAt: null,
-        ...(projectIds.length ? { projectId: { in: projectIds } } : {}),
-      },
-      workspaceId: context.workspaceId,
-      ...(query.query
-        ? {
-            OR: [
-              { identifier: { contains: query.query, mode: 'insensitive' } },
-              { issue: { identifier: { contains: query.query, mode: 'insensitive' } } },
-              { issue: { title: { contains: query.query, mode: 'insensitive' } } },
-              { issue: { project: { name: { contains: query.query, mode: 'insensitive' } } } },
-            ],
-          }
-        : {}),
-      ...(query.unassigned === 'true'
-        ? { assigneeMembershipId: null }
-        : assignees.length
-          ? { assigneeMembershipId: { in: assignees } }
-          : {}),
-      ...(projectTeamIds.length ? { projectTeamId: { in: projectTeamIds } } : {}),
-      ...(teamIds.length ? { teamId: { in: teamIds } } : {}),
-      ...(categories.length
-        ? { workflowState: { category: { in: categories as StateCategory[] } } }
-        : {}),
-      ...(workflowStateIds.length ? { workflowStateId: { in: workflowStateIds } } : {}),
-    };
+    const where = teamWorkWhere(context, query);
     const rows = await this.repository.listTeamWorkOrderRows(where);
     const sort = query.sort ?? 'updatedAt';
     const direction = query.sortDirection ?? 'desc';
@@ -171,6 +212,58 @@ export class TeamWorkQueryService {
       nextCursor:
         start + page.length < rows.length && page.length ? encodeCursor(page.at(-1)!.id) : null,
       totalCount: await this.repository.countTeamWorks(where),
+    };
+  }
+
+  async groups(
+    context: IssueMutationContext,
+    query: TeamWorkGroupQueryDto,
+  ): Promise<ListGroupSummaryResponseDto> {
+    if (query.groupBy === query.subGroupBy) {
+      throw new ApiError({
+        code: 'INVALID_QUERY',
+        message: '메인 그룹과 서브 그룹은 서로 달라야 합니다.',
+        status: HttpStatus.BAD_REQUEST,
+      });
+    }
+    const rows = await this.repository.listTeamWorkGroupRows(teamWorkWhere(context, query));
+    const groups: ListGroupSummaryResponseDto['groups'] = [];
+    const groupsByValue = new Map<string, ListGroupSummaryResponseDto['groups'][number]>();
+    const subGroupsByMain = new Map<
+      string,
+      Map<string, ListGroupSummaryResponseDto['groups'][number]['subGroups'][number]>
+    >();
+    for (const row of rows) {
+      const main = teamWorkGroupValue(row, query.groupBy);
+      let group = groupsByValue.get(main.value);
+      if (!group) {
+        group = { ...main, count: 0, subGroups: [] };
+        groupsByValue.set(main.value, group);
+        groups.push(group);
+      }
+      group.count += 1;
+      if (query.subGroupBy) {
+        const sub = teamWorkGroupValue(row, query.subGroupBy);
+        let subGroups = subGroupsByMain.get(main.value);
+        if (!subGroups) {
+          subGroups = new Map();
+          subGroupsByMain.set(main.value, subGroups);
+        }
+        const existing = subGroups.get(sub.value);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          const created = { ...sub, count: 1 };
+          subGroups.set(sub.value, created);
+          group.subGroups.push(created);
+        }
+      }
+    }
+    return {
+      groupBy: query.groupBy,
+      groups,
+      subGroupBy: query.subGroupBy ?? null,
+      totalCount: rows.length,
     };
   }
 

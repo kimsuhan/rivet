@@ -4,11 +4,12 @@ import { isUUID } from 'class-validator';
 import { IssuePriority, IssueStatus, Prisma } from '@rivet/database';
 
 import { ApiError } from '../../common/errors/api-error';
-import type { IssueListQueryDto } from './dto/issue-request.dto';
+import type { IssueGroupQueryDto, IssueListQueryDto } from './dto/issue-request.dto';
 import type {
   IssueDetailResponseDto,
   IssueListResponseDto,
   IssueSummaryResponseDto,
+  ListGroupSummaryResponseDto,
   TeamWorkListResponseDto,
   TeamWorkSummaryResponseDto,
 } from './dto/issue-response.dto';
@@ -35,6 +36,97 @@ function csvValues(value: string | undefined): string[] {
   ];
 }
 
+function parseIssueListFilters(
+  workspaceId: string,
+  query: IssueListQueryDto | IssueGroupQueryDto,
+): { filters: IssueListFilters; where: Prisma.IssueWhereInput } {
+  const projectIds = csvValues(query.projectId);
+  const statuses = csvValues(query.status);
+  const priorities = csvValues(query.priority);
+  const labelIds = csvValues(query.labelId);
+  const creatorIds = csvValues(query.createdByMembershipId);
+  const assigneeIds = csvValues(query.assigneeMembershipId);
+  if (
+    projectIds.some((id) => !isUUID(id, '4')) ||
+    labelIds.some((id) => !isUUID(id, '4')) ||
+    creatorIds.some((id) => !isUUID(id, '4')) ||
+    assigneeIds.some((id) => !isUUID(id, '4'))
+  ) {
+    throw new ApiError({
+      code: 'INVALID_QUERY',
+      message: 'ID 필터가 올바르지 않습니다.',
+      status: HttpStatus.BAD_REQUEST,
+    });
+  }
+  if (
+    statuses.some((value) => !Object.values(IssueStatus).includes(value as IssueStatus)) ||
+    priorities.some((value) => !Object.values(IssuePriority).includes(value as IssuePriority))
+  ) {
+    throw new ApiError({
+      code: 'INVALID_QUERY',
+      message: '상태 또는 우선순위 필터가 올바르지 않습니다.',
+      status: HttpStatus.BAD_REQUEST,
+    });
+  }
+  const unassigned = query.unassigned === 'true';
+  const filters: IssueListFilters = {
+    assigneeIds,
+    ...(query.createdFrom ? { createdFrom: new Date(query.createdFrom) } : {}),
+    ...(query.createdTo ? { createdTo: new Date(query.createdTo) } : {}),
+    creatorIds,
+    labelIds,
+    priorities: priorities as IssuePriority[],
+    projectIds,
+    ...(query.query ? { query: query.query } : {}),
+    statuses: statuses as IssueStatus[],
+    unassigned,
+    ...(query.updatedFrom ? { updatedFrom: new Date(query.updatedFrom) } : {}),
+    ...(query.updatedTo ? { updatedTo: new Date(query.updatedTo) } : {}),
+    workspaceId,
+  };
+  const assignmentOr: Prisma.IssueWhereInput[] = [];
+  if (assigneeIds.length) {
+    assignmentOr.push({
+      teamWorks: {
+        some: { assigneeMembershipId: { in: assigneeIds }, deletedAt: null },
+      },
+    });
+  }
+  if (unassigned) {
+    assignmentOr.push(
+      { teamWorks: { none: { deletedAt: null } } },
+      { teamWorks: { some: { assigneeMembershipId: null, deletedAt: null } } },
+    );
+  }
+  const where: Prisma.IssueWhereInput = {
+    ...(assignmentOr.length ? { AND: [{ OR: assignmentOr }] } : {}),
+    createdAt: {
+      ...(filters.createdFrom ? { gte: filters.createdFrom } : {}),
+      ...(filters.createdTo ? { lte: filters.createdTo } : {}),
+    },
+    deletedAt: null,
+    updatedAt: {
+      ...(filters.updatedFrom ? { gte: filters.updatedFrom } : {}),
+      ...(filters.updatedTo ? { lte: filters.updatedTo } : {}),
+    },
+    workspaceId,
+    ...(creatorIds.length ? { createdByMembershipId: { in: creatorIds } } : {}),
+    ...(labelIds.length ? { labels: { some: { labelId: { in: labelIds } } } } : {}),
+    ...(priorities.length ? { priority: { in: priorities as IssuePriority[] } } : {}),
+    ...(projectIds.length ? { projectId: { in: projectIds } } : {}),
+    ...(statuses.length ? { status: { in: statuses as IssueStatus[] } } : {}),
+    ...(query.query
+      ? {
+          OR: [
+            { identifier: { contains: query.query, mode: 'insensitive' as const } },
+            { title: { contains: query.query, mode: 'insensitive' as const } },
+          ],
+        }
+      : {}),
+  };
+  return { filters, where };
+}
+
 @Injectable()
 export class IssueQueryService {
   constructor(
@@ -43,70 +135,7 @@ export class IssueQueryService {
   ) {}
 
   async list(workspaceId: string, query: IssueListQueryDto): Promise<IssueListResponseDto> {
-    const projectIds = csvValues(query.projectId);
-    const statuses = csvValues(query.status);
-    const priorities = csvValues(query.priority);
-    const labelIds = csvValues(query.labelId);
-    const creatorIds = csvValues(query.createdByMembershipId);
-    if (
-      projectIds.some((id) => !isUUID(id, '4')) ||
-      labelIds.some((id) => !isUUID(id, '4')) ||
-      creatorIds.some((id) => !isUUID(id, '4'))
-    ) {
-      throw new ApiError({
-        code: 'INVALID_QUERY',
-        message: 'ID 필터가 올바르지 않습니다.',
-        status: HttpStatus.BAD_REQUEST,
-      });
-    }
-    if (
-      statuses.some((value) => !Object.values(IssueStatus).includes(value as IssueStatus)) ||
-      priorities.some((value) => !Object.values(IssuePriority).includes(value as IssuePriority))
-    ) {
-      throw new ApiError({
-        code: 'INVALID_QUERY',
-        message: '상태 또는 우선순위 필터가 올바르지 않습니다.',
-        status: HttpStatus.BAD_REQUEST,
-      });
-    }
-    const filters: IssueListFilters = {
-      ...(query.createdFrom ? { createdFrom: new Date(query.createdFrom) } : {}),
-      ...(query.createdTo ? { createdTo: new Date(query.createdTo) } : {}),
-      creatorIds,
-      labelIds,
-      priorities: priorities as IssuePriority[],
-      projectIds,
-      ...(query.query ? { query: query.query } : {}),
-      statuses: statuses as IssueStatus[],
-      ...(query.updatedFrom ? { updatedFrom: new Date(query.updatedFrom) } : {}),
-      ...(query.updatedTo ? { updatedTo: new Date(query.updatedTo) } : {}),
-      workspaceId,
-    };
-    const where: Prisma.IssueWhereInput = {
-      createdAt: {
-        ...(filters.createdFrom ? { gte: filters.createdFrom } : {}),
-        ...(filters.createdTo ? { lte: filters.createdTo } : {}),
-      },
-      deletedAt: null,
-      updatedAt: {
-        ...(filters.updatedFrom ? { gte: filters.updatedFrom } : {}),
-        ...(filters.updatedTo ? { lte: filters.updatedTo } : {}),
-      },
-      workspaceId,
-      ...(creatorIds.length ? { createdByMembershipId: { in: creatorIds } } : {}),
-      ...(labelIds.length ? { labels: { some: { labelId: { in: labelIds } } } } : {}),
-      ...(priorities.length ? { priority: { in: priorities as IssuePriority[] } } : {}),
-      ...(projectIds.length ? { projectId: { in: projectIds } } : {}),
-      ...(statuses.length ? { status: { in: statuses as IssueStatus[] } } : {}),
-      ...(query.query
-        ? {
-            OR: [
-              { identifier: { contains: query.query, mode: 'insensitive' as const } },
-              { title: { contains: query.query, mode: 'insensitive' as const } },
-            ],
-          }
-        : {}),
-    };
+    const { filters, where } = parseIssueListFilters(workspaceId, query);
     const sorts = parseIssueSorts(query);
     const filterFingerprint = issueListFilterFingerprint(filters);
     const cursor = parseIssueListCursor(query.cursor, sorts, filterFingerprint);
@@ -129,6 +158,58 @@ export class IssueQueryService {
       nextCursor: hasNext
         ? encodeIssueListCursor(pageOrderRows.at(-1)!, sorts, filterFingerprint)
         : null,
+      totalCount,
+    };
+  }
+
+  async groups(
+    workspaceId: string,
+    query: IssueGroupQueryDto,
+  ): Promise<ListGroupSummaryResponseDto> {
+    if (query.groupBy === query.subGroupBy) {
+      throw new ApiError({
+        code: 'INVALID_QUERY',
+        message: '메인 그룹과 서브 그룹은 서로 달라야 합니다.',
+        status: HttpStatus.BAD_REQUEST,
+      });
+    }
+    const { filters, where } = parseIssueListFilters(workspaceId, query);
+    const [mainRows, subRows, totalCount] = await Promise.all([
+      this.listRepository.groupRows(filters, query.groupBy, undefined),
+      query.subGroupBy
+        ? this.listRepository.groupRows(filters, query.groupBy, query.subGroupBy)
+        : Promise.resolve([]),
+      this.listRepository.count(where),
+    ]);
+    const groups: ListGroupSummaryResponseDto['groups'] = [];
+    const groupsByValue = new Map<string, ListGroupSummaryResponseDto['groups'][number]>();
+    for (const row of mainRows) {
+      const count = Number(row.count);
+      const group: ListGroupSummaryResponseDto['groups'][number] = {
+        count,
+        imageFileId: row.mainImageFileId,
+        label: row.mainLabel,
+        subGroups: [],
+        value: row.mainValue,
+      };
+      groupsByValue.set(row.mainValue, group);
+      groups.push(group);
+    }
+    for (const row of subRows) {
+      const group = groupsByValue.get(row.mainValue);
+      if (group && row.subValue !== null && row.subLabel !== null) {
+        group.subGroups.push({
+          count: Number(row.count),
+          imageFileId: row.subImageFileId,
+          label: row.subLabel,
+          value: row.subValue,
+        });
+      }
+    }
+    return {
+      groupBy: query.groupBy,
+      groups,
+      subGroupBy: query.subGroupBy ?? null,
       totalCount,
     };
   }

@@ -4,29 +4,31 @@ import { CircleDot, Plus, Search, X } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
-import { useProjectsControllerList } from '@rivet/api-client';
+import { type IssuesControllerGroupsParams, useProjectsControllerList } from '@rivet/api-client';
 
 import { ContentEmpty } from '@/components/states/content-empty';
 import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
+import { GroupedIssueList } from './grouped-issue-lists';
+import { IssueAssigneeFilter } from './issue-assignee-filter';
+import { IssueFilterMenu } from './issue-filter-menu';
 import { getIssuePagesQueryKey, useIssuePages } from './issue-list-queries';
 import { IssueListRow } from './issue-list-row';
 import { IssueListToolbar } from './issue-list-toolbar';
 import { issueSortsFromSearchParams, serializeIssueSorts } from './issue-multi-sort';
 import { IssueMultiSortControls } from './issue-multi-sort-controls';
+import {
+  ISSUE_GROUP_OPTIONS,
+  ISSUE_VISIBLE_FIELD_OPTIONS,
+  parseCsv,
+  serializeCsv,
+  visibleFieldsFromSearch,
+} from './issue-view-configuration';
 import { issueWorkHref } from './issue-work-routing';
 import { SavedViewControls } from './saved-view-controls';
 
@@ -48,10 +50,19 @@ export function FeatureIssueListScreen() {
   const query = searchParams.get('query') ?? '';
   const savedViewId = searchParams.get('view');
   const projectId = searchParams.get('projectId') ?? '';
+  const projectIds = parseCsv(projectId);
   const status = searchParams.get('status') ?? '';
+  const statuses = parseCsv(status);
+  const assigneeMembershipId = searchParams.get('assigneeMembershipId') ?? '';
+  const assigneeMembershipIds = parseCsv(assigneeMembershipId);
+  const unassigned = searchParams.get('unassigned') === 'true';
   const sorts = issueSortsFromSearchParams(searchParams);
   const serializedSorts = serializeIssueSorts(sorts);
   const density = searchParams.get('density') ?? 'comfortable';
+  const visibleFieldsParam = searchParams.get('visibleFields');
+  const visibleFields = visibleFieldsFromSearch(visibleFieldsParam, 'ISSUES');
+  const groupBy = searchParams.get('groupBy') ?? '';
+  const subGroupBy = searchParams.get('subGroupBy') ?? '';
   const defaultConfiguration = {
     density: 'comfortable',
     sorts: [{ direction: 'desc', field: 'updatedAt' }],
@@ -60,22 +71,32 @@ export function FeatureIssueListScreen() {
     ...(query ? { query } : {}),
     ...(projectId ? { projectId } : {}),
     ...(status ? { status } : {}),
+    ...(assigneeMembershipId ? { assigneeMembershipId } : {}),
+    ...(unassigned ? { unassigned: 'true' } : {}),
     sorts,
     density,
+    ...(visibleFieldsParam !== null ? { visibleFields } : {}),
+    ...(groupBy ? { groupBy } : {}),
+    ...(subGroupBy ? { subGroupBy } : {}),
   };
   const issueParams = {
     ...(projectId ? { projectId } : {}),
     ...(query ? { query } : {}),
     ...(status ? { status: status as never } : {}),
+    ...(assigneeMembershipId ? { assigneeMembershipId } : {}),
+    ...(unassigned ? { unassigned: 'true' as const } : {}),
     sorts: serializedSorts,
   };
-  const issues = useIssuePages(issueParams);
+  const issues = useIssuePages(issueParams, !groupBy);
   const issueQueryKey = getIssuePagesQueryKey(issueParams);
   const issueItems = issues.data?.pages.flatMap((page) => page.items) ?? [];
   const totalCount = issues.data?.pages[0]?.totalCount;
   const projects = useProjectsControllerList(
     { includeArchived: false, sort: 'updatedAt', sortDirection: 'desc' },
     { query: { retry: false } },
+  );
+  const projectNames = new Map(
+    (projects.data?.items ?? []).map((project) => [project.id, project.name]),
   );
 
   function replace(key: string, value: string) {
@@ -94,8 +115,10 @@ export function FeatureIssueListScreen() {
     router.push(`${pathname}${next.size ? `?${next.toString()}` : ''}`, { scroll: false });
   }
 
-  const activeProjectName = projects.data?.items.find((project) => project.id === projectId)?.name;
-  const activeFilterCount = Number(Boolean(projectId)) + Number(Boolean(status));
+  const activeFilterCount =
+    Number(projectIds.length > 0) +
+    Number(statuses.length > 0) +
+    Number(assigneeMembershipIds.length > 0 || unassigned);
 
   return (
     <section className="mx-auto max-w-[1440px] space-y-5" aria-labelledby="issues-title">
@@ -129,65 +152,47 @@ export function FeatureIssueListScreen() {
             onSearchOpenChange={setSearchOpen}
             filterContent={
               <>
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-muted-foreground text-xs">프로젝트</span>
-                  <Select
-                    items={[
-                      { label: '모든 프로젝트', value: '' },
-                      ...(projects.data?.items ?? []).map((project) => ({
-                        label: project.name,
-                        value: project.id,
-                      })),
-                    ]}
-                    value={projectId}
-                    onValueChange={(value) => replace('projectId', value ?? '')}
-                  >
-                    <SelectTrigger className="w-full" size="sm" aria-label="프로젝트 필터">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="">모든 프로젝트</SelectItem>
-                        {(projects.data?.items ?? []).map((project) => (
-                          <SelectItem key={project.id} value={project.id}>
-                            {project.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-muted-foreground text-xs">상태</span>
-                  <Select
-                    items={[
-                      { label: '모든 상태', value: '' },
-                      ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ label, value })),
-                    ]}
-                    value={status}
-                    onValueChange={(value) => replace('status', value ?? '')}
-                  >
-                    <SelectTrigger className="w-full" size="sm" aria-label="상태 필터">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="">모든 상태</SelectItem>
-                        {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <IssueFilterMenu
+                  emptyLabel="선택할 프로젝트가 없습니다."
+                  label="프로젝트"
+                  onChange={(values) => replace('projectId', serializeCsv(values))}
+                  options={(projects.data?.items ?? []).map((project) => ({
+                    id: project.id,
+                    label: project.name,
+                  }))}
+                  selected={projectIds}
+                  variant="compact"
+                />
+                <IssueFilterMenu
+                  emptyLabel="선택할 상태가 없습니다."
+                  label="상태"
+                  onChange={(values) => replace('status', serializeCsv(values))}
+                  options={Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label }))}
+                  selected={statuses}
+                  variant="compact"
+                />
+                <IssueAssigneeFilter
+                  selected={{ membershipIds: assigneeMembershipIds, unassigned }}
+                  onChange={(selection) =>
+                    replaceMany({
+                      assigneeMembershipId: serializeCsv(selection.membershipIds),
+                      unassigned: selection.unassigned ? 'true' : '',
+                    })
+                  }
+                />
                 {activeFilterCount ? (
                   <Button
                     className="w-full"
                     size="sm"
                     variant="ghost"
-                    onClick={() => replaceMany({ projectId: '', status: '' })}
+                    onClick={() =>
+                      replaceMany({
+                        assigneeMembershipId: '',
+                        projectId: '',
+                        status: '',
+                        unassigned: '',
+                      })
+                    }
                   >
                     필터 초기화
                   </Button>
@@ -197,6 +202,9 @@ export function FeatureIssueListScreen() {
             sortAndViewControls={
               <IssueMultiSortControls
                 density={density}
+                fieldOptions={ISSUE_VISIBLE_FIELD_OPTIONS}
+                groupBy={groupBy}
+                groupOptions={ISSUE_GROUP_OPTIONS}
                 sorts={sorts}
                 onSortsChange={(value) =>
                   replaceMany({
@@ -206,12 +214,19 @@ export function FeatureIssueListScreen() {
                   })
                 }
                 onDensityChange={(value) => replace('density', value)}
+                onGroupByChange={(value) => replace('groupBy', value)}
+                onSubGroupByChange={(value) => replace('subGroupBy', value)}
+                onVisibleFieldsChange={(value) =>
+                  replace('visibleFields', serializeCsv(value) || 'none')
+                }
+                subGroupBy={subGroupBy}
+                visibleFields={visibleFields}
               />
             }
           />
         }
         activeFilters={
-          query || projectId || status ? (
+          query || projectId || status || assigneeMembershipId || unassigned ? (
             <>
               {query ? (
                 <Button size="xs" variant="secondary" onClick={() => replace('query', '')}>
@@ -221,30 +236,54 @@ export function FeatureIssueListScreen() {
               ) : null}
               {projectId ? (
                 <Button size="xs" variant="secondary" onClick={() => replace('projectId', '')}>
-                  프로젝트: {activeProjectName ?? '접근할 수 없음'}
+                  프로젝트:{' '}
+                  {projectIds.length === 1
+                    ? (projectNames.get(projectIds[0]!) ?? '접근할 수 없음')
+                    : `${projectIds.length}개`}
                   <X data-icon="inline-end" aria-label="프로젝트 필터 제거" />
                 </Button>
               ) : null}
               {status ? (
                 <Button size="xs" variant="secondary" onClick={() => replace('status', '')}>
-                  상태: {STATUS_LABELS[status as keyof typeof STATUS_LABELS] ?? status}
+                  상태:{' '}
+                  {statuses.length === 1
+                    ? (STATUS_LABELS[statuses[0] as keyof typeof STATUS_LABELS] ?? statuses[0])
+                    : `${statuses.length}개`}
                   <X data-icon="inline-end" aria-label="상태 필터 제거" />
+                </Button>
+              ) : null}
+              {assigneeMembershipId || unassigned ? (
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => replaceMany({ assigneeMembershipId: '', unassigned: '' })}
+                >
+                  담당자: {assigneeMembershipIds.length + Number(unassigned)}개 조건
+                  <X data-icon="inline-end" aria-label="담당자 필터 제거" />
                 </Button>
               ) : null}
               <Button
                 size="xs"
                 variant="ghost"
-                onClick={() => replaceMany({ projectId: '', query: '', status: '' })}
+                onClick={() =>
+                  replaceMany({
+                    assigneeMembershipId: '',
+                    projectId: '',
+                    query: '',
+                    status: '',
+                    unassigned: '',
+                  })
+                }
               >
                 모두 지우기
               </Button>
             </>
           ) : undefined
         }
-        {...(projectId && projects.data && !activeProjectName
+        {...(projectIds.length && projects.data && projectIds.some((id) => !projectNames.has(id))
           ? {
               staleValueMessage:
-                '저장된 보기의 프로젝트가 보관되었거나 접근 권한이 없습니다. 필터를 수정한 뒤 보기를 다시 저장하세요.',
+                '저장된 보기의 프로젝트 일부가 보관되었거나 접근 권한이 없습니다. 필터를 수정한 뒤 보기를 다시 저장하세요.',
             }
           : {})}
       >
@@ -259,8 +298,20 @@ export function FeatureIssueListScreen() {
           />
         ) : null}
       </SavedViewControls>
-      {issues.isPending ? <ContentLoading label="이슈를 불러오는 중입니다" /> : null}
-      {issues.isError && !issues.data ? (
+      {groupBy ? (
+        <GroupedIssueList
+          baseParams={issueParams}
+          density={density as 'compact' | 'comfortable'}
+          groupBy={groupBy as IssuesControllerGroupsParams['groupBy']}
+          savedViewId={savedViewId}
+          {...(subGroupBy
+            ? { subGroupBy: subGroupBy as IssuesControllerGroupsParams['subGroupBy'] }
+            : {})}
+          visibleFields={visibleFields}
+        />
+      ) : null}
+      {!groupBy && issues.isPending ? <ContentLoading label="이슈를 불러오는 중입니다" /> : null}
+      {!groupBy && issues.isError && !issues.data ? (
         <ContentError
           title="이슈를 불러오지 못했습니다"
           description="입력한 필터는 유지했습니다."
@@ -268,7 +319,7 @@ export function FeatureIssueListScreen() {
           onRetry={() => void issues.refetch()}
         />
       ) : null}
-      {issues.data && issueItems.length === 0 ? (
+      {!groupBy && issues.data && issueItems.length === 0 ? (
         <ContentEmpty
           align="center"
           icon={CircleDot}
@@ -276,7 +327,7 @@ export function FeatureIssueListScreen() {
           description="필터를 바꾸거나 새 이슈를 만들어 보세요."
         />
       ) : null}
-      {issueItems.length ? (
+      {!groupBy && issueItems.length ? (
         <ul className="!-mt-3">
           {issueItems.map((issue) => (
             <IssueListRow
@@ -285,11 +336,12 @@ export function FeatureIssueListScreen() {
               issue={issue}
               queryKey={issueQueryKey}
               density={density as 'compact' | 'comfortable'}
+              visibleFields={visibleFields}
             />
           ))}
         </ul>
       ) : null}
-      {issues.isFetchNextPageError ? (
+      {!groupBy && issues.isFetchNextPageError ? (
         <ContentError
           title="다음 이슈를 불러오지 못했습니다"
           description="이미 불러온 이슈는 유지했습니다."
@@ -297,7 +349,7 @@ export function FeatureIssueListScreen() {
           onRetry={() => void issues.fetchNextPage()}
         />
       ) : null}
-      {issues.hasNextPage ? (
+      {!groupBy && issues.hasNextPage ? (
         <div className="flex justify-center">
           <Button
             variant="outline"
@@ -308,7 +360,7 @@ export function FeatureIssueListScreen() {
           </Button>
         </div>
       ) : null}
-      {totalCount !== undefined ? (
+      {!groupBy && totalCount !== undefined ? (
         <p className="text-muted-foreground text-right text-xs">
           총 {totalCount.toLocaleString('ko-KR')}개
         </p>

@@ -4,13 +4,10 @@ import {
   ArrowDown,
   ArrowDownUp,
   ArrowUp,
-  Check,
   ChevronDown,
   ChevronUp,
   Plus,
   RotateCcw,
-  Rows3,
-  Settings2,
   Trash2,
 } from 'lucide-react';
 
@@ -33,6 +30,7 @@ import {
   type IssueSortField,
   MAX_ISSUE_SORTS,
 } from './issue-multi-sort';
+import { ListViewConfigurationControls } from './list-view-configuration-controls';
 
 const SORT_OPTIONS: Array<{ label: string; value: IssueSortField }> = [
   { label: '우선순위', value: 'priority' },
@@ -59,17 +57,31 @@ function move(sorts: readonly IssueSortClause[], from: number, to: number): Issu
 
 export function IssueMultiSortControls({
   density,
+  fieldOptions = [],
+  groupBy = '',
+  groupOptions = [],
   onDensityChange,
+  onGroupByChange = () => undefined,
   onSortsChange,
+  onSubGroupByChange = () => undefined,
+  onVisibleFieldsChange = () => undefined,
   sorts,
+  subGroupBy = '',
+  visibleFields = [],
 }: {
   density: string;
+  fieldOptions?: ReadonlyArray<{ label: string; value: string }>;
+  groupBy?: string;
+  groupOptions?: ReadonlyArray<{ label: string; value: string }>;
   onDensityChange: (value: 'comfortable' | 'compact') => void;
+  onGroupByChange?: (value: string) => void;
   onSortsChange: (value: IssueSortClause[]) => void;
+  onSubGroupByChange?: (value: string) => void;
+  onVisibleFieldsChange?: (value: string[]) => void;
   sorts: readonly IssueSortClause[];
+  subGroupBy?: string;
+  visibleFields?: readonly string[];
 }) {
-  const compact = density === 'compact';
-
   function addSort(): void {
     const field = ISSUE_SORT_FIELDS.find(
       (candidate) => !sorts.some((sort) => sort.field === candidate),
@@ -235,46 +247,18 @@ export function IssueMultiSortControls({
           </div>
         </PopoverContent>
       </Popover>
-      <Popover>
-        <PopoverTrigger
-          type="button"
-          aria-label={`보기 설정: ${compact ? '촘촘히 보기' : '여유 보기'}`}
-          title="보기 설정"
-          className={buttonVariants({
-            size: 'icon-sm',
-            variant: compact ? 'secondary' : 'ghost',
-          })}
-        >
-          <Settings2 />
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-56 gap-2 p-3">
-          <PopoverTitle className="text-sm">보기 설정</PopoverTitle>
-          <div className="space-y-1" aria-label="목록 밀도">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="w-full justify-start"
-              onClick={() => onDensityChange('comfortable')}
-            >
-              <Rows3 data-icon="inline-start" />
-              여유 보기
-              {!compact ? <Check className="ml-auto" aria-label="선택됨" /> : null}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="w-full justify-start"
-              onClick={() => onDensityChange('compact')}
-            >
-              <Rows3 data-icon="inline-start" className="scale-y-75" />
-              촘촘히 보기
-              {compact ? <Check className="ml-auto" aria-label="선택됨" /> : null}
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
+      <ListViewConfigurationControls
+        density={density}
+        fieldOptions={fieldOptions}
+        groupBy={groupBy}
+        groupOptions={groupOptions}
+        onDensityChange={onDensityChange}
+        onGroupByChange={onGroupByChange}
+        onSubGroupByChange={onSubGroupByChange}
+        onVisibleFieldsChange={onVisibleFieldsChange}
+        subGroupBy={subGroupBy}
+        visibleFields={visibleFields}
+      />
     </div>
   );
 }

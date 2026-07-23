@@ -3,7 +3,9 @@
 import { ChevronDown, type LucideIcon, SlidersHorizontal, Tag } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
@@ -23,10 +25,15 @@ export function IssueFilterMenu({
   disabled = false,
   emptyLabel,
   label,
+  hasMore = false,
+  loadingMore = false,
   onChange,
+  onLoadMore,
+  onSearchChange,
   options,
   presentation = 'details',
   selected,
+  search,
   triggerClassName,
   variant = 'default',
 }: {
@@ -35,10 +42,15 @@ export function IssueFilterMenu({
   disabled?: boolean;
   emptyLabel: string;
   label: string;
+  hasMore?: boolean;
+  loadingMore?: boolean;
   onChange: (selected: string[]) => void;
+  onLoadMore?: () => void;
+  onSearchChange?: (value: string) => void;
   options: IssueFilterOption[];
   presentation?: 'details' | 'popover';
   selected: string[];
+  search?: string;
   triggerClassName?: string;
   variant?: 'compact' | 'default';
 }) {
@@ -77,57 +89,82 @@ export function IssueFilterMenu({
     enabledOptions[nextIndex]?.focus();
   }
 
-  const optionsContent =
-    options.length === 0 ? (
-      <p className="text-muted-foreground px-2 py-2 text-sm">{emptyLabel}</p>
-    ) : (
-      <ul className="max-h-64 overflow-y-auto" onKeyDown={handleOptionsKeyDown}>
-        {options.map((option) => {
-          const checked = selectedSet.has(option.id);
-          return (
-            <li key={option.id}>
-              <label
-                className={cn(
-                  'hover:bg-accent flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm lg:min-h-9',
-                  checked && 'bg-accent/60',
-                  option.disabled && 'text-muted-foreground cursor-not-allowed opacity-60',
-                )}
-              >
-                <Checkbox
-                  checked={checked}
-                  disabled={disabled || option.disabled}
-                  aria-disabled={disabled || option.disabled}
-                  onCheckedChange={(nextChecked) =>
-                    onChange(
-                      nextChecked
-                        ? [...selected, option.id]
-                        : selected.filter((value) => value !== option.id),
-                    )
-                  }
-                />
-                {option.swatch ? (
-                  <span
-                    aria-hidden="true"
-                    className="size-2.5 rounded-full border"
-                    style={{ backgroundColor: option.swatch }}
+  const optionsContent = (
+    <>
+      {onSearchChange ? (
+        <div className="p-1">
+          <Input
+            aria-label={`${label} 검색`}
+            className="h-8"
+            placeholder={`${label} 검색`}
+            value={search ?? ''}
+            onChange={(event) => onSearchChange(event.target.value)}
+          />
+        </div>
+      ) : null}
+      {options.length === 0 ? (
+        <p className="text-muted-foreground px-2 py-2 text-sm">{emptyLabel}</p>
+      ) : (
+        <ul className="max-h-64 overflow-y-auto" onKeyDown={handleOptionsKeyDown}>
+          {options.map((option) => {
+            const checked = selectedSet.has(option.id);
+            return (
+              <li key={option.id}>
+                <label
+                  className={cn(
+                    'hover:bg-accent flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm lg:min-h-9',
+                    checked && 'bg-accent/60',
+                    option.disabled && 'text-muted-foreground cursor-not-allowed opacity-60',
+                  )}
+                >
+                  <Checkbox
+                    checked={checked}
+                    disabled={disabled || option.disabled}
+                    aria-disabled={disabled || option.disabled}
+                    onCheckedChange={(nextChecked) =>
+                      onChange(
+                        nextChecked
+                          ? [...selected, option.id]
+                          : selected.filter((value) => value !== option.id),
+                      )
+                    }
                   />
-                ) : null}
-                {option.icon ? (
-                  <option.icon
-                    aria-hidden="true"
-                    className={cn('size-4 shrink-0', option.iconClassName)}
-                  />
-                ) : null}
-                <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                {option.suffix ? (
-                  <span className="text-muted-foreground shrink-0 text-xs">{option.suffix}</span>
-                ) : null}
-              </label>
-            </li>
-          );
-        })}
-      </ul>
-    );
+                  {option.swatch ? (
+                    <span
+                      aria-hidden="true"
+                      className="size-2.5 rounded-full border"
+                      style={{ backgroundColor: option.swatch }}
+                    />
+                  ) : null}
+                  {option.icon ? (
+                    <option.icon
+                      aria-hidden="true"
+                      className={cn('size-4 shrink-0', option.iconClassName)}
+                    />
+                  ) : null}
+                  <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                  {option.suffix ? (
+                    <span className="text-muted-foreground shrink-0 text-xs">{option.suffix}</span>
+                  ) : null}
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {hasMore && onLoadMore ? (
+        <Button
+          className="mt-1 w-full"
+          disabled={loadingMore}
+          size="sm"
+          variant="ghost"
+          onClick={onLoadMore}
+        >
+          {loadingMore ? '불러오는 중…' : '더 보기'}
+        </Button>
+      ) : null}
+    </>
+  );
 
   if (presentation === 'popover') {
     return (

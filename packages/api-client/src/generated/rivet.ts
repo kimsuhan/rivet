@@ -92,10 +92,12 @@ import type {
   IssueTemplateListResponseDto,
   IssueTemplateResponseDto,
   IssueTemplatesControllerListParams,
+  IssuesControllerGroupsParams,
   IssuesControllerListParams,
   LabelListResponseDto,
   LabelResponseDto,
   LabelsControllerListParams,
+  ListGroupSummaryResponseDto,
   LoginDto,
   MemberDetailResponseDto,
   MemberListResponseDto,
@@ -132,6 +134,7 @@ import type {
   TeamWorkDetailResponseDto,
   TeamWorkListResponseDto,
   TeamWorkSummaryResponseDto,
+  TeamWorksControllerGroupsParams,
   TeamWorksControllerListParams,
   TeamsControllerDeleteWorkflowStateParams,
   TeamsControllerListParams,
@@ -6549,6 +6552,114 @@ export const useIssuesControllerCreate = <TError = ErrorType<ApiErrorResponseDto
       return useMutation(getIssuesControllerCreateMutationOptions(options), queryClient);
     }
 
+export const getIssuesControllerGroupsUrl = (params: IssuesControllerGroupsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/issues/groups?${stringifiedParams}` : `/api/v1/issues/groups`
+}
+
+/**
+ * @summary 이슈 보기 그룹별 항목 개수 조회
+ */
+export const issuesControllerGroups = async (params: IssuesControllerGroupsParams, options?: RequestInit): Promise<ListGroupSummaryResponseDto> => {
+
+  return rivetFetch<ListGroupSummaryResponseDto>(getIssuesControllerGroupsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getIssuesControllerGroupsQueryKey = (params?: IssuesControllerGroupsParams,) => {
+    return [
+    `/api/v1/issues/groups`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getIssuesControllerGroupsQueryOptions = <TData = Awaited<ReturnType<typeof issuesControllerGroups>>, TError = ErrorType<ApiErrorResponseDto>>(params: IssuesControllerGroupsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof issuesControllerGroups>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getIssuesControllerGroupsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof issuesControllerGroups>>> = ({ signal }) => issuesControllerGroups(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof issuesControllerGroups>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type IssuesControllerGroupsQueryResult = NonNullable<Awaited<ReturnType<typeof issuesControllerGroups>>>
+export type IssuesControllerGroupsQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useIssuesControllerGroups<TData = Awaited<ReturnType<typeof issuesControllerGroups>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: IssuesControllerGroupsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof issuesControllerGroups>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof issuesControllerGroups>>,
+          TError,
+          Awaited<ReturnType<typeof issuesControllerGroups>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useIssuesControllerGroups<TData = Awaited<ReturnType<typeof issuesControllerGroups>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: IssuesControllerGroupsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof issuesControllerGroups>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof issuesControllerGroups>>,
+          TError,
+          Awaited<ReturnType<typeof issuesControllerGroups>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useIssuesControllerGroups<TData = Awaited<ReturnType<typeof issuesControllerGroups>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: IssuesControllerGroupsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof issuesControllerGroups>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 이슈 보기 그룹별 항목 개수 조회
+ */
+
+export function useIssuesControllerGroups<TData = Awaited<ReturnType<typeof issuesControllerGroups>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: IssuesControllerGroupsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof issuesControllerGroups>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getIssuesControllerGroupsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getIssuesControllerListTeamWorksUrl = (issueId: string,) => {
 
 
@@ -7207,6 +7318,114 @@ export function useTeamWorksControllerList<TData = Awaited<ReturnType<typeof tea
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getTeamWorksControllerListQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getTeamWorksControllerGroupsUrl = (params: TeamWorksControllerGroupsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/team-works/groups?${stringifiedParams}` : `/api/v1/team-works/groups`
+}
+
+/**
+ * @summary 내 작업 보기 그룹별 항목 개수 조회
+ */
+export const teamWorksControllerGroups = async (params: TeamWorksControllerGroupsParams, options?: RequestInit): Promise<ListGroupSummaryResponseDto> => {
+
+  return rivetFetch<ListGroupSummaryResponseDto>(getTeamWorksControllerGroupsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getTeamWorksControllerGroupsQueryKey = (params?: TeamWorksControllerGroupsParams,) => {
+    return [
+    `/api/v1/team-works/groups`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getTeamWorksControllerGroupsQueryOptions = <TData = Awaited<ReturnType<typeof teamWorksControllerGroups>>, TError = ErrorType<ApiErrorResponseDto>>(params: TeamWorksControllerGroupsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamWorksControllerGroups>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getTeamWorksControllerGroupsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof teamWorksControllerGroups>>> = ({ signal }) => teamWorksControllerGroups(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof teamWorksControllerGroups>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type TeamWorksControllerGroupsQueryResult = NonNullable<Awaited<ReturnType<typeof teamWorksControllerGroups>>>
+export type TeamWorksControllerGroupsQueryError = ErrorType<ApiErrorResponseDto>
+
+
+export function useTeamWorksControllerGroups<TData = Awaited<ReturnType<typeof teamWorksControllerGroups>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: TeamWorksControllerGroupsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamWorksControllerGroups>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof teamWorksControllerGroups>>,
+          TError,
+          Awaited<ReturnType<typeof teamWorksControllerGroups>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useTeamWorksControllerGroups<TData = Awaited<ReturnType<typeof teamWorksControllerGroups>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: TeamWorksControllerGroupsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamWorksControllerGroups>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof teamWorksControllerGroups>>,
+          TError,
+          Awaited<ReturnType<typeof teamWorksControllerGroups>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useTeamWorksControllerGroups<TData = Awaited<ReturnType<typeof teamWorksControllerGroups>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: TeamWorksControllerGroupsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamWorksControllerGroups>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 내 작업 보기 그룹별 항목 개수 조회
+ */
+
+export function useTeamWorksControllerGroups<TData = Awaited<ReturnType<typeof teamWorksControllerGroups>>, TError = ErrorType<ApiErrorResponseDto>>(
+ params: TeamWorksControllerGroupsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof teamWorksControllerGroups>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getTeamWorksControllerGroupsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

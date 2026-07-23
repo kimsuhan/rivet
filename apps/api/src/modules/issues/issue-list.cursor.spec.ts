@@ -9,12 +9,14 @@ import {
 import type { IssueListFilters, IssueListOrderRow, IssueSortClause } from './issue-list.policy';
 
 const filters: IssueListFilters = {
+  assigneeIds: [],
   creatorIds: ['3dc0b213-eafa-450c-ad12-49a7d927c7b8'],
   labelIds: [],
   priorities: [IssuePriority.HIGH],
   projectIds: ['05ed9724-f207-447d-9f18-7026f493d3fd'],
   query: '검색',
   statuses: [IssueStatus.TODO],
+  unassigned: false,
   workspaceId: '953685f0-4921-41cd-8422-d8a1ccc3f547',
 };
 const sorts: IssueSortClause[] = [
@@ -64,6 +66,17 @@ describe('issue list cursor', () => {
         encoded,
         sorts,
         issueListFilterFingerprint({ ...filters, query: '다른 검색' }),
+      ),
+    ).toThrow(ApiError);
+    expect(() =>
+      parseIssueListCursor(
+        encoded,
+        sorts,
+        issueListFilterFingerprint({
+          ...filters,
+          assigneeIds: ['b38a063f-d68f-4d9f-9bd6-5bd4993771eb'],
+          unassigned: true,
+        }),
       ),
     ).toThrow(ApiError);
   });

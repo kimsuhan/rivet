@@ -5,13 +5,13 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { TeamWorksControllerListPriority } from './teamWorksControllerListPriority';
-import type { TeamWorksControllerListSort } from './teamWorksControllerListSort';
-import type { TeamWorksControllerListSortDirection } from './teamWorksControllerListSortDirection';
-import type { TeamWorksControllerListStateCategory } from './teamWorksControllerListStateCategory';
-import type { TeamWorksControllerListUnassigned } from './teamWorksControllerListUnassigned';
+import type { TeamWorksControllerGroupsGroupBy } from './teamWorksControllerGroupsGroupBy';
+import type { TeamWorksControllerGroupsPriority } from './teamWorksControllerGroupsPriority';
+import type { TeamWorksControllerGroupsStateCategory } from './teamWorksControllerGroupsStateCategory';
+import type { TeamWorksControllerGroupsSubGroupBy } from './teamWorksControllerGroupsSubGroupBy';
+import type { TeamWorksControllerGroupsUnassigned } from './teamWorksControllerGroupsUnassigned';
 
-export type TeamWorksControllerListParams = {
+export type TeamWorksControllerGroupsParams = {
 /**
  * 팀 작업 표시 ID, 상위 이슈 표시 ID·제목 또는 프로젝트 이름 검색
  * @maxLength 500
@@ -41,27 +41,18 @@ workflowStateId?: string;
  * 쉼표로 구분한 상태 범주
  * @maxLength 100
  */
-stateCategory?: TeamWorksControllerListStateCategory;
+stateCategory?: TeamWorksControllerGroupsStateCategory;
 /**
  * 쉼표로 구분한 상위 이슈 우선순위
  * @maxLength 100
  */
-priority?: TeamWorksControllerListPriority;
+priority?: TeamWorksControllerGroupsPriority;
 /**
  * 쉼표로 구분한 멤버십 ID 또는 me
  * @maxLength 2048
  */
 assigneeMembershipId?: string;
-unassigned?: TeamWorksControllerListUnassigned;
-sort?: TeamWorksControllerListSort;
-sortDirection?: TeamWorksControllerListSortDirection;
-/**
- * @minimum 1
- * @maximum 100
- */
-limit?: number;
-/**
- * @maxLength 1024
- */
-cursor?: string;
+unassigned?: TeamWorksControllerGroupsUnassigned;
+groupBy: TeamWorksControllerGroupsGroupBy;
+subGroupBy?: TeamWorksControllerGroupsSubGroupBy;
 };

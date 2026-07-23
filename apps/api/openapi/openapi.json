@@ -5816,6 +5816,29 @@
             }
           },
           {
+            "name": "assigneeMembershipId",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 팀 작업 담당자 멤버십 ID",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "unassigned",
+            "required": false,
+            "in": "query",
+            "description": "팀 작업이 없거나 담당자가 없는 팀 작업이 있는 이슈 포함 여부",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
             "name": "createdFrom",
             "required": false,
             "in": "query",
@@ -6046,6 +6069,222 @@
           }
         ],
         "summary": "이슈 생성 및 선택적인 최초 팀 작업 시작",
+        "tags": [
+          "issues"
+        ]
+      }
+    },
+    "/api/v1/issues/groups": {
+      "get": {
+        "operationId": "IssuesController_groups",
+        "parameters": [
+          {
+            "name": "query",
+            "required": false,
+            "in": "query",
+            "description": "표시 ID 또는 제목 검색",
+            "schema": {
+              "maxLength": 500,
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 프로젝트 ID",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 이슈 상태",
+            "schema": {
+              "maxLength": 200,
+              "type": "string",
+              "enum": [
+                "UNSORTED",
+                "TODO",
+                "IN_PROGRESS",
+                "REVIEW",
+                "DONE",
+                "PAUSED",
+                "CANCELED"
+              ]
+            }
+          },
+          {
+            "name": "priority",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 우선순위",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "labelId",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 라벨 ID",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "createdByMembershipId",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 만든 사람 멤버십 ID",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "assigneeMembershipId",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 팀 작업 담당자 멤버십 ID",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "unassigned",
+            "required": false,
+            "in": "query",
+            "description": "팀 작업이 없거나 담당자가 없는 팀 작업이 있는 이슈 포함 여부",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "name": "createdFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "createdTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "updatedFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "updatedTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupBy",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "assigneeMembershipId",
+                "projectId",
+                "status",
+                "priority",
+                "createdByMembershipId"
+              ]
+            }
+          },
+          {
+            "name": "subGroupBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "assigneeMembershipId",
+                "projectId",
+                "status",
+                "priority",
+                "createdByMembershipId"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListGroupSummaryResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "이슈 보기 그룹별 항목 개수 조회",
         "tags": [
           "issues"
         ]
@@ -6468,6 +6707,23 @@
             }
           },
           {
+            "name": "priority",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 상위 이슈 우선순위",
+            "schema": {
+              "maxLength": 100,
+              "type": "string",
+              "enum": [
+                "NONE",
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "URGENT"
+              ]
+            }
+          },
+          {
             "name": "assigneeMembershipId",
             "required": false,
             "in": "query",
@@ -6557,6 +6813,200 @@
           }
         ],
         "summary": "내 작업과 팀 작업 목록 조회",
+        "tags": [
+          "team-works"
+        ]
+      }
+    },
+    "/api/v1/team-works/groups": {
+      "get": {
+        "operationId": "TeamWorksController_groups",
+        "parameters": [
+          {
+            "name": "query",
+            "required": false,
+            "in": "query",
+            "description": "팀 작업 표시 ID, 상위 이슈 표시 ID·제목 또는 프로젝트 이름 검색",
+            "schema": {
+              "maxLength": 500,
+              "type": "string"
+            }
+          },
+          {
+            "name": "teamId",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 팀 ID",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 프로젝트 ID",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectTeamId",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 프로젝트 참여 팀 ID",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "workflowStateId",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 워크플로 상태 ID",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "stateCategory",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 상태 범주",
+            "schema": {
+              "maxLength": 100,
+              "type": "string",
+              "enum": [
+                "BACKLOG",
+                "UNSTARTED",
+                "STARTED",
+                "COMPLETED",
+                "CANCELED"
+              ]
+            }
+          },
+          {
+            "name": "priority",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 상위 이슈 우선순위",
+            "schema": {
+              "maxLength": 100,
+              "type": "string",
+              "enum": [
+                "NONE",
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "URGENT"
+              ]
+            }
+          },
+          {
+            "name": "assigneeMembershipId",
+            "required": false,
+            "in": "query",
+            "description": "쉼표로 구분한 멤버십 ID 또는 me",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "name": "unassigned",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "name": "groupBy",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "projectId",
+                "teamId",
+                "stateCategory",
+                "workflowStateId",
+                "priority"
+              ]
+            }
+          },
+          {
+            "name": "subGroupBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "projectId",
+                "teamId",
+                "stateCategory",
+                "workflowStateId",
+                "priority"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListGroupSummaryResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "내 작업 보기 그룹별 항목 개수 조회",
         "tags": [
           "team-works"
         ]
@@ -13101,6 +13551,93 @@
         "required": [
           "items",
           "nextCursor",
+          "totalCount"
+        ]
+      },
+      "ListSubGroupResponseDto": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "number",
+            "minimum": 0
+          },
+          "imageFileId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "imageFileId",
+          "label",
+          "value"
+        ]
+      },
+      "ListGroupResponseDto": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "number",
+            "minimum": 0
+          },
+          "imageFileId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "subGroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ListSubGroupResponseDto"
+            }
+          }
+        },
+        "required": [
+          "count",
+          "imageFileId",
+          "label",
+          "value",
+          "subGroups"
+        ]
+      },
+      "ListGroupSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "groupBy": {
+            "type": "string"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ListGroupResponseDto"
+            }
+          },
+          "subGroupBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "totalCount": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "groupBy",
+          "groups",
+          "subGroupBy",
           "totalCount"
         ]
       },

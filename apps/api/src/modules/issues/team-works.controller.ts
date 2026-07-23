@@ -11,12 +11,15 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiConflictResponse,
   ApiCookieAuth,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 
@@ -25,11 +28,13 @@ import type { AuthenticatedRequestContext } from '../auth/authentication.context
 import { CurrentAuthentication } from '../auth/current-authentication.decorator';
 import {
   RemoveTeamWorkDto,
+  TeamWorkGroupQueryDto,
   TeamWorkListQueryDto,
   UpdateTeamWorkDto,
 } from './dto/issue-request.dto';
 import {
   IssueDetailResponseDto,
+  ListGroupSummaryResponseDto,
   TeamWorkDetailResponseDto,
   TeamWorkListResponseDto,
   UpdateTeamWorkResponseDto,
@@ -55,6 +60,19 @@ export class TeamWorksController {
     @Query() query: TeamWorkListQueryDto,
   ): Promise<TeamWorkListResponseDto> {
     return this.queries.list(workspaceContext(authentication), query);
+  }
+
+  @Get('groups')
+  @ApiOperation({ summary: '내 작업 보기 그룹별 항목 개수 조회' })
+  @ApiOkResponse({ type: ListGroupSummaryResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({ type: ApiErrorResponseDto })
+  groups(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Query() query: TeamWorkGroupQueryDto,
+  ): Promise<ListGroupSummaryResponseDto> {
+    return this.queries.groups(workspaceContext(authentication), query);
   }
 
   @Get(':teamWorkRef')

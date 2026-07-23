@@ -10,14 +10,38 @@ import {
   type ApiError,
   type ApiErrorResponseDto,
   getIssuesControllerListQueryKey,
+  getMembersControllerListQueryKey,
   getTeamWorksControllerListQueryKey,
   type IssueListResponseDto,
   issuesControllerList,
   type IssuesControllerListParams,
+  type MemberListResponseDto,
+  membersControllerList,
+  type MembersControllerListParams,
   type TeamWorkListResponseDto,
   teamWorksControllerList,
   type TeamWorksControllerListParams,
 } from '@rivet/api-client';
+
+export function useIssueMemberPages(
+  params: MembersControllerListParams,
+): UseInfiniteQueryResult<InfiniteData<MemberListResponseDto>, ApiError<ApiErrorResponseDto>> {
+  const queryKey = [...getMembersControllerListQueryKey(params), 'infinite'] as const;
+  return useInfiniteQuery<
+    MemberListResponseDto,
+    ApiError<ApiErrorResponseDto>,
+    InfiniteData<MemberListResponseDto>,
+    typeof queryKey,
+    string | undefined
+  >({
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: undefined,
+    queryFn: ({ pageParam, signal }) =>
+      membersControllerList({ ...params, ...(pageParam ? { cursor: pageParam } : {}) }, { signal }),
+    queryKey,
+    retry: false,
+  });
+}
 
 export function getIssuePagesQueryKey(params: IssuesControllerListParams) {
   return [...getIssuesControllerListQueryKey(params), 'infinite'] as const;
@@ -43,7 +67,10 @@ export function useTeamWorkPages(
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined,
     queryFn: ({ pageParam, signal }) =>
-      teamWorksControllerList({ ...params, ...(pageParam ? { cursor: pageParam } : {}) }, { signal }),
+      teamWorksControllerList(
+        { ...params, ...(pageParam ? { cursor: pageParam } : {}) },
+        { signal },
+      ),
     queryKey,
     retry: false,
   });

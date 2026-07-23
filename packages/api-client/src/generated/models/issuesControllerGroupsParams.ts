@@ -5,12 +5,12 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { IssuesControllerListSort } from './issuesControllerListSort';
-import type { IssuesControllerListSortDirection } from './issuesControllerListSortDirection';
-import type { IssuesControllerListStatus } from './issuesControllerListStatus';
-import type { IssuesControllerListUnassigned } from './issuesControllerListUnassigned';
+import type { IssuesControllerGroupsGroupBy } from './issuesControllerGroupsGroupBy';
+import type { IssuesControllerGroupsStatus } from './issuesControllerGroupsStatus';
+import type { IssuesControllerGroupsSubGroupBy } from './issuesControllerGroupsSubGroupBy';
+import type { IssuesControllerGroupsUnassigned } from './issuesControllerGroupsUnassigned';
 
-export type IssuesControllerListParams = {
+export type IssuesControllerGroupsParams = {
 /**
  * 표시 ID 또는 제목 검색
  * @maxLength 500
@@ -25,7 +25,7 @@ projectId?: string;
  * 쉼표로 구분한 이슈 상태
  * @maxLength 200
  */
-status?: IssuesControllerListStatus;
+status?: IssuesControllerGroupsStatus;
 /**
  * 쉼표로 구분한 우선순위
  * @maxLength 100
@@ -49,26 +49,11 @@ assigneeMembershipId?: string;
 /**
  * 팀 작업이 없거나 담당자가 없는 팀 작업이 있는 이슈 포함 여부
  */
-unassigned?: IssuesControllerListUnassigned;
+unassigned?: IssuesControllerGroupsUnassigned;
 createdFrom?: string;
 createdTo?: string;
 updatedFrom?: string;
 updatedTo?: string;
-sort?: IssuesControllerListSort;
-sortDirection?: IssuesControllerListSortDirection;
-/**
- * 쉼표로 구분한 정렬 조건(field:direction). 최대 3개이며 sort/sortDirection과 함께 사용할 수 없습니다.
- * @maxLength 200
- */
-sorts?: string;
-/**
- * @minimum 1
- * @maximum 100
- */
-limit?: number;
-/**
- * 같은 정렬·필터 조건에서만 사용하는 불투명 커서
- * @maxLength 1024
- */
-cursor?: string;
+groupBy: IssuesControllerGroupsGroupBy;
+subGroupBy?: IssuesControllerGroupsSubGroupBy;
 };

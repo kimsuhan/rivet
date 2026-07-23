@@ -111,6 +111,40 @@ describe('SavedViewsService', () => {
     });
   });
 
+  it('normalizes multi filters, visible fields, and two-level grouping', async () => {
+    transaction.savedView.create.mockResolvedValue(view);
+    const firstProjectId = '05ed9724-f207-447d-9f18-7026f493d3fd';
+    const secondProjectId = '3dc0b213-eafa-450c-ad12-49a7d927c7b8';
+
+    await service.create(context, {
+      configuration: {
+        assigneeMembershipId: `${secondProjectId},${firstProjectId},${secondProjectId}`,
+        groupBy: 'assigneeMembershipId',
+        projectId: `${secondProjectId},${firstProjectId}`,
+        status: 'TODO,DONE,TODO',
+        subGroupBy: 'status',
+        unassigned: 'true',
+        visibleFields: ['updatedAt', 'createdAt', 'status'],
+      },
+      name: '그룹 보기',
+      resourceType: 'ISSUES',
+    });
+
+    expect(transaction.savedView.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        configuration: {
+          assigneeMembershipId: `${firstProjectId},${secondProjectId}`,
+          groupBy: 'assigneeMembershipId',
+          projectId: `${firstProjectId},${secondProjectId}`,
+          status: 'DONE,TODO',
+          subGroupBy: 'status',
+          unassigned: 'true',
+          visibleFields: ['status', 'createdAt', 'updatedAt'],
+        },
+      }),
+    });
+  });
+
   it('rejects arbitrary URLs and unsupported query keys', async () => {
     await expect(
       service.create(context, {
@@ -142,6 +176,9 @@ describe('SavedViewsService', () => {
       'ISSUES',
       { sort: 'priority', sorts: [{ direction: 'desc', field: 'status' }] },
     ],
+    ['같은 메인·서브 그룹', 'ISSUES', { groupBy: 'status', subGroupBy: 'status' }],
+    ['메인 그룹 없는 서브 그룹', 'ISSUES', { subGroupBy: 'status' }],
+    ['지원하지 않는 표시 필드', 'ISSUES', { visibleFields: ['unknown'] }],
   ] as const)('%s 구성을 거부한다', async (_label, resourceType, configuration) => {
     await expect(
       service.create(context, { configuration, name: '잘못된 보기', resourceType }),

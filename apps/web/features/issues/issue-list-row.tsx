@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { ArrowRight, CircleAlert } from 'lucide-react';
+import type { CSSProperties } from 'react';
 
 import {
   type IssueListResponseDto,
@@ -42,10 +43,7 @@ function updateIssueListData(
   return { ...current, items: current.items.map(update) };
 }
 
-export const ISSUE_LIST_GRID_COLUMNS =
-  'grid-cols-[minmax(18rem,32rem)_8.5rem_7.5rem_10rem_6.5rem_5rem_7rem] max-xl:grid-cols-[minmax(18rem,26rem)_8.5rem_7.5rem_9rem_6.5rem_6rem] max-lg:grid-cols-[minmax(18rem,22rem)_8.5rem_7.5rem_6rem] max-md:grid-cols-1 max-md:gap-1 max-md:px-3';
-
-function relativeUpdatedAt(value: string) {
+function relativeDate(value: string) {
   const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60_000);
   if (minutes < 1) return '방금';
   if (minutes < 60) return `${minutes}분 전`;
@@ -58,11 +56,21 @@ export function IssueListRow({
   issue,
   queryKey,
   density = 'comfortable',
+  visibleFields = [
+    'project',
+    'labels',
+    'status',
+    'priority',
+    'teamWorkCount',
+    'progress',
+    'updatedAt',
+  ],
 }: {
   detailHref?: string;
   issue: IssueSummaryResponseDto;
   queryKey: QueryKey;
   density?: 'compact' | 'comfortable';
+  visibleFields?: readonly string[];
 }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -97,11 +105,24 @@ export function IssueListRow({
   const nextActionIsDecision = nextAction !== '업무 보기';
   const href = detailHref ?? `/issues/${encodeURIComponent(issue.identifier)}?tab=work`;
   const nextActionHref = issue.status === 'REVIEW' ? '/deployments' : href;
+  const visible = new Set(visibleFields);
+  const columns = [
+    'minmax(18rem,1fr)',
+    ...(visible.has('status') ? ['8.5rem'] : []),
+    ...(visible.has('priority') ? ['7.5rem'] : []),
+    ...(visible.has('teamWorkCount') ? ['9rem'] : []),
+    ...(visible.has('progress') ? ['6.5rem'] : []),
+    ...(visible.has('createdBy') ? ['8rem'] : []),
+    ...(visible.has('createdAt') ? ['6rem'] : []),
+    ...(visible.has('updatedAt') ? ['6rem'] : []),
+    '7rem',
+  ].join(' ');
 
   return (
     <li className="group border-b last:border-b-0">
       <div
-        className={`grid ${density === 'compact' ? 'min-h-11 gap-2 py-0 text-[13px]' : 'min-h-16 gap-3 py-2.5 text-sm'} ${ISSUE_LIST_GRID_COLUMNS} items-center px-3`}
+        className={`grid grid-cols-1 lg:[grid-template-columns:var(--issue-list-columns)] ${density === 'compact' ? 'min-h-11 gap-2 py-0 text-[13px]' : 'min-h-16 gap-3 py-2.5 text-sm'} items-center px-3`}
+        style={{ '--issue-list-columns': columns } as CSSProperties}
       >
         <Link
           href={href}
@@ -119,46 +140,74 @@ export function IssueListRow({
             {issue.identifier}
           </span>
           <span className="min-w-0 truncate font-medium">{issue.title}</span>
-          <span
-            className={cn(
-              'text-muted-foreground flex min-w-0 items-center gap-1.5 truncate text-xs',
-              density === 'compact' ? 'shrink' : 'mt-1',
-            )}
-          >
-            <ProjectLogo
-              logoFileId={issue.project.logoFileId}
-              name={issue.project.name}
-              size="xs"
-            />
-            <span className="truncate">{issue.project.name}</span>
-            <IssueLabelChips emptyLabel="" labels={issue.labels} />
-          </span>
+          {visible.has('project') || visible.has('labels') ? (
+            <span
+              className={cn(
+                'text-muted-foreground flex min-w-0 items-center gap-1.5 truncate text-xs',
+                density === 'compact' ? 'shrink' : 'mt-1',
+              )}
+            >
+              {visible.has('project') ? (
+                <>
+                  <ProjectLogo
+                    logoFileId={issue.project.logoFileId}
+                    name={issue.project.name}
+                    size="xs"
+                  />
+                  <span className="truncate">{issue.project.name}</span>
+                </>
+              ) : null}
+              {visible.has('labels') ? (
+                <IssueLabelChips emptyLabel="" labels={issue.labels} />
+              ) : null}
+            </span>
+          ) : null}
         </Link>
-        <IssueStatusDisplay status={issue.status} className="w-32" />
-        <PriorityTrigger
-          identifier={issue.identifier}
-          priority={issue.priority}
-          busy={mutation.isPending}
-          disabled={mutation.isPending}
-          iconOnly={density === 'compact'}
-          onValueChange={(priority) => mutation.mutate(priority)}
-        />
-        <span className="text-muted-foreground truncate max-lg:hidden">
-          {issue.workflowSummary.teamWorkCount
-            ? `작업 ${issue.workflowSummary.teamWorkCount}개`
-            : '아직 없음'}
-        </span>
-        <span className="flex items-center gap-2 tabular-nums">
-          <span>{issue.progress.percentage}%</span>
-          <Progress className="hidden w-12 xl:block" value={issue.progress.percentage} />
-        </span>
-        <time className="text-muted-foreground text-xs max-xl:hidden" dateTime={issue.updatedAt}>
-          {relativeUpdatedAt(issue.updatedAt)}
-        </time>
+        {visible.has('status') ? (
+          <IssueStatusDisplay status={issue.status} className="w-32" />
+        ) : null}
+        {visible.has('priority') ? (
+          <PriorityTrigger
+            identifier={issue.identifier}
+            priority={issue.priority}
+            busy={mutation.isPending}
+            disabled={mutation.isPending}
+            iconOnly={density === 'compact'}
+            onValueChange={(priority) => mutation.mutate(priority)}
+          />
+        ) : null}
+        {visible.has('teamWorkCount') ? (
+          <span className="text-muted-foreground truncate">
+            {issue.workflowSummary.teamWorkCount
+              ? `작업 ${issue.workflowSummary.teamWorkCount}개`
+              : '아직 없음'}
+          </span>
+        ) : null}
+        {visible.has('progress') ? (
+          <span className="flex items-center gap-2 tabular-nums">
+            <span>{issue.progress.percentage}%</span>
+            <Progress className="hidden w-12 xl:block" value={issue.progress.percentage} />
+          </span>
+        ) : null}
+        {visible.has('createdBy') ? (
+          <span className="text-muted-foreground truncate text-xs">
+            {issue.createdBy.user.displayName}
+          </span>
+        ) : null}
+        {visible.has('createdAt') ? (
+          <time className="text-muted-foreground text-xs" dateTime={issue.createdAt}>
+            {relativeDate(issue.createdAt)}
+          </time>
+        ) : null}
+        {visible.has('updatedAt') ? (
+          <time className="text-muted-foreground text-xs" dateTime={issue.updatedAt}>
+            {relativeDate(issue.updatedAt)}
+          </time>
+        ) : null}
         <Link
           href={nextActionHref}
           className={cn(
-            'max-lg:hidden',
+            'w-fit',
             nextActionIsDecision && density === 'comfortable'
               ? cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'gap-1.5')
               : cn(

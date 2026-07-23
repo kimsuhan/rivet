@@ -1,5 +1,6 @@
 'use client';
 
+import type { CSSProperties } from 'react';
 import { useState } from 'react';
 
 import {
@@ -19,17 +20,24 @@ import { TeamWorkCompletionModal } from './team-work-completion-modal';
 import { TeamWorkPrimaryAction } from './team-work-primary-action';
 import { useTeamWorkInlineMutation } from './use-team-work-inline-mutation';
 
-export const MY_WORK_GRID_COLUMNS =
-  'grid-cols-[minmax(0,1fr)_10rem_8rem] max-xl:grid-cols-[minmax(0,1fr)_9rem_7rem] max-md:grid-cols-1';
+function relativeDate(value: string): string {
+  const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60_000);
+  if (minutes < 1) return '방금';
+  if (minutes < 60) return `${minutes}분 전`;
+  if (minutes < 1_440) return `${Math.round(minutes / 60)}시간 전`;
+  return `${Math.round(minutes / 1_440)}일 전`;
+}
 
 export function MyWorkListRow({
   work,
   density = 'comfortable',
   savedViewId,
+  visibleFields = ['project', 'team', 'labels', 'status', 'priority'],
 }: {
   work: TeamWorkSummaryResponseDto;
   density?: 'compact' | 'comfortable';
   savedViewId?: string | null;
+  visibleFields?: readonly string[];
 }) {
   const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, undefined, {
     query: { retry: false },
@@ -40,6 +48,14 @@ export function MyWorkListRow({
   const retry = () => {
     if (stateMutation.variables) stateMutation.mutate(stateMutation.variables);
   };
+  const visible = new Set(visibleFields);
+  const columns = [
+    'minmax(0,1fr)',
+    ...(visible.has('status') ? ['10rem'] : []),
+    ...(visible.has('createdAt') ? ['6rem'] : []),
+    ...(visible.has('updatedAt') ? ['6rem'] : []),
+    '8rem',
+  ].join(' ');
 
   return (
     <li className="group relative border-b last:border-b-0">
@@ -60,10 +76,13 @@ export function MyWorkListRow({
         <span className="sr-only">{work.issue.title}</span>
       </Link>
       <div
-        className={`pointer-events-none relative z-10 grid ${density === 'compact' ? 'min-h-11 gap-2 py-1.5' : 'min-h-16 gap-3 py-2.5'} ${MY_WORK_GRID_COLUMNS} items-center px-3 text-sm max-md:gap-2 max-md:py-3`}
+        className={`pointer-events-none relative z-10 grid grid-cols-1 lg:[grid-template-columns:var(--my-work-columns)] ${density === 'compact' ? 'min-h-11 gap-2 py-1.5' : 'min-h-16 gap-3 py-2.5'} items-center px-3 text-sm max-md:gap-2 max-md:py-3`}
+        style={{ '--my-work-columns': columns } as CSSProperties}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <PriorityDisplay iconOnly priority={work.issue.priority} />
+          {visible.has('priority') ? (
+            <PriorityDisplay iconOnly priority={work.issue.priority} />
+          ) : null}
           <div className="min-w-0">
             <p className="flex min-w-0 items-baseline gap-2">
               <span className="text-muted-foreground shrink-0 font-mono text-xs">
@@ -73,43 +92,67 @@ export function MyWorkListRow({
                 {work.issue.title}
               </span>
             </p>
-            <div
-              className={`text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs ${density === 'compact' ? '' : 'mt-1'}`}
-            >
-              <ProjectLogo
-                logoFileId={work.issue.project.logoFileId}
-                name={work.issue.project.name}
-                size="xs"
-              />
-              <span className="truncate">{work.issue.project.name}</span>
-              <span aria-hidden="true">·</span>
-              <span className="truncate">{work.projectTeam.team.name}</span>
-              <IssueLabelChips emptyLabel="" labels={work.issue.labels} />
-            </div>
+            {visible.has('project') || visible.has('team') || visible.has('labels') ? (
+              <div
+                className={`text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs ${density === 'compact' ? '' : 'mt-1'}`}
+              >
+                {visible.has('project') ? (
+                  <>
+                    <ProjectLogo
+                      logoFileId={work.issue.project.logoFileId}
+                      name={work.issue.project.name}
+                      size="xs"
+                    />
+                    <span className="truncate">{work.issue.project.name}</span>
+                  </>
+                ) : null}
+                {visible.has('project') && visible.has('team') ? (
+                  <span aria-hidden="true">·</span>
+                ) : null}
+                {visible.has('team') ? (
+                  <span className="truncate">{work.projectTeam.team.name}</span>
+                ) : null}
+                {visible.has('labels') ? (
+                  <IssueLabelChips emptyLabel="" labels={work.issue.labels} />
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
-        <div
-          className="pointer-events-auto min-w-0"
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-        >
-          <StatusTrigger
-            busy={stateMutation.isPending}
-            disabled={stateMutation.isPending || states.isPending}
-            identifier={work.identifier}
-            onValueChange={(id) => {
-              const state = states.data?.items.find((item) => item.id === id);
-              if (state) {
-                stateMutation.mutate({
-                  stateProgress: workflowStateProgress(states.data?.items ?? [], state),
-                  workflowState: state,
-                });
-              }
-            }}
-            states={states.data?.items ?? []}
-            value={work.workflowState.id}
-          />
-        </div>
+        {visible.has('status') ? (
+          <div
+            className="pointer-events-auto min-w-0"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <StatusTrigger
+              busy={stateMutation.isPending}
+              disabled={stateMutation.isPending || states.isPending}
+              identifier={work.identifier}
+              onValueChange={(id) => {
+                const state = states.data?.items.find((item) => item.id === id);
+                if (state) {
+                  stateMutation.mutate({
+                    stateProgress: workflowStateProgress(states.data?.items ?? [], state),
+                    workflowState: state,
+                  });
+                }
+              }}
+              states={states.data?.items ?? []}
+              value={work.workflowState.id}
+            />
+          </div>
+        ) : null}
+        {visible.has('createdAt') ? (
+          <time className="text-muted-foreground text-xs" dateTime={work.createdAt}>
+            {relativeDate(work.createdAt)}
+          </time>
+        ) : null}
+        {visible.has('updatedAt') ? (
+          <time className="text-muted-foreground text-xs" dateTime={work.updatedAt}>
+            {relativeDate(work.updatedAt)}
+          </time>
+        ) : null}
         <div
           className="pointer-events-auto min-h-10 min-w-0 justify-self-end max-md:justify-self-start"
           onClick={(event) => event.stopPropagation()}
