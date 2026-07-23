@@ -7,7 +7,8 @@
 ## 필수 문서
 
 - 구현·리뷰 전에 [공통 개발 지침](../../docs/development/common.md)을 읽는다.
-- 이벤트 동작이 필요할 때만 [비동기 작업 명세서](../../docs/architecture/005.%20실시간%C2%B7알림%20및%20비동기%20작업%20명세서.md)의 해당 이벤트를 읽는다.
+- 이벤트 동작이 필요할 때만
+  [비동기 작업과 외부 연동](../../docs/architecture/async-and-integrations.md)의 관련 계약을 읽는다.
 
 ## 책임 경계
 

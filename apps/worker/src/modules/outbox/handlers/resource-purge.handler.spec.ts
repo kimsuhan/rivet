@@ -54,7 +54,6 @@ describe('ResourcePurgeHandler', () => {
     notification: { deleteMany: jest.fn() },
     project: { deleteMany: jest.fn(), update: jest.fn() },
     projectTeam: { deleteMany: jest.fn() },
-    projectRoleTeam: { deleteMany: jest.fn() },
   };
   const database = { client: { $transaction: jest.fn() } };
   let handler: ResourcePurgeHandler;
@@ -152,7 +151,6 @@ describe('ResourcePurgeHandler', () => {
     ).rejects.toEqual(new RetryableOutboxError('PROJECT_PURGE_BLOCKED'));
     expect(transaction.issueTemplate.updateMany).not.toHaveBeenCalled();
     expect(transaction.projectTeam.deleteMany).not.toHaveBeenCalled();
-    expect(transaction.projectRoleTeam.deleteMany).not.toHaveBeenCalled();
   });
 
   it('cancels project purge when the project is restored after the due snapshot', async () => {
@@ -193,7 +191,6 @@ describe('ResourcePurgeHandler', () => {
     expect(transaction.issueTemplate.updateMany).toHaveBeenCalledWith({
       data: {
         initialProjectTeamId: null,
-        initialRole: null,
         projectId: null,
         version: { increment: 1 },
       },
@@ -217,7 +214,6 @@ describe('ResourcePurgeHandler', () => {
     expect(
       transaction.issueTemplate.updateMany.mock.invocationCallOrder[0] ?? Infinity,
     ).toBeLessThan(transaction.projectTeam.deleteMany.mock.invocationCallOrder[0] ?? -Infinity);
-    expect(transaction.projectRoleTeam.deleteMany).toHaveBeenCalled();
     expect(transaction.activityEvent.deleteMany).toHaveBeenCalled();
     expect(transaction.project.update).toHaveBeenCalledWith({
       data: { logoFileId: null },

@@ -5,7 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
-import { MembershipRole, MembershipStatus, ProjectRole, StateCategory } from '@rivet/database';
+import { MembershipRole, MembershipStatus, StateCategory } from '@rivet/database';
 
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
@@ -398,6 +398,9 @@ describe('M2 team and workflow management', () => {
     const project = await database.client.project.create({
       data: { name: '조직 안전장치 프로젝트', workspaceId },
     });
+    const projectTeam = await database.client.projectTeam.create({
+      data: { projectId: project.id, teamId, workspaceId },
+    });
     const issue = await database.client.issue.create({
       data: {
         createdByMembershipId: adminMembershipId,
@@ -415,7 +418,7 @@ describe('M2 team and workflow management', () => {
         createdByMembershipId: adminMembershipId,
         identifier: 'MGT-1',
         issueId: issue.id,
-        projectRole: ProjectRole.BACKEND,
+        projectTeamId: projectTeam.id,
         sequenceNumber: 1,
         teamId,
         workflowStateId: deletableState.id,

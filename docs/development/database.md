@@ -1,7 +1,9 @@
 # 데이터베이스 개발 지침
 
-> 상태: 확정 v1.0  
+> 상태: 현행
 > 적용 범위: `packages/database`, Prisma 쿼리와 트랜잭션
+> 정본 책임: Prisma schema, migration, 쿼리와 트랜잭션 개발 기준
+> 갱신 조건: 데이터베이스 도구, schema 구성 또는 migration 전략 변경
 
 데이터베이스 코드를 구현·리뷰·리팩터링할 때 [공통 개발 지침](./common.md)과 함께 읽는다.
 

@@ -5,7 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
-import { MembershipRole, ProjectRole, StateCategory } from '@rivet/database';
+import { MembershipRole, StateCategory } from '@rivet/database';
 
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
@@ -298,23 +298,20 @@ describe('M9 issue content and team execution API', () => {
       const project = await transaction.project.create({
         data: { leadMembershipId: membership.id, name: '통합 프로젝트', workspaceId: workspace.id },
       });
-      await transaction.projectRoleTeam.createMany({
+      await transaction.projectTeam.createMany({
         data: [
           {
             projectId: project.id,
-            role: ProjectRole.BACKEND,
             teamId: backend.id,
             workspaceId: workspace.id,
           },
           {
             projectId: project.id,
-            role: ProjectRole.WEB_FRONTEND,
             teamId: web.id,
             workspaceId: workspace.id,
           },
           {
             projectId: project.id,
-            role: ProjectRole.APP_FRONTEND,
             teamId: app.id,
             workspaceId: workspace.id,
           },
@@ -327,10 +324,9 @@ describe('M9 issue content and team execution API', () => {
           workspaceId: workspace.id,
         },
       });
-      await transaction.projectRoleTeam.create({
+      await transaction.projectTeam.create({
         data: {
           projectId: soloProject.id,
-          role: ProjectRole.BACKEND,
           teamId: backend.id,
           workspaceId: workspace.id,
         },
@@ -424,7 +420,6 @@ describe('M9 issue content and team execution API', () => {
       await database.client.teamWork.deleteMany({ where: { workspaceId } });
       await database.client.issue.deleteMany({ where: { workspaceId } });
       await database.client.outboxEvent.deleteMany({ where: { workspaceId } });
-      await database.client.projectRoleTeam.deleteMany({ where: { workspaceId } });
       await database.client.projectTeam.deleteMany({ where: { workspaceId } });
       await database.client.project.deleteMany({ where: { workspaceId } });
       await database.client.workflowState.deleteMany({ where: { workspaceId } });

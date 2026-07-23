@@ -145,16 +145,12 @@ export class ResourcePurgeHandler {
       await transaction.issueTemplate.updateMany({
         data: {
           initialProjectTeamId: null,
-          initialRole: null,
           projectId: null,
           version: { increment: 1 },
         },
         where: { projectId: payload.projectId, workspaceId },
       });
       await transaction.projectTeam.deleteMany({
-        where: { projectId: payload.projectId, workspaceId },
-      });
-      await transaction.projectRoleTeam.deleteMany({
         where: { projectId: payload.projectId, workspaceId },
       });
       await transaction.activityEvent.deleteMany({

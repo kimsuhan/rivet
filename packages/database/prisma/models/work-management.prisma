@@ -16,12 +16,6 @@ enum IssueStatus {
   CANCELED
 }
 
-enum ProjectRole {
-  BACKEND
-  WEB_FRONTEND
-  APP_FRONTEND
-}
-
 enum ProjectStatus {
   PLANNED
   IN_PROGRESS
@@ -94,7 +88,6 @@ model Project {
   logoFile            File?                @relation("ProjectLogoFile", fields: [workspaceId, logoFileId], references: [workspaceId, id], onDelete: Restrict)
   leadMembership      WorkspaceMembership? @relation("ProjectLeadMembership", fields: [workspaceId, leadMembershipId], references: [workspaceId, id], onDelete: Restrict)
   deletedByMembership WorkspaceMembership? @relation("ProjectDeletedByMembership", fields: [workspaceId, deletedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
-  roleTeams           ProjectRoleTeam[]
   projectTeams        ProjectTeam[]
   issues              Issue[]
   issueTemplates      IssueTemplate[]
@@ -109,25 +102,6 @@ model Project {
   @@index([workspaceId, targetDate, id])
   @@index([workspaceId, deletedAt, createdAt, id])
   @@map("projects")
-}
-
-model ProjectRoleTeam {
-  workspaceId String      @map("workspace_id") @db.Uuid
-  projectId   String      @map("project_id") @db.Uuid
-  role        ProjectRole
-  teamId      String      @map("team_id") @db.Uuid
-  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  project   Project   @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
-  team      Team      @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
-
-  @@id([projectId, role])
-  @@unique([workspaceId, projectId, role])
-  @@unique([workspaceId, projectId, role, teamId])
-  @@index([workspaceId, teamId, projectId, role])
-  @@map("project_role_teams")
 }
 
 model ProjectTeam {
@@ -164,7 +138,6 @@ model IssueTemplate {
   descriptionMarkdown  String        @map("description_markdown") @db.Text
   priority             IssuePriority @default(NONE)
   projectId            String?       @map("project_id") @db.Uuid
-  initialRole          ProjectRole?  @map("initial_role")
   initialProjectTeamId String?       @map("initial_project_team_id") @db.Uuid
   archivedAt           DateTime?     @map("archived_at") @db.Timestamptz(3)
   version              Int           @default(1)
@@ -247,8 +220,7 @@ model TeamWork {
   issueId                String           @map("issue_id") @db.Uuid
   identifier             String           @db.VarChar(32)
   sequenceNumber         Int              @map("sequence_number")
-  projectRole            ProjectRole      @default(BACKEND) @map("project_role")
-  projectTeamId          String?          @map("project_team_id") @db.Uuid
+  projectTeamId          String           @map("project_team_id") @db.Uuid
   teamId                 String           @map("team_id") @db.Uuid
   workflowStateId        String           @map("workflow_state_id") @db.Uuid
   assigneeMembershipId   String?          @map("assignee_membership_id") @db.Uuid
@@ -266,7 +238,7 @@ model TeamWork {
   workspace              Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   issue                  Issue                          @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
   team                   Team                           @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
-  projectTeam            ProjectTeam?                   @relation(fields: [workspaceId, teamId, projectTeamId], references: [workspaceId, teamId, id], onDelete: Restrict)
+  projectTeam            ProjectTeam                    @relation(fields: [workspaceId, teamId, projectTeamId], references: [workspaceId, teamId, id], onDelete: Restrict)
   workflowState          WorkflowState                  @relation(fields: [workspaceId, teamId, workflowStateId], references: [workspaceId, teamId, id], onDelete: Restrict)
   assigneeTeamMember     TeamMember?                    @relation("TeamWorkAssigneeTeamMember", fields: [workspaceId, teamId, assigneeMembershipId], references: [workspaceId, teamId, membershipId], onDelete: Restrict)
   createdByMembership    WorkspaceMembership            @relation("TeamWorkCreatorMembership", fields: [workspaceId, createdByMembershipId], references: [workspaceId, id], onDelete: Restrict)
@@ -288,7 +260,6 @@ model TeamWork {
   @@index([workspaceId, teamId, deletedAt, updatedAt, id])
   @@index([workspaceId, assigneeMembershipId, deletedAt, updatedAt, id])
   @@index([workspaceId, workflowStateId, id])
-  @@index([workspaceId, projectRole, id])
   @@index([workspaceId, projectTeamId, deletedAt, updatedAt, id])
   @@index([workspaceId, deploymentStatus, updatedAt, id])
   @@index([workspaceId, deploymentGroupId, id])

@@ -226,7 +226,7 @@ export async function cleanupM2Users(emails: string[]): Promise<void> {
       await database.query('DELETE FROM issue_templates WHERE workspace_id = ANY($1::uuid[])', [
         workspaceIds,
       ]);
-      await database.query('DELETE FROM project_role_teams WHERE workspace_id = ANY($1::uuid[])', [
+      await database.query('DELETE FROM project_teams WHERE workspace_id = ANY($1::uuid[])', [
         workspaceIds,
       ]);
       await database.query('DELETE FROM projects WHERE workspace_id = ANY($1::uuid[])', [

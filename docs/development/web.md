@@ -1,7 +1,9 @@
 # 웹 개발 지침
 
-> 상태: 확정 v1.0  
+> 상태: 현행
 > 적용 범위: `apps/web`
+> 정본 책임: Next.js 화면 구조, 상태, API 소비, UI와 접근성 구현 기준
+> 갱신 조건: 웹 아키텍처, 상태 관리, UI 기반 또는 렌더링 정책 변경
 
 웹 코드를 구현·리뷰·리팩터링할 때 [공통 개발 지침](./common.md)과 함께 읽는다.
 
@@ -58,7 +60,7 @@ apps/web/
   - 모달 열림과 현재 입력값은 로컬 상태로 관리한다.
   - 이슈·프로젝트·알림은 서버 상태 캐시로 관리한다.
   - 검색어, 필터, 정렬과 선택 탭은 공유·복원할 필요가 있으면 URL 상태로 관리한다.
-- MVP에는 Zustand, Redux 같은 별도 전역 상태 라이브러리를 도입하지 않는다.
+- 현재는 Zustand, Redux 같은 별도 전역 상태 라이브러리를 사용하지 않는다.
 - 페이지 이동 뒤에도 유지돼야 하고 서로 떨어진 여러 화면이 함께 변경하는 클라이언트 전용 상태가 실제로 생길 때만 해당 상태 범위에 전역 store 도입을 검토한다.
 - props나 현재 state로 계산 가능한 값은 별도 state와 `useEffect`로 동기화하지 않는다.
 - 컴포넌트 안에 새 컴포넌트를 선언하지 않는다. 동일 파일의 바깥 함수로 분리하고 필요한 값은 props로 전달한다.
@@ -103,7 +105,8 @@ features/issues/
 
 ## 5. UI와 스타일
 
-- UI 시각 구현은 [DESIGN.md](../../DESIGN.md)와 [디자인 시스템 명세서](../planning/005.%20디자인%20시스템%20명세서.md)를 따른다.
+- UI 시각 구현은 [DESIGN.md](../../DESIGN.md), `app/globals.css`와 기존
+  `components/ui`를 따른다.
 - shadcn/ui 원본은 `apps/web/components/ui`에서 소유하고 제품 토큰과 접근성 기준에 맞게 수정한다.
 - `packages/ui`는 두 번째 실제 소비자가 생기기 전에는 만들지 않는다.
 - Tailwind는 `app/globals.css`의 의미 CSS 변수와 디자인 시스템 토큰을 사용한다.
@@ -121,7 +124,8 @@ features/issues/
 - 서버 정본은 Markdown 문자열이며 Lexical JSON과 렌더링 HTML을 API로 보내지 않는다.
 - Markdown 미리보기와 저장 후 조회는 react-markdown, remark-gfm과 rehype-sanitize로 구성한 하나의 렌더러를 재사용한다.
 - `rehype-raw`와 `dangerouslySetInnerHTML`을 사용하지 않고 Markdown 안의 HTML 원문은 렌더링하지 않는다.
-- rehype-sanitize 허용 목록에는 MVP 서식에 포함된 요소와 속성만 두고 표·작업 목록·임의 HTML은 허용하지 않는다.
+- rehype-sanitize 허용 목록에는 현재 지원하는 서식의 요소와 속성만 두고 표·작업 목록·임의
+  HTML은 허용하지 않는다.
 - 사용자 입력을 해석하거나 노드를 추가하는 plugin은 sanitize보다 앞에 실행하고 sanitize 뒤에는 신뢰된 표시 변환만 둔다.
 - 링크와 이미지는 전용 React 컴포넌트에서 허용 프로토콜, 외부 링크 속성과 인증된 첨부파일 상대 경로를 검증한다.
 - Data URL을 본문에 넣지 않고 업로드된 파일 ID의 같은 출처 상대 경로만 삽입한다.

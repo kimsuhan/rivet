@@ -5,7 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { LoggerModule } from 'nestjs-pino';
 
-import { MembershipRole, NotificationType, ProjectRole, StateCategory } from '@rivet/database';
+import { MembershipRole, NotificationType, StateCategory } from '@rivet/database';
 import type {
   ApiHandoffCreatedOutboxPayload,
   TeamWorkChangedOutboxPayload,
@@ -38,6 +38,8 @@ describe('M9 team-work worker PostgreSQL integration', () => {
   const backendStateId = randomUUID();
   const webStateId = randomUUID();
   const projectId = randomUUID();
+  const backendProjectTeamId = randomUUID();
+  const webProjectTeamId = randomUUID();
   const issueId = randomUUID();
   const backendWorkId = randomUUID();
   const webWorkId = randomUUID();
@@ -78,10 +80,14 @@ describe('M9 team-work worker PostgreSQL integration', () => {
       { category: StateCategory.UNSTARTED, id: webStateId, isDefault: true, name: '할 일', normalizedName: '할 일', position: 0, teamId: webTeamId, workspaceId },
     ] });
     await database.client.project.create({ data: { id: projectId, name: 'M9 Worker 프로젝트', workspaceId } });
+    await database.client.projectTeam.createMany({ data: [
+      { id: backendProjectTeamId, projectId, teamId: backendTeamId, workspaceId },
+      { id: webProjectTeamId, projectId, teamId: webTeamId, workspaceId },
+    ] });
     await database.client.issue.create({ data: { createdByMembershipId: actorMembershipId, id: issueId, identifier: 'F-9100', projectId, sequenceNumber: 9100, title: 'Worker 통합 이슈', workspaceId } });
     await database.client.teamWork.createMany({ data: [
-      { createdByMembershipId: actorMembershipId, id: backendWorkId, identifier: 'API-9100', issueId, projectRole: ProjectRole.BACKEND, sequenceNumber: 9100, teamId: backendTeamId, workflowStateId: backendStateId, workspaceId },
-      { assigneeMembershipId: recipientMembershipId, createdByMembershipId: actorMembershipId, id: webWorkId, identifier: 'WEB-9100', issueId, projectRole: ProjectRole.WEB_FRONTEND, sequenceNumber: 9100, teamId: webTeamId, workflowStateId: webStateId, workspaceId },
+      { createdByMembershipId: actorMembershipId, id: backendWorkId, identifier: 'API-9100', issueId, projectTeamId: backendProjectTeamId, sequenceNumber: 9100, teamId: backendTeamId, workflowStateId: backendStateId, workspaceId },
+      { assigneeMembershipId: recipientMembershipId, createdByMembershipId: actorMembershipId, id: webWorkId, identifier: 'WEB-9100', issueId, projectTeamId: webProjectTeamId, sequenceNumber: 9100, teamId: webTeamId, workflowStateId: webStateId, workspaceId },
     ] });
     await database.client.issueSubscription.create({ data: { issueId, membershipId: recipientMembershipId, workspaceId } });
     await database.client.apiHandoff.create({ data: { authorMembershipId: actorMembershipId, bodyMarkdown: '## 전달', id: handoffId, issueId, kind: 'INITIAL', sequenceNumber: 1, sourceTeamWorkId: backendWorkId, workspaceId } });
@@ -95,6 +101,7 @@ describe('M9 team-work worker PostgreSQL integration', () => {
     await database.client.issueSubscription.deleteMany({ where: { workspaceId } });
     await database.client.teamWork.deleteMany({ where: { workspaceId } });
     await database.client.issue.deleteMany({ where: { workspaceId } });
+    await database.client.projectTeam.deleteMany({ where: { workspaceId } });
     await database.client.project.deleteMany({ where: { workspaceId } });
     await database.client.workflowState.deleteMany({ where: { workspaceId } });
     await database.client.teamMember.deleteMany({ where: { workspaceId } });

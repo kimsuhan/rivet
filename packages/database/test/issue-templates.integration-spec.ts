@@ -1,12 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import {
-  createPrismaClient,
-  IssuePriority,
-  MembershipRole,
-  ProjectRole,
-  StateCategory,
-} from '../src';
+import { createPrismaClient, IssuePriority, MembershipRole, StateCategory } from '../src';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL 환경 변수가 필요합니다.');
@@ -22,6 +16,7 @@ type Fixture = {
   labelId: string;
   membershipId: string;
   projectId: string;
+  projectTeamId: string;
   teamId: string;
   userId: string;
   workflowStateId: string;
@@ -83,8 +78,8 @@ async function createFixture(name: string): Promise<Fixture> {
   await prisma.project.create({
     data: { id: projectId, name: `${name} 프로젝트`, workspaceId },
   });
-  await prisma.projectRoleTeam.create({
-    data: { projectId, role: ProjectRole.BACKEND, teamId, workspaceId },
+  const projectTeam = await prisma.projectTeam.create({
+    data: { projectId, teamId, workspaceId },
   });
   await prisma.label.create({
     data: {
@@ -100,6 +95,7 @@ async function createFixture(name: string): Promise<Fixture> {
     labelId,
     membershipId,
     projectId,
+    projectTeamId: projectTeam.id,
     teamId,
     userId,
     workflowStateId,
@@ -117,7 +113,6 @@ async function cleanup(fixtures: Fixture[]) {
   await prisma.teamWork.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
   await prisma.issue.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
   await prisma.issueTemplate.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
-  await prisma.projectRoleTeam.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
   await prisma.projectTeam.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
   await prisma.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
   await prisma.workflowState.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
@@ -131,7 +126,7 @@ async function cleanup(fixtures: Fixture[]) {
 describe('issue templates PostgreSQL integration', () => {
   afterAll(async () => prisma.$disconnect());
 
-  it('enforces workspace references, project-role dependency, and active name uniqueness', async () => {
+  it('enforces workspace references, project-team dependency, and active name uniqueness', async () => {
     const first = await createFixture('첫 번째');
     const second = await createFixture('두 번째');
 
@@ -177,10 +172,10 @@ describe('issue templates PostgreSQL integration', () => {
       await expect(
         prisma.issueTemplate.create({
           data: {
-            descriptionMarkdown: '프로젝트 없는 역할',
-            initialRole: ProjectRole.BACKEND,
-            name: '잘못된 역할',
-            normalizedName: '잘못된 역할',
+            descriptionMarkdown: '프로젝트 없는 최초 팀',
+            initialProjectTeamId: first.projectTeamId,
+            name: '잘못된 최초 팀',
+            normalizedName: '잘못된 최초 팀',
             workspaceId: first.workspaceId,
           },
         }),
@@ -277,7 +272,7 @@ describe('issue templates PostgreSQL integration', () => {
       const template = await prisma.issueTemplate.create({
         data: {
           descriptionMarkdown: '영구 삭제 전 템플릿 설명',
-          initialRole: ProjectRole.BACKEND,
+          initialProjectTeamId: fixture.projectTeamId,
           name: '영구 삭제 대상 프로젝트 템플릿',
           normalizedName: '영구 삭제 대상 프로젝트 템플릿',
           priority: IssuePriority.HIGH,
@@ -318,7 +313,7 @@ describe('issue templates PostgreSQL integration', () => {
       await expect(
         prisma.issueTemplate.findUniqueOrThrow({ where: { id: template.id } }),
       ).resolves.toMatchObject({
-        initialRole: ProjectRole.BACKEND,
+        initialProjectTeamId: fixture.projectTeamId,
         projectId: fixture.projectId,
         version: 1,
       });
@@ -326,13 +321,9 @@ describe('issue templates PostgreSQL integration', () => {
         await transaction.issueTemplate.updateMany({
           data: {
             initialProjectTeamId: null,
-            initialRole: null,
             projectId: null,
             version: { increment: 1 },
           },
-          where: { projectId: fixture.projectId, workspaceId: fixture.workspaceId },
-        });
-        await transaction.projectRoleTeam.deleteMany({
           where: { projectId: fixture.projectId, workspaceId: fixture.workspaceId },
         });
         await transaction.projectTeam.deleteMany({
@@ -355,7 +346,7 @@ describe('issue templates PostgreSQL integration', () => {
           where: { id: template.id },
         }),
       ).resolves.toMatchObject({
-        initialRole: null,
+        initialProjectTeamId: null,
         labels: [expect.objectContaining({ labelId: fixture.labelId })],
         projectId: null,
         version: 2,
@@ -385,7 +376,7 @@ describe('issue templates PostgreSQL integration', () => {
       const template = await prisma.issueTemplate.create({
         data: {
           descriptionMarkdown: '적용 당시 설명',
-          initialRole: ProjectRole.BACKEND,
+          initialProjectTeamId: fixture.projectTeamId,
           name: '적용 템플릿',
           normalizedName: '적용 템플릿',
           priority: IssuePriority.HIGH,
@@ -426,7 +417,7 @@ describe('issue templates PostgreSQL integration', () => {
           id: teamWorkId,
           identifier: `WORK-${teamWorkId.slice(0, 8)}`,
           issueId,
-          projectRole: template.initialRole!,
+          projectTeamId: fixture.projectTeamId,
           sequenceNumber: 1,
           teamId: fixture.teamId,
           workflowStateId: fixture.workflowStateId,
@@ -439,7 +430,7 @@ describe('issue templates PostgreSQL integration', () => {
         data: {
           archivedAt: new Date(),
           descriptionMarkdown: '나중에 바뀐 설명',
-          initialRole: ProjectRole.WEB_FRONTEND,
+          initialProjectTeamId: null,
           priority: IssuePriority.LOW,
           version: { increment: 1 },
         },
@@ -461,7 +452,7 @@ describe('issue templates PostgreSQL integration', () => {
       expect(issue.teamWorks).toEqual([
         expect.objectContaining({
           id: teamWorkId,
-          projectRole: ProjectRole.BACKEND,
+          projectTeamId: fixture.projectTeamId,
           teamId: fixture.teamId,
         }),
       ]);
