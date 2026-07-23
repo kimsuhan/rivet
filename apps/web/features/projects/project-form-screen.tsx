@@ -2,7 +2,16 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ImagePlus, Monitor, RotateCcw, Search, Trash2, Users } from 'lucide-react';
+import {
+  ArrowLeft,
+  ImagePlus,
+  LockKeyhole,
+  Monitor,
+  RotateCcw,
+  Search,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
@@ -278,6 +287,7 @@ function ProjectForm({
     const fieldErrors = body.fieldErrors ?? {};
     const fieldMap: Partial<Record<keyof ProjectFormValues, string | undefined>> = {
       description: fieldErrors.description?.[0],
+      deploymentTrackingTeamIds: fieldErrors.deploymentTrackingTeamIds?.[0],
       name: fieldErrors.name?.[0],
       startDate: fieldErrors.startDate?.[0],
       targetDate: fieldErrors.targetDate?.[0],
@@ -636,6 +646,15 @@ function ProjectForm({
                         aria-describedby={`project-team-${team.id}-description`}
                         onCheckedChange={(next) => {
                           const selected = values.teamIds ?? [];
+                          if (!next) {
+                            form.setValue(
+                              'deploymentTrackingTeamIds',
+                              (values.deploymentTrackingTeamIds ?? []).filter(
+                                (id) => id !== team.id,
+                              ),
+                              { shouldDirty: true, shouldValidate: true },
+                            );
+                          }
                           form.setValue(
                             'teamIds',
                             next
@@ -672,6 +691,71 @@ function ProjectForm({
             <FieldDescription>{t('field.noParticipatingTeams')}</FieldDescription>
           ) : null}
           <FieldError errors={[form.formState.errors.teamIds]} />
+        </FieldSet>
+
+        <FieldSet data-invalid={Boolean(form.formState.errors.deploymentTrackingTeamIds)}>
+          <FieldLegend>{t('field.deploymentTracking')}</FieldLegend>
+          <FieldDescription>{t('field.deploymentTrackingHint')}</FieldDescription>
+          {!canManageTeams ? (
+            <Alert>
+              <LockKeyhole aria-hidden="true" />
+              <AlertTitle>{t('deploymentPermission.title')}</AlertTitle>
+              <AlertDescription>{t('deploymentPermission.description')}</AlertDescription>
+            </Alert>
+          ) : null}
+          {(values.teamIds ?? []).length === 0 ? (
+            <div className="border-border bg-muted/30 rounded-lg border border-dashed px-4 py-6 text-center">
+              <p className="text-sm font-medium">{t('field.deploymentTrackingEmpty')}</p>
+            </div>
+          ) : (
+            <ul className="divide-border overflow-hidden rounded-xl border">
+              {teamOptions
+                .filter((team) => (values.teamIds ?? []).includes(team.id))
+                .map((team) => {
+                  const checked = (values.deploymentTrackingTeamIds ?? []).includes(team.id);
+                  return (
+                    <li key={team.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
+                      <span className="bg-muted text-muted-foreground min-w-12 rounded-md px-2 py-1 text-center font-mono text-xs font-semibold">
+                        {team.key}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{team.name}</span>
+                        <span className="text-muted-foreground block text-xs">
+                          {checked
+                            ? t('field.deploymentTrackingOn')
+                            : t('field.deploymentTrackingOff')}
+                        </span>
+                      </span>
+                      {canManageTeams ? (
+                        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(next) => {
+                              const selected = values.deploymentTrackingTeamIds ?? [];
+                              form.setValue(
+                                'deploymentTrackingTeamIds',
+                                next
+                                  ? [...new Set([...selected, team.id])]
+                                  : selected.filter((id) => id !== team.id),
+                                { shouldDirty: true, shouldValidate: true },
+                              );
+                            }}
+                          />
+                          {t('field.deploymentTrackingToggle')}
+                        </label>
+                      ) : (
+                        <Badge variant={checked ? 'secondary' : 'outline'}>
+                          {checked
+                            ? t('field.deploymentTrackingToggle')
+                            : t('field.deploymentTrackingDisabled')}
+                        </Badge>
+                      )}
+                    </li>
+                  );
+                })}
+            </ul>
+          )}
+          <FieldError errors={[form.formState.errors.deploymentTrackingTeamIds]} />
         </FieldSet>
 
         <div className="bg-background fixed inset-x-0 bottom-0 flex justify-end gap-2 border-t px-6 py-3 lg:left-14 xl:left-60">

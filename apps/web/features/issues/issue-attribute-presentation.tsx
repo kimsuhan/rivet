@@ -40,7 +40,7 @@ export const ISSUE_STATUS_PRESENTATION: Record<IssueSummaryResponseDto['status']
   UNSORTED: { icon: CircleDashed, iconClassName: 'text-muted-foreground', label: '접수됨' },
   TODO: { icon: Circle, iconClassName: 'text-foreground', label: '할 일' },
   IN_PROGRESS: { icon: CircleDotDashed, iconClassName: 'text-info', label: '진행 중' },
-  REVIEW: { icon: CircleDot, iconClassName: 'text-info', label: '완료 확인' },
+  REVIEW: { icon: CircleDot, iconClassName: 'text-info', label: '배포 대기' },
   DONE: { icon: CircleCheck, iconClassName: 'text-success', label: '완료' },
   PAUSED: { icon: CirclePause, iconClassName: 'text-warning', label: '일시 중지' },
   CANCELED: { icon: CircleX, iconClassName: 'text-muted-foreground', label: '취소' },

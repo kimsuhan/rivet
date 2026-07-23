@@ -42,6 +42,7 @@ describe('ProjectsService', () => {
     projectTeams: [
       {
         deactivatedAt: null,
+        deploymentTrackingEnabled: false,
         id: projectTeamId,
         isActive: true,
         team: { archivedAt: null, id: teamId, key: 'API', name: 'API 팀' },
@@ -101,7 +102,7 @@ describe('ProjectsService', () => {
     transaction.project.findFirst.mockResolvedValue(project);
     transaction.project.update.mockResolvedValue({ id: projectId });
     transaction.projectTeam.findMany.mockResolvedValue([
-      { id: projectTeamId, isActive: true, teamId },
+      { deploymentTrackingEnabled: false, id: projectTeamId, isActive: true, teamId },
     ]);
     transaction.projectTeam.createMany.mockResolvedValue({ count: 1 });
     transaction.projectTeam.updateMany.mockResolvedValue({ count: 1 });
@@ -234,6 +235,7 @@ describe('ProjectsService', () => {
       description: '  결제 흐름을 개편한다.  ',
       leadMembershipId,
       name: '  결제 개편  ',
+      deploymentTrackingTeamIds: [teamId],
       teamIds: [teamId],
       startDate: '2026-07-15',
       targetDate: '2026-08-15',
@@ -256,7 +258,14 @@ describe('ProjectsService', () => {
       select: { id: true },
     });
     expect(transaction.projectTeam.createMany).toHaveBeenCalledWith({
-      data: [{ projectId, teamId, workspaceId: context.workspaceId }],
+      data: [
+        {
+          deploymentTrackingEnabled: true,
+          projectId,
+          teamId,
+          workspaceId: context.workspaceId,
+        },
+      ],
     });
     expect(transaction.activityEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ eventType: 'PROJECT_CREATED', projectId }),
@@ -344,6 +353,48 @@ describe('ProjectsService', () => {
     expect(transaction.project.update).not.toHaveBeenCalled();
   });
 
+  it('rejects participating team changes from a regular non-lead member', async () => {
+    transaction.$queryRaw
+      .mockResolvedValueOnce([{ id: context.workspaceId }])
+      .mockResolvedValueOnce([lockedProject]);
+
+    await expect(
+      service.update(
+        { ...context, membershipRole: MembershipRole.MEMBER },
+        projectId,
+        { teamIds: [otherTeamId], version: 1 },
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'PROJECT_TEAM_MANAGE_FORBIDDEN' },
+      status: HttpStatus.FORBIDDEN,
+    });
+
+    expect(transaction.projectTeam.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects deployment tracking changes from a regular non-lead member', async () => {
+    transaction.$queryRaw
+      .mockResolvedValueOnce([{ id: context.workspaceId }])
+      .mockResolvedValueOnce([lockedProject]);
+
+    await expect(
+      service.update(
+        { ...context, membershipRole: MembershipRole.MEMBER },
+        projectId,
+        {
+          deploymentTrackingTeamIds: [teamId],
+          teamIds: [teamId],
+          version: 1,
+        },
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'PROJECT_TEAM_MANAGE_FORBIDDEN' },
+      status: HttpStatus.FORBIDDEN,
+    });
+
+    expect(transaction.projectTeam.upsert).not.toHaveBeenCalled();
+  });
+
   it('returns blocking issue details when excluding an in-use project team', async () => {
     transaction.$queryRaw
       .mockResolvedValueOnce([{ id: context.workspaceId }])
@@ -419,8 +470,13 @@ describe('ProjectsService', () => {
       },
     });
     expect(transaction.projectTeam.upsert).toHaveBeenCalledWith({
-      create: { projectId, teamId: otherTeamId, workspaceId: context.workspaceId },
-      update: { deactivatedAt: null, isActive: true },
+      create: {
+        deploymentTrackingEnabled: false,
+        projectId,
+        teamId: otherTeamId,
+        workspaceId: context.workspaceId,
+      },
+      update: { deactivatedAt: null, deploymentTrackingEnabled: false, isActive: true },
       where: { projectId_teamId: { projectId, teamId: otherTeamId } },
     });
     expect(transaction.activityEvent.createMany).toHaveBeenCalledWith({

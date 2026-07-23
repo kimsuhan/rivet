@@ -877,11 +877,7 @@ describe('M9 issue content and team execution API', () => {
         workflowStateId: webDoneId,
       })
       .expect(200);
-    expect(completedWeb.body.issue.status).toBe('REVIEW');
-    const completedIssue = await mutate('patch', `/api/v1/issues/${issue.id}`)
-      .send({ statusAction: 'COMPLETE', version: completedWeb.body.issue.version })
-      .expect(200);
-    expect(completedIssue.body.status).toBe('DONE');
+    expect(completedWeb.body.issue.status).toBe('DONE');
 
     const comment = await mutate('post', `/api/v1/issues/${issue.id}/comments`)
       .send({ bodyMarkdown: '공통 댓글', teamWorkId: web.id })
@@ -1108,14 +1104,8 @@ describe('M9 issue content and team execution API', () => {
         workflowStateId: backendDoneId,
       })
       .expect(200);
-    expect(completed.body.issue.status).toBe('REVIEW');
+    expect(completed.body.issue.status).toBe('DONE');
     expect(completed.body.issue.progress).toEqual({ completed: 1, percentage: 100, total: 1 });
-
-    const done = await mutate('patch', `/api/v1/issues/${issueId}`)
-      .send({ statusAction: 'COMPLETE', version: completed.body.issue.version })
-      .expect(200);
-    expect(done.body.status).toBe('DONE');
-    expect(done.body.progress).toEqual({ completed: 1, percentage: 100, total: 1 });
 
     const removed = await mutate('post', `/api/v1/team-works/${teamWork.id}/remove`)
       .send({ version: completed.body.teamWork.version })

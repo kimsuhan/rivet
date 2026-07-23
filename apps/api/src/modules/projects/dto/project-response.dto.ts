@@ -51,6 +51,9 @@ export class ProjectTeamResponseDto {
   @ApiProperty({ format: 'date-time', nullable: true, type: String })
   deactivatedAt!: string | null;
 
+  @ApiProperty()
+  deploymentTrackingEnabled!: boolean;
+
   @ApiProperty({ type: ProjectTeamSummaryResponseDto })
   team!: ProjectTeamSummaryResponseDto;
 }

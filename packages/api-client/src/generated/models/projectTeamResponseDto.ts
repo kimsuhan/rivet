@@ -12,5 +12,6 @@ export interface ProjectTeamResponseDto {
   active: boolean;
   /** @nullable */
   deactivatedAt: string | null;
+  deploymentTrackingEnabled: boolean;
   team: ProjectTeamSummaryResponseDto;
 }

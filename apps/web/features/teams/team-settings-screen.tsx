@@ -273,7 +273,14 @@ function TeamCreateDialog({
     clearErrors();
     setUnexpectedError(false);
     mutation.mutate(
-      { data: values },
+      {
+        data: {
+          key: values.key,
+          memberIds: values.memberIds,
+          name: values.name,
+          ...(values.leaderId ? { leaderId: values.leaderId } : {}),
+        },
+      },
       {
         onError: (error) => {
           const code = error.body.code;

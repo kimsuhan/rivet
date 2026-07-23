@@ -58,37 +58,39 @@ model Workspace {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  createdByUser        User                      @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  memberships          WorkspaceMembership[]
-  invitations          WorkspaceInvitation[]
-  invitationTeams      WorkspaceInvitationTeam[]
-  teams                Team[]
-  labels               Label[]
-  outboxEvents         OutboxEvent[]
-  projects             Project[]
-  projectRoles         ProjectRoleTeam[]
-  projectTeams         ProjectTeam[]
-  issueTemplates       IssueTemplate[]
-  issueTemplateLabels  IssueTemplateLabel[]
-  issues               Issue[]
-  teamWorks            TeamWork[]
-  issueLabels          IssueLabel[]
-  subscriptions        IssueSubscription[]
-  apiHandoffs          ApiHandoff[]
-  apiHandoffTargets    ApiHandoffTarget[]
-  activityEvents       ActivityEvent[]
-  notifications        Notification[]
-  comments             Comment[]
-  mentions             Mention[]
-  files                File[]
-  fileAttachments      IssueFileAttachment[]
-  exportAudits         ExportAudit[]
-  importRuns           ImportRun[]
-  importSourceRows     ImportSourceRow[]
-  savedViews           SavedView[]
-  webPushSubscriptions WebPushSubscription[]
-  productFeedback      ProductFeedback[]
-  productEventStates   ProductEventState[]
+  createdByUser          User                           @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  memberships            WorkspaceMembership[]
+  invitations            WorkspaceInvitation[]
+  invitationTeams        WorkspaceInvitationTeam[]
+  teams                  Team[]
+  labels                 Label[]
+  outboxEvents           OutboxEvent[]
+  projects               Project[]
+  projectRoles           ProjectRoleTeam[]
+  projectTeams           ProjectTeam[]
+  issueTemplates         IssueTemplate[]
+  issueTemplateLabels    IssueTemplateLabel[]
+  issues                 Issue[]
+  teamWorks              TeamWork[]
+  issueLabels            IssueLabel[]
+  subscriptions          IssueSubscription[]
+  apiHandoffs            ApiHandoff[]
+  apiHandoffTargets      ApiHandoffTarget[]
+  activityEvents         ActivityEvent[]
+  notifications          Notification[]
+  comments               Comment[]
+  mentions               Mention[]
+  files                  File[]
+  fileAttachments        IssueFileAttachment[]
+  exportAudits           ExportAudit[]
+  importRuns             ImportRun[]
+  importSourceRows       ImportSourceRow[]
+  savedViews             SavedView[]
+  webPushSubscriptions   WebPushSubscription[]
+  productFeedback        ProductFeedback[]
+  productEventStates     ProductEventState[]
+  deploymentGroups       DeploymentGroup[]
+  deploymentDependencies TeamWorkDeploymentDependency[]
 
   @@map("workspaces")
 }
@@ -117,6 +119,7 @@ model WorkspaceMembership {
   createdIssues          Issue[]                   @relation("IssueCreatorMembership")
   deletedIssues          Issue[]                   @relation("IssueDeletedByMembership")
   createdTeamWorks       TeamWork[]                @relation("TeamWorkCreatorMembership")
+  deployedTeamWorks      TeamWork[]                @relation("TeamWorkDeployedByMembership")
   issueSubscriptions     IssueSubscription[]
   authoredHandoffs       ApiHandoff[]              @relation("ApiHandoffAuthorMembership")
   actorActivityEvents    ActivityEvent[]           @relation("ActivityActorMembership")

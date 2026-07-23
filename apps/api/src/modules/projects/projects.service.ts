@@ -57,7 +57,15 @@ export class ProjectsService {
     const startDate = parseProjectDate(dto.startDate, 'startDate') ?? null;
     const targetDate = parseProjectDate(dto.targetDate, 'targetDate') ?? null;
     const teamIds = normalizeProjectTeamIds(dto.teamIds);
+    const deploymentTrackingTeamIds = normalizeProjectTeamIds(dto.deploymentTrackingTeamIds);
     validateProjectDateOrder(startDate, targetDate);
+
+    if (deploymentTrackingTeamIds.some((teamId) => !teamIds.includes(teamId))) {
+      return projectValidationError(
+        'deploymentTrackingTeamIds',
+        '프로젝트 참여 팀만 운영 배포 관리 대상으로 설정할 수 있습니다.',
+      );
+    }
 
     if (
       teamIds.length > 0 &&
@@ -78,11 +86,7 @@ export class ProjectsService {
         context.workspaceId,
         dto.leadMembershipId ?? undefined,
       );
-      await this.projects.lockActiveTeams(
-        transaction,
-        context.workspaceId,
-        teamIds,
-      );
+      await this.projects.lockActiveTeams(transaction, context.workspaceId, teamIds);
       if (dto.logoFileId) {
         await this.requireAvailableLogoFile(transaction, context, dto.logoFileId);
       }
@@ -109,6 +113,7 @@ export class ProjectsService {
       if (teamIds.length > 0) {
         await transaction.projectTeam.createMany({
           data: teamIds.map((teamId) => ({
+            deploymentTrackingEnabled: deploymentTrackingTeamIds.includes(teamId),
             projectId: project.id,
             teamId,
             workspaceId: context.workspaceId,
@@ -120,6 +125,7 @@ export class ProjectsService {
           actorMembershipId: context.membershipId,
           afterData: {
             name,
+            deploymentTrackingTeamIds,
             teamIds,
             status: dto.status ?? ProjectStatus.PLANNED,
           },
@@ -175,6 +181,7 @@ export class ProjectsService {
       dto.startDate === undefined &&
       dto.targetDate === undefined &&
       dto.teamIds === undefined &&
+      dto.deploymentTrackingTeamIds === undefined &&
       dto.logoFileId === undefined
     ) {
       return projectValidationError('project', '변경할 프로젝트 정보를 입력해 주세요.');
@@ -186,6 +193,10 @@ export class ProjectsService {
     const requestedTargetDate = parseProjectDate(dto.targetDate, 'targetDate');
     const requestedTeamIds =
       dto.teamIds === undefined ? undefined : normalizeProjectTeamIds(dto.teamIds);
+    const requestedDeploymentTrackingTeamIds =
+      dto.deploymentTrackingTeamIds === undefined
+        ? undefined
+        : normalizeProjectTeamIds(dto.deploymentTrackingTeamIds);
 
     const outcome = await this.database.client.$transaction(async (transaction) => {
       await this.projects.lockWorkspace(transaction, context.workspaceId);
@@ -216,7 +227,7 @@ export class ProjectsService {
 
       const currentProjectTeams = await transaction.projectTeam.findMany({
         orderBy: [{ teamId: 'asc' }, { id: 'asc' }],
-        select: { id: true, isActive: true, teamId: true },
+        select: { deploymentTrackingEnabled: true, id: true, isActive: true, teamId: true },
         where: { projectId, workspaceId: context.workspaceId },
       });
       const currentActiveTeamIds = currentProjectTeams
@@ -227,7 +238,26 @@ export class ProjectsService {
         requestedTeamIds !== undefined &&
         (requestedTeamIds.length !== currentActiveTeamIds.length ||
           requestedTeamIds.some((teamId, index) => teamId !== currentActiveTeamIds[index]));
-      if (changesProjectTeams && requestedTeamIds) {
+      const currentDeploymentTrackingTeamIds = currentProjectTeams
+        .filter(({ deploymentTrackingEnabled, isActive }) => isActive && deploymentTrackingEnabled)
+        .map(({ teamId }) => teamId)
+        .sort();
+      const effectiveTeamIds = requestedTeamIds ?? currentActiveTeamIds;
+      const effectiveDeploymentTrackingTeamIds =
+        requestedDeploymentTrackingTeamIds ??
+        currentDeploymentTrackingTeamIds.filter((teamId) => effectiveTeamIds.includes(teamId));
+      if (effectiveDeploymentTrackingTeamIds.some((teamId) => !effectiveTeamIds.includes(teamId))) {
+        return projectValidationError(
+          'deploymentTrackingTeamIds',
+          '프로젝트 참여 팀만 운영 배포 관리 대상으로 설정할 수 있습니다.',
+        );
+      }
+      const changesDeploymentTracking =
+        effectiveDeploymentTrackingTeamIds.length !== currentDeploymentTrackingTeamIds.length ||
+        effectiveDeploymentTrackingTeamIds.some(
+          (teamId, index) => teamId !== currentDeploymentTrackingTeamIds[index],
+        );
+      if (changesProjectTeams || changesDeploymentTracking) {
         if (
           context.membershipRole !== MembershipRole.ADMIN &&
           current.leadMembershipId !== context.membershipId
@@ -238,12 +268,8 @@ export class ProjectsService {
             status: HttpStatus.FORBIDDEN,
           });
         }
-        await this.projects.lockActiveTeams(
-          transaction,
-          context.workspaceId,
-          requestedTeamIds,
-        );
-        const requestedTeamIdSet = new Set(requestedTeamIds);
+        await this.projects.lockActiveTeams(transaction, context.workspaceId, effectiveTeamIds);
+        const requestedTeamIdSet = new Set(effectiveTeamIds);
         const deactivatedProjectTeamIds = currentProjectTeams
           .filter(({ isActive, teamId }) => isActive && !requestedTeamIdSet.has(teamId))
           .map(({ id }) => id);
@@ -296,6 +322,7 @@ export class ProjectsService {
         !changesStartDate &&
         !changesTargetDate &&
         !changesProjectTeams &&
+        !changesDeploymentTracking &&
         !changesLogo
       ) {
         const row = await this.projects.find(transaction, context.workspaceId, projectId);
@@ -342,9 +369,9 @@ export class ProjectsService {
         }
       }
 
-      if (changesProjectTeams && requestedTeamIds) {
+      if (changesProjectTeams || changesDeploymentTracking) {
         const deactivatedAt = new Date();
-        if (requestedTeamIds.length === 0) {
+        if (effectiveTeamIds.length === 0) {
           await transaction.projectTeam.updateMany({
             data: { deactivatedAt, isActive: false },
             where: { isActive: true, projectId, workspaceId: context.workspaceId },
@@ -355,14 +382,23 @@ export class ProjectsService {
             where: {
               isActive: true,
               projectId,
-              teamId: { notIn: requestedTeamIds },
+              teamId: { notIn: effectiveTeamIds },
               workspaceId: context.workspaceId,
             },
           });
-          for (const teamId of requestedTeamIds) {
+          for (const teamId of effectiveTeamIds) {
             await transaction.projectTeam.upsert({
-              create: { projectId, teamId, workspaceId: context.workspaceId },
-              update: { deactivatedAt: null, isActive: true },
+              create: {
+                deploymentTrackingEnabled: effectiveDeploymentTrackingTeamIds.includes(teamId),
+                projectId,
+                teamId,
+                workspaceId: context.workspaceId,
+              },
+              update: {
+                deactivatedAt: null,
+                deploymentTrackingEnabled: effectiveDeploymentTrackingTeamIds.includes(teamId),
+                isActive: true,
+              },
               where: { projectId_teamId: { projectId, teamId } },
             });
           }
@@ -409,10 +445,13 @@ export class ProjectsService {
         );
       }
       if (changesProjectTeams) {
+        addEvent('projectTeams', currentActiveTeamIds, effectiveTeamIds);
+      }
+      if (changesDeploymentTracking) {
         addEvent(
-          'projectTeams',
-          currentActiveTeamIds,
-          requestedTeamIds!,
+          'deploymentTrackingTeamIds',
+          currentDeploymentTrackingTeamIds,
+          effectiveDeploymentTrackingTeamIds,
         );
       }
       await transaction.activityEvent.createMany({ data: events });
@@ -478,10 +517,16 @@ export class ProjectsService {
       return projectValidationError('logoFileId', '사용할 수 있는 프로젝트 로고 파일이 아닙니다.');
     }
     if (file.avatarLinked || file.attachmentLinked || file.logoLinked) {
-      return projectValidationError('logoFileId', '이미 연결된 파일은 프로젝트 로고로 사용할 수 없습니다.');
+      return projectValidationError(
+        'logoFileId',
+        '이미 연결된 파일은 프로젝트 로고로 사용할 수 없습니다.',
+      );
     }
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.detectedMimeType)) {
-      return projectValidationError('logoFileId', '프로젝트 로고는 JPG, PNG, WebP만 사용할 수 있습니다.');
+      return projectValidationError(
+        'logoFileId',
+        '프로젝트 로고는 JPG, PNG, WebP만 사용할 수 있습니다.',
+      );
     }
   }
 

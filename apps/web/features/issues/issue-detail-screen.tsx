@@ -8,10 +8,12 @@ import {
   ArrowUpRight,
   Check,
   CircleAlert,
+  CircleCheck,
   FileText,
   MessageCircleQuestion,
   MoreHorizontal,
   Play,
+  Rocket,
   Save,
   UserRound,
 } from 'lucide-react';
@@ -44,7 +46,7 @@ import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -74,6 +76,12 @@ import {
   WorkNoteEditor,
 } from '@/features/collaboration/markdown-editor';
 import { MarkdownRenderer } from '@/features/collaboration/markdown-renderer';
+import { DeploymentPlanDialog } from '@/features/deployments/deployment-plan-dialog';
+import {
+  deploymentCondition,
+  deploymentProgress,
+  deploymentReadiness,
+} from '@/features/deployments/deployment-presentation';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 
 import { IssueAttachments } from './issue-attachments';
@@ -253,6 +261,7 @@ function TeamWorkPanel({
 }) {
   const queryClient = useQueryClient();
   const markdown = useTranslations('Markdown');
+  const deployment = useTranslations('Deployments');
   const editorLabels = markdownEditorLabels(
     (key) => markdown(key as never),
     (key) => String(markdown.raw(key as never)),
@@ -276,6 +285,34 @@ function TeamWorkPanel({
   const [followUpGuideOpen, setFollowUpGuideOpen] = useState(false);
   const [followUpSuccess, setFollowUpSuccess] = useState(false);
   const [savedFollowUpSequence, setSavedFollowUpSequence] = useState<number | null>(null);
+  const deploymentConditionValue = deploymentCondition(work, issue.teamWorks);
+  const deploymentReadinessValue = deploymentReadiness(work, issue.teamWorks);
+  const deploymentConditionText =
+    deploymentConditionValue.kind === 'INDEPENDENT'
+      ? deployment('condition.independent')
+      : deploymentConditionValue.kind === 'TOGETHER'
+        ? deployment('condition.together')
+        : deployment('condition.afterTeam', {
+            team: deploymentConditionValue.predecessorTeamNames.join(', '),
+          });
+  const deploymentReadinessText =
+    deploymentReadinessValue.kind === 'DEPLOYED'
+      ? null
+      : deploymentReadinessValue.kind === 'WAITING_FOR_WORK'
+        ? deployment('readiness.waitingForWork', {
+            state: deploymentReadinessValue.workflowStateName,
+          })
+        : deploymentReadinessValue.kind === 'WAITING_FOR_PREDECESSOR'
+          ? deployment('readiness.waitingForPredecessor', {
+              teams: deploymentReadinessValue.predecessorTeamNames.join(', '),
+            })
+          : deploymentReadinessValue.kind === 'WAITING_FOR_TOGETHER'
+            ? deployment('readiness.waitingForTogether', deploymentReadinessValue)
+            : deployment(
+                work.deploymentStatus === 'REDEPLOY_REQUIRED'
+                  ? 'readiness.redeployReady'
+                  : 'readiness.ready',
+              );
 
   function saveState(stateId: string) {
     const state = states.data?.items.find((item) => item.id === stateId);
@@ -387,6 +424,54 @@ function TeamWorkPanel({
               />
             </dd>
           </div>
+          {work.deploymentStatus !== 'NOT_APPLICABLE' ? (
+            <>
+              <div className="flex items-center gap-2">
+                <dt className="text-muted-foreground">{deployment('field.status')}</dt>
+                <dd className="flex flex-wrap items-center gap-1.5">
+                  <Link href="/deployments" className="hover:underline">
+                    <Badge
+                      variant={
+                        work.deploymentStatus === 'DEPLOYED'
+                          ? 'outline'
+                          : work.deploymentStatus === 'REDEPLOY_REQUIRED'
+                            ? 'destructive'
+                            : deploymentReadinessValue.kind === 'READY'
+                              ? 'default'
+                              : 'secondary'
+                      }
+                    >
+                      {work.deploymentStatus === 'DEPLOYED'
+                        ? deployment('view.DEPLOYED')
+                        : work.deploymentStatus === 'REDEPLOY_REQUIRED'
+                          ? deployment('status.REDEPLOY_REQUIRED')
+                          : deploymentReadinessText}
+                    </Badge>
+                  </Link>
+                  {work.deploymentStatus === 'REDEPLOY_REQUIRED' && deploymentReadinessText ? (
+                    <span className="text-muted-foreground text-xs">{deploymentReadinessText}</span>
+                  ) : null}
+                </dd>
+              </div>
+              <div className="flex items-center gap-2">
+                <dt className="text-muted-foreground">{deployment('field.condition')}</dt>
+                <dd className="text-xs">{deploymentConditionText}</dd>
+              </div>
+              {work.deployedAt ? (
+                <div className="flex items-center gap-2">
+                  <dt className="text-muted-foreground">{deployment('field.completedRecord')}</dt>
+                  <dd className="text-muted-foreground text-xs">
+                    {formatHandoffDateTime(work.deployedAt)}
+                    {work.deployedBy
+                      ? ` · ${deployment('deployedBy', {
+                          member: work.deployedBy.user.displayName,
+                        })}`
+                      : null}
+                  </dd>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </dl>
       </div>
       {error ? (
@@ -765,6 +850,7 @@ export function IssueDetailScreen(props: IssueDetailScreenProps) {
   const entry = props.entry ?? 'issue';
   const projectId = props.entry === 'project' ? props.projectId : null;
   const markdown = useTranslations('Markdown');
+  const deployments = useTranslations('Deployments');
   const editorLabels = markdownEditorLabels(
     (key) => markdown(key as never),
     (key) => String(markdown.raw(key as never)),
@@ -811,6 +897,18 @@ export function IssueDetailScreen(props: IssueDetailScreenProps) {
   const project = useProjectsControllerGet(issue?.project.id ?? '', {
     query: { enabled: Boolean(issue), retry: false },
   });
+  const canManageDeploymentPlan = Boolean(
+    issue &&
+    session.data?.authenticated &&
+    (session.data.membership?.role === 'ADMIN' ||
+      project.data?.lead?.id === session.data.membership?.id),
+  );
+  const deploymentWorks =
+    issue?.teamWorks.filter(
+      ({ deploymentStatus, stateCategory }) =>
+        stateCategory !== 'CANCELED' && deploymentStatus !== 'NOT_APPLICABLE',
+    ) ?? [];
+  const issueDeploymentProgress = deploymentProgress(deploymentWorks);
   const [startProjectTeamIds, setStartProjectTeamIds] = useState<string[]>([]);
   const [addTeamWorkDisclosure, setAddTeamWorkDisclosure] = useState(() => ({
     open: selectedWork?.stateCategory !== 'STARTED',
@@ -1016,7 +1114,7 @@ export function IssueDetailScreen(props: IssueDetailScreenProps) {
       // React Query mutation 상태가 인라인 오류를 표시한다.
     }
   }
-  async function statusAction(action: 'COMPLETE' | 'PAUSE' | 'RESUME' | 'REOPEN') {
+  async function statusAction(action: 'PAUSE' | 'RESUME' | 'REOPEN') {
     try {
       const updated = await updateIssue.mutateAsync({
         issueId: currentIssue.id,
@@ -1110,6 +1208,23 @@ export function IssueDetailScreen(props: IssueDetailScreenProps) {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {canManageDeploymentPlan && deploymentWorks.length > 1 ? (
+              <DeploymentPlanDialog issue={issue} />
+            ) : deploymentWorks.length > 0 ? (
+              <Link
+                href="/deployments"
+                className={buttonVariants({ size: 'sm', variant: 'outline' })}
+              >
+                {issueDeploymentProgress.completed === issueDeploymentProgress.total ? (
+                  <CircleCheck aria-hidden="true" className="size-4" />
+                ) : (
+                  <Rocket aria-hidden="true" className="size-4" />
+                )}
+                {issueDeploymentProgress.completed === issueDeploymentProgress.total
+                  ? deployments('summary.complete', issueDeploymentProgress)
+                  : deployments('summary.progress', issueDeploymentProgress)}
+              </Link>
+            ) : null}
             {isMyWorkEntry && selectedWork ? (
               <TeamWorkStatusDisplay
                 category={selectedWork.stateCategory}
@@ -1120,12 +1235,6 @@ export function IssueDetailScreen(props: IssueDetailScreenProps) {
             ) : (
               <IssueStatusDisplay status={issue.status} />
             )}
-            {!isMyWorkEntry && issue.status === 'REVIEW' ? (
-              <Button size="sm" onClick={() => void statusAction('COMPLETE')}>
-                <Check className="size-4" />
-                이슈 완료
-              </Button>
-            ) : null}
             {!isMyWorkEntry && issue.status === 'PAUSED' ? (
               <Button size="sm" variant="outline" onClick={() => void statusAction('RESUME')}>
                 재개

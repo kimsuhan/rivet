@@ -367,7 +367,7 @@ export class IssueHandoffService {
 
     const projectTeams = await transaction.projectTeam.findMany({
       orderBy: [{ team: { name: 'asc' } }, { id: 'asc' }],
-      select: { id: true, teamId: true },
+      select: { deploymentTrackingEnabled: true, id: true, teamId: true },
       where: {
         id: { in: requestedIds },
         isActive: true,
@@ -421,6 +421,7 @@ export class IssueHandoffService {
       const created = await transaction.teamWork.create({
         data: {
           createdByMembershipId: context.membershipId,
+          deploymentStatus: projectTeam.deploymentTrackingEnabled ? 'PENDING' : 'NOT_APPLICABLE',
           identifier: `${team.key}-${team.nextIssueNumber}`,
           issueId,
           projectTeamId: projectTeam.id,

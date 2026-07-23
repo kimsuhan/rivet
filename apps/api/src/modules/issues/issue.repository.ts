@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 
-import { IssueFileKind, Prisma, StateCategory } from '@rivet/database';
+import { DeploymentStatus, IssueFileKind, Prisma, StateCategory } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { issueResourceNotFound } from './issue.errors';
@@ -16,6 +16,14 @@ const MEMBER_SELECT = {
 const TEAM_WORK_SELECT = {
   assigneeTeamMember: { select: { membership: { select: MEMBER_SELECT } } },
   createdAt: true,
+  deployedAt: true,
+  deployedByMembership: { select: MEMBER_SELECT },
+  deploymentGroupId: true,
+  deploymentPredecessors: {
+    orderBy: { predecessorTeamWorkId: 'asc' },
+    select: { predecessorTeamWorkId: true },
+  },
+  deploymentStatus: true,
   id: true,
   identifier: true,
   issue: {
@@ -42,6 +50,7 @@ const TEAM_WORK_SELECT = {
     select: {
       id: true,
       isActive: true,
+      deploymentTrackingEnabled: true,
       team: { select: { archivedAt: true, id: true, key: true, name: true } },
     },
   },
@@ -113,6 +122,7 @@ const ISSUE_SELECT = {
           identifier: true,
           projectTeam: {
             select: {
+              deploymentTrackingEnabled: true,
               id: true,
               isActive: true,
               team: { select: { archivedAt: true, id: true, key: true, name: true } },
@@ -140,6 +150,7 @@ const ISSUE_SELECT = {
               identifier: true,
               projectTeam: {
                 select: {
+                  deploymentTrackingEnabled: true,
                   id: true,
                   isActive: true,
                   team: { select: { archivedAt: true, id: true, key: true, name: true } },
@@ -197,6 +208,39 @@ export type TeamWorkOrderRow = Prisma.TeamWorkGetPayload<{
   select: typeof TEAM_WORK_ORDER_SELECT;
 }>;
 
+function deploymentTeamWorkWhere(
+  workspaceId: string,
+  statuses: DeploymentStatus[],
+  teamIds?: string[],
+  readyOnly = false,
+): Prisma.TeamWorkWhereInput {
+  return {
+    deletedAt: null,
+    deploymentStatus: { in: statuses },
+    issue: { deletedAt: null },
+    ...(teamIds ? { teamId: { in: teamIds } } : {}),
+    ...(readyOnly
+      ? {
+          OR: [
+            { deploymentGroupId: null },
+            {
+              deploymentGroup: {
+                teamWorks: {
+                  none: { workflowState: { category: { not: StateCategory.COMPLETED } } },
+                },
+              },
+            },
+          ],
+          deploymentPredecessors: {
+            none: { predecessor: { deploymentStatus: { not: DeploymentStatus.DEPLOYED } } },
+          },
+          workflowState: { category: StateCategory.COMPLETED },
+        }
+      : {}),
+    workspaceId,
+  };
+}
+
 @Injectable()
 export class IssueRepository {
   constructor(private readonly database: DatabaseService) {}
@@ -207,6 +251,32 @@ export class IssueRepository {
 
   countTeamWorks(where: Prisma.TeamWorkWhereInput): Promise<number> {
     return this.database.client.teamWork.count({ where });
+  }
+
+  listDeploymentTeamWorks(
+    workspaceId: string,
+    statuses: DeploymentStatus[],
+    limit: number,
+    teamIds?: string[],
+    readyOnly = false,
+  ): Promise<TeamWorkRow[]> {
+    return this.database.client.teamWork.findMany({
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      select: TEAM_WORK_SELECT,
+      take: limit,
+      where: deploymentTeamWorkWhere(workspaceId, statuses, teamIds, readyOnly),
+    });
+  }
+
+  countDeploymentTeamWorks(
+    workspaceId: string,
+    statuses: DeploymentStatus[],
+    teamIds?: string[],
+    readyOnly = false,
+  ): Promise<number> {
+    return this.database.client.teamWork.count({
+      where: deploymentTeamWorkWhere(workspaceId, statuses, teamIds, readyOnly),
+    });
   }
 
   async findIssue(
@@ -263,6 +333,21 @@ export class IssueRepository {
     });
     if (!row) issueResourceNotFound('팀 작업을 찾을 수 없습니다.');
     return row;
+  }
+
+  findTeamWorksInTransaction(
+    transaction: Prisma.TransactionClient,
+    workspaceId: string,
+    teamWorkIds: string[],
+  ): Promise<TeamWorkRow[]> {
+    return transaction.teamWork.findMany({
+      select: TEAM_WORK_SELECT,
+      where: {
+        deletedAt: null,
+        id: { in: teamWorkIds },
+        workspaceId,
+      },
+    });
   }
 
   async findTeamWorks(workspaceId: string, teamWorkIds: string[]): Promise<TeamWorkRow[]> {

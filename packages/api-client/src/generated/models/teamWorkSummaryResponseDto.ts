@@ -9,6 +9,7 @@ import type { IssueMemberSummaryResponseDto } from './issueMemberSummaryResponse
 import type { IssueProjectTeamSummaryResponseDto } from './issueProjectTeamSummaryResponseDto';
 import type { IssueWorkflowStateSummaryResponseDto } from './issueWorkflowStateSummaryResponseDto';
 import type { TeamWorkIssueSummaryResponseDto } from './teamWorkIssueSummaryResponseDto';
+import type { TeamWorkSummaryResponseDtoDeploymentStatus } from './teamWorkSummaryResponseDtoDeploymentStatus';
 import type { TeamWorkSummaryResponseDtoStateCategory } from './teamWorkSummaryResponseDtoStateCategory';
 
 export interface TeamWorkSummaryResponseDto {
@@ -31,6 +32,14 @@ export interface TeamWorkSummaryResponseDto {
      * @nullable
      */
   workNoteMarkdown: string | null;
+  deploymentStatus: TeamWorkSummaryResponseDtoDeploymentStatus;
+  /** @nullable */
+  deploymentGroupId: string | null;
+  deploymentPredecessorTeamWorkIds: string[];
+  /** @nullable */
+  deployedAt: string | null;
+  /** @nullable */
+  deployedBy: IssueMemberSummaryResponseDto | null;
   /** @minimum 1 */
   version: number;
   createdAt: string;

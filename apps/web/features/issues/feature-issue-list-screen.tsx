@@ -34,7 +34,7 @@ const STATUS_LABELS = {
   UNSORTED: '접수됨',
   TODO: '할 일',
   IN_PROGRESS: '진행 중',
-  REVIEW: '완료 확인',
+  REVIEW: '배포 대기',
   DONE: '완료',
   PAUSED: '일시 중지',
   CANCELED: '취소',

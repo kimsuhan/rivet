@@ -88,7 +88,7 @@ export function IssueListRow({
   });
   const nextAction =
     issue.status === 'REVIEW'
-      ? '완료 확인'
+      ? '배포 현황 보기'
       : issue.workflowSummary.teamWorkCount === 0
         ? '팀 작업 시작'
         : issue.workflowSummary.unassignedCount
@@ -96,6 +96,7 @@ export function IssueListRow({
           : '업무 보기';
   const nextActionIsDecision = nextAction !== '업무 보기';
   const href = detailHref ?? `/issues/${encodeURIComponent(issue.identifier)}?tab=work`;
+  const nextActionHref = issue.status === 'REVIEW' ? '/deployments' : href;
 
   return (
     <li className="group border-b last:border-b-0">
@@ -139,7 +140,7 @@ export function IssueListRow({
           {relativeUpdatedAt(issue.updatedAt)}
         </time>
         <Link
-          href={href}
+          href={nextActionHref}
           className={cn(
             'max-lg:hidden',
             nextActionIsDecision

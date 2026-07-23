@@ -381,8 +381,6 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     await expect(webCompletionDialog.getByText('작업 전달은 필요하지 않습니다.')).toBeVisible();
     await webCompletionDialog.getByRole('button', { name: '완료', exact: true }).click();
     await expect(webCompletionDialog).toBeHidden();
-    await expect(page.getByText('완료 확인')).toBeVisible();
-    await page.getByRole('button', { name: '이슈 완료' }).click();
     await expect(page.getByText('완료', { exact: true }).first()).toBeVisible();
 
     await selectTeamWork(page, backendIdentifier, isMobile);

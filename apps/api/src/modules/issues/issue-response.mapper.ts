@@ -29,9 +29,7 @@ export function calculateWorkflowStateProgress(
 ): number | null {
   if (state.category !== StateCategory.STARTED) return null;
 
-  const startedStates = states.filter(
-    ({ category }) => category === StateCategory.STARTED,
-  );
+  const startedStates = states.filter(({ category }) => category === StateCategory.STARTED);
   const index = startedStates.findIndex(({ id }) => id === state.id);
   return index < 0 ? null : (index + 1) / (startedStates.length + 1);
 }
@@ -43,6 +41,7 @@ function projectTeamResponse(projectTeam: TeamWorkRow['projectTeam']) {
 
   return {
     active: projectTeam.isActive,
+    deploymentTrackingEnabled: projectTeam.deploymentTrackingEnabled,
     id: projectTeam.id,
     team: teamResponse(projectTeam.team),
   };
@@ -66,6 +65,13 @@ export function toTeamWorkSummary(row: TeamWorkRow): TeamWorkSummaryResponseDto 
   return {
     assignee: row.assigneeTeamMember ? memberResponse(row.assigneeTeamMember.membership) : null,
     createdAt: row.createdAt.toISOString(),
+    deployedAt: row.deployedAt?.toISOString() ?? null,
+    deployedBy: row.deployedByMembership ? memberResponse(row.deployedByMembership) : null,
+    deploymentGroupId: row.deploymentGroupId,
+    deploymentPredecessorTeamWorkIds: row.deploymentPredecessors.map(
+      ({ predecessorTeamWorkId }) => predecessorTeamWorkId,
+    ),
+    deploymentStatus: row.deploymentStatus,
     id: row.id,
     identifier: row.identifier,
     issue: {

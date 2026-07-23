@@ -1,6 +1,13 @@
+import { randomUUID } from 'node:crypto';
+
 import { Injectable } from '@nestjs/common';
 
-import { IssueStatus, Prisma, StateCategory } from '@rivet/database';
+import { DeploymentStatus, IssueStatus, Prisma, StateCategory } from '@rivet/database';
+import {
+  ISSUE_CHANGED,
+  ISSUE_CHANGED_SCHEMA_VERSION,
+  type IssueChangedOutboxPayload,
+} from '@rivet/event-contracts';
 
 import { issueResourceNotFound } from './issue.errors';
 
@@ -10,6 +17,7 @@ export class IssueStatusService {
     transaction: Prisma.TransactionClient,
     workspaceId: string,
     issueId: string,
+    actorMembershipId: string,
   ): Promise<IssueStatus> {
     const issue = await transaction.issue.findFirst({
       select: { status: true },
@@ -20,7 +28,10 @@ export class IssueStatusService {
       return issue.status;
     }
     const teamWorks = await transaction.teamWork.findMany({
-      select: { workflowState: { select: { category: true } } },
+      select: {
+        deploymentStatus: true,
+        workflowState: { select: { category: true } },
+      },
       where: { deletedAt: null, issueId, workspaceId },
     });
     const valid = teamWorks.filter(
@@ -29,14 +40,21 @@ export class IssueStatusService {
     const allValidCompleted =
       valid.length > 0 &&
       valid.every(({ workflowState }) => workflowState.category === StateCategory.COMPLETED);
-    // DONE은 유효 팀 작업 전체 완료를 전제로 하는 수동 상태다. 팀 작업 변경으로 이
-    // 불변식이 깨졌을 때만 자동 상태 계산으로 되돌려 진행률과 상태의 모순을 막는다.
-    if (issue.status === IssueStatus.DONE && allValidCompleted) return issue.status;
+    const allDeploymentsCompleted = valid.every(
+      ({ deploymentStatus }) =>
+        deploymentStatus === DeploymentStatus.NOT_APPLICABLE ||
+        deploymentStatus === DeploymentStatus.DEPLOYED,
+    );
+    if (issue.status === IssueStatus.DONE && allValidCompleted && allDeploymentsCompleted) {
+      return issue.status;
+    }
     const next =
       valid.length === 0
         ? IssueStatus.UNSORTED
         : allValidCompleted
-          ? IssueStatus.REVIEW
+          ? allDeploymentsCompleted
+            ? IssueStatus.DONE
+            : IssueStatus.REVIEW
           : valid.some(
                 ({ workflowState }) =>
                   workflowState.category === StateCategory.STARTED ||
@@ -49,6 +67,44 @@ export class IssueStatusService {
         data: { status: next, version: { increment: 1 } },
         where: { id: issueId },
       });
+      if (next === IssueStatus.DONE) {
+        const subscriberMembershipIds = (
+          await transaction.issueSubscription.findMany({
+            orderBy: { membershipId: 'asc' },
+            select: { membershipId: true },
+            where: { issueId, workspaceId },
+          })
+        ).map(({ membershipId }) => membershipId);
+        await transaction.activityEvent.create({
+          data: {
+            actorMembershipId,
+            afterData: IssueStatus.DONE,
+            beforeData: issue.status,
+            eventType: 'ISSUE_CHANGED',
+            fieldName: 'status',
+            issueId,
+            workspaceId,
+          },
+        });
+        await transaction.outboxEvent.create({
+          data: {
+            actorMembershipId,
+            aggregateId: issueId,
+            aggregateType: 'ISSUE',
+            eventType: ISSUE_CHANGED,
+            id: randomUUID(),
+            payload: {
+              changedFields: ['STATUS'],
+              issueId,
+              mentionedMembershipIds: [],
+              schemaVersion: ISSUE_CHANGED_SCHEMA_VERSION,
+              subscriberMembershipIds,
+              terminalCategory: 'COMPLETED',
+            } satisfies IssueChangedOutboxPayload,
+            workspaceId,
+          },
+        });
+      }
     }
     return next;
   }

@@ -28,6 +28,7 @@ vi.mock('@rivet/api-client', () => ({
     },
   }),
   useNotificationsControllerUnreadCount: () => ({ data: { count: 7 } }),
+  useDeploymentsControllerList: () => ({ data: { items: [], totalCount: 2 } }),
   useProjectsControllerList: () => ({
     data: {
       items: [
@@ -237,10 +238,12 @@ vi.mock('next/navigation', () => ({
 const labels = {
   brandLabel: 'Rivet 홈',
   desktopNavigation: '주 탐색',
+  deploymentPending: '배포 현황, 내 팀에서 처리 가능한 배포 {count}건',
   inboxUnread: '알림함, 읽지 않은 알림 {count}개',
   mobileNavigation: '모바일 주 탐색',
   openIssueCreate: '이슈 만들기 열기',
   navigation: {
+    deployments: '배포 현황',
     inbox: '알림함',
     issues: '이슈',
     myIssues: '내 작업',
@@ -476,6 +479,7 @@ describe('AppShell', () => {
       '/my-issues?view=saved-my-work&sort=executionOrder&sortDirection=desc',
       '/issues',
       '/issues?view=saved-issues&query=%EA%B8%B4%EA%B8%89&sort=priority&sortDirection=desc',
+      '/deployments',
       '/projects',
       '/projects/project-1',
     ]);
@@ -730,6 +734,25 @@ describe('AppShell', () => {
 
     expect(screen.getAllByRole('link', { name: '알림함, 읽지 않은 알림 7개' })).toHaveLength(2);
     expect(screen.getAllByText('7')).toHaveLength(3);
+  });
+
+  it('배포 현황에는 내 팀에서 처리 가능한 배포 수를 표시한다', () => {
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    const desktopNavigation = screen.getByRole('navigation', {
+      name: labels.desktopNavigation,
+    });
+
+    expect(
+      within(desktopNavigation).getByRole('link', {
+        name: '배포 현황, 내 팀에서 처리 가능한 배포 2건',
+      }),
+    ).toBeInTheDocument();
+    expect(within(desktopNavigation).getAllByText('2')).toHaveLength(2);
   });
 
   it('데스크톱 만들기 버튼으로 모달을 열고 닫은 뒤 트리거 포커스를 복원한다', async () => {

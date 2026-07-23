@@ -107,6 +107,11 @@ function work(
   return {
     assignee: null,
     createdAt: new Date(0).toISOString(),
+    deployedAt: null,
+    deployedBy: null,
+    deploymentGroupId: null,
+    deploymentPredecessorTeamWorkIds: [],
+    deploymentStatus: 'NOT_APPLICABLE',
     id,
     identifier,
     issue: {
@@ -120,6 +125,7 @@ function work(
     },
     projectTeam: {
       active: true,
+      deploymentTrackingEnabled: false,
       id: `project-team-${id}`,
       team: { archived: false, id: `team-${id}`, key: teamKey, name: `${teamKey} 팀` },
     },
@@ -310,6 +316,16 @@ describe('IssueDetailScreen', () => {
     currentIssue = issue('IN_PROGRESS');
     view.rerender(<IssueDetailScreen issueRef="F-2" />);
     expect(screen.getByRole('button', { name: '일시 중지' })).toBeVisible();
+  });
+
+  it('배포 대기 상태에서는 수동 이슈 완료 버튼을 표시하지 않는다', () => {
+    const deploymentWork = work('work-1', 'API-1', 'COMPLETED', 'API');
+    deploymentWork.deploymentStatus = 'PENDING';
+    currentIssue = issue('REVIEW', [deploymentWork]);
+
+    renderDetail();
+
+    expect(screen.queryByRole('button', { name: '이슈 완료' })).not.toBeInTheDocument();
   });
 
   it('텍스트와 함께 접근 가능한 진행률 막대를 표시한다', () => {

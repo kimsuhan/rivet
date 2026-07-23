@@ -7,6 +7,7 @@ import {
   ListTodo,
   type LucideIcon,
   Plus,
+  Rocket,
   Search,
   Settings,
   Users,
@@ -25,6 +26,7 @@ import {
 
 import {
   useAuthControllerGetSession,
+  useDeploymentsControllerList,
   useNotificationsControllerUnreadCount,
 } from '@rivet/api-client';
 
@@ -82,6 +84,7 @@ type ShellLabels = {
   openTeamSelector: string;
   openWorkspaceMenu: string;
   skipToContent: string;
+  deploymentPending: string;
   inboxUnread: string;
   expandSection: string;
   collapseSection: string;
@@ -91,6 +94,7 @@ type ShellLabels = {
     inbox: string;
     teams: string;
     projects: string;
+    deployments: string;
     search: string;
     settings: string;
     workspace: string;
@@ -103,7 +107,7 @@ type ShellLabels = {
 };
 
 type NavigationItem = {
-  href: '/issues' | '/my-issues' | '/inbox' | '/projects';
+  href: '/issues' | '/my-issues' | '/inbox' | '/projects' | '/deployments';
   label: string;
   icon: LucideIcon;
 };
@@ -174,6 +178,20 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
       retry: false,
     },
   });
+  const myTeamDeployments = useDeploymentsControllerList(
+    {
+      limit: 1,
+      readyOnly: true,
+      scope: 'MY_TEAMS',
+      status: ['PENDING', 'REDEPLOY_REQUIRED'],
+    },
+    {
+      query: {
+        enabled: Boolean(session.data?.authenticated),
+        retry: false,
+      },
+    },
+  );
   const lastFeedbackTrigger = useRef<HTMLElement | null>(null);
   const lastIssueCreateTrigger = useRef<HTMLElement | null>(null);
   const lastProfileTrigger = useRef<HTMLElement | null>(null);
@@ -203,10 +221,15 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
     label: labels.navigation.projects,
     icon: FolderKanban,
   };
+  const deploymentsItem: NavigationItem = {
+    href: '/deployments',
+    label: labels.navigation.deployments,
+    icon: Rocket,
+  };
   // 모바일 하단 탭은 기존 순서를 유지하고, 데스크톱만 개인·워크스페이스 구역으로 나눈다.
   const navigationItems: NavigationItem[] = [myIssuesItem, inboxItem, issuesItem, projectsItem];
   const personalItems: NavigationItem[] = [inboxItem, myIssuesItem];
-  const workspaceItems: NavigationItem[] = [issuesItem, projectsItem];
+  const workspaceItems: NavigationItem[] = [issuesItem, deploymentsItem, projectsItem];
   const isWorkspaceAdmin = Boolean(
     session.data?.authenticated &&
     session.data.membership?.role === 'ADMIN' &&
@@ -226,6 +249,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
   const settingsActive = pathname === '/settings' || pathname.startsWith('/settings/');
   const workspace = session.data?.authenticated ? session.data.workspace : null;
   const unreadNotificationCount = unreadNotifications.data?.count ?? 0;
+  const myTeamDeploymentCount = myTeamDeployments.data?.totalCount ?? 0;
   const inboxNavigationLabel =
     unreadNotificationCount > 0
       ? labels.inboxUnread.replace(
@@ -233,6 +257,13 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
           new Intl.NumberFormat('ko-KR').format(unreadNotificationCount),
         )
       : labels.navigation.inbox;
+  const deploymentsNavigationLabel =
+    myTeamDeploymentCount > 0
+      ? labels.deploymentPending.replace(
+          '{count}',
+          new Intl.NumberFormat('ko-KR').format(myTeamDeploymentCount),
+        )
+      : labels.navigation.deployments;
   const selectedTeamLocation = currentTeamLocation(pathname);
   const selectedTeamKey = selectedTeamLocation?.teamKey ?? null;
   const selectedTeamView = selectedTeamLocation?.view ?? null;
@@ -448,7 +479,13 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
           <Link
             href={navigationHref(href)}
             aria-current={active ? 'page' : undefined}
-            aria-label={href === '/inbox' ? inboxNavigationLabel : label}
+            aria-label={
+              href === '/inbox'
+                ? inboxNavigationLabel
+                : href === '/deployments'
+                  ? deploymentsNavigationLabel
+                  : label
+            }
             title={label}
             className={cn(
               'focus-visible:ring-sidebar-ring relative flex h-8 flex-1 items-center gap-2 rounded-md border-l-2 px-2 text-sm transition-colors outline-none focus-visible:ring-2',
@@ -459,17 +496,17 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
           >
             <span className="relative shrink-0">
               <Icon aria-hidden="true" className="size-4" strokeWidth={1.75} />
-              {href === '/inbox' ? (
+              {href === '/inbox' || href === '/deployments' ? (
                 <NotificationCountBadge
-                  count={unreadNotificationCount}
+                  count={href === '/inbox' ? unreadNotificationCount : myTeamDeploymentCount}
                   className="absolute -top-2 left-2 xl:hidden"
                 />
               ) : null}
             </span>
             <span className="hidden truncate xl:inline">{label}</span>
-            {href === '/inbox' ? (
+            {href === '/inbox' || href === '/deployments' ? (
               <NotificationCountBadge
-                count={unreadNotificationCount}
+                count={href === '/inbox' ? unreadNotificationCount : myTeamDeploymentCount}
                 className="ml-auto hidden xl:flex"
               />
             ) : null}

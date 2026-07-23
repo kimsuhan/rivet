@@ -297,6 +297,7 @@
     "openTeamSelector": "팀 선택 열기",
     "openWorkspaceMenu": "워크스페이스 메뉴 열기",
     "inboxUnread": "알림함, 읽지 않은 알림 {count}개",
+    "deploymentPending": "배포 현황, 내 팀에서 처리 가능한 배포 {count}건",
     "skipToContent": "본문으로 건너뛰기",
     "expandSection": "{section} 하위 목록 펼치기",
     "collapseSection": "{section} 하위 목록 접기"
@@ -414,9 +415,107 @@
     "inbox": "알림함",
     "teams": "팀",
     "projects": "프로젝트",
+    "deployments": "배포 현황",
     "search": "검색",
     "settings": "설정",
     "workspace": "워크스페이스"
+  },
+  "Deployments": {
+    "title": "배포 현황",
+    "description": "팀 작업과 분리된 운영 배포 상태를 확인하고 팀별 배포 완료를 기록합니다.",
+    "viewLabel": "배포 현황 보기",
+    "view": {
+      "PENDING": "진행 중",
+      "DEPLOYED": "배포 완료"
+    },
+    "scope": {
+      "label": "배포 담당 범위",
+      "MY_TEAMS": "내 팀",
+      "ALL": "전체"
+    },
+    "count": "{count}건",
+    "issueSummaryCount": "{issues}개 이슈 · {deployments}개 팀 배포",
+    "projectSummaryCount": "{projects}개 프로젝트 · {issues}개 이슈 · {deployments}개 팀 배포",
+    "loading": "배포 현황을 불러오는 중입니다.",
+    "errorTitle": "배포 현황을 불러오지 못했습니다",
+    "errorDescription": "현재 조건을 유지했습니다. 잠시 후 다시 시도해 주세요.",
+    "retry": "다시 시도",
+    "actionErrorTitle": "배포 상태를 변경하지 못했습니다",
+    "actionErrorDescription": "최신 상태를 확인한 뒤 다시 시도해 주세요.",
+    "empty": {
+      "MY_TEAMS": {
+        "PENDING": {
+          "title": "내 팀에서 진행 중인 배포가 없습니다",
+          "description": "내가 속한 팀에 배포 작업이 생기면 이곳에 표시됩니다."
+        },
+        "DEPLOYED": {
+          "title": "내 팀에서 완료한 배포가 없습니다",
+          "description": "내가 속한 팀의 운영 배포 완료 이력을 확인할 수 있습니다."
+        }
+      },
+      "ALL": {
+        "PENDING": {
+          "title": "진행 중인 배포가 없습니다",
+          "description": "작업 완료를 기다리거나 배포할 수 있는 팀 작업이 생기면 이곳에 표시됩니다."
+        },
+        "DEPLOYED": {
+          "title": "완료된 배포가 없습니다",
+          "description": "팀에서 운영 배포를 완료하면 이력으로 확인할 수 있습니다."
+        }
+      }
+    },
+    "status": {
+      "REDEPLOY_REQUIRED": "재배포 필요"
+    },
+    "summary": {
+      "progress": "배포 {completed}/{total}",
+      "complete": "배포 {completed}/{total} 완료"
+    },
+    "condition": {
+      "independent": "각각 배포",
+      "together": "함께 배포",
+      "afterTeam": "{team} 배포 후",
+      "unknownPredecessor": "선행 팀"
+    },
+    "readiness": {
+      "ready": "배포 가능",
+      "redeployReady": "재배포 가능",
+      "waitingForWork": "{state} · 작업 완료 후 배포 가능",
+      "waitingForPredecessor": "{teams} 배포 대기",
+      "waitingForTogether": "함께 배포 준비 {completed}/{total}"
+    },
+    "field": {
+      "status": "배포 상태",
+      "condition": "배포 조건",
+      "completedRecord": "완료 기록"
+    },
+    "plan": {
+      "title": "운영 배포 조건",
+      "description": "기본은 각각 배포입니다. 순서가 필요하면 선행 팀을 지정하고, 같은 시점에 배포할 팀만 함께 배포로 묶으세요.",
+      "teamWorkColumn": "팀 작업",
+      "conditionColumn": "배포 조건",
+      "previewTitle": "적용될 배포 흐름",
+      "independentPreview": "모든 팀이 각자의 배포 흐름에 맞춰 배포합니다.",
+      "togetherPreview": "{works} 함께 배포",
+      "togetherValidation": "함께 배포할 팀 작업을 두 개 이상 선택해 주세요.",
+      "errorTitle": "배포 조건을 저장하지 못했습니다",
+      "errorDescription": "최신 이슈 상태를 확인한 뒤 다시 시도해 주세요.",
+      "cancel": "취소",
+      "save": "저장"
+    },
+    "project": {
+      "issueCount": "{count}개 이슈",
+      "completeReady": "준비된 배포 {count}건 완료",
+      "complete": "프로젝트 배포 완료",
+      "confirmTitle": "{project}의 준비된 배포를 완료할까요?",
+      "confirmDescription": "현재 배포 가능한 팀 작업 {count}건을 한 번에 완료합니다. 아직 작업이나 선행 배포를 기다리는 항목은 그대로 유지됩니다.",
+      "cancel": "취소",
+      "confirmAction": "{count}건 배포 완료"
+    },
+    "deployedAt": "{date} 배포 완료",
+    "deployedBy": "{member} 기록",
+    "markDeployed": "배포 완료 처리",
+    "markRedeployed": "재배포 완료"
   },
   "Search": {
     "title": "검색",
@@ -446,7 +545,7 @@
       "UNSORTED": "접수됨",
       "TODO": "할 일",
       "IN_PROGRESS": "진행 중",
-      "REVIEW": "완료 확인",
+      "REVIEW": "배포 대기",
       "DONE": "완료",
       "PAUSED": "일시 중지",
       "CANCELED": "취소"
@@ -1540,8 +1639,8 @@
       "projectErrorTitle": "예상 단계를 불러오지 못했습니다",
       "projectErrorDescription": "현재 작업은 계속 확인할 수 있습니다. 프로젝트 참여 팀을 다시 불러와 주세요.",
       "allComplete": "모든 팀 작업이 완료되었습니다",
-      "allCompleteDescription": "작업 흐름을 확인한 뒤 상위 이슈를 완료할 수 있습니다.",
-      "completeIssue": "이슈 완료"
+      "allCompleteDescription": "운영 배포가 남아 있으면 배포 대기로 전환되고, 모두 끝났다면 이슈가 자동 완료됩니다.",
+      "completeIssue": "배포 현황 보기"
     },
     "workSummary": {
       "title": "현재 작업 요약",
@@ -1720,7 +1819,7 @@
       "REVIEW_REQUIRED": "검토 필요",
       "ASSIGNMENT_REQUIRED": "담당 필요",
       "IN_PROGRESS": "진행 중",
-      "COMPLETION_REQUIRED": "완료 확인",
+      "COMPLETION_REQUIRED": "배포 대기",
       "COMPLETED": "완료"
     },
     "filters": {
@@ -1793,7 +1892,7 @@
       "UNSORTED": "접수됨",
       "TODO": "할 일",
       "IN_PROGRESS": "진행 중",
-      "REVIEW": "완료 확인",
+      "REVIEW": "배포 대기",
       "DONE": "완료",
       "PAUSED": "일시 중지",
       "CANCELED": "취소"
@@ -2129,7 +2228,14 @@
       "inactiveTeam": "과거 참여 팀 · 선택하면 다시 활성화",
       "activeWorkspaceTeam": "활성 워크스페이스 팀",
       "reactivate": "재활성화",
-      "noParticipatingTeams": "아직 참여 팀이 없습니다. 프로젝트는 지금 저장하고 나중에 팀을 추가할 수 있습니다."
+      "noParticipatingTeams": "아직 참여 팀이 없습니다. 프로젝트는 지금 저장하고 나중에 팀을 추가할 수 있습니다.",
+      "deploymentTracking": "운영 배포 관리",
+      "deploymentTrackingHint": "배포 개념이 있는 팀만 켜 주세요. 설정을 켠 뒤 새로 만드는 팀 작업부터 배포 현황에 포함됩니다.",
+      "deploymentTrackingEmpty": "먼저 프로젝트 참여 팀을 선택해 주세요.",
+      "deploymentTrackingOn": "새 팀 작업의 운영 배포를 관리합니다.",
+      "deploymentTrackingOff": "업무 완료까지만 관리하며 배포 현황에는 표시하지 않습니다.",
+      "deploymentTrackingToggle": "배포 관리",
+      "deploymentTrackingDisabled": "배포 관리 안 함"
     },
     "status": {
       "PLANNED": "계획",
@@ -2182,6 +2288,10 @@
     "teamPermission": {
       "title": "참여 팀은 관리자 또는 프로젝트 리드가 관리합니다",
       "description": "다른 프로젝트 정보는 저장할 수 있지만 참여 팀 선택은 현재 상태로 유지됩니다."
+    },
+    "deploymentPermission": {
+      "title": "운영 배포 설정은 관리자 또는 프로젝트 리드가 관리합니다",
+      "description": "현재 설정은 확인만 할 수 있습니다. 변경이 필요하면 관리자 또는 프로젝트 리드에게 요청해 주세요."
     },
     "teamInUse": {
       "title": "진행 중인 작업이 있는 팀은 제외할 수 없습니다",

@@ -24,7 +24,7 @@ import {
 
 import { IssuePriority, IssueStatus, StateCategory } from '@rivet/database';
 
-export const ISSUE_STATUS_ACTIONS = ['PAUSE', 'RESUME', 'CANCEL', 'COMPLETE', 'REOPEN'] as const;
+export const ISSUE_STATUS_ACTIONS = ['PAUSE', 'RESUME', 'CANCEL', 'REOPEN'] as const;
 export type IssueStatusAction = (typeof ISSUE_STATUS_ACTIONS)[number];
 
 function normalizeString(value: unknown): unknown {
