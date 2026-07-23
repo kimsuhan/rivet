@@ -5,7 +5,6 @@ import {
   IssuePriority,
   IssueStatus,
   MembershipRole,
-  ProjectRole,
   StateCategory,
 } from '../src';
 
@@ -19,7 +18,7 @@ const prisma = createPrismaClient({
   poolMax: 2,
 });
 
-describe('B3 dynamic project teams database integration', () => {
+describe('project teams database integration', () => {
   const workspaceId = randomUUID();
   const otherWorkspaceId = randomUUID();
   const userId = randomUUID();
@@ -40,18 +39,18 @@ describe('B3 dynamic project teams database integration', () => {
     await prisma.user.createMany({
       data: [
         {
-          displayName: 'B3 관리자',
+          displayName: '프로젝트 팀 관리자',
           email: `${userId}@example.test`,
           id: userId,
           normalizedEmail: `${userId}@example.test`,
-          passwordHash: '$argon2id$b3-test',
+          passwordHash: '$argon2id$project-team-test',
         },
         {
-          displayName: 'B3 다른 관리자',
+          displayName: '다른 프로젝트 팀 관리자',
           email: `${otherUserId}@example.test`,
           id: otherUserId,
           normalizedEmail: `${otherUserId}@example.test`,
-          passwordHash: '$argon2id$b3-test',
+          passwordHash: '$argon2id$project-team-test',
         },
       ],
     });
@@ -60,16 +59,16 @@ describe('B3 dynamic project teams database integration', () => {
         {
           createdByUserId: userId,
           id: workspaceId,
-          name: 'B3 워크스페이스',
-          normalizedSlug: `b3-${workspaceId}`,
-          slug: `b3-${workspaceId}`,
+          name: '프로젝트 팀 워크스페이스',
+          normalizedSlug: `project-team-${workspaceId}`,
+          slug: `project-team-${workspaceId}`,
         },
         {
           createdByUserId: otherUserId,
           id: otherWorkspaceId,
-          name: 'B3 다른 워크스페이스',
-          normalizedSlug: `b3-${otherWorkspaceId}`,
-          slug: `b3-${otherWorkspaceId}`,
+          name: '다른 프로젝트 팀 워크스페이스',
+          normalizedSlug: `project-team-${otherWorkspaceId}`,
+          slug: `project-team-${otherWorkspaceId}`,
         },
       ],
     });
@@ -152,11 +151,16 @@ describe('B3 dynamic project teams database integration', () => {
     });
     await prisma.project.createMany({
       data: [
-        { id: projectId, leadMembershipId: membershipId, name: 'B3 프로젝트', workspaceId },
+        {
+          id: projectId,
+          leadMembershipId: membershipId,
+          name: '프로젝트 팀 프로젝트',
+          workspaceId,
+        },
         {
           id: otherProjectId,
           leadMembershipId: otherMembershipId,
-          name: 'B3 다른 프로젝트',
+          name: '다른 프로젝트 팀 프로젝트',
           workspaceId: otherWorkspaceId,
         },
       ],
@@ -165,7 +169,7 @@ describe('B3 dynamic project teams database integration', () => {
       data: {
         createdByMembershipId: membershipId,
         id: issueId,
-        identifier: 'B3-1',
+        identifier: 'PROJECT-TEAM-1',
         priority: IssuePriority.NONE,
         projectId,
         sequenceNumber: 1,
@@ -182,7 +186,6 @@ describe('B3 dynamic project teams database integration', () => {
     await prisma.issueTemplate.deleteMany({ where: { workspaceId } });
     await prisma.teamWork.deleteMany({ where: { workspaceId } });
     await prisma.issue.deleteMany({ where: { workspaceId } });
-    await prisma.projectRoleTeam.deleteMany({ where: { workspaceId } });
     await prisma.projectTeam.deleteMany({ where: { workspaceId } });
     await prisma.project.deleteMany({ where: { id: { in: [projectId, otherProjectId] } } });
     await prisma.workflowState.deleteMany({
@@ -202,12 +205,9 @@ describe('B3 dynamic project teams database integration', () => {
     await prisma.$disconnect();
   });
 
-  it('syncs post-expand legacy role writes to one participant and links legacy TeamWork', async () => {
-    await prisma.projectRoleTeam.createMany({
-      data: [
-        { projectId, role: ProjectRole.BACKEND, teamId: planningTeamId, workspaceId },
-        { projectId, role: ProjectRole.WEB_FRONTEND, teamId: planningTeamId, workspaceId },
-      ],
+  it('links team work to the selected project participant', async () => {
+    const participant = await prisma.projectTeam.create({
+      data: { projectId, teamId: planningTeamId, workspaceId },
     });
 
     const participants = await prisma.projectTeam.findMany({
@@ -221,14 +221,14 @@ describe('B3 dynamic project teams database integration', () => {
         createdByMembershipId: membershipId,
         identifier: 'PLAN-1',
         issueId,
-        projectRole: ProjectRole.BACKEND,
+        projectTeamId: participant.id,
         sequenceNumber: 1,
         teamId: planningTeamId,
         workflowStateId: planningStateId,
         workspaceId,
       },
     });
-    expect(work.projectTeamId).toBe(participants[0]!.id);
+    expect(work.projectTeamId).toBe(participant.id);
   });
 
   it('accepts non-enum teams and preserves template and handoff history through ProjectTeam', async () => {

@@ -660,7 +660,6 @@ describe('TeamsService management', () => {
     });
     const usageQuery = (transaction.$queryRaw.mock.calls[1]?.[0] as string[] | undefined)?.join('');
     expect(usageQuery).toContain('FROM "project_teams" project_team');
-    expect(usageQuery).not.toContain('FROM "project_role_teams"');
     expect(transaction.workflowState.delete).not.toHaveBeenCalled();
   });
 

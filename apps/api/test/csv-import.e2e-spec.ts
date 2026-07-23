@@ -5,7 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request, { type Test as RequestTest } from 'supertest';
 
-import { IssueStatus, MembershipRole, ProjectRole, StateCategory } from '@rivet/database';
+import { IssueStatus, MembershipRole, StateCategory } from '@rivet/database';
 
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
@@ -227,13 +227,8 @@ describe('Alpha A1 CSV import API', () => {
       const project = await transaction.project.create({
         data: { name: '기존 프로젝트', workspaceId: workspace.id },
       });
-      await transaction.projectRoleTeam.create({
-        data: {
-          projectId: project.id,
-          role: ProjectRole.WEB_FRONTEND,
-          teamId: team.id,
-          workspaceId: workspace.id,
-        },
+      await transaction.projectTeam.create({
+        data: { projectId: project.id, teamId: team.id, workspaceId: workspace.id },
       });
       return {
         adminMembershipId: adminMembership.id,
@@ -290,10 +285,9 @@ describe('Alpha A1 CSV import API', () => {
         where: { workspaceId: { in: workspaceIds } },
       });
       await database.client.label.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
-      await database.client.projectRoleTeam.deleteMany({
+      await database.client.projectTeam.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
       });
-      await database.client.projectTeam.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.workflowState.deleteMany({
         where: { workspaceId: { in: workspaceIds } },

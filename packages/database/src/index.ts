@@ -15,7 +15,6 @@ export {
   MembershipRole,
   MembershipStatus,
   NotificationType,
-  ProjectRole,
   ProjectStatus,
   StateCategory,
   TeamMemberRole,

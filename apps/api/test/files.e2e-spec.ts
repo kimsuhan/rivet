@@ -6,7 +6,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
-import { IssueFileKind, MembershipRole, ProjectRole, ProjectStatus, StateCategory } from '@rivet/database';
+import { IssueFileKind, MembershipRole, ProjectStatus, StateCategory } from '@rivet/database';
 
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
@@ -149,6 +149,9 @@ describe('M5 files and profile', () => {
         },
         select: { id: true },
       });
+      const projectTeam = await transaction.projectTeam.create({
+        data: { projectId: project.id, teamId: team.id, workspaceId: workspace.id },
+      });
       const issue = await transaction.issue.create({
         data: {
           createdByMembershipId: ownerMembership.id,
@@ -166,7 +169,7 @@ describe('M5 files and profile', () => {
           createdByMembershipId: ownerMembership.id,
           identifier: 'FIL-1',
           issueId: issue.id,
-          projectRole: ProjectRole.BACKEND,
+          projectTeamId: projectTeam.id,
           sequenceNumber: 1,
           teamId: team.id,
           workflowStateId: state.id,

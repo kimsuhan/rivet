@@ -5,7 +5,6 @@ import {
   IssuePriority,
   IssueStatus,
   MembershipRole,
-  ProjectRole,
   StateCategory,
 } from '../src';
 
@@ -28,6 +27,8 @@ describe('M9 issue and team-work database integration', () => {
   const backendStateId = randomUUID();
   const webStateId = randomUUID();
   const projectId = randomUUID();
+  const backendProjectTeamId = randomUUID();
+  const webProjectTeamId = randomUUID();
 
   beforeAll(async () => {
     const email = `${userId}@example.test`;
@@ -91,10 +92,10 @@ describe('M9 issue and team-work database integration', () => {
     await prisma.project.create({
       data: { id: projectId, leadMembershipId: membershipId, name: 'M9 프로젝트', workspaceId },
     });
-    await prisma.projectRoleTeam.createMany({
+    await prisma.projectTeam.createMany({
       data: [
-        { projectId, role: ProjectRole.BACKEND, teamId: backendTeamId, workspaceId },
-        { projectId, role: ProjectRole.WEB_FRONTEND, teamId: webTeamId, workspaceId },
+        { id: backendProjectTeamId, projectId, teamId: backendTeamId, workspaceId },
+        { id: webProjectTeamId, projectId, teamId: webTeamId, workspaceId },
       ],
     });
   });
@@ -106,7 +107,6 @@ describe('M9 issue and team-work database integration', () => {
     await prisma.comment.deleteMany({ where: { workspaceId } });
     await prisma.teamWork.deleteMany({ where: { workspaceId } });
     await prisma.issue.deleteMany({ where: { workspaceId } });
-    await prisma.projectRoleTeam.deleteMany({ where: { workspaceId } });
     await prisma.projectTeam.deleteMany({ where: { workspaceId } });
     await prisma.project.deleteMany({ where: { workspaceId } });
     await prisma.workflowState.deleteMany({ where: { workspaceId } });
@@ -138,7 +138,7 @@ describe('M9 issue and team-work database integration', () => {
         createdByMembershipId: membershipId,
         identifier: 'API-9001',
         issueId: issue.id,
-        projectRole: ProjectRole.BACKEND,
+        projectTeamId: backendProjectTeamId,
         sequenceNumber: 9001,
         teamId: backendTeamId,
         workflowStateId: backendStateId,
@@ -150,7 +150,7 @@ describe('M9 issue and team-work database integration', () => {
         createdByMembershipId: membershipId,
         identifier: 'WEB-9001',
         issueId: issue.id,
-        projectRole: ProjectRole.WEB_FRONTEND,
+        projectTeamId: webProjectTeamId,
         workNoteMarkdown: '응답 타입 연결',
         sequenceNumber: 9001,
         teamId: webTeamId,

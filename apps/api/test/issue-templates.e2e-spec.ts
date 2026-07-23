@@ -5,7 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
-import { IssuePriority, MembershipRole, ProjectRole, StateCategory } from '@rivet/database';
+import { IssuePriority, MembershipRole, StateCategory } from '@rivet/database';
 
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
@@ -150,16 +150,8 @@ describe('A4 workspace issue templates API', () => {
         data: { name: 'A4 프로젝트', workspaceId: workspace.id },
         select: { id: true },
       });
-      await transaction.projectRoleTeam.create({
-        data: {
-          projectId: project.id,
-          role: ProjectRole.BACKEND,
-          teamId: team.id,
-          workspaceId: workspace.id,
-        },
-      });
-      const projectTeam = await transaction.projectTeam.findUniqueOrThrow({
-        where: { projectId_teamId: { projectId: project.id, teamId: team.id } },
+      const projectTeam = await transaction.projectTeam.create({
+        data: { projectId: project.id, teamId: team.id, workspaceId: workspace.id },
       });
       return {
         adminId: admin.id,
@@ -217,10 +209,9 @@ describe('A4 workspace issue templates API', () => {
       await database.client.issueTemplate.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
       });
-      await database.client.projectRoleTeam.deleteMany({
+      await database.client.projectTeam.deleteMany({
         where: { workspaceId: { in: workspaceIds } },
       });
-      await database.client.projectTeam.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.project.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.label.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       await database.client.teamMember.deleteMany({
@@ -493,8 +484,9 @@ describe('A4 workspace issue templates API', () => {
       });
     await database.client.team.update({ data: { archivedAt: null }, where: { id: teamId } });
 
-    await database.client.projectRoleTeam.delete({
-      where: { projectId_role: { projectId, role: ProjectRole.BACKEND } },
+    await database.client.projectTeam.update({
+      data: { deactivatedAt: new Date(), isActive: false },
+      where: { id: projectTeamId },
     });
     await mutate(
       memberSessionToken,
@@ -507,13 +499,9 @@ describe('A4 workspace issue templates API', () => {
       .expect(({ body }) => {
         expect(body.details).toEqual({ unavailableReason: 'PROJECT_TEAM_UNAVAILABLE' });
       });
-    await database.client.projectRoleTeam.create({
-      data: {
-        projectId,
-        role: ProjectRole.BACKEND,
-        teamId,
-        workspaceId,
-      },
+    await database.client.projectTeam.update({
+      data: { deactivatedAt: null, isActive: true },
+      where: { id: projectTeamId },
     });
 
     const archived = await mutate(
