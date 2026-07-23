@@ -13,6 +13,5 @@ export const UpdateIssueDtoStatusAction = {
   PAUSE: 'PAUSE',
   RESUME: 'RESUME',
   CANCEL: 'CANCEL',
-  COMPLETE: 'COMPLETE',
   REOPEN: 'REOPEN',
 } as const;

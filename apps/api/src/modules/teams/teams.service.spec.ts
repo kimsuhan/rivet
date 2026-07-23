@@ -95,6 +95,7 @@ describe('TeamsService', () => {
   it('locks memberships and creates the team, members, and seven default states atomically', async () => {
     const result = await service.create(context, {
       key: 'WEB',
+      leaderId: memberId,
       memberIds: [context.membershipId, memberId],
       name: '  Frontend  ',
     });
@@ -113,10 +114,16 @@ describe('TeamsService', () => {
       data: [
         {
           membershipId: context.membershipId,
+          role: 'MEMBER',
           teamId,
           workspaceId: context.workspaceId,
         },
-        { membershipId: memberId, teamId, workspaceId: context.workspaceId },
+        {
+          membershipId: memberId,
+          role: 'LEAD',
+          teamId,
+          workspaceId: context.workspaceId,
+        },
       ],
     });
     const workflowData = transaction.workflowState.createManyAndReturn.mock.calls[0]?.[0].data;
@@ -137,6 +144,7 @@ describe('TeamsService', () => {
       '취소',
     ]);
     expect(result.workflowStates.map(({ position }) => position)).toEqual([0, 1]);
+    expect(result.leaderIds).toEqual([memberId]);
   });
 
   it('rejects a requester that is not an active admin', async () => {
@@ -176,14 +184,41 @@ describe('TeamsService', () => {
     expect(transaction.team.create).not.toHaveBeenCalled();
   });
 
-  it('requires the onboarding creator in the initial team members', async () => {
+  it('allows the creating admin to stay out of the initial team members', async () => {
     await expect(
       service.create(context, { key: 'WEB', memberIds: [memberId], name: 'Frontend' }),
-    ).rejects.toMatchObject({
-      response: { code: 'FORBIDDEN' },
-      status: HttpStatus.FORBIDDEN,
+    ).resolves.toMatchObject({
+      leaderIds: [],
+      memberIds: [memberId],
     });
-    expect(transaction.team.create).not.toHaveBeenCalled();
+    expect(transaction.teamMember.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          membershipId: memberId,
+          role: 'MEMBER',
+          teamId,
+          workspaceId: context.workspaceId,
+        },
+      ],
+    });
+  });
+
+  it('rejects a leader who is not included in the initial team members', async () => {
+    await expect(
+      service.create(context, {
+        key: 'WEB',
+        leaderId: context.membershipId,
+        memberIds: [memberId],
+        name: 'Frontend',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'VALIDATION_ERROR',
+        fieldErrors: { leaderId: ['팀장은 초기 팀 멤버 중에서 선택해 주세요.'] },
+      },
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+    });
+    expect(database.client.$transaction).not.toHaveBeenCalled();
   });
 
   it.each([

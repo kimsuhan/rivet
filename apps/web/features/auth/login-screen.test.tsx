@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +17,9 @@ type LoginOptions = {
 };
 
 const auth = vi.hoisted(() => ({
+  accept: vi.fn(),
+  acceptState: { isPending: false },
+  invalidateQueries: vi.fn(),
   mutate: vi.fn(),
   options: null as LoginOptions | null,
   setQueryData: vi.fn(),
@@ -29,7 +32,10 @@ const auth = vi.hoisted(() => ({
 }));
 
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({ setQueryData: auth.setQueryData }),
+  useQueryClient: () => ({
+    invalidateQueries: auth.invalidateQueries,
+    setQueryData: auth.setQueryData,
+  }),
 }));
 
 vi.mock('@rivet/api-client', () => ({
@@ -39,6 +45,7 @@ vi.mock('@rivet/api-client', () => ({
     auth.options = options;
     return { ...auth.state, mutate: auth.mutate };
   },
+  useInvitationAuthControllerAccept: () => ({ ...auth.acceptState, mutate: auth.accept }),
 }));
 
 vi.mock('@/i18n/navigation', () => ({
@@ -67,6 +74,7 @@ const labels = {
   passwordRequired: '비밀번호를 입력하세요.',
   invalidCredentialsTitle: '로그인 정보가 맞지 않습니다.',
   invalidCredentialsDescription: '이메일과 비밀번호를 다시 확인하세요.',
+  invitationCompleting: '로그인하고 워크스페이스에 참여하는 중입니다.',
   emailNotVerifiedTitle: '이메일 인증이 필요합니다.',
   emailNotVerifiedDescription: '인증 메일을 다시 요청할 수 있습니다.',
   verifyEmailLink: '인증 메일 다시 받기',
@@ -78,9 +86,10 @@ const labels = {
 
 afterEach(cleanup);
 
-function renderLogin(returnTo: string | null = null) {
+function renderLogin(returnTo: string | null = null, acceptInvitationOnLogin = false) {
   return render(
     <LoginScreen
+      acceptInvitationOnLogin={acceptInvitationOnLogin}
       labels={labels}
       forgotPasswordHref="/forgot-password"
       signUpHref="/signup"
@@ -92,6 +101,10 @@ function renderLogin(returnTo: string | null = null) {
 
 describe('LoginScreen', () => {
   beforeEach(() => {
+    auth.accept.mockReset();
+    auth.acceptState.isPending = false;
+    auth.invalidateQueries.mockReset();
+    auth.invalidateQueries.mockResolvedValue(undefined);
     auth.mutate.mockReset();
     auth.replace.mockReset();
     auth.setQueryData.mockReset();
@@ -127,6 +140,29 @@ describe('LoginScreen', () => {
     });
 
     expect(auth.replace).toHaveBeenCalledWith('/invite');
+  });
+
+  it('초대 로그인은 성공 직후 초대를 수락하고 내 작업으로 이동한다', async () => {
+    renderLogin(null, true);
+    auth.accept.mockImplementation((_variables, options) => {
+      void options?.onSuccess?.();
+    });
+
+    act(() => {
+      auth.options?.mutation?.onSuccess?.({
+        csrfToken: 'csrf-token',
+        onboardingStep: 'ACCEPT_INVITATION',
+      });
+    });
+
+    expect(auth.accept).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    expect(auth.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['/api/v1/auth/session'],
+    });
+    await waitFor(() => expect(auth.replace).toHaveBeenCalledWith('/my-issues'));
   });
 
   it.each([

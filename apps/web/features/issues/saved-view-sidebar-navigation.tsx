@@ -47,7 +47,9 @@ export function SavedViewSidebarNavigation({
       className={sidebarSubGroupClassName}
     >
       {views.data!.items.map((view) => {
-        const active = pathname === viewPathname && selectedId === view.id;
+        const active =
+          (pathname === viewPathname || pathname.startsWith(`${viewPathname}/`)) &&
+          selectedId === view.id;
         return (
           <Link
             key={view.id}

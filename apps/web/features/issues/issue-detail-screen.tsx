@@ -1,7 +1,22 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, CircleAlert, FileText, Play, Save, UserRound } from 'lucide-react';
+import {
+  ArrowDownLeft,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUpRight,
+  Check,
+  CircleAlert,
+  CircleCheck,
+  FileText,
+  MessageCircleQuestion,
+  MoreHorizontal,
+  Play,
+  Rocket,
+  Save,
+  UserRound,
+} from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
@@ -26,11 +41,12 @@ import {
   useTeamWorksControllerGet,
 } from '@rivet/api-client';
 
+import { ProjectLogo } from '@/components/project-logo';
 import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -40,6 +56,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';
 import {
   Select,
@@ -50,6 +67,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { UserAvatar } from '@/components/user-avatar';
 import { workflowStateProgress } from '@/components/workflow-state-icon';
 import {
   HandoffEditor,
@@ -58,6 +76,12 @@ import {
   WorkNoteEditor,
 } from '@/features/collaboration/markdown-editor';
 import { MarkdownRenderer } from '@/features/collaboration/markdown-renderer';
+import { DeploymentPlanDialog } from '@/features/deployments/deployment-plan-dialog';
+import {
+  deploymentCondition,
+  deploymentProgress,
+  deploymentReadiness,
+} from '@/features/deployments/deployment-presentation';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 
 import { IssueAttachments } from './issue-attachments';
@@ -81,6 +105,7 @@ import {
   issueWorkHref,
   matchesRequestedTeamWork,
   myWorkHref,
+  projectIssueWorkHref,
 } from './issue-work-routing';
 import { TeamWorkCompletionModal } from './team-work-completion-modal';
 import { TeamWorkPrimaryAction } from './team-work-primary-action';
@@ -226,20 +251,17 @@ function useTeamWorkCellMutation(
 }
 
 function TeamWorkPanel({
-  handoffHref,
-  highlightedHandoffId,
   issue,
   mentionOptions,
   work,
 }: {
-  handoffHref: string;
-  highlightedHandoffId: string | null;
   issue: IssueDetailResponseDto;
   mentionOptions: MentionOption[];
   work: TeamWorkSummaryResponseDto;
 }) {
   const queryClient = useQueryClient();
   const markdown = useTranslations('Markdown');
+  const deployment = useTranslations('Deployments');
   const editorLabels = markdownEditorLabels(
     (key) => markdown(key as never),
     (key) => String(markdown.raw(key as never)),
@@ -263,6 +285,34 @@ function TeamWorkPanel({
   const [followUpGuideOpen, setFollowUpGuideOpen] = useState(false);
   const [followUpSuccess, setFollowUpSuccess] = useState(false);
   const [savedFollowUpSequence, setSavedFollowUpSequence] = useState<number | null>(null);
+  const deploymentConditionValue = deploymentCondition(work, issue.teamWorks);
+  const deploymentReadinessValue = deploymentReadiness(work, issue.teamWorks);
+  const deploymentConditionText =
+    deploymentConditionValue.kind === 'INDEPENDENT'
+      ? deployment('condition.independent')
+      : deploymentConditionValue.kind === 'TOGETHER'
+        ? deployment('condition.together')
+        : deployment('condition.afterTeam', {
+            team: deploymentConditionValue.predecessorTeamNames.join(', '),
+          });
+  const deploymentReadinessText =
+    deploymentReadinessValue.kind === 'DEPLOYED'
+      ? null
+      : deploymentReadinessValue.kind === 'WAITING_FOR_WORK'
+        ? deployment('readiness.waitingForWork', {
+            state: deploymentReadinessValue.workflowStateName,
+          })
+        : deploymentReadinessValue.kind === 'WAITING_FOR_PREDECESSOR'
+          ? deployment('readiness.waitingForPredecessor', {
+              teams: deploymentReadinessValue.predecessorTeamNames.join(', '),
+            })
+          : deploymentReadinessValue.kind === 'WAITING_FOR_TOGETHER'
+            ? deployment('readiness.waitingForTogether', deploymentReadinessValue)
+            : deployment(
+                work.deploymentStatus === 'REDEPLOY_REQUIRED'
+                  ? 'readiness.redeployReady'
+                  : 'readiness.ready',
+              );
 
   function saveState(stateId: string) {
     const state = states.data?.items.find((item) => item.id === stateId);
@@ -302,19 +352,6 @@ function TeamWorkPanel({
     );
   }
 
-  const relatedHandoffs = issue.handoffFlows.filter(
-    (handoff) =>
-      handoff.sourceTeamWork.id === work.id ||
-      handoff.targets.some((target) => target.teamWork.id === work.id),
-  );
-  const latestRelatedHandoff =
-    relatedHandoffs.find((handoff) => handoff.id === highlightedHandoffId) ?? relatedHandoffs[0];
-  const hasInitialHandoff = issue.handoffFlows.some(
-    (handoff) =>
-      handoff.kind === 'INITIAL' &&
-      (handoff.sourceTeamWork.id === work.id ||
-        handoff.targets.some((target) => target.teamWork.id === work.id)),
-  );
   const initialHandoff = issue.handoffFlows.find(
     (handoff) => handoff.kind === 'INITIAL' && handoff.sourceTeamWork.id === work.id,
   );
@@ -331,10 +368,9 @@ function TeamWorkPanel({
     stateMutation.error ?? assigneeMutation.error ?? noteMutation.error ?? followUpMutation.error;
 
   return (
-    <section className="border-b pb-6" aria-labelledby="selected-work-title">
+    <section className="pb-6" aria-labelledby="selected-work-title">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pb-3 sm:justify-between">
         <h2 id="selected-work-title" className="order-1 text-lg font-semibold">
-          <span className="font-mono text-sm">{work.projectTeam.team.key}</span> ·{' '}
           {work.projectTeam.team.name}
         </h2>
         <TeamWorkPrimaryAction
@@ -386,11 +422,56 @@ function TeamWorkPanel({
                   });
                 }}
               />
-              {assigneeMutation.isPending ? (
-                <span className="text-muted-foreground text-xs">담당자 저장 중…</span>
-              ) : null}
             </dd>
           </div>
+          {work.deploymentStatus !== 'NOT_APPLICABLE' ? (
+            <>
+              <div className="flex items-center gap-2">
+                <dt className="text-muted-foreground">{deployment('field.status')}</dt>
+                <dd className="flex flex-wrap items-center gap-1.5">
+                  <Link href="/deployments" className="hover:underline">
+                    <Badge
+                      variant={
+                        work.deploymentStatus === 'DEPLOYED'
+                          ? 'outline'
+                          : work.deploymentStatus === 'REDEPLOY_REQUIRED'
+                            ? 'destructive'
+                            : deploymentReadinessValue.kind === 'READY'
+                              ? 'default'
+                              : 'secondary'
+                      }
+                    >
+                      {work.deploymentStatus === 'DEPLOYED'
+                        ? deployment('view.DEPLOYED')
+                        : work.deploymentStatus === 'REDEPLOY_REQUIRED'
+                          ? deployment('status.REDEPLOY_REQUIRED')
+                          : deploymentReadinessText}
+                    </Badge>
+                  </Link>
+                  {work.deploymentStatus === 'REDEPLOY_REQUIRED' && deploymentReadinessText ? (
+                    <span className="text-muted-foreground text-xs">{deploymentReadinessText}</span>
+                  ) : null}
+                </dd>
+              </div>
+              <div className="flex items-center gap-2">
+                <dt className="text-muted-foreground">{deployment('field.condition')}</dt>
+                <dd className="text-xs">{deploymentConditionText}</dd>
+              </div>
+              {work.deployedAt ? (
+                <div className="flex items-center gap-2">
+                  <dt className="text-muted-foreground">{deployment('field.completedRecord')}</dt>
+                  <dd className="text-muted-foreground text-xs">
+                    {formatHandoffDateTime(work.deployedAt)}
+                    {work.deployedBy
+                      ? ` · ${deployment('deployedBy', {
+                          member: work.deployedBy.user.displayName,
+                        })}`
+                      : null}
+                  </dd>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </dl>
       </div>
       {error ? (
@@ -420,34 +501,46 @@ function TeamWorkPanel({
         submitting={stateMutation.isPending}
         work={work}
       />
-      <section className="mt-5 border-t pt-4" aria-labelledby="handoff-context-title">
+      <section id="handoffs" className="mt-6" aria-labelledby="handoff-context-title">
         <div className="flex items-center justify-between gap-3">
-          <h3 id="handoff-context-title" className="text-sm font-semibold">
-            {initialHandoff ? '보낸 전달' : '받은 전달'}
-          </h3>
-          <Link
-            className="text-primary text-sm underline underline-offset-4"
-            href={handoffHref}
-            scroll={false}
-          >
-            전체 전달 보기
-          </Link>
-        </div>
-        {relatedHandoffs.length ? (
-          <ul className="mt-3 space-y-4">
-            {latestRelatedHandoff ? (
-              <LatestHandoff
-                key={`${latestRelatedHandoff.id}-${highlightedHandoffId ?? ''}`}
-                handoff={latestRelatedHandoff}
-                issueId={issue.id}
-                initiallyExpanded={Boolean(highlightedHandoffId)}
-              />
+          <div className="flex items-center gap-2">
+            <h3 id="handoff-context-title" className="text-sm font-semibold">
+              작업 전달
+            </h3>
+            {issue.handoffFlows.length ? (
+              <span className="text-muted-foreground text-xs tabular-nums">
+                {issue.handoffFlows.length}건
+              </span>
             ) : null}
+          </div>
+          {initialHandoff ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setFollowUpSuccess(false);
+                setFollowUpOpen(true);
+              }}
+            >
+              추가 전달
+            </Button>
+          ) : null}
+        </div>
+        {issue.handoffFlows.length ? (
+          <ul className="mt-3 space-y-3">
+            {issue.handoffFlows.toReversed().map((handoff) => (
+              <HandoffContextCard
+                key={handoff.id}
+                currentWorkId={work.id}
+                handoff={handoff}
+                issueId={issue.id}
+              />
+            ))}
           </ul>
         ) : (
           <p className="text-muted-foreground mt-2 text-sm">아직 전달된 내용이 없습니다.</p>
         )}
-        {initialHandoff && hasInitialHandoff ? (
+        {initialHandoff ? (
           <>
             {followUpSuccess ? (
               <Alert className="mt-4">
@@ -462,17 +555,6 @@ function TeamWorkPanel({
                 </AlertDescription>
               </Alert>
             ) : null}
-            <Button
-              className="mt-4"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setFollowUpSuccess(false);
-                setFollowUpOpen(true);
-              }}
-            >
-              추가 전달 작성
-            </Button>
             <Dialog
               open={followUpOpen}
               onOpenChange={(open) => {
@@ -482,69 +564,79 @@ function TeamWorkPanel({
                 setFollowUpOpen(open);
               }}
             >
-              <DialogContent closeLabel="추가 전달 작성 닫기" className="sm:max-w-2xl">
-                <DialogHeader>
+              <DialogContent
+                closeLabel="추가 전달 작성 닫기"
+                className="flex flex-col gap-0 overflow-clip p-0 sm:max-w-2xl"
+              >
+                <DialogHeader className="shrink-0 p-4 pb-0">
                   <DialogTitle>추가 전달 작성</DialogTitle>
                   <DialogDescription>
                     최초 전달 이후의 변경만 새 이력으로 남깁니다. 기존 전달 대상 작업은 바뀌지
                     않습니다.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="border-border bg-muted/40 rounded-lg border px-3 py-2.5 text-sm">
-                  <p className="text-muted-foreground text-xs font-medium">전달 관계</p>
-                  <p className="mt-1 font-medium">
-                    {work.identifier} · {work.projectTeam.team.name} →{' '}
-                    {followUpRecipientWorks.length > 0
-                      ? followUpRecipientWorks
-                          .map((target) => `${target.identifier} · ${target.projectTeam.team.name}`)
-                          .join(', ')
-                      : '최초 전달 대상 작업'}
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <HandoffEditor
-                    charLimit={50_000}
-                    labels={editorLabels}
-                    mentionOptions={mentionOptions}
-                    onChange={setFollowUpBody}
-                    status={followUpMutation.isPending ? '저장 중…' : null}
-                    value={followUpBody}
-                  />
-                  {followUpBodyInvalid ? (
-                    <p className="text-destructive text-sm" role="alert">
-                      전달할 변경 내용을 입력해 주세요.
+                <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-4">
+                  <div className="border-border bg-muted/40 rounded-lg border px-3 py-2.5 text-sm">
+                    <p className="text-muted-foreground text-xs font-medium">전달 관계</p>
+                    <p className="mt-1 font-medium">
+                      {work.identifier} · {work.projectTeam.team.name} →{' '}
+                      {followUpRecipientWorks.length > 0
+                        ? followUpRecipientWorks
+                            .map(
+                              (target) => `${target.identifier} · ${target.projectTeam.team.name}`,
+                            )
+                            .join(', ')
+                        : '최초 전달 대상 작업'}
                     </p>
-                  ) : null}
-                </div>
-                <details
-                  open={followUpGuideOpen}
-                  onToggle={(event) => setFollowUpGuideOpen(event.currentTarget.open)}
-                >
-                  <summary className="cursor-pointer text-sm font-medium">작성 가이드 보기</summary>
-                  <div className="text-muted-foreground mt-2 space-y-2 text-sm">
-                    <p>
-                      변경 요약, 변경된 결과 또는 입력·출력, 다음 팀에서 필요한 조치를 필요한 만큼만
-                      적어 주세요.
-                    </p>
-                    <Button
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setFollowUpBody(FOLLOW_UP_HANDOFF_TEMPLATE)}
-                    >
-                      가이드 삽입
-                    </Button>
                   </div>
-                </details>
-                <Alert>
-                  <AlertTitle>알림 대상</AlertTitle>
-                  <AlertDescription>
-                    {followUpRecipientWorks.length > 0
-                      ? `${followUpRecipientWorks.map((target) => target.identifier).join(', ')} 작업의 담당자와 구독자에게만 알립니다.`
-                      : '최초 전달 대상 작업의 담당자와 구독자에게만 알립니다.'}
-                  </AlertDescription>
-                </Alert>
-                <DialogFooter>
+                  <div className="grid min-w-0 gap-2">
+                    <HandoffEditor
+                      charLimit={50_000}
+                      labels={editorLabels}
+                      mentionOptions={mentionOptions}
+                      onChange={setFollowUpBody}
+                      status={followUpMutation.isPending ? '저장 중…' : null}
+                      value={followUpBody}
+                    />
+                    {followUpBodyInvalid ? (
+                      <p className="text-destructive text-sm" role="alert">
+                        전달할 변경 내용을 입력해 주세요.
+                      </p>
+                    ) : null}
+                  </div>
+                  <details
+                    open={followUpGuideOpen}
+                    onToggle={(event) => setFollowUpGuideOpen(event.currentTarget.open)}
+                  >
+                    <summary className="cursor-pointer text-sm font-medium">
+                      작성 가이드 보기
+                    </summary>
+                    <div className="text-muted-foreground mt-2 flex flex-col gap-2 text-sm">
+                      <p>
+                        변경 요약, 변경된 결과 또는 입력·출력, 다음 팀에서 필요한 조치를 필요한
+                        만큼만 적어 주세요.
+                      </p>
+                      <Button
+                        className="self-start"
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setFollowUpBody(FOLLOW_UP_HANDOFF_TEMPLATE)}
+                      >
+                        가이드 삽입
+                      </Button>
+                    </div>
+                  </details>
+                  <Alert>
+                    <AlertTitle>알림 대상</AlertTitle>
+                    <AlertDescription>
+                      {followUpRecipientWorks.length > 0
+                        ? `${followUpRecipientWorks.map((target) => target.identifier).join(', ')} 작업의 담당자와 구독자에게만 알립니다.`
+                        : '최초 전달 대상 작업의 담당자와 구독자에게만 알립니다.'}
+                    </AlertDescription>
+                  </Alert>
+                </div>
+                <DialogFooter className="mx-0 mb-0 shrink-0 rounded-b-xl">
                   <Button
                     disabled={followUpMutation.isPending}
                     type="button"
@@ -566,11 +658,16 @@ function TeamWorkPanel({
           </>
         ) : null}
       </section>
-      <section className="mt-6 border-t pt-4" aria-labelledby="work-note-title">
+      <section className="mt-6" aria-labelledby="work-note-title">
         <div className="flex items-center justify-between gap-3">
-          <h3 id="work-note-title" className="text-sm font-medium">
-            작업 노트
-          </h3>
+          <div className="flex min-w-0 items-center gap-3">
+            <h3 id="work-note-title" className="shrink-0 text-sm font-medium">
+              작업 노트
+            </h3>
+            {!editingWorkNote && !work.workNoteMarkdown ? (
+              <span className="text-muted-foreground truncate text-xs">작성된 노트 없음</span>
+            ) : null}
+          </div>
           {!editingWorkNote ? (
             <Button
               aria-label="작업 노트 편집"
@@ -578,7 +675,7 @@ function TeamWorkPanel({
               variant="ghost"
               onClick={() => setEditingWorkNote(true)}
             >
-              {work.workNoteMarkdown ? '편집' : '작업 노트 추가'}
+              {work.workNoteMarkdown ? '편집' : '추가'}
             </Button>
           ) : null}
         </div>
@@ -633,141 +730,127 @@ function TeamWorkPanel({
   );
 }
 
-function LatestHandoff({
+function HandoffContextCard({
+  currentWorkId,
   handoff,
-  initiallyExpanded,
   issueId,
 }: {
+  currentWorkId: string;
   handoff: IssueDetailResponseDto['handoffFlows'][number];
-  initiallyExpanded: boolean;
   issueId: string;
 }) {
-  const [expanded, setExpanded] = useState(initiallyExpanded);
-  const contentId = `handoff-content-${handoff.id}`;
+  const [menuOpen, setMenuOpen] = useState(false);
   const label = `${handoff.kind === 'INITIAL' ? '최초 전달' : '추가 전달'} #${handoff.sequenceNumber}`;
   const bodyMarkdown = stripEmptyHandoffSections(handoff.bodyMarkdown);
+  const relationship =
+    handoff.sourceTeamWork.id === currentWorkId
+      ? 'sent'
+      : handoff.targets.some((target) => target.teamWork.id === currentWorkId)
+        ? 'received'
+        : 'other';
+  const DirectionIcon =
+    relationship === 'sent'
+      ? ArrowUpRight
+      : relationship === 'received'
+        ? ArrowDownLeft
+        : ArrowRight;
+  const relationshipLabel =
+    relationship === 'sent' ? '보냄' : relationship === 'received' ? '받음' : '다른 작업';
 
   return (
-    <li id={`handoff-${handoff.id}`} className="border-primary/50 border-l-2 pl-4 text-sm">
-      <p className="font-medium">{label}</p>
-      <p className="text-muted-foreground mt-0.5 text-xs">
-        {handoff.author.user.displayName} · {formatHandoffDateTime(handoff.createdAt)}
-      </p>
-      <Button
-        aria-controls={contentId}
-        aria-expanded={expanded}
-        className="mt-1"
-        size="sm"
-        variant="ghost"
-        onClick={() => setExpanded((current) => !current)}
-      >
-        {expanded ? '내용 접기' : '내용 펼치기'}
-      </Button>
-      {expanded ? (
-        <div id={contentId}>
-          {bodyMarkdown ? (
-            <MarkdownRenderer
-              className="mt-2"
-              imageUnavailableLabel="이미지를 표시할 수 없습니다"
-              markdown={bodyMarkdown}
-            />
-          ) : (
-            <p className="text-muted-foreground mt-2">입력된 변경사항이 없습니다.</p>
-          )}
-          <Button
-            className="mt-2"
-            size="sm"
-            variant="ghost"
-            onClick={() => askAboutHandoffInComments(issueId, label)}
+    <li
+      id={`handoff-${handoff.id}`}
+      className="border-border bg-muted/15 rounded-lg border p-4 text-sm"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <Badge variant={relationship === 'sent' ? 'secondary' : 'outline'}>
+            <DirectionIcon aria-hidden="true" data-icon="inline-start" />
+            {relationshipLabel}
+          </Badge>
+          <p className="font-medium">{label}</p>
+          <span className="text-muted-foreground text-xs">{handoff.author.user.displayName}</span>
+          <time className="text-muted-foreground text-xs" dateTime={handoff.createdAt}>
+            {formatHandoffDateTime(handoff.createdAt)}
+          </time>
+        </div>
+        <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+          <PopoverTrigger
+            aria-label={`${label} 작업 메뉴`}
+            className="hover:bg-muted focus-visible:border-ring focus-visible:ring-ring/50 inline-flex size-7 shrink-0 items-center justify-center rounded-md outline-none focus-visible:ring-2"
           >
-            댓글로 질문
-          </Button>
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
-function HandoffHistoryItem({
-  handoff,
-  initiallyExpanded,
-  issueId,
-  pathname,
-  searchParams,
-}: {
-  handoff: IssueDetailResponseDto['handoffFlows'][number];
-  initiallyExpanded: boolean;
-  issueId: string;
-  pathname: string;
-  searchParams: ReturnType<typeof useSearchParams>;
-}) {
-  const router = useRouter();
-  const [expanded, setExpanded] = useState(initiallyExpanded);
-  const contentId = `handoff-history-content-${handoff.id}`;
-  const label = `${handoff.kind === 'INITIAL' ? '최초 전달' : '추가 전달'} #${handoff.sequenceNumber}`;
-  const bodyMarkdown = stripEmptyHandoffSections(handoff.bodyMarkdown);
-
-  return (
-    <li id={`handoff-${handoff.id}`} className="border-primary/40 border-l-2 pl-4 text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <strong>{label}</strong>
-          <p className="text-muted-foreground mt-1">
-            {handoff.sourceTeamWork.identifier} →{' '}
-            {handoff.targets.map((target) => target.teamWork.identifier).join(', ')}
-          </p>
-          <p className="text-muted-foreground mt-0.5 text-xs">
-            {handoff.author.user.displayName} · {formatHandoffDateTime(handoff.createdAt)}
-          </p>
-        </div>
-        <Button
-          aria-controls={contentId}
-          aria-expanded={expanded}
-          size="sm"
-          variant="ghost"
-          onClick={() => setExpanded((current) => !current)}
-        >
-          {expanded ? '내용 접기' : '내용 펼치기'}
-        </Button>
+            <MoreHorizontal aria-hidden="true" className="size-4" />
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-40 p-1">
+            <Button
+              className="w-full justify-start"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setMenuOpen(false);
+                askAboutHandoffInComments(issueId, label);
+              }}
+            >
+              <MessageCircleQuestion data-icon="inline-start" />
+              댓글로 질문
+            </Button>
+          </PopoverContent>
+        </Popover>
       </div>
-      {expanded ? (
-        <div id={contentId}>
-          {bodyMarkdown ? (
-            <MarkdownRenderer
-              className="mt-3"
-              imageUnavailableLabel="이미지를 표시할 수 없습니다"
-              markdown={bodyMarkdown}
-            />
-          ) : (
-            <p className="text-muted-foreground mt-3">입력된 변경사항이 없습니다.</p>
-          )}
-          <Button
-            className="mt-2"
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              const next = new URLSearchParams(searchParams.toString());
-              next.set('tab', 'work');
-              router.replace(`${pathname}?${next.toString()}#comments`, { scroll: false });
-              askAboutHandoffInComments(issueId, label);
-            }}
-          >
-            댓글로 질문
-          </Button>
+      <div
+        className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs"
+        aria-label={`${relationshipLabel} 전달 경로`}
+      >
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <span className="text-foreground font-mono">{handoff.sourceTeamWork.identifier}</span>
+          <span className="truncate">{handoff.sourceTeamWork.projectTeam.team.name}</span>
+          {handoff.sourceTeamWork.id === currentWorkId ? (
+            <Badge className="h-4 px-1.5 text-[10px]" variant="outline">
+              현재 작업
+            </Badge>
+          ) : null}
+        </span>
+        <ArrowRight aria-hidden="true" className="size-3.5 shrink-0" />
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+          {handoff.targets.map((target, index) => (
+            <span key={target.teamWork.id} className="inline-flex min-w-0 items-center gap-1.5">
+              {index > 0 ? <span aria-hidden="true">·</span> : null}
+              <span className="text-foreground font-mono">{target.teamWork.identifier}</span>
+              <span className="truncate">{target.teamWork.projectTeam.team.name}</span>
+              {target.teamWork.id === currentWorkId ? (
+                <Badge className="h-4 px-1.5 text-[10px]" variant="outline">
+                  현재 작업
+                </Badge>
+              ) : null}
+            </span>
+          ))}
         </div>
-      ) : null}
+      </div>
+      <div className="mt-3 leading-6">
+        {bodyMarkdown ? (
+          <MarkdownRenderer
+            imageUnavailableLabel="이미지를 표시할 수 없습니다"
+            markdown={bodyMarkdown}
+          />
+        ) : (
+          <p className="text-muted-foreground">입력된 변경사항이 없습니다.</p>
+        )}
+      </div>
     </li>
   );
 }
 
-export function IssueDetailScreen({
-  entry = 'issue',
-  issueRef,
-}: {
-  entry?: 'issue' | 'my-work';
-  issueRef: string;
-}) {
+type IssueDetailScreenProps =
+  | { entry?: 'issue'; issueRef: string; projectId?: never }
+  | { entry: 'my-work'; issueRef: string; projectId?: never }
+  | { entry: 'project'; issueRef: string; projectId: string };
+
+export function IssueDetailScreen(props: IssueDetailScreenProps) {
+  const { issueRef } = props;
+  const entry = props.entry ?? 'issue';
+  const projectId = props.entry === 'project' ? props.projectId : null;
   const markdown = useTranslations('Markdown');
+  const deployments = useTranslations('Deployments');
   const editorLabels = markdownEditorLabels(
     (key) => markdown(key as never),
     (key) => String(markdown.raw(key as never)),
@@ -777,14 +860,12 @@ export function IssueDetailScreen({
   const router = useRouter();
   const queryClient = useQueryClient();
   const isMyWorkEntry = entry === 'my-work';
+  const isProjectEntry = entry === 'project';
+  const savedViewId = isProjectEntry ? null : searchParams.get('view');
   const requestedWork = isMyWorkEntry ? issueRef : searchParams.get('work');
   const requestedHandoff = searchParams.get('handoff');
-  const tab =
-    searchParams.get('tab') === 'handoffs'
-      ? 'handoffs'
-      : searchParams.get('tab') === 'activity'
-        ? 'activity'
-        : 'work';
+  const legacyHandoffTab = searchParams.get('tab') === 'handoffs';
+  const tab = searchParams.get('tab') === 'activity' ? 'activity' : 'work';
   const selectedWorkQuery = useTeamWorksControllerGet(requestedWork ?? issueRef, {
     query: { enabled: isMyWorkEntry || Boolean(requestedWork), retry: false },
   });
@@ -799,6 +880,9 @@ export function IssueDetailScreen({
     },
   });
   const issue = issueQuery.data;
+  const projectMismatch = Boolean(
+    isProjectEntry && issue && projectId && issue.project.id !== projectId,
+  );
   const selectedWork =
     issue?.teamWorks.find((work) => matchesRequestedTeamWork(work.identifier, requestedWork)) ??
     issue?.teamWorks[0];
@@ -813,6 +897,18 @@ export function IssueDetailScreen({
   const project = useProjectsControllerGet(issue?.project.id ?? '', {
     query: { enabled: Boolean(issue), retry: false },
   });
+  const canManageDeploymentPlan = Boolean(
+    issue &&
+    session.data?.authenticated &&
+    (session.data.membership?.role === 'ADMIN' ||
+      project.data?.lead?.id === session.data.membership?.id),
+  );
+  const deploymentWorks =
+    issue?.teamWorks.filter(
+      ({ deploymentStatus, stateCategory }) =>
+        stateCategory !== 'CANCELED' && deploymentStatus !== 'NOT_APPLICABLE',
+    ) ?? [];
+  const issueDeploymentProgress = deploymentProgress(deploymentWorks);
   const [startProjectTeamIds, setStartProjectTeamIds] = useState<string[]>([]);
   const [addTeamWorkDisclosure, setAddTeamWorkDisclosure] = useState(() => ({
     open: selectedWork?.stateCategory !== 'STARTED',
@@ -835,17 +931,60 @@ export function IssueDetailScreen({
   useEffect(() => {
     if (isMyWorkEntry || !issueQuery.isError || !legacyWork.data) return;
     router.replace(
-      `${issueWorkHref(legacyWork.data.issue.identifier, legacyWork.data.identifier)}${window.location.hash}`,
+      `${issueWorkHref(legacyWork.data.issue.identifier, legacyWork.data.identifier, savedViewId)}${window.location.hash}`,
       { scroll: false },
     );
-  }, [isMyWorkEntry, issueQuery.isError, legacyWork.data, router]);
+  }, [isMyWorkEntry, issueQuery.isError, legacyWork.data, router, savedViewId]);
   useEffect(() => {
-    if (isMyWorkEntry || !issue || requestedWork || !selectedWork) return;
+    if (!projectMismatch || !issue) return;
+    const query = searchParams.toString();
+    router.replace(
+      `/issues/${encodeURIComponent(issue.identifier)}${query ? `?${query}` : ''}${window.location.hash}`,
+      { scroll: false },
+    );
+  }, [issue, projectMismatch, router, searchParams]);
+  useEffect(() => {
+    if (
+      legacyHandoffTab ||
+      projectMismatch ||
+      isMyWorkEntry ||
+      !issue ||
+      requestedWork ||
+      !selectedWork
+    )
+      return;
     const next = new URLSearchParams(searchParams.toString());
     next.set('tab', 'work');
     next.set('work', selectedWork.identifier);
     router.replace(`${pathname}?${next.toString()}${window.location.hash}`, { scroll: false });
-  }, [isMyWorkEntry, issue, pathname, requestedWork, router, searchParams, selectedWork]);
+  }, [
+    isMyWorkEntry,
+    issue,
+    legacyHandoffTab,
+    pathname,
+    projectMismatch,
+    requestedWork,
+    router,
+    searchParams,
+    selectedWork,
+  ]);
+  useEffect(() => {
+    if (!legacyHandoffTab) return;
+    const next = new URLSearchParams(searchParams.toString());
+    next.set('tab', 'work');
+    if (!isMyWorkEntry && !requestedWork && selectedWork) {
+      next.set('work', selectedWork.identifier);
+    }
+    router.replace(`${pathname}?${next.toString()}#handoffs`, { scroll: false });
+  }, [
+    isMyWorkEntry,
+    legacyHandoffTab,
+    pathname,
+    requestedWork,
+    router,
+    searchParams,
+    selectedWork,
+  ]);
   useEffect(() => {
     if (!issue) return;
     const anchor = requestedHandoff ? `handoff-${requestedHandoff}` : window.location.hash.slice(1);
@@ -887,15 +1026,32 @@ export function IssueDetailScreen({
       />
     );
   if (!issue) return <ContentLoading label="정본 주소로 이동 중입니다" />;
+  if (projectMismatch) return <ContentLoading label="올바른 이슈 주소로 이동 중입니다" />;
 
   const currentIssue = issue;
   const detailHref = (teamWorkIdentifier: string, nextTab = 'work') =>
     isMyWorkEntry
-      ? myWorkHref(teamWorkIdentifier, nextTab)
-      : issueWorkHref(currentIssue.identifier, teamWorkIdentifier).replace(
-          'tab=work',
-          `tab=${nextTab}`,
-        );
+      ? myWorkHref(teamWorkIdentifier, nextTab, savedViewId)
+      : isProjectEntry && projectId
+        ? projectIssueWorkHref(projectId, currentIssue.identifier, teamWorkIdentifier, nextTab)
+        : issueWorkHref(currentIssue.identifier, teamWorkIdentifier, savedViewId).replace(
+            'tab=work',
+            `tab=${nextTab}`,
+          );
+  const backHref = isMyWorkEntry
+    ? savedViewId
+      ? `/my-issues?view=${encodeURIComponent(savedViewId)}`
+      : '/my-issues'
+    : isProjectEntry && projectId
+      ? `/projects/${encodeURIComponent(projectId)}`
+      : savedViewId
+        ? `/issues?view=${encodeURIComponent(savedViewId)}`
+        : '/issues';
+  const backLabel = isMyWorkEntry
+    ? '내 작업'
+    : isProjectEntry
+      ? currentIssue.project.name
+      : '이슈 목록';
   const myWorkIsExcluded =
     isMyWorkEntry && selectedWork
       ? isExcludedFromMyWork(
@@ -958,7 +1114,7 @@ export function IssueDetailScreen({
       // React Query mutation 상태가 인라인 오류를 표시한다.
     }
   }
-  async function statusAction(action: 'COMPLETE' | 'PAUSE' | 'RESUME' | 'REOPEN') {
+  async function statusAction(action: 'PAUSE' | 'RESUME' | 'REOPEN') {
     try {
       const updated = await updateIssue.mutateAsync({
         issueId: currentIssue.id,
@@ -975,7 +1131,7 @@ export function IssueDetailScreen({
     <article className="mx-auto max-w-[1440px] space-y-6">
       <header className="space-y-4">
         <Link
-          href={isMyWorkEntry ? '/my-issues' : '/issues'}
+          href={backHref}
           className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
           onClick={(event) => {
             if (!isMyWorkEntry) return;
@@ -992,7 +1148,7 @@ export function IssueDetailScreen({
           }}
         >
           <ArrowLeft className="size-4" />
-          {isMyWorkEntry ? '내 작업' : '이슈 목록'}
+          {backLabel}
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -1006,13 +1162,27 @@ export function IssueDetailScreen({
               {isMyWorkEntry ? (
                 <>
                   <span className="font-mono">{issue.identifier}</span>
-                  <span>{issue.project.name}</span>
+                  <span className="inline-flex items-center gap-2">
+                    <ProjectLogo
+                      logoFileId={issue.project.logoFileId}
+                      name={issue.project.name}
+                      size="xs"
+                    />
+                    {issue.project.name}
+                  </span>
                   {selectedWork ? <span>{selectedWork.projectTeam.team.name}</span> : null}
                   <IssueLabelChips emptyLabel="" labels={issue.labels} />
                 </>
               ) : (
                 <>
-                  <span>{issue.project.name}</span>
+                  <span className="inline-flex items-center gap-2">
+                    <ProjectLogo
+                      logoFileId={issue.project.logoFileId}
+                      name={issue.project.name}
+                      size="xs"
+                    />
+                    {issue.project.name}
+                  </span>
                   {issue.priority === 'NONE' ? (
                     <span>우선순위 없음</span>
                   ) : (
@@ -1038,6 +1208,23 @@ export function IssueDetailScreen({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {canManageDeploymentPlan && deploymentWorks.length > 1 ? (
+              <DeploymentPlanDialog issue={issue} />
+            ) : deploymentWorks.length > 0 ? (
+              <Link
+                href="/deployments"
+                className={buttonVariants({ size: 'sm', variant: 'outline' })}
+              >
+                {issueDeploymentProgress.completed === issueDeploymentProgress.total ? (
+                  <CircleCheck aria-hidden="true" className="size-4" />
+                ) : (
+                  <Rocket aria-hidden="true" className="size-4" />
+                )}
+                {issueDeploymentProgress.completed === issueDeploymentProgress.total
+                  ? deployments('summary.complete', issueDeploymentProgress)
+                  : deployments('summary.progress', issueDeploymentProgress)}
+              </Link>
+            ) : null}
             {isMyWorkEntry && selectedWork ? (
               <TeamWorkStatusDisplay
                 category={selectedWork.stateCategory}
@@ -1048,12 +1235,6 @@ export function IssueDetailScreen({
             ) : (
               <IssueStatusDisplay status={issue.status} />
             )}
-            {!isMyWorkEntry && issue.status === 'REVIEW' ? (
-              <Button size="sm" onClick={() => void statusAction('COMPLETE')}>
-                <Check className="size-4" />
-                이슈 완료
-              </Button>
-            ) : null}
             {!isMyWorkEntry && issue.status === 'PAUSED' ? (
               <Button size="sm" variant="outline" onClick={() => void statusAction('RESUME')}>
                 재개
@@ -1085,7 +1266,6 @@ export function IssueDetailScreen({
           {(
             [
               { key: 'work', label: '업무' },
-              { key: 'handoffs', label: '전달' },
               { key: 'activity', label: '활동' },
             ] as const
           ).map((item) => {
@@ -1178,12 +1358,19 @@ export function IssueDetailScreen({
                           name={work.workflowState.name}
                           progress={work.stateProgress}
                         />
-                        <span className="font-mono text-xs">{work.projectTeam.team.key}</span>
                         {work.projectTeam.team.name}
                       </span>
-                      <span className="text-muted-foreground mt-1 block truncate text-xs">
-                        {work.assignee?.user.displayName ?? '담당자 없음'}
-                      </span>
+                      {work.assignee ? (
+                        <span className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1.5 text-xs">
+                          <UserAvatar
+                            avatarFileId={work.assignee.user.avatarFileId}
+                            className="data-[size=sm]:size-4 [&_[data-slot=avatar-fallback]]:text-[9px]"
+                            displayName={work.assignee.user.displayName}
+                            size="sm"
+                          />
+                          <span className="truncate">{work.assignee.user.displayName}</span>
+                        </span>
+                      ) : null}
                     </Link>
                   );
                 })}
@@ -1229,7 +1416,6 @@ export function IssueDetailScreen({
                         )
                       }
                     />
-                    <span className="font-mono text-xs">{projectTeam.team.key}</span>
                     {projectTeam.team.name}
                   </label>
                 ))}
@@ -1246,31 +1432,6 @@ export function IssueDetailScreen({
           ) : null}
         </aside>
         <main className="min-w-0 space-y-6">
-          {tab === 'handoffs' ? (
-            <section id="handoffs" aria-labelledby="handoffs-title">
-              <h2 id="handoffs-title" className="text-lg font-semibold">
-                작업 전달
-              </h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                최초 전달과 이후 API 변경을 원문 그대로 확인합니다.
-              </p>
-              <ol className="mt-5 space-y-6">
-                {issue.handoffFlows.map((handoff, index) => (
-                  <HandoffHistoryItem
-                    key={handoff.id}
-                    handoff={handoff}
-                    initiallyExpanded={handoff.id === requestedHandoff || index === 0}
-                    issueId={issue.id}
-                    pathname={pathname}
-                    searchParams={searchParams}
-                  />
-                ))}
-              </ol>
-              {!issue.handoffFlows.length ? (
-                <p className="text-muted-foreground mt-4 text-sm">아직 전달 이력이 없습니다.</p>
-              ) : null}
-            </section>
-          ) : null}
           {tab === 'activity' ? (
             <IssueTimeline
               currentMembershipId={
@@ -1286,9 +1447,7 @@ export function IssueDetailScreen({
             <>
               {selectedWork ? (
                 <TeamWorkPanel
-                  handoffHref={`${detailHref(selectedWork.identifier, 'handoffs')}${requestedHandoff ? `&handoff=${encodeURIComponent(requestedHandoff)}` : ''}`}
                   key={selectedWork.id}
-                  highlightedHandoffId={requestedHandoff}
                   issue={issue}
                   mentionOptions={mentionOptions}
                   work={selectedWork}
@@ -1302,7 +1461,7 @@ export function IssueDetailScreen({
                   </p>
                 </section>
               )}
-              <section className="border-t pt-5" aria-labelledby="issue-content-title">
+              <section className="mt-8 border-t pt-6" aria-labelledby="issue-content-title">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <FileText aria-hidden="true" className="text-muted-foreground size-4" />
@@ -1352,13 +1511,11 @@ export function IssueDetailScreen({
                     />
                   </div>
                 ) : (
-                  <p className="text-muted-foreground mt-4 border-y py-4 text-sm">
-                    등록된 설명이 없습니다.
-                  </p>
+                  <p className="text-muted-foreground mt-3 text-sm">등록된 설명이 없습니다.</p>
                 )}
               </section>
               <IssueAttachments issue={issue} />
-              <div id="comments" className="border-t pt-5">
+              <div id="comments">
                 <IssueTimeline
                   currentMembershipId={
                     session.data?.authenticated ? (session.data.membership?.id ?? null) : null

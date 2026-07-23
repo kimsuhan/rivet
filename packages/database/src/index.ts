@@ -1,6 +1,7 @@
 export { createPrismaClient, type DatabaseClientOptions } from './client';
 export { Prisma, PrismaClient } from './generated/prisma/client';
 export {
+  DeploymentStatus,
   EmailTemplateType,
   ExportType,
   FeedbackCategory,

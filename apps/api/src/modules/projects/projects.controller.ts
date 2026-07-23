@@ -43,6 +43,7 @@ import { ProjectsService } from './projects.service';
 function workspaceContext(authentication: AuthenticatedRequestContext): {
   membershipId: string;
   membershipRole: 'ADMIN' | 'MEMBER';
+  userId: string;
   workspaceId: string;
 } {
   const { membership, workspace } = authentication.session;
@@ -60,7 +61,12 @@ function workspaceContext(authentication: AuthenticatedRequestContext): {
     });
   }
 
-  return { membershipId: membership.id, membershipRole: membership.role, workspaceId: workspace.id };
+  return {
+    membershipId: membership.id,
+    membershipRole: membership.role,
+    userId: authentication.session.user.id,
+    workspaceId: workspace.id,
+  };
 }
 
 @ApiTags('projects')

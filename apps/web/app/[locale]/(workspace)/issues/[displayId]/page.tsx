@@ -15,6 +15,7 @@ export default async function IssueDetailPage({
   return (
     <NextIntlClientProvider
       messages={{
+        Deployments: messages.Deployments,
         Files: messages.Files,
         IssueDetail: messages.IssueDetail,
         Markdown: messages.Markdown,

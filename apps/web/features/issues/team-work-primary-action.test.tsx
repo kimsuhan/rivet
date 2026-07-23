@@ -63,6 +63,11 @@ function work(overrides: Partial<TeamWorkSummaryResponseDto> = {}): TeamWorkSumm
   return {
     assignee: null,
     createdAt: '2026-07-01T00:00:00.000Z',
+    deployedAt: null,
+    deployedBy: null,
+    deploymentGroupId: null,
+    deploymentPredecessorTeamWorkIds: [],
+    deploymentStatus: 'NOT_APPLICABLE',
     id: 'team-work-1',
     identifier: 'API-1',
     issue: {
@@ -70,12 +75,19 @@ function work(overrides: Partial<TeamWorkSummaryResponseDto> = {}): TeamWorkSumm
       identifier: 'F-1',
       labels: [],
       priority: 'NONE',
-      project: { archived: false, id: 'project-1', name: '프로젝트', status: 'PLANNED' },
+      project: {
+        archived: false,
+        id: 'project-1',
+        logoFileId: null,
+        name: '프로젝트',
+        status: 'PLANNED',
+      },
       status: 'TODO',
       title: '이슈 제목',
     },
     projectTeam: {
       active: true,
+      deploymentTrackingEnabled: false,
       id: 'project-team-1',
       team: { archived: false, id: 'team-1', key: 'PLAN', name: '기획' },
     },

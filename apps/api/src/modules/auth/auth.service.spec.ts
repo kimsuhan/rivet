@@ -438,6 +438,39 @@ describe('AuthService', () => {
     expect(sessions.create).toHaveBeenCalledWith(sessionContext.user.id);
   });
 
+  it('uses a matching invitation as email proof after password authentication', async () => {
+    const password = 'a sufficiently long phrase';
+    const passwordHash = await hashPassword(password);
+    client.user.findUnique.mockResolvedValue({
+      emailVerifiedAt: null,
+      id: sessionContext.user.id,
+      membership: null,
+      passwordHash,
+    });
+    transaction.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        id: '6f6b9772-f15c-4c5b-adac-706e60f477bb',
+        invitationEmail: 'user@example.com',
+        userId: null,
+      },
+    ]);
+    client.$queryRaw.mockResolvedValue([{ id: '6f6b9772-f15c-4c5b-adac-706e60f477bb' }]);
+
+    const result = await service.login(
+      { email: 'User@Example.com', password },
+      '127.0.0.1',
+      'invitation-continuation-token',
+    );
+
+    expect(result.response.onboardingStep).toBe('ACCEPT_INVITATION');
+    expect(
+      transaction.$executeRaw.mock.calls
+        .map((call) => (call[0] as readonly string[]).join('?'))
+        .join('\n'),
+    ).toContain('SET "email_verified_at" = COALESCE');
+    expect(sessions.create).toHaveBeenCalledWith(sessionContext.user.id);
+  });
+
   it('rehashes a valid login only when the stored Argon2 parameters are weaker', async () => {
     const password = 'a sufficiently long phrase';
     const passwordHash = await argon2Hash(password, {

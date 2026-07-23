@@ -16,11 +16,13 @@ export const PROJECT_SELECT = {
       user: { select: { avatarFileId: true, displayName: true, id: true } },
     },
   },
+  logoFileId: true,
   name: true,
   projectTeams: {
     orderBy: [{ isActive: 'desc' }, { team: { name: 'asc' } }, { id: 'asc' }],
     select: {
       deactivatedAt: true,
+      deploymentTrackingEnabled: true,
       id: true,
       isActive: true,
       team: { select: { archivedAt: true, id: true, key: true, name: true } },
@@ -64,11 +66,14 @@ export function toProjectResponse(
           },
         }
       : null,
+    logoFileId: row.logoFileId,
     name: row.name,
     progress,
-    projectTeams: row.projectTeams.map(({ deactivatedAt, id, isActive, team }) => ({
+    projectTeams: row.projectTeams.map(
+      ({ deactivatedAt, deploymentTrackingEnabled, id, isActive, team }) => ({
         active: isActive,
         deactivatedAt: deactivatedAt?.toISOString() ?? null,
+        deploymentTrackingEnabled,
         id,
         team: {
           archived: team.archivedAt !== null,
@@ -76,7 +81,8 @@ export function toProjectResponse(
           key: team.key,
           name: team.name,
         },
-      })),
+      }),
+    ),
     startDate: projectDateValue(row.startDate),
     status: row.status,
     targetDate: projectDateValue(row.targetDate),

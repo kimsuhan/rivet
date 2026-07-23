@@ -12,6 +12,7 @@ describe('file access policy', () => {
     detectedMimeType: 'image/png',
     id: '953685f0-4921-41cd-8422-d8a1ccc3f547',
     issueAttachments: [],
+    logoProject: null,
     originalName: 'image.png',
     scope: FileScope.WORKSPACE,
     sizeBytes: 100n,
@@ -31,6 +32,17 @@ describe('file access policy', () => {
 
   it('allows a linked issue file only inside the current workspace', () => {
     const linked = { ...file, issueAttachments: [{ workspaceId }] } satisfies FileAccessRow;
+    expect(canAccessFile(linked, { userId: 'other-user', workspaceId })).toBe(true);
+    expect(
+      canAccessFile(linked, {
+        userId: 'other-user',
+        workspaceId: '05ed9724-f207-447d-9f18-7026f493d3fd',
+      }),
+    ).toBe(false);
+  });
+
+  it('allows a project logo only inside the project workspace', () => {
+    const linked = { ...file, logoProject: { workspaceId } } satisfies FileAccessRow;
     expect(canAccessFile(linked, { userId: 'other-user', workspaceId })).toBe(true);
     expect(
       canAccessFile(linked, {

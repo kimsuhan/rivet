@@ -20,6 +20,8 @@ interface PurgeLockRow {
   purgeAt: Date | null;
 }
 
+type ProjectPurgeLockRow = PurgeLockRow & { logoFileId: string | null };
+
 @Injectable()
 export class ResourcePurgeHandler {
   constructor(private readonly database: DatabaseService) {}
@@ -99,9 +101,10 @@ export class ResourcePurgeHandler {
   ): Promise<void> {
     const workspaceId = this.workspaceId(event);
     await this.database.client.$transaction(async (transaction) => {
-      const [projectSnapshot] = await transaction.$queryRaw<PurgeLockRow[]>`
+      const [projectSnapshot] = await transaction.$queryRaw<ProjectPurgeLockRow[]>`
         SELECT "deleted_at" AS "deletedAt",
                "purge_at" AS "purgeAt",
+               "logo_file_id" AS "logoFileId",
                CURRENT_TIMESTAMP AS "databaseNow"
         FROM "projects"
         WHERE "workspace_id" = ${workspaceId}::uuid
@@ -118,9 +121,10 @@ export class ResourcePurgeHandler {
         ORDER BY "id"
         FOR UPDATE
       `;
-      const [project] = await transaction.$queryRaw<PurgeLockRow[]>`
+      const [project] = await transaction.$queryRaw<ProjectPurgeLockRow[]>`
         SELECT "deleted_at" AS "deletedAt",
                "purge_at" AS "purgeAt",
+               "logo_file_id" AS "logoFileId",
                CURRENT_TIMESTAMP AS "databaseNow"
         FROM "projects"
         WHERE "workspace_id" = ${workspaceId}::uuid
@@ -156,6 +160,16 @@ export class ResourcePurgeHandler {
       await transaction.activityEvent.deleteMany({
         where: { projectId: payload.projectId, workspaceId },
       });
+      if (project.logoFileId) {
+        await transaction.project.update({
+          data: { logoFileId: null },
+          where: { workspaceId_id: { id: payload.projectId, workspaceId } },
+        });
+        await transaction.file.update({
+          data: { unlinkedAt: project.databaseNow },
+          where: { id: project.logoFileId },
+        });
+      }
       const deleted = await transaction.project.deleteMany({
         where: {
           deletedAt: { not: null },

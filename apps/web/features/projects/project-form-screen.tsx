@@ -2,9 +2,18 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Monitor, RotateCcw, Search, Users } from 'lucide-react';
+import {
+  ArrowLeft,
+  ImagePlus,
+  LockKeyhole,
+  Monitor,
+  RotateCcw,
+  Search,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 
 import {
@@ -21,6 +30,7 @@ import {
 } from '@rivet/api-client';
 
 import { PageHeading } from '@/components/layout/page-heading';
+import { ProjectLogo } from '@/components/project-logo';
 import { ContentEmpty } from '@/components/states/content-empty';
 import { ContentError } from '@/components/states/content-error';
 import { ContentLoading } from '@/components/states/content-loading';
@@ -50,6 +60,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { Link, useRouter } from '@/i18n/navigation';
 
+import { deleteUploadedFile, uploadFile } from '../files/file-api';
+import { optimizeProjectLogo } from '../files/image-optimizer';
 import {
   createProjectPayload,
   PROJECT_FORM_STATUSES,
@@ -200,6 +212,9 @@ function ProjectForm({
   const [latestProject, setLatestProject] = useState<ProjectResponseDto | null>(null);
   const [lastSubmitted, setLastSubmitted] = useState<ProjectFormValues | null>(null);
   const [teamSearch, setTeamSearch] = useState('');
+  const [isLogoUploading, setIsLogoUploading] = useState(false);
+  const [logoUploadFailed, setLogoUploadFailed] = useState(false);
+  const [pendingLogoFileId, setPendingLogoFileId] = useState<string | null>(null);
   const mutation = project ? update : create;
   const isPending = mutation.isPending;
   const currentTeams = project?.projectTeams.map(({ team }) => team) ?? [];
@@ -224,6 +239,32 @@ function ProjectForm({
     project?.projectTeams.filter(({ active }) => !active).map(({ team }) => team.id) ?? [],
   );
 
+  useEffect(() => {
+    return () => {
+      if (pendingLogoFileId) void deleteUploadedFile(pendingLogoFileId).catch(() => undefined);
+    };
+  }, [pendingLogoFileId]);
+
+  function cleanupPendingLogo(): void {
+    setPendingLogoFileId(null);
+  }
+
+  async function selectLogo(file: File): Promise<void> {
+    setLogoUploadFailed(false);
+    setIsLogoUploading(true);
+    try {
+      const optimized = await optimizeProjectLogo(file);
+      const uploaded = await uploadFile(optimized, 'WORKSPACE');
+      cleanupPendingLogo();
+      setPendingLogoFileId(uploaded.id);
+      form.setValue('logoFileId', uploaded.id, { shouldDirty: true, shouldValidate: true });
+    } catch {
+      setLogoUploadFailed(true);
+    } finally {
+      setIsLogoUploading(false);
+    }
+  }
+
   async function refreshLatest() {
     if (!reload) return null;
     const latest = await reload();
@@ -246,10 +287,12 @@ function ProjectForm({
     const fieldErrors = body.fieldErrors ?? {};
     const fieldMap: Partial<Record<keyof ProjectFormValues, string | undefined>> = {
       description: fieldErrors.description?.[0],
+      deploymentTrackingTeamIds: fieldErrors.deploymentTrackingTeamIds?.[0],
       name: fieldErrors.name?.[0],
       startDate: fieldErrors.startDate?.[0],
       targetDate: fieldErrors.targetDate?.[0],
       teamIds: fieldErrors.teamIds?.[0],
+      logoFileId: fieldErrors.logoFileId?.[0],
     };
     for (const [field, message] of Object.entries(fieldMap)) {
       if (message) form.setError(field as keyof ProjectFormValues, { message, type: 'server' });
@@ -295,6 +338,7 @@ function ProjectForm({
     const options = {
       onError: (error: unknown) => handleError(error, submitted),
       onSuccess: async (saved: ProjectResponseDto) => {
+        setPendingLogoFileId(null);
         await queryClient.invalidateQueries({ queryKey: getProjectsControllerListQueryKey() });
         await queryClient.invalidateQueries({
           queryKey: getProjectsControllerGetQueryKey(saved.id),
@@ -317,6 +361,7 @@ function ProjectForm({
 
   function restoreLatest() {
     if (!latestProject) return;
+    cleanupPendingLogo();
     form.reset(projectFormDefaults(latestProject));
     setNotice(null);
   }
@@ -413,6 +458,64 @@ function ProjectForm({
         ) : null}
 
         <FieldGroup>
+          <Field data-invalid={Boolean(form.formState.errors.logoFileId) || logoUploadFailed}>
+            <FieldLabel htmlFor="project-logo">{t('field.logo')}</FieldLabel>
+            <div className="flex items-center gap-4">
+              <ProjectLogo
+                logoFileId={values.logoFileId || null}
+                name={values.name || project?.name || t('field.logo')}
+                size="lg"
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Input
+                  id="project-logo"
+                  className="sr-only"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={isLogoUploading || isPending}
+                  aria-invalid={Boolean(form.formState.errors.logoFileId) || logoUploadFailed}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = '';
+                    if (file) void selectLogo(file);
+                  }}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <label
+                    htmlFor="project-logo"
+                    className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                  >
+                    {isLogoUploading ? (
+                      <Spinner aria-hidden="true" data-icon="inline-start" />
+                    ) : (
+                      <ImagePlus aria-hidden="true" data-icon="inline-start" />
+                    )}
+                    {values.logoFileId ? t('field.logoReplace') : t('field.logoSelect')}
+                  </label>
+                  {values.logoFileId ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={isLogoUploading || isPending}
+                      onClick={() => {
+                        void cleanupPendingLogo();
+                        form.setValue('logoFileId', '', { shouldDirty: true });
+                      }}
+                    >
+                      <Trash2 aria-hidden="true" data-icon="inline-start" />
+                      {t('field.logoRemove')}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            <FieldDescription>
+              {isLogoUploading ? t('field.logoUploading') : t('field.logoHint')}
+            </FieldDescription>
+            {logoUploadFailed ? <FieldError>{t('field.logoUploadError')}</FieldError> : null}
+            <FieldError errors={[form.formState.errors.logoFileId]} />
+          </Field>
           <Field data-invalid={Boolean(form.formState.errors.name)}>
             <FieldLabel htmlFor="project-name">{t('field.name')}</FieldLabel>
             <Input
@@ -543,6 +646,15 @@ function ProjectForm({
                         aria-describedby={`project-team-${team.id}-description`}
                         onCheckedChange={(next) => {
                           const selected = values.teamIds ?? [];
+                          if (!next) {
+                            form.setValue(
+                              'deploymentTrackingTeamIds',
+                              (values.deploymentTrackingTeamIds ?? []).filter(
+                                (id) => id !== team.id,
+                              ),
+                              { shouldDirty: true, shouldValidate: true },
+                            );
+                          }
                           form.setValue(
                             'teamIds',
                             next
@@ -581,6 +693,71 @@ function ProjectForm({
           <FieldError errors={[form.formState.errors.teamIds]} />
         </FieldSet>
 
+        <FieldSet data-invalid={Boolean(form.formState.errors.deploymentTrackingTeamIds)}>
+          <FieldLegend>{t('field.deploymentTracking')}</FieldLegend>
+          <FieldDescription>{t('field.deploymentTrackingHint')}</FieldDescription>
+          {!canManageTeams ? (
+            <Alert>
+              <LockKeyhole aria-hidden="true" />
+              <AlertTitle>{t('deploymentPermission.title')}</AlertTitle>
+              <AlertDescription>{t('deploymentPermission.description')}</AlertDescription>
+            </Alert>
+          ) : null}
+          {(values.teamIds ?? []).length === 0 ? (
+            <div className="border-border bg-muted/30 rounded-lg border border-dashed px-4 py-6 text-center">
+              <p className="text-sm font-medium">{t('field.deploymentTrackingEmpty')}</p>
+            </div>
+          ) : (
+            <ul className="divide-border overflow-hidden rounded-xl border">
+              {teamOptions
+                .filter((team) => (values.teamIds ?? []).includes(team.id))
+                .map((team) => {
+                  const checked = (values.deploymentTrackingTeamIds ?? []).includes(team.id);
+                  return (
+                    <li key={team.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
+                      <span className="bg-muted text-muted-foreground min-w-12 rounded-md px-2 py-1 text-center font-mono text-xs font-semibold">
+                        {team.key}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{team.name}</span>
+                        <span className="text-muted-foreground block text-xs">
+                          {checked
+                            ? t('field.deploymentTrackingOn')
+                            : t('field.deploymentTrackingOff')}
+                        </span>
+                      </span>
+                      {canManageTeams ? (
+                        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(next) => {
+                              const selected = values.deploymentTrackingTeamIds ?? [];
+                              form.setValue(
+                                'deploymentTrackingTeamIds',
+                                next
+                                  ? [...new Set([...selected, team.id])]
+                                  : selected.filter((id) => id !== team.id),
+                                { shouldDirty: true, shouldValidate: true },
+                              );
+                            }}
+                          />
+                          {t('field.deploymentTrackingToggle')}
+                        </label>
+                      ) : (
+                        <Badge variant={checked ? 'secondary' : 'outline'}>
+                          {checked
+                            ? t('field.deploymentTrackingToggle')
+                            : t('field.deploymentTrackingDisabled')}
+                        </Badge>
+                      )}
+                    </li>
+                  );
+                })}
+            </ul>
+          )}
+          <FieldError errors={[form.formState.errors.deploymentTrackingTeamIds]} />
+        </FieldSet>
+
         <div className="bg-background fixed inset-x-0 bottom-0 flex justify-end gap-2 border-t px-6 py-3 lg:left-14 xl:left-60">
           <Link
             href={project ? `/projects/${project.id}` : '/projects'}
@@ -588,7 +765,7 @@ function ProjectForm({
           >
             {t('cancel')}
           </Link>
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" disabled={isPending || isLogoUploading}>
             {isPending ? <Spinner aria-hidden="true" data-icon="inline-start" /> : null}
             {isPending ? t('saving') : project ? t('edit.save') : t('create.save')}
           </Button>

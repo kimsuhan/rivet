@@ -555,7 +555,7 @@ export function IssueTimeline({
           {loadingLabel}
         </p>
       ) : items.length === 0 && !timeline.hasNextPage ? (
-        <p className="text-muted-foreground mt-3 border-y py-4 text-sm">
+        <p className="text-muted-foreground mt-3 text-sm">
           {mode === 'comments' ? t('timeline.comments.empty') : t('timeline.activity.empty')}
         </p>
       ) : items.length > 0 ? (
@@ -639,13 +639,7 @@ export function IssueTimeline({
       ) : null}
 
       {mode === 'comments' ? (
-        <div className="mt-6 flex flex-col gap-3" aria-labelledby="new-comment-title">
-          <div className="flex items-center gap-2">
-            <MessageSquareIcon aria-hidden="true" className="text-muted-foreground size-4" />
-            <h3 id="new-comment-title" className="text-sm font-semibold">
-              {t('timeline.comments.write')}
-            </h3>
-          </div>
+        <div className="mt-4 flex flex-col gap-3">
           <CommentEditor
             charLimit={50_000}
             disabled={createComment.isPending}

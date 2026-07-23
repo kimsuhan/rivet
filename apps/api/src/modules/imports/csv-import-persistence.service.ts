@@ -93,6 +93,27 @@ export class CsvImportPersistenceService {
     await writeBatches(projectTeamsToCreate, (data) =>
       transaction.projectTeam.createMany({ data }),
     );
+    const deploymentTrackedProjectTeamIds = new Set(
+      (
+        await transaction.projectTeam.findMany({
+          select: { id: true },
+          where: {
+            deploymentTrackingEnabled: true,
+            id: {
+              in: [
+                ...new Set([
+                  ...analysis.preparedRows.flatMap(({ projectTeamId }) =>
+                    projectTeamId ? [projectTeamId] : [],
+                  ),
+                  ...projectTeamIds.values(),
+                ]),
+              ],
+            },
+            workspaceId: context.workspaceId,
+          },
+        })
+      ).map(({ id }) => id),
+    );
 
     const workspace = await transaction.workspace.findUniqueOrThrow({
       select: { nextIssueNumber: true },
@@ -175,6 +196,9 @@ export class CsvImportPersistenceService {
       teamWorksToCreate.push({
         assigneeMembershipId: row.assigneeMembershipId,
         createdByMembershipId: context.membershipId,
+        deploymentStatus: deploymentTrackedProjectTeamIds.has(projectTeamId)
+          ? 'PENDING'
+          : 'NOT_APPLICABLE',
         id: teamWorkId,
         identifier: `${team.key}-${teamWorkNumber}`,
         issueId,

@@ -86,7 +86,12 @@ export class IssueAssignmentService {
         dto.teamAssignments,
         dto.requireCurrentUserTeamMembership,
       );
-      await this.statuses.recalculate(transaction, context.workspaceId, issueId);
+      await this.statuses.recalculate(
+        transaction,
+        context.workspaceId,
+        issueId,
+        context.membershipId,
+      );
       const issue = await this.repository.findIssue(transaction, context.workspaceId, issueId);
       await notifyResourceChanged(transaction, {
         changeType: 'UPDATED',
@@ -175,7 +180,12 @@ export class IssueAssignmentService {
           workspaceId: context.workspaceId,
         },
       });
-      await this.statuses.recalculate(transaction, context.workspaceId, issueId);
+      await this.statuses.recalculate(
+        transaction,
+        context.workspaceId,
+        issueId,
+        context.membershipId,
+      );
       const teamWork = await this.repository.findTeamWork(
         transaction,
         context.workspaceId,
@@ -295,7 +305,12 @@ export class IssueAssignmentService {
           await this.repository.findTeamWork(transaction, context.workspaceId, current.id),
         );
       }
-      await this.statuses.recalculate(transaction, context.workspaceId, issueId);
+      await this.statuses.recalculate(
+        transaction,
+        context.workspaceId,
+        issueId,
+        context.membershipId,
+      );
       const issue = await this.repository.findIssue(transaction, context.workspaceId, issueId);
       return {
         issue: toIssueSummary(issue),
@@ -317,6 +332,7 @@ export class IssueAssignmentService {
     for (const assignment of assignments) {
       const projectTeam = await transaction.projectTeam.findFirst({
         select: {
+          deploymentTrackingEnabled: true,
           id: true,
           team: { select: { archivedAt: true, id: true, key: true, name: true } },
           teamId: true,
@@ -467,6 +483,7 @@ export class IssueAssignmentService {
         data: {
           assigneeMembershipId: assignment.assigneeMembershipId ?? null,
           createdByMembershipId: context.membershipId,
+          deploymentStatus: projectTeam.deploymentTrackingEnabled ? 'PENDING' : 'NOT_APPLICABLE',
           identifier: `${team.key}-${team.nextIssueNumber}`,
           issueId,
           projectTeamId: projectTeam.id,

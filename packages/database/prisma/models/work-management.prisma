@@ -34,6 +34,13 @@ enum HandoffKind {
   FOLLOW_UP
 }
 
+enum DeploymentStatus {
+  NOT_APPLICABLE
+  PENDING
+  DEPLOYED
+  REDEPLOY_REQUIRED
+}
+
 enum NotificationType {
   TEAM_WORK_ASSIGNED
   MENTIONED
@@ -70,6 +77,7 @@ model Project {
   workspaceId           String        @map("workspace_id") @db.Uuid
   name                  String        @db.VarChar(200)
   description           String?       @db.VarChar(5000)
+  logoFileId            String?       @map("logo_file_id") @db.Uuid
   status                ProjectStatus @default(PLANNED)
   leadMembershipId      String?       @map("lead_membership_id") @db.Uuid
   startDate             DateTime?     @map("start_date") @db.Date
@@ -83,6 +91,7 @@ model Project {
   updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  logoFile            File?                @relation("ProjectLogoFile", fields: [workspaceId, logoFileId], references: [workspaceId, id], onDelete: Restrict)
   leadMembership      WorkspaceMembership? @relation("ProjectLeadMembership", fields: [workspaceId, leadMembershipId], references: [workspaceId, id], onDelete: Restrict)
   deletedByMembership WorkspaceMembership? @relation("ProjectDeletedByMembership", fields: [workspaceId, deletedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
   roleTeams           ProjectRoleTeam[]
@@ -93,6 +102,7 @@ model Project {
   importSourceRows    ImportSourceRow[]
 
   @@unique([workspaceId, id])
+  @@unique([workspaceId, logoFileId])
   @@index([workspaceId, archivedAt, updatedAt, id])
   @@index([workspaceId, status, updatedAt, id])
   @@index([workspaceId, leadMembershipId, updatedAt, id])
@@ -121,14 +131,15 @@ model ProjectRoleTeam {
 }
 
 model ProjectTeam {
-  id            String    @id @default(uuid()) @db.Uuid
-  workspaceId   String    @map("workspace_id") @db.Uuid
-  projectId     String    @map("project_id") @db.Uuid
-  teamId        String    @map("team_id") @db.Uuid
-  isActive      Boolean   @default(true) @map("is_active")
-  deactivatedAt DateTime? @map("deactivated_at") @db.Timestamptz(3)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                        String    @id @default(uuid()) @db.Uuid
+  workspaceId               String    @map("workspace_id") @db.Uuid
+  projectId                 String    @map("project_id") @db.Uuid
+  teamId                    String    @map("team_id") @db.Uuid
+  isActive                  Boolean   @default(true) @map("is_active")
+  deploymentTrackingEnabled Boolean   @default(false) @map("deployment_tracking_enabled")
+  deactivatedAt             DateTime? @map("deactivated_at") @db.Timestamptz(3)
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   project        Project         @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
@@ -203,20 +214,22 @@ model Issue {
   createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  workspace           Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  project             Project               @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
-  createdByMembership WorkspaceMembership   @relation("IssueCreatorMembership", fields: [workspaceId, createdByMembershipId], references: [workspaceId, id], onDelete: Restrict)
-  deletedByMembership WorkspaceMembership?  @relation("IssueDeletedByMembership", fields: [workspaceId, deletedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
-  teamWorks           TeamWork[]
-  labels              IssueLabel[]
-  subscriptions       IssueSubscription[]
-  activityEvents      ActivityEvent[]
-  handoffs            ApiHandoff[]
-  notifications       Notification[]
-  comments            Comment[]
-  mentions            Mention[]
-  fileAttachments     IssueFileAttachment[]
-  importSourceRows    ImportSourceRow[]
+  workspace              Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  project                Project                        @relation(fields: [workspaceId, projectId], references: [workspaceId, id], onDelete: Restrict)
+  createdByMembership    WorkspaceMembership            @relation("IssueCreatorMembership", fields: [workspaceId, createdByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  deletedByMembership    WorkspaceMembership?           @relation("IssueDeletedByMembership", fields: [workspaceId, deletedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  teamWorks              TeamWork[]
+  labels                 IssueLabel[]
+  subscriptions          IssueSubscription[]
+  activityEvents         ActivityEvent[]
+  handoffs               ApiHandoff[]
+  notifications          Notification[]
+  comments               Comment[]
+  mentions               Mention[]
+  fileAttachments        IssueFileAttachment[]
+  importSourceRows       ImportSourceRow[]
+  deploymentGroups       DeploymentGroup[]
+  deploymentDependencies TeamWorkDeploymentDependency[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, identifier])
@@ -229,36 +242,44 @@ model Issue {
 }
 
 model TeamWork {
-  id                    String      @id @default(uuid()) @db.Uuid
-  workspaceId           String      @map("workspace_id") @db.Uuid
-  issueId               String      @map("issue_id") @db.Uuid
-  identifier            String      @db.VarChar(32)
-  sequenceNumber        Int         @map("sequence_number")
-  projectRole           ProjectRole @default(BACKEND) @map("project_role")
-  projectTeamId         String?     @map("project_team_id") @db.Uuid
-  teamId                String      @map("team_id") @db.Uuid
-  workflowStateId       String      @map("workflow_state_id") @db.Uuid
-  assigneeMembershipId  String?     @map("assignee_membership_id") @db.Uuid
-  workNoteMarkdown      String?     @map("work_note_markdown") @db.VarChar(10000)
-  createdByMembershipId String      @map("created_by_membership_id") @db.Uuid
-  deletedAt             DateTime?   @map("deleted_at") @db.Timestamptz(3)
-  version               Int         @default(1)
-  createdAt             DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                     String           @id @default(uuid()) @db.Uuid
+  workspaceId            String           @map("workspace_id") @db.Uuid
+  issueId                String           @map("issue_id") @db.Uuid
+  identifier             String           @db.VarChar(32)
+  sequenceNumber         Int              @map("sequence_number")
+  projectRole            ProjectRole      @default(BACKEND) @map("project_role")
+  projectTeamId          String?          @map("project_team_id") @db.Uuid
+  teamId                 String           @map("team_id") @db.Uuid
+  workflowStateId        String           @map("workflow_state_id") @db.Uuid
+  assigneeMembershipId   String?          @map("assignee_membership_id") @db.Uuid
+  workNoteMarkdown       String?          @map("work_note_markdown") @db.VarChar(10000)
+  deploymentStatus       DeploymentStatus @default(NOT_APPLICABLE) @map("deployment_status")
+  deploymentGroupId      String?          @map("deployment_group_id") @db.Uuid
+  deployedAt             DateTime?        @map("deployed_at") @db.Timestamptz(3)
+  deployedByMembershipId String?          @map("deployed_by_membership_id") @db.Uuid
+  createdByMembershipId  String           @map("created_by_membership_id") @db.Uuid
+  deletedAt              DateTime?        @map("deleted_at") @db.Timestamptz(3)
+  version                Int              @default(1)
+  createdAt              DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  issue               Issue               @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
-  team                Team                @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
-  projectTeam         ProjectTeam?        @relation(fields: [workspaceId, teamId, projectTeamId], references: [workspaceId, teamId, id], onDelete: Restrict)
-  workflowState       WorkflowState       @relation(fields: [workspaceId, teamId, workflowStateId], references: [workspaceId, teamId, id], onDelete: Restrict)
-  assigneeTeamMember  TeamMember?         @relation("TeamWorkAssigneeTeamMember", fields: [workspaceId, teamId, assigneeMembershipId], references: [workspaceId, teamId, membershipId], onDelete: Restrict)
-  createdByMembership WorkspaceMembership @relation("TeamWorkCreatorMembership", fields: [workspaceId, createdByMembershipId], references: [workspaceId, id], onDelete: Restrict)
-  sourceHandoffs      ApiHandoff[]        @relation("ApiHandoffSourceTeamWork")
-  handoffTargets      ApiHandoffTarget[]
-  comments            Comment[]
-  mentions            Mention[]
-  activityEvents      ActivityEvent[]
-  notifications       Notification[]
+  workspace              Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  issue                  Issue                          @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
+  team                   Team                           @relation(fields: [workspaceId, teamId], references: [workspaceId, id], onDelete: Restrict)
+  projectTeam            ProjectTeam?                   @relation(fields: [workspaceId, teamId, projectTeamId], references: [workspaceId, teamId, id], onDelete: Restrict)
+  workflowState          WorkflowState                  @relation(fields: [workspaceId, teamId, workflowStateId], references: [workspaceId, teamId, id], onDelete: Restrict)
+  assigneeTeamMember     TeamMember?                    @relation("TeamWorkAssigneeTeamMember", fields: [workspaceId, teamId, assigneeMembershipId], references: [workspaceId, teamId, membershipId], onDelete: Restrict)
+  createdByMembership    WorkspaceMembership            @relation("TeamWorkCreatorMembership", fields: [workspaceId, createdByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  deployedByMembership   WorkspaceMembership?           @relation("TeamWorkDeployedByMembership", fields: [workspaceId, deployedByMembershipId], references: [workspaceId, id], onDelete: Restrict)
+  deploymentGroup        DeploymentGroup?               @relation(fields: [workspaceId, issueId, deploymentGroupId], references: [workspaceId, issueId, id], onDelete: Restrict)
+  deploymentPredecessors TeamWorkDeploymentDependency[] @relation("DeploymentDependentTeamWork")
+  deploymentDependents   TeamWorkDeploymentDependency[] @relation("DeploymentPredecessorTeamWork")
+  sourceHandoffs         ApiHandoff[]                   @relation("ApiHandoffSourceTeamWork")
+  handoffTargets         ApiHandoffTarget[]
+  comments               Comment[]
+  mentions               Mention[]
+  activityEvents         ActivityEvent[]
+  notifications          Notification[]
 
   @@unique([workspaceId, id])
   @@unique([workspaceId, issueId, id])
@@ -269,7 +290,41 @@ model TeamWork {
   @@index([workspaceId, workflowStateId, id])
   @@index([workspaceId, projectRole, id])
   @@index([workspaceId, projectTeamId, deletedAt, updatedAt, id])
+  @@index([workspaceId, deploymentStatus, updatedAt, id])
+  @@index([workspaceId, deploymentGroupId, id])
   @@map("team_works")
+}
+
+model DeploymentGroup {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  issueId     String   @map("issue_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  issue     Issue      @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
+  teamWorks TeamWork[]
+
+  @@unique([workspaceId, issueId, id])
+  @@index([workspaceId, issueId, createdAt, id])
+  @@map("deployment_groups")
+}
+
+model TeamWorkDeploymentDependency {
+  workspaceId           String   @map("workspace_id") @db.Uuid
+  issueId               String   @map("issue_id") @db.Uuid
+  dependentTeamWorkId   String   @map("dependent_team_work_id") @db.Uuid
+  predecessorTeamWorkId String   @map("predecessor_team_work_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  issue       Issue     @relation(fields: [workspaceId, issueId], references: [workspaceId, id], onDelete: Cascade)
+  dependent   TeamWork  @relation("DeploymentDependentTeamWork", fields: [workspaceId, issueId, dependentTeamWorkId], references: [workspaceId, issueId, id], onDelete: Cascade)
+  predecessor TeamWork  @relation("DeploymentPredecessorTeamWork", fields: [workspaceId, issueId, predecessorTeamWorkId], references: [workspaceId, issueId, id], onDelete: Cascade)
+
+  @@id([dependentTeamWorkId, predecessorTeamWorkId])
+  @@index([workspaceId, issueId, predecessorTeamWorkId, dependentTeamWorkId])
+  @@map("team_work_deployment_dependencies")
 }
 
 model ApiHandoff {

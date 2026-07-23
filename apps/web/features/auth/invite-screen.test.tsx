@@ -58,16 +58,17 @@ const labels = {
   invitedByLabel: '초대한 사람',
   loading: '초대 링크를 확인하는 중입니다.',
   loginLink: '로그인',
-  loginRequiredDescription: '같은 이메일 계정으로 로그인하거나 가입하세요.',
-  loginRequiredTitle: '로그인 또는 가입이 필요합니다',
+  loginRequiredDescription: '초대받은 이메일 계정으로 로그인하면 바로 참여합니다.',
+  loginRequiredTitle: '로그인하고 참여하세요',
   productName: 'Rivet',
-  continuationDescription: '인증을 마치면 이 초대로 자동으로 돌아옵니다.',
   redirecting: '워크스페이스로 이동하는 중입니다.',
   retry: '다시 시도',
   sessionErrorDescription: '잠시 후 다시 시도해 주세요.',
   sessionErrorTitle: '로그인 상태를 확인하지 못했습니다',
   sessionLoading: '로그인 상태를 확인하는 중입니다.',
   signUpLink: '가입하기',
+  signUpRequiredDescription: '초대받은 이메일로 계정을 만들면 바로 참여합니다.',
+  signUpRequiredTitle: '계정을 만들고 참여하세요',
   title: '워크스페이스 초대',
   unexpectedDescription: '잠시 후 다시 시도해 주세요.',
   unexpectedTitle: '초대를 확인하지 못했습니다',
@@ -82,6 +83,7 @@ const previewData = {
   emailMasked: 'me***@example.com',
   expiresAt: '2026-07-18T00:00:00.000Z',
   invitedByDisplayName: '김관리',
+  nextAction: 'SIGN_UP' as const,
   workspaceName: '제품 개발팀',
 };
 
@@ -131,7 +133,7 @@ function renderScreen(token = 'invite-token') {
       <InviteScreen
         invitationSignUpHref="/signup?invitation=1"
         labels={labels}
-        loginHref="/login"
+        loginHref="/login?invitation=1"
         signUpHref="/signup"
       />
     </QueryClientProvider>,
@@ -171,17 +173,28 @@ describe('InviteScreen', () => {
     expect(screen.getByText(previewData.emailMasked)).toBeVisible();
   });
 
-  it('비로그인 사용자에게 가입·로그인 뒤 자동으로 초대를 이어 간다고 안내한다', async () => {
+  it('계정이 없는 초대 이메일에는 가입 후 참여하는 단일 행동을 제공한다', async () => {
     renderScreen();
 
-    expect(await screen.findByText(labels.loginRequiredTitle)).toBeVisible();
-    expect(screen.getByText(labels.continuationDescription)).toBeVisible();
-    expect(screen.getByRole('link', { name: labels.loginLink })).toHaveAttribute('href', '/login');
+    expect(await screen.findByText(labels.signUpRequiredTitle)).toBeVisible();
     expect(screen.getByRole('link', { name: labels.signUpLink })).toHaveAttribute(
       'href',
       '/signup?invitation=1',
     );
+    expect(screen.queryByRole('link', { name: labels.loginLink })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: labels.accept })).not.toBeInTheDocument();
+  });
+
+  it('기존 계정의 초대 이메일에는 로그인 후 참여하는 단일 행동을 제공한다', async () => {
+    mockPreview({ data: { ...previewData, nextAction: 'LOGIN' } });
+    renderScreen();
+
+    expect(await screen.findByText(labels.loginRequiredTitle)).toBeVisible();
+    expect(screen.getByRole('link', { name: labels.loginLink })).toHaveAttribute(
+      'href',
+      '/login?invitation=1',
+    );
+    expect(screen.queryByRole('link', { name: labels.signUpLink })).not.toBeInTheDocument();
   });
 
   it('구조화되지 않은 미리보기 오류에서도 링크를 유지하고 다시 시도한다', async () => {

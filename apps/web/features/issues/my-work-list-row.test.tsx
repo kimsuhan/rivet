@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import type { AnchorHTMLAttributes } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MyWorkListRow } from './my-work-list-row';
 
@@ -27,6 +27,8 @@ vi.mock('./use-team-work-inline-mutation', () => ({
 }));
 
 describe('MyWorkListRow', () => {
+  afterEach(cleanup);
+
   it('행을 내 작업 상세 팀 작업 경로로 연결한다', () => {
     render(
       <ul>
@@ -56,6 +58,39 @@ describe('MyWorkListRow', () => {
     expect(screen.getByRole('link', { name: 'WEB-12 작업 상세 열기' })).toHaveAttribute(
       'href',
       '/my-issues/WEB-12?tab=work',
+    );
+  });
+
+  it('저장된 보기에서 연 작업은 상세 주소에 보기 문맥을 유지한다', () => {
+    render(
+      <ul>
+        <MyWorkListRow
+          savedViewId="saved-my-work"
+          work={{
+            id: 'team-work-id',
+            identifier: 'WEB-12',
+            issue: {
+              identifier: 'ISSUE-9',
+              labels: [],
+              priority: 'HIGH',
+              project: { name: 'Rivet' },
+              title: '내 작업 상세 진입',
+            },
+            projectTeam: {
+              active: true,
+              id: 'project-team-id',
+              team: { id: 'team-id', key: 'PLAN', name: '기획' },
+            },
+            version: 1,
+            workflowState: { id: 'state-id' },
+          } as never}
+        />
+      </ul>,
+    );
+
+    expect(screen.getByRole('link', { name: 'WEB-12 작업 상세 열기' })).toHaveAttribute(
+      'href',
+      '/my-issues/WEB-12?tab=work&view=saved-my-work',
     );
   });
 

@@ -21,6 +21,7 @@ export const FILE_ACCESS_SELECT = {
   },
   ...FILE_RESOURCE_SELECT,
   issueAttachments: { select: { workspaceId: true } },
+  logoProject: { select: { workspaceId: true } },
   storageKey: true,
   uploadedByUserId: true,
 } satisfies Prisma.FileSelect;

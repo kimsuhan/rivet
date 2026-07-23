@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 import {
+  DeploymentStatus,
   HandoffKind,
   IssuePriority,
   IssueStatus,
@@ -34,6 +35,7 @@ export class IssueTeamSummaryResponseDto {
 export class IssueProjectTeamSummaryResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() active!: boolean;
+  @ApiProperty() deploymentTrackingEnabled!: boolean;
   @ApiProperty({ type: IssueTeamSummaryResponseDto }) team!: IssueTeamSummaryResponseDto;
 }
 
@@ -50,6 +52,7 @@ export class IssueWorkflowStateSummaryResponseDto {
 export class IssueProjectSummaryResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() name!: string;
+  @ApiProperty({ format: 'uuid', nullable: true, type: String }) logoFileId!: string | null;
   @ApiProperty({ enum: ProjectStatus }) status!: ProjectStatus;
   @ApiProperty() archived!: boolean;
 }
@@ -120,6 +123,14 @@ export class TeamWorkSummaryResponseDto {
   @ApiProperty({ nullable: true, type: IssueMemberSummaryResponseDto })
   assignee!: IssueMemberSummaryResponseDto | null;
   @ApiProperty({ maxLength: 10000, nullable: true, type: String }) workNoteMarkdown!: string | null;
+  @ApiProperty({ enum: DeploymentStatus }) deploymentStatus!: DeploymentStatus;
+  @ApiProperty({ format: 'uuid', nullable: true, type: String })
+  deploymentGroupId!: string | null;
+  @ApiProperty({ format: 'uuid', isArray: true, type: String })
+  deploymentPredecessorTeamWorkIds!: string[];
+  @ApiProperty({ format: 'date-time', nullable: true, type: String }) deployedAt!: string | null;
+  @ApiProperty({ nullable: true, type: IssueMemberSummaryResponseDto })
+  deployedBy!: IssueMemberSummaryResponseDto | null;
   @ApiProperty({ minimum: 1 }) version!: number;
   @ApiProperty({ format: 'date-time' }) createdAt!: string;
   @ApiProperty({ format: 'date-time' }) updatedAt!: string;

@@ -204,7 +204,30 @@ export class AuthService {
       });
     }
 
-    if (!user.emailVerifiedAt) {
+    let isEmailVerified = Boolean(user.emailVerifiedAt);
+    if (invitationContinuationToken) {
+      isEmailVerified = await this.database.client.$transaction(async (transaction) => {
+        await transaction.$queryRaw`
+          SELECT "id"
+          FROM "users"
+          WHERE "id" = ${user.id}::uuid
+          FOR UPDATE
+        `;
+        const hasInvitationProof = await this.bindInvitationContinuation(
+          transaction,
+          user.id,
+          email,
+          invitationContinuationToken,
+          false,
+        );
+        if (hasInvitationProof && !user.emailVerifiedAt) {
+          await this.verifyEmailFromInvitation(transaction, user.id);
+        }
+        return isEmailVerified || hasInvitationProof;
+      });
+    }
+
+    if (!isEmailVerified) {
       throw new ApiError({
         code: 'EMAIL_NOT_VERIFIED',
         message: '이메일 인증이 필요합니다.',
@@ -217,24 +240,6 @@ export class AuthService {
         code: 'MEMBERSHIP_INACTIVE',
         message: '비활성화된 멤버십입니다. 워크스페이스 관리자에게 문의해 주세요.',
         status: HttpStatus.FORBIDDEN,
-      });
-    }
-
-    if (invitationContinuationToken) {
-      await this.database.client.$transaction(async (transaction) => {
-        await transaction.$queryRaw`
-          SELECT "id"
-          FROM "users"
-          WHERE "id" = ${user.id}::uuid
-          FOR UPDATE
-        `;
-        await this.bindInvitationContinuation(
-          transaction,
-          user.id,
-          email,
-          invitationContinuationToken,
-          false,
-        );
       });
     }
 

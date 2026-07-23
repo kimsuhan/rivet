@@ -5,10 +5,13 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
+import type { InvitationPreviewResponseDtoNextAction } from './invitationPreviewResponseDtoNextAction';
 
 export interface InvitationPreviewResponseDto {
   workspaceName: string;
   emailMasked: string;
   invitedByDisplayName: string;
   expiresAt: string;
+  /** 유효한 초대 이메일의 계정 상태에 따른 다음 인증 행동 */
+  nextAction: InvitationPreviewResponseDtoNextAction;
 }

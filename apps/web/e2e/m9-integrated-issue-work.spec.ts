@@ -333,9 +333,10 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     await expect(page.getByRole('link', { name: '내 작업', exact: true })).toBeVisible();
     await page.reload();
     await expect(page).toHaveURL(backendWorkUrl);
-    await page.getByRole('link', { name: '전달', exact: true }).click();
-    await expect(page).toHaveURL(
-      new RegExp(`/my-issues/${backendIdentifier}\\?tab=handoffs$`, 'u'),
+    await expect(page.getByRole('link', { name: '전달', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: '업무', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
     );
     await page.goto(`/teams/${encodeURIComponent(apiTeam.key)}/issues`);
     await page.getByRole('link', { name: backendIdentifier, exact: true }).click();
@@ -366,7 +367,6 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
 
     await selectTeamWork(page, webIdentifier, isMobile);
     await expect(page.getByRole('button', { name: /: 완료$/u })).toBeVisible();
-    await page.getByRole('button', { name: '내용 펼치기' }).click();
     await expect(page.getByText('웹 구현에 필요한 API 응답을 배포했습니다.')).toBeVisible();
     await captureIssueStep(page, testInfo, 'received-initial-handoff');
     const webStates = await apiRequest<WorkflowStateList>(
@@ -381,12 +381,10 @@ test('M9 이슈 콘텐츠와 팀 실행의 정본 통합 흐름을 검증한다'
     await expect(webCompletionDialog.getByText('작업 전달은 필요하지 않습니다.')).toBeVisible();
     await webCompletionDialog.getByRole('button', { name: '완료', exact: true }).click();
     await expect(webCompletionDialog).toBeHidden();
-    await expect(page.getByText('완료 확인')).toBeVisible();
-    await page.getByRole('button', { name: '이슈 완료' }).click();
     await expect(page.getByText('완료', { exact: true }).first()).toBeVisible();
 
     await selectTeamWork(page, backendIdentifier, isMobile);
-    await page.getByRole('button', { name: '추가 전달 작성' }).click();
+    await page.getByRole('button', { name: '추가 전달', exact: true }).click();
     const followUpDialog = page.getByRole('dialog', { name: '추가 전달 작성' });
     await expect(followUpDialog).toBeVisible();
     await expect(followUpDialog.getByText('알림 대상')).toBeVisible();

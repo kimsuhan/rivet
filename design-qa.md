@@ -1,82 +1,50 @@
-# Workspace onboarding design QA
+# Design QA
 
-- Source visual truth: `/Users/shyh/.codex/visualizations/2026/07/19/019f78e9-8c84-7873-ad92-da576532db9e/01-workspace-create.png`
-- Implementation screenshot: `/Users/shyh/.codex/visualizations/2026/07/19/019f78e9-8c84-7873-ad92-da576532db9e/04-workspace-create-desktop.png`
-- Full-view comparison: `/Users/shyh/.codex/visualizations/2026/07/19/019f78e9-8c84-7873-ad92-da576532db9e/08-workspace-create-comparison.jpg`
-- Additional states: `02-workspace-choice-desktop-viewport.png`, `05-workspace-choice-focus.png`, `06-workspace-choice-mobile.png`, `07-workspace-create-mobile.png`
-- Viewports: desktop 1280 × 800, mobile 390 × 844
-- State: 워크스페이스 시작 방법 선택, 초대 대기, 새 워크스페이스 생성, 기본 팀 생성
+- source visual truth path: `/var/folders/0g/9ftcl3zs36sd93n_k505ygsm0000gn/T/codex-clipboard-9fcae720-a955-45b8-935a-04e6f2d76f93.png`
+- implementation screenshot path: `/Users/kim/.codex/visualizations/2026/07/21/019f8201-2340-7f10-8093-cc902106cd20/project-menu-after.png`
+- viewport: source crop 952×392 at 2x density; implementation content crop 1152×392 at 1x density
+- state: 다크 테마, 이슈가 연결된 활성 프로젝트, 프로젝트 더보기 메뉴 열림
+- browser-rendered URL: `http://127.0.0.1:3000/projects/d73b3baf-654a-4202-8e33-c780f7615839`
 
-## Findings
+## Evidence
 
-- P0/P1/P2 차이 없음.
-- 글꼴과 타이포그래피: 기존 Pretendard 계층, 굵기와 한국어 행간을 유지했다. 선택지 설명은 작은 보조 본문으로 구분되며 모바일에서도 잘리지 않는다.
-- 간격과 레이아웃 리듬: 기존 448px 카드 폭, 표면 단계, 입력 간격과 CTA 배치를 유지했다. 새 선택·대기 상태도 같은 카드 폭과 간격 토큰을 사용한다.
-- 동작 일관성: 초대 대기와 생성 화면의 `시작 방법 다시 선택`을 같은 외곽선 버튼으로 사용하고 카드 위 왼쪽에 배치했다. 데스크톱 실측에서 두 화면 모두 버튼과 카드의 x 좌표가 일치하고 세로 간격은 20px이다.
-- 색상과 시각 토큰: 기존 canvas, surface, border, muted, primary 토큰만 사용했다. 선택과 키보드 포커스는 라벤더 링과 텍스트로 함께 전달된다.
-- 이미지와 자산: 기존 Rivet 워드마크와 lucide 아이콘만 사용했다. 대체 그래픽이나 임시 자산은 없다.
-- 문구와 콘텐츠: 모든 워크스페이스 진입 상태에서 전체 3단계를 표시하고, 초대 대기 경로에는 가입 이메일과 메일 미수신 시 이메일 주소·스팸함 확인 안내를 제공한다.
-- 입력 보조: 영문 이름은 kebab-case 슬러그로, 주소에 직접 쓸 수 없는 한글 이름은 유효한 기본 슬러그로 자동 변환한다. 사용자가 직접 수정한 슬러그는 이후 이름 변경으로 덮어쓰지 않는다.
-- 팀 키 입력 보조: 팀 이름에서 영문 대문자 2~5자 키를 자동 생성하고 한글 이름에는 유효한 5자 기본 키를 제공한다. 직접 입력은 영문자만 남겨 대문자로 변환하며, 사용자가 수정한 키는 이후 이름 변경으로 덮어쓰지 않는다.
-
-## Evidence and limits
-
-- 원본은 563 × 651, 구현 캡처는 1280 × 800이므로 페이지 전체 위치를 픽셀 단위로 비교하지 않았다. 두 캡처의 카드 폭은 448px로 같아 카드 내부의 타이포그래피, 간격, 표면과 입력 밀도를 비교했다.
-- 전체 비교 이미지에서 원본 생성 폼과 구현 생성 폼의 시각 토큰과 컨트롤 크기를 함께 확인했다.
-- 별도 확대 영역은 필요하지 않았다. 전체 비교 이미지의 원본 해상도에서 라벨, 도움말, 입력, 주소 미리보기와 CTA가 모두 판독 가능했다.
-- 선택 화면, 초대 대기 화면과 생성 경고는 원본에 없는 의도적 신규 상태다. 디자인 시스템과 모바일 캡처를 기준으로 별도 검수했다.
-- 브라우저에서 선택 → 초대 대기 → 생성, 생성 → 선택 복귀, 키보드 `focus-visible`, 모바일 가로 넘침과 첫 화면 CTA 노출을 확인했다. 콘솔 오류는 없었다.
-- 후속 UX 검수에서 초대 대기와 생성 화면의 뒤로가기 버튼이 같은 읽기 순서, 크기, 정렬과 간격을 사용하는지 다시 확인했다.
-- 1280 × 720 후속 검수에서 선택·대기 화면의 단계 표시, 대기 도움말, 영문·한글 슬러그 자동 생성, 수동 슬러그 보호와 가로 넘침 없음을 확인했다. 콘솔 오류는 없었다.
-- 기본 팀 화면 후속 검수에서 `Product Design → PD`, 한글 이름의 5자 기본 키, `w3e-b한글 → WEB` 정규화, 수동 키 보호와 표시 ID 미리보기 동기화를 확인했다. 콘솔 오류와 가로 넘침은 없었다.
-- 시각 검증에서는 인증 경계를 임시로 우회해 초대 대기 화면의 이메일 자리에 fallback 문구가 표시됐다. 실제 세션 이메일 표시는 컴포넌트 테스트로 확인했고 M1 Playwright 흐름에도 검사를 추가했지만, 테스트 전용 데이터베이스 설정이 없어 해당 E2E는 실행하지 않았다.
-
-## Comparison history
-
-1. 첫 비교에서 기존 생성 폼의 카드 폭, 표면, 입력, 주소 미리보기와 Primary CTA가 유지됐고, 신규 경고와 복귀 동작으로 인한 의도적 세로 확장만 확인했다. 수정이 필요한 P0/P1/P2 차이는 없었다.
-
-## Follow-up polish
-
-- 없음.
-
-final result: passed
-
----
-
-# Workflow settings design QA
-
-- Source references: `/Users/kim/.codex/visualizations/2026/07/20/019f7d20-4770-7851-98c6-ef9a748ba3f6/workflow-ui-audit/01-linear.png`, `/Users/kim/.codex/visualizations/2026/07/20/019f7d20-4770-7851-98c6-ef9a748ba3f6/workflow-ui-audit/02-rivet.png`
-- Implementation screenshot: `/Users/kim/.codex/visualizations/2026/07/20/019f7d20-4770-7851-98c6-ef9a748ba3f6/workflow-ui-audit/03-rivet-implemented.png`
-- Viewport: desktop 1518 × 1536
-- State: 기본 워크플로 7개 상태, 기본값 `미분류`
+- full-view comparison: `/Users/kim/.codex/visualizations/2026/07/21/019f8201-2340-7f10-8093-cc902106cd20/project-menu-comparison.png`
+  - 원본과 구현 캡처의 밀도와 가로 크기가 달라 전체 화면은 구성과 상태 확인에 사용했다.
+  - 상단의 독립 편집 버튼이 사라지고 더보기와 이슈 만들기만 남은 점을 확인했다.
+- focused region comparison: `/Users/kim/.codex/visualizations/2026/07/21/019f8201-2340-7f10-8093-cc902106cd20/project-menu-focused-comparison.png`
+  - 원본 메뉴를 2x에서 1x로 정규화해 구현 메뉴와 나란히 비교했다.
+  - 제목 블록, 구분선, 편집, 보관 순서와 240px 메뉴 폭을 확인했다.
 
 ## Findings
 
-- P0/P1/P2 차이 없음.
-- 정보 위계: 카테고리별 큰 카드와 반복 설명을 하나의 패널과 얇은 구간 헤더로 합쳐 상태 이름이 먼저 읽힌다.
-- 시각 앵커: 기존 이슈 화면과 같은 범주별 아이콘·색상 표현을 재사용해 별도 자산과 스키마 없이 상태 성격을 구분한다.
-- 밀도와 리듬: 번호와 상시 텍스트 액션을 제거하고 48px 행, 이름 옆 `기본` 배지, 상시 노출 관리 메뉴로 정리했다.
-- 생성 맥락: 각 구간 헤더의 `+`가 해당 범주를 미리 선택해 이름만 입력하는 추가 창을 연다.
-- 액션 발견성: 이름 변경, 삭제와 기본값 지정은 상시 노출 `…` 메뉴에 모으고, 키보드 접근 가능한 위·아래 이동은 hover 또는 focus 안에서만 보인다.
-- 정책 가시성: 완료·취소 범주를 기본값으로 지정할 때 새 미배정·전달 대상 작업에 미치는 영향과 기존 작업 불변을 확인 창에 명시한다.
+- P0/P1/P2: 없음.
+- fonts and typography: 기존 Pretendard 계열과 프로젝트 타이포그래피를 유지했다. 보조 라벨은 12px, 제목과 액션은 14px 계층으로 구분되며 긴 프로젝트명은 말줄임 처리된다.
+- spacing and layout rhythm: 제목 블록의 8px 내부 간격과 구분선 뒤 액션 간격이 일관적이다. 메뉴는 `clientWidth = scrollWidth = 240`, `clientHeight = scrollHeight = 147`로 오버플로가 없다.
+- colors and visual tokens: `bg-muted`, `text-muted-foreground`, `border` 토큰으로 기존 다크 테마 대비를 유지했다. 임의 색상은 추가하지 않았다.
+- image quality and asset fidelity: 이 화면에는 래스터 이미지가 없다. 폴더, 편집, 보관 아이콘은 프로젝트가 이미 사용하는 Lucide 아이콘을 사용해 선 굵기와 스타일이 일치한다.
+- copy and content: `프로젝트` 보조 라벨, 실제 프로젝트명, `프로젝트 편집`, `프로젝트 보관`이 의도한 정보와 작업 순서를 정확히 전달한다.
 
-## Evidence and limits
+## Primary Interactions Tested
 
-- Linear의 밝은 테마와 화면 구조를 복제하지 않고 Rivet의 다크 테마, 사이드바, 표면·테두리 토큰을 유지하면서 상태 설정 영역의 위계와 밀도만 융화했다.
-- 이슈 수는 현재 워크플로 응답 계약에 없고 잘못된 수치를 보여 줄 수 있어 이번 단계에서 의도적으로 제외했다.
-- 상태별 사용자 지정 색상과 드래그 재정렬도 범위에서 제외했다. 범주 파생 색상과 접근 가능한 화살표 이동을 유지한다.
-- 브라우저에서 5개 구간이 한 번씩만 표시되고 범주 경계를 넘는 이동 버튼이 비활성화되는지 확인했다.
-- `진행 중` 헤더 추가 창에서 범주 선택 입력이 사라지고 범주가 문구로 고정되는지 확인했다.
-- `완료` 상태의 관리 메뉴에서 기본값 지정, 이름 변경, 삭제가 제공되고 기본값 지정 시 종료 상태 확인 창이 열리는지 확인했다.
-- 원본, 기존 Rivet 화면과 구현 화면을 같은 비교 입력에서 확인했으며 잘림, 가로 넘침, 깨진 아이콘, 불균형한 간격은 발견되지 않았다.
+- `프로젝트 더보기`를 열어 제목 블록, 구분선, 편집·보관 액션 노출을 확인했다.
+- `프로젝트 편집` 링크가 현재 프로젝트의 `/edit` 경로를 가리키는지 확인했다.
+- 브라우저 콘솔 오류는 없었다.
 
-## Comparison history
+## Comparison History
 
-1. 기존 Rivet 화면은 각 범주 설명과 4~5개 상시 텍스트 액션이 상태 이름보다 강하게 보였다.
-2. 최종 구현은 단일 패널, 범주 아이콘, 구간별 추가와 관리 메뉴로 텍스트 반복을 줄이면서 모든 기능의 발견성과 키보드 경로를 유지했다.
+### Pass 1
 
-## Follow-up polish
+- earlier findings: 없음.
+- fixes made: QA 비교 후 추가 수정 없음.
+- post-fix visual evidence: focused region comparison에서 액션 이동과 제목 구분이 의도대로 확인되었다.
 
-- 없음.
+## Implementation Checklist
+
+- [x] 상단의 독립 편집 버튼 제거
+- [x] 편집을 더보기 메뉴의 첫 액션으로 이동
+- [x] 제목을 보조 라벨, 프로젝트명, 폴더 아이콘으로 구분
+- [x] 제목과 액션 사이에 구분선 추가
+- [x] 편집 링크와 보관 동작 유지
+- [x] 메뉴 오버플로와 콘솔 오류 확인
 
 final result: passed

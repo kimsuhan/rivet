@@ -216,22 +216,27 @@ export function IssueAttachments({ issue }: { issue: IssueDetailResponseDto }) {
 
   return (
     <section aria-labelledby="issue-attachments-title" className="mt-8">
-      <div className="flex items-center gap-2">
-        <PaperclipIcon aria-hidden="true" className="text-muted-foreground size-4" />
-        <h2 id="issue-attachments-title" className="text-base font-semibold">
-          {t('attachments.title')}
-        </h2>
-      </div>
-      <p className="text-muted-foreground mt-1 text-sm">{t('attachments.description')}</p>
-
-      <div className="mt-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <PaperclipIcon aria-hidden="true" className="text-muted-foreground size-4" />
+          <h2 id="issue-attachments-title" className="text-base font-semibold">
+            {t('attachments.title')}
+          </h2>
+          {items.length === 0 ? (
+            <span className="text-muted-foreground truncate text-xs">{t('attachments.empty')}</span>
+          ) : null}
+        </div>
         <FileUploadQueue
+          compactTrigger
           labels={fileUploadQueueLabels((key) => filesT(key as never))}
           onFileIdsChange={ignoreFileIds}
           removeFile={removeFile}
           sendFile={sendFile}
         />
       </div>
+      {items.length > 0 ? (
+        <p className="text-muted-foreground mt-1 text-sm">{t('attachments.description')}</p>
+      ) : null}
 
       {uploadLinkError ? (
         <Alert variant="destructive" className="mt-3">
@@ -261,9 +266,7 @@ export function IssueAttachments({ issue }: { issue: IssueDetailResponseDto }) {
         </p>
       ) : null}
 
-      {items.length === 0 ? (
-        <p className="text-muted-foreground mt-3 border-y py-4 text-sm">{t('attachments.empty')}</p>
-      ) : (
+      {items.length === 0 ? null : (
         <ul className="mt-3 flex min-w-0 flex-col divide-y border-y">
           {items.map((attachment) => {
             const unavailable = unavailableFileId === attachment.file.id;

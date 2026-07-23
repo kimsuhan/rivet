@@ -39,6 +39,7 @@ type LockedInvitationRow = InvitationRow & {
 };
 
 type InvitationTokenRow = LockedInvitationRow & {
+  accountExists: boolean;
   invitationId: string;
   isTokenExpired: boolean;
   oneTimeTokenId: string;
@@ -411,7 +412,12 @@ export class InvitationContinuationService {
              invitation."created_at" AS "createdAt",
              inviter_user."display_name" AS "invitedByDisplayName",
              workspace."name" AS "workspaceName",
-             workspace."slug" AS "workspaceSlug"
+             workspace."slug" AS "workspaceSlug",
+             EXISTS (
+               SELECT 1
+               FROM "users" AS invited_account
+               WHERE invited_account."normalized_email" = invitation."normalized_email"
+             ) AS "accountExists"
       FROM "one_time_tokens" AS token
       INNER JOIN "workspace_invitations" AS invitation
         ON invitation."id" = token."invitation_id"
@@ -490,7 +496,12 @@ export class InvitationContinuationService {
              invitation."created_at" AS "createdAt",
              inviter_user."display_name" AS "invitedByDisplayName",
              workspace."name" AS "workspaceName",
-             workspace."slug" AS "workspaceSlug"
+             workspace."slug" AS "workspaceSlug",
+             EXISTS (
+               SELECT 1
+               FROM "users" AS invited_account
+               WHERE invited_account."normalized_email" = invitation."normalized_email"
+             ) AS "accountExists"
       FROM "workspace_invitation_continuations" AS continuation
       INNER JOIN "one_time_tokens" AS token
         ON token."id" = continuation."one_time_token_id"
@@ -590,6 +601,7 @@ export class InvitationContinuationService {
       emailMasked: this.maskEmail(invitation.email),
       expiresAt: invitation.expiresAt.toISOString(),
       invitedByDisplayName: invitation.invitedByDisplayName,
+      nextAction: invitation.accountExists ? 'LOGIN' : 'SIGN_UP',
       workspaceName: invitation.workspaceName,
     };
   }

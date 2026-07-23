@@ -1,6 +1,5 @@
 'use client';
 
-import { Dot } from 'lucide-react';
 import { useEffect } from 'react';
 
 import { useProjectsControllerList } from '@rivet/api-client';
@@ -10,14 +9,17 @@ import {
   sidebarSubItemClassName,
   sidebarSubItemStateClassName,
 } from '@/components/layout/sidebar-section';
+import { ProjectLogo } from '@/components/project-logo';
 import { Link, usePathname } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
 export function ProjectSidebarNavigation({
   expanded,
+  memberTeamIds,
   onHasItemsChange,
 }: {
   expanded: boolean;
+  memberTeamIds: string[] | null;
   onHasItemsChange?: (hasItems: boolean) => void;
 }) {
   const pathname = usePathname();
@@ -25,7 +27,12 @@ export function ProjectSidebarNavigation({
     { includeArchived: false, limit: 100, sort: 'updatedAt', sortDirection: 'desc' },
     { query: { retry: false } },
   );
-  const hasItems = Boolean(projects.data?.items.length);
+  const memberTeamIdSet = new Set(memberTeamIds ?? []);
+  const visibleProjects =
+    projects.data?.items.filter((project) =>
+      project.projectTeams.some(({ active, team }) => active && memberTeamIdSet.has(team.id)),
+    ) ?? [];
+  const hasItems = visibleProjects.length > 0;
 
   useEffect(() => {
     onHasItemsChange?.(hasItems);
@@ -34,12 +41,8 @@ export function ProjectSidebarNavigation({
   if (!hasItems || !expanded) return null;
 
   return (
-    <div
-      role="group"
-      aria-label="프로젝트 목록"
-      className={sidebarSubGroupClassName}
-    >
-      {projects.data!.items.map((project) => {
+    <div role="group" aria-label="프로젝트 목록" className={sidebarSubGroupClassName}>
+      {visibleProjects.map((project) => {
         const href = `/projects/${project.id}` as const;
         const active = pathname === href || pathname.startsWith(`${href}/`);
 
@@ -51,11 +54,7 @@ export function ProjectSidebarNavigation({
             title={`${project.name} 프로젝트 이슈 보기`}
             className={cn(sidebarSubItemClassName, sidebarSubItemStateClassName(active))}
           >
-            <Dot
-              aria-hidden="true"
-              className={cn('size-4 shrink-0', active ? 'text-primary' : 'text-transparent')}
-              strokeWidth={3}
-            />
+            <ProjectLogo logoFileId={project.logoFileId} name={project.name} size="xs" />
             <span className="min-w-0 flex-1 truncate">{project.name}</span>
           </Link>
         );

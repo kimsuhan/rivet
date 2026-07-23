@@ -41,6 +41,7 @@ import type {
   ClaimTeamWorkResponseDto,
   CommentResourceResponseDto,
   CommentsControllerRemoveParams,
+  CompleteProjectDeploymentsDto,
   ConfirmPasswordResetDto,
   CreateCommentDto,
   CreateInvitationsDto,
@@ -64,6 +65,8 @@ import type {
   CsvImportRunListResponseDto,
   CsvImportRunResponseDto,
   CsvImportValidationResponseDto,
+  DeploymentListResponseDto,
+  DeploymentsControllerListParams,
   EmailDto,
   FeedbackControllerListParams,
   FeedbackListResponseDto,
@@ -128,6 +131,7 @@ import type {
   TeamResponseDto,
   TeamWorkDetailResponseDto,
   TeamWorkListResponseDto,
+  TeamWorkSummaryResponseDto,
   TeamWorksControllerListParams,
   TeamsControllerDeleteWorkflowStateParams,
   TeamsControllerListParams,
@@ -141,6 +145,7 @@ import type {
   UnauthenticatedSessionDto,
   UpdateCommentDto,
   UpdateFeedbackStatusDto,
+  UpdateIssueDeploymentPlanDto,
   UpdateIssueDto,
   UpdateIssueResponseDto,
   UpdateIssueTemplateDto,
@@ -150,6 +155,7 @@ import type {
   UpdateProjectDto,
   UpdateSavedViewDto,
   UpdateTeamDto,
+  UpdateTeamWorkDeploymentDto,
   UpdateTeamWorkDto,
   UpdateTeamWorkResponseDto,
   UpdateWorkflowStateDto,
@@ -6030,6 +6036,338 @@ export const useIssueTemplatesControllerApply = <TError = ErrorType<ApiErrorResp
         TContext
       > => {
       return useMutation(getIssueTemplatesControllerApplyMutationOptions(options), queryClient);
+    }
+
+export const getDeploymentsControllerListUrl = (params?: DeploymentsControllerListParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["status"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/deployments?${stringifiedParams}` : `/api/v1/deployments`
+}
+
+/**
+ * @summary 현재 워크스페이스 운영 배포 현황 조회
+ */
+export const deploymentsControllerList = async (params?: DeploymentsControllerListParams, options?: RequestInit): Promise<DeploymentListResponseDto> => {
+
+  return rivetFetch<DeploymentListResponseDto>(getDeploymentsControllerListUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeploymentsControllerListQueryKey = (params?: DeploymentsControllerListParams,) => {
+    return [
+    `/api/v1/deployments`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getDeploymentsControllerListQueryOptions = <TData = Awaited<ReturnType<typeof deploymentsControllerList>>, TError = ErrorType<unknown>>(params?: DeploymentsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deploymentsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeploymentsControllerListQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deploymentsControllerList>>> = ({ signal }) => deploymentsControllerList(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deploymentsControllerList>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeploymentsControllerListQueryResult = NonNullable<Awaited<ReturnType<typeof deploymentsControllerList>>>
+export type DeploymentsControllerListQueryError = ErrorType<unknown>
+
+
+export function useDeploymentsControllerList<TData = Awaited<ReturnType<typeof deploymentsControllerList>>, TError = ErrorType<unknown>>(
+ params: undefined |  DeploymentsControllerListParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deploymentsControllerList>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deploymentsControllerList>>,
+          TError,
+          Awaited<ReturnType<typeof deploymentsControllerList>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeploymentsControllerList<TData = Awaited<ReturnType<typeof deploymentsControllerList>>, TError = ErrorType<unknown>>(
+ params?: DeploymentsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deploymentsControllerList>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deploymentsControllerList>>,
+          TError,
+          Awaited<ReturnType<typeof deploymentsControllerList>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeploymentsControllerList<TData = Awaited<ReturnType<typeof deploymentsControllerList>>, TError = ErrorType<unknown>>(
+ params?: DeploymentsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deploymentsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary 현재 워크스페이스 운영 배포 현황 조회
+ */
+
+export function useDeploymentsControllerList<TData = Awaited<ReturnType<typeof deploymentsControllerList>>, TError = ErrorType<unknown>>(
+ params?: DeploymentsControllerListParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deploymentsControllerList>>, TError, TData>>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeploymentsControllerListQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeploymentsControllerUpdateTeamWorkUrl = (teamWorkId: string,) => {
+
+
+
+
+  return `/api/v1/deployments/team-works/${teamWorkId}`
+}
+
+/**
+ * @summary 팀 작업 운영 배포 상태 변경
+ */
+export const deploymentsControllerUpdateTeamWork = async (teamWorkId: string,
+    updateTeamWorkDeploymentDto: UpdateTeamWorkDeploymentDto, options?: RequestInit): Promise<TeamWorkSummaryResponseDto> => {
+
+  return rivetFetch<TeamWorkSummaryResponseDto>(getDeploymentsControllerUpdateTeamWorkUrl(teamWorkId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateTeamWorkDeploymentDto)
+  }
+);}
+
+
+
+
+
+export const getDeploymentsControllerUpdateTeamWorkMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deploymentsControllerUpdateTeamWork>>, TError,{teamWorkId: string;data: BodyType<UpdateTeamWorkDeploymentDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deploymentsControllerUpdateTeamWork>>, TError,{teamWorkId: string;data: BodyType<UpdateTeamWorkDeploymentDto>}, TContext> => {
+
+const mutationKey = ['deploymentsControllerUpdateTeamWork'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deploymentsControllerUpdateTeamWork>>, {teamWorkId: string;data: BodyType<UpdateTeamWorkDeploymentDto>}> = (props) => {
+          const {teamWorkId,data} = props ?? {};
+
+          return  deploymentsControllerUpdateTeamWork(teamWorkId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeploymentsControllerUpdateTeamWorkMutationResult = NonNullable<Awaited<ReturnType<typeof deploymentsControllerUpdateTeamWork>>>
+    export type DeploymentsControllerUpdateTeamWorkMutationBody = BodyType<UpdateTeamWorkDeploymentDto>
+    export type DeploymentsControllerUpdateTeamWorkMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 팀 작업 운영 배포 상태 변경
+ */
+export const useDeploymentsControllerUpdateTeamWork = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deploymentsControllerUpdateTeamWork>>, TError,{teamWorkId: string;data: BodyType<UpdateTeamWorkDeploymentDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deploymentsControllerUpdateTeamWork>>,
+        TError,
+        {teamWorkId: string;data: BodyType<UpdateTeamWorkDeploymentDto>},
+        TContext
+      > => {
+      return useMutation(getDeploymentsControllerUpdateTeamWorkMutationOptions(options), queryClient);
+    }
+
+export const getDeploymentsControllerCompleteProjectDeploymentsUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/v1/deployments/projects/${projectId}`
+}
+
+/**
+ * @summary 프로젝트에서 준비된 운영 배포 일괄 완료
+ */
+export const deploymentsControllerCompleteProjectDeployments = async (projectId: string,
+    completeProjectDeploymentsDto: CompleteProjectDeploymentsDto, options?: RequestInit): Promise<DeploymentListResponseDto> => {
+
+  return rivetFetch<DeploymentListResponseDto>(getDeploymentsControllerCompleteProjectDeploymentsUrl(projectId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(completeProjectDeploymentsDto)
+  }
+);}
+
+
+
+
+
+export const getDeploymentsControllerCompleteProjectDeploymentsMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deploymentsControllerCompleteProjectDeployments>>, TError,{projectId: string;data: BodyType<CompleteProjectDeploymentsDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deploymentsControllerCompleteProjectDeployments>>, TError,{projectId: string;data: BodyType<CompleteProjectDeploymentsDto>}, TContext> => {
+
+const mutationKey = ['deploymentsControllerCompleteProjectDeployments'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deploymentsControllerCompleteProjectDeployments>>, {projectId: string;data: BodyType<CompleteProjectDeploymentsDto>}> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  deploymentsControllerCompleteProjectDeployments(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeploymentsControllerCompleteProjectDeploymentsMutationResult = NonNullable<Awaited<ReturnType<typeof deploymentsControllerCompleteProjectDeployments>>>
+    export type DeploymentsControllerCompleteProjectDeploymentsMutationBody = BodyType<CompleteProjectDeploymentsDto>
+    export type DeploymentsControllerCompleteProjectDeploymentsMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 프로젝트에서 준비된 운영 배포 일괄 완료
+ */
+export const useDeploymentsControllerCompleteProjectDeployments = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deploymentsControllerCompleteProjectDeployments>>, TError,{projectId: string;data: BodyType<CompleteProjectDeploymentsDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deploymentsControllerCompleteProjectDeployments>>,
+        TError,
+        {projectId: string;data: BodyType<CompleteProjectDeploymentsDto>},
+        TContext
+      > => {
+      return useMutation(getDeploymentsControllerCompleteProjectDeploymentsMutationOptions(options), queryClient);
+    }
+
+export const getDeploymentsControllerUpdatePlanUrl = (issueId: string,) => {
+
+
+
+
+  return `/api/v1/deployments/issues/${issueId}/plan`
+}
+
+/**
+ * @summary 이슈 운영 배포 조건 변경
+ */
+export const deploymentsControllerUpdatePlan = async (issueId: string,
+    updateIssueDeploymentPlanDto: UpdateIssueDeploymentPlanDto, options?: RequestInit): Promise<IssueDetailResponseDto> => {
+
+  return rivetFetch<IssueDetailResponseDto>(getDeploymentsControllerUpdatePlanUrl(issueId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateIssueDeploymentPlanDto)
+  }
+);}
+
+
+
+
+
+export const getDeploymentsControllerUpdatePlanMutationOptions = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deploymentsControllerUpdatePlan>>, TError,{issueId: string;data: BodyType<UpdateIssueDeploymentPlanDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deploymentsControllerUpdatePlan>>, TError,{issueId: string;data: BodyType<UpdateIssueDeploymentPlanDto>}, TContext> => {
+
+const mutationKey = ['deploymentsControllerUpdatePlan'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deploymentsControllerUpdatePlan>>, {issueId: string;data: BodyType<UpdateIssueDeploymentPlanDto>}> = (props) => {
+          const {issueId,data} = props ?? {};
+
+          return  deploymentsControllerUpdatePlan(issueId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeploymentsControllerUpdatePlanMutationResult = NonNullable<Awaited<ReturnType<typeof deploymentsControllerUpdatePlan>>>
+    export type DeploymentsControllerUpdatePlanMutationBody = BodyType<UpdateIssueDeploymentPlanDto>
+    export type DeploymentsControllerUpdatePlanMutationError = ErrorType<ApiErrorResponseDto>
+
+    /**
+ * @summary 이슈 운영 배포 조건 변경
+ */
+export const useDeploymentsControllerUpdatePlan = <TError = ErrorType<ApiErrorResponseDto>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deploymentsControllerUpdatePlan>>, TError,{issueId: string;data: BodyType<UpdateIssueDeploymentPlanDto>}, TContext>, request?: SecondParameter<typeof rivetFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deploymentsControllerUpdatePlan>>,
+        TError,
+        {issueId: string;data: BodyType<UpdateIssueDeploymentPlanDto>},
+        TContext
+      > => {
+      return useMutation(getDeploymentsControllerUpdatePlanMutationOptions(options), queryClient);
     }
 
 export const getIssuesControllerListUrl = (params?: IssuesControllerListParams,) => {

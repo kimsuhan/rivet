@@ -5405,6 +5405,343 @@
         ]
       }
     },
+    "/api/v1/deployments": {
+      "get": {
+        "operationId": "DeploymentsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "uniqueItems": true,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NOT_APPLICABLE",
+                  "PENDING",
+                  "DEPLOYED",
+                  "REDEPLOY_REQUIRED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "ALL",
+              "type": "string",
+              "enum": [
+                "ALL",
+                "MY_TEAMS"
+              ]
+            }
+          },
+          {
+            "name": "readyOnly",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "현재 워크스페이스 운영 배포 현황 조회",
+        "tags": [
+          "deployments"
+        ]
+      }
+    },
+    "/api/v1/deployments/team-works/{teamWorkId}": {
+      "patch": {
+        "operationId": "DeploymentsController_updateTeamWork",
+        "parameters": [
+          {
+            "name": "teamWorkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTeamWorkDeploymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamWorkSummaryResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "팀 작업 운영 배포 상태 변경",
+        "tags": [
+          "deployments"
+        ]
+      }
+    },
+    "/api/v1/deployments/projects/{projectId}": {
+      "patch": {
+        "operationId": "DeploymentsController_completeProjectDeployments",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteProjectDeploymentsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "프로젝트에서 준비된 운영 배포 일괄 완료",
+        "tags": [
+          "deployments"
+        ]
+      }
+    },
+    "/api/v1/deployments/issues/{issueId}/plan": {
+      "put": {
+        "operationId": "DeploymentsController_updatePlan",
+        "parameters": [
+          {
+            "name": "issueId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateIssueDeploymentPlanDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueDetailResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "이슈 운영 배포 조건 변경",
+        "tags": [
+          "deployments"
+        ]
+      }
+    },
     "/api/v1/issues": {
       "get": {
         "operationId": "IssuesController_list",
@@ -10316,13 +10653,22 @@
           "expiresAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "nextAction": {
+            "enum": [
+              "LOGIN",
+              "SIGN_UP"
+            ],
+            "type": "string",
+            "description": "유효한 초대 이메일의 계정 상태에 따른 다음 인증 행동"
           }
         },
         "required": [
           "workspaceName",
           "emailMasked",
           "invitedByDisplayName",
-          "expiresAt"
+          "expiresAt",
+          "nextAction"
         ]
       },
       "InvitationContinuationResponseDto": {
@@ -10344,6 +10690,14 @@
             "type": "string",
             "format": "date-time"
           },
+          "nextAction": {
+            "enum": [
+              "LOGIN",
+              "SIGN_UP"
+            ],
+            "type": "string",
+            "description": "유효한 초대 이메일의 계정 상태에 따른 다음 인증 행동"
+          },
           "email": {
             "type": "string",
             "description": "유효한 초대 진행 상태에서 가입·로그인 계정을 고정하는 원문 이메일",
@@ -10355,6 +10709,7 @@
           "emailMasked",
           "invitedByDisplayName",
           "expiresAt",
+          "nextAction",
           "email"
         ]
       },
@@ -10674,6 +11029,10 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "leaderId": {
+            "type": "string",
+            "format": "uuid"
           }
         },
         "required": [
@@ -11785,6 +12144,11 @@
           "name": {
             "type": "string"
           },
+          "logoFileId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
           "status": {
             "enum": [
               "PLANNED",
@@ -11801,6 +12165,7 @@
         "required": [
           "id",
           "name",
+          "logoFileId",
           "status",
           "archived"
         ]
@@ -11828,272 +12193,6 @@
           "name",
           "color",
           "archived"
-        ]
-      },
-      "IssueProgressResponseDto": {
-        "type": "object",
-        "properties": {
-          "completed": {
-            "type": "number",
-            "minimum": 0
-          },
-          "total": {
-            "type": "number",
-            "minimum": 0
-          },
-          "percentage": {
-            "type": "number",
-            "maximum": 100,
-            "minimum": 0
-          }
-        },
-        "required": [
-          "completed",
-          "total",
-          "percentage"
-        ]
-      },
-      "IssueUserSummaryResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "avatarFileId": {
-            "type": "string",
-            "nullable": true,
-            "format": "uuid"
-          }
-        },
-        "required": [
-          "id",
-          "displayName",
-          "avatarFileId"
-        ]
-      },
-      "IssueMemberSummaryResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "user": {
-            "$ref": "#/components/schemas/IssueUserSummaryResponseDto"
-          },
-          "role": {
-            "enum": [
-              "ADMIN",
-              "MEMBER"
-            ],
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "ACTIVE",
-              "INACTIVE"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "user",
-          "role",
-          "status"
-        ]
-      },
-      "IssueTeamSummaryResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "key": {
-            "type": "string"
-          },
-          "archived": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "key",
-          "archived"
-        ]
-      },
-      "IssueProjectTeamSummaryResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "active": {
-            "type": "boolean"
-          },
-          "team": {
-            "$ref": "#/components/schemas/IssueTeamSummaryResponseDto"
-          }
-        },
-        "required": [
-          "id",
-          "active",
-          "team"
-        ]
-      },
-      "IssueWorkflowSummaryResponseDto": {
-        "type": "object",
-        "properties": {
-          "teamWorkCount": {
-            "type": "number",
-            "minimum": 0
-          },
-          "completedCount": {
-            "type": "number",
-            "minimum": 0
-          },
-          "canceledCount": {
-            "type": "number",
-            "minimum": 0
-          },
-          "unassignedCount": {
-            "type": "number",
-            "minimum": 0
-          },
-          "activeTeams": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/IssueProjectTeamSummaryResponseDto"
-            }
-          },
-          "allTeamWorksCompleted": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "teamWorkCount",
-          "completedCount",
-          "canceledCount",
-          "unassignedCount",
-          "activeTeams",
-          "allTeamWorksCompleted"
-        ]
-      },
-      "IssueSummaryResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "identifier": {
-            "type": "string",
-            "example": "ISSUE-42"
-          },
-          "title": {
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "UNSORTED",
-              "TODO",
-              "IN_PROGRESS",
-              "REVIEW",
-              "DONE",
-              "PAUSED",
-              "CANCELED"
-            ],
-            "type": "string"
-          },
-          "priority": {
-            "enum": [
-              "NONE",
-              "LOW",
-              "MEDIUM",
-              "HIGH",
-              "URGENT"
-            ],
-            "type": "string"
-          },
-          "project": {
-            "$ref": "#/components/schemas/IssueProjectSummaryResponseDto"
-          },
-          "labels": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/IssueLabelSummaryResponseDto"
-            }
-          },
-          "progress": {
-            "$ref": "#/components/schemas/IssueProgressResponseDto"
-          },
-          "createdBy": {
-            "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
-          },
-          "workflowSummary": {
-            "$ref": "#/components/schemas/IssueWorkflowSummaryResponseDto"
-          },
-          "version": {
-            "type": "number",
-            "minimum": 1
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "identifier",
-          "title",
-          "status",
-          "priority",
-          "project",
-          "labels",
-          "progress",
-          "createdBy",
-          "workflowSummary",
-          "version",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "IssueListResponseDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/IssueSummaryResponseDto"
-            }
-          },
-          "nextCursor": {
-            "type": "string",
-            "nullable": true
-          },
-          "totalCount": {
-            "type": "number",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "items",
-          "nextCursor",
-          "totalCount"
         ]
       },
       "TeamWorkIssueSummaryResponseDto": {
@@ -12149,6 +12248,54 @@
           "priority",
           "project",
           "labels"
+        ]
+      },
+      "IssueTeamSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "key",
+          "archived"
+        ]
+      },
+      "IssueProjectTeamSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "deploymentTrackingEnabled": {
+            "type": "boolean"
+          },
+          "team": {
+            "$ref": "#/components/schemas/IssueTeamSummaryResponseDto"
+          }
+        },
+        "required": [
+          "id",
+          "active",
+          "deploymentTrackingEnabled",
+          "team"
         ]
       },
       "IssueWorkflowStateSummaryResponseDto": {
@@ -12208,6 +12355,60 @@
           "version"
         ]
       },
+      "IssueUserSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "avatarFileId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "avatarFileId"
+        ]
+      },
+      "IssueMemberSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user": {
+            "$ref": "#/components/schemas/IssueUserSummaryResponseDto"
+          },
+          "role": {
+            "enum": [
+              "ADMIN",
+              "MEMBER"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user",
+          "role",
+          "status"
+        ]
+      },
       "TeamWorkSummaryResponseDto": {
         "type": "object",
         "properties": {
@@ -12258,6 +12459,41 @@
             "nullable": true,
             "maxLength": 10000
           },
+          "deploymentStatus": {
+            "enum": [
+              "NOT_APPLICABLE",
+              "PENDING",
+              "DEPLOYED",
+              "REDEPLOY_REQUIRED"
+            ],
+            "type": "string"
+          },
+          "deploymentGroupId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "deploymentPredecessorTeamWorkIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "deployedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "deployedBy": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
+              }
+            ]
+          },
           "version": {
             "type": "number",
             "minimum": 1
@@ -12281,12 +12517,17 @@
           "stateProgress",
           "assignee",
           "workNoteMarkdown",
+          "deploymentStatus",
+          "deploymentGroupId",
+          "deploymentPredecessorTeamWorkIds",
+          "deployedAt",
+          "deployedBy",
           "version",
           "createdAt",
           "updatedAt"
         ]
       },
-      "TeamWorkListResponseDto": {
+      "DeploymentListResponseDto": {
         "type": "object",
         "properties": {
           "items": {
@@ -12295,10 +12536,6 @@
               "$ref": "#/components/schemas/TeamWorkSummaryResponseDto"
             }
           },
-          "nextCursor": {
-            "type": "string",
-            "nullable": true
-          },
           "totalCount": {
             "type": "number",
             "minimum": 0
@@ -12306,29 +12543,32 @@
         },
         "required": [
           "items",
-          "nextCursor",
           "totalCount"
         ]
       },
-      "InitialTeamAssignmentDto": {
+      "UpdateTeamWorkDeploymentDto": {
         "type": "object",
         "properties": {
-          "projectTeamId": {
-            "type": "string",
-            "format": "uuid",
-            "description": "프로젝트 참여 팀 ID"
+          "action": {
+            "enum": [
+              "REQUIRE",
+              "SKIP",
+              "MARK_DEPLOYED",
+              "MARK_REDEPLOY_REQUIRED"
+            ],
+            "type": "string"
           },
-          "assigneeMembershipId": {
-            "type": "string",
-            "nullable": true,
-            "format": "uuid"
+          "version": {
+            "type": "number",
+            "minimum": 1
           }
         },
         "required": [
-          "projectTeamId"
+          "action",
+          "version"
         ]
       },
-      "AppliedIssueTemplateDto": {
+      "ProjectDeploymentTeamWorkDto": {
         "type": "object",
         "properties": {
           "id": {
@@ -12345,73 +12585,145 @@
           "version"
         ]
       },
-      "CreateIssueDto": {
+      "CompleteProjectDeploymentsDto": {
         "type": "object",
         "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1
-          },
-          "descriptionMarkdown": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 100000
-          },
-          "projectId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "priority": {
-            "enum": [
-              "NONE",
-              "LOW",
-              "MEDIUM",
-              "HIGH",
-              "URGENT"
-            ],
-            "type": "string",
-            "default": "NONE"
-          },
-          "labelIds": {
+          "teamWorks": {
             "uniqueItems": true,
-            "maxItems": 100,
+            "minItems": 1,
+            "maxItems": 200,
             "type": "array",
             "items": {
-              "type": "string",
-              "format": "uuid"
+              "$ref": "#/components/schemas/ProjectDeploymentTeamWorkDto"
             }
-          },
-          "attachmentFileIds": {
-            "uniqueItems": true,
-            "maxItems": 100,
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          "initialTeams": {
-            "uniqueItems": true,
-            "maxItems": 100,
-            "description": "생성과 함께 시작할 프로젝트 참여 팀",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/InitialTeamAssignmentDto"
-            }
-          },
-          "appliedTemplate": {
-            "description": "생성 입력을 채운 이슈 템플릿과 적용 당시 version",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/AppliedIssueTemplateDto"
-              }
-            ]
           }
         },
         "required": [
-          "title",
-          "projectId"
+          "teamWorks"
+        ]
+      },
+      "DeploymentDependencyDto": {
+        "type": "object",
+        "properties": {
+          "dependentTeamWorkId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "predecessorTeamWorkId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "dependentTeamWorkId",
+          "predecessorTeamWorkId"
+        ]
+      },
+      "DeploymentTogetherGroupDto": {
+        "type": "object",
+        "properties": {
+          "teamWorkIds": {
+            "uniqueItems": true,
+            "minItems": 2,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "teamWorkIds"
+        ]
+      },
+      "UpdateIssueDeploymentPlanDto": {
+        "type": "object",
+        "properties": {
+          "dependencies": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentDependencyDto"
+            }
+          },
+          "togetherGroups": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentTogetherGroupDto"
+            }
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "dependencies",
+          "togetherGroups",
+          "version"
+        ]
+      },
+      "IssueProgressResponseDto": {
+        "type": "object",
+        "properties": {
+          "completed": {
+            "type": "number",
+            "minimum": 0
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0
+          },
+          "percentage": {
+            "type": "number",
+            "maximum": 100,
+            "minimum": 0
+          }
+        },
+        "required": [
+          "completed",
+          "total",
+          "percentage"
+        ]
+      },
+      "IssueWorkflowSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "teamWorkCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "completedCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "canceledCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "unassignedCount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "activeTeams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueProjectTeamSummaryResponseDto"
+            }
+          },
+          "allTeamWorksCompleted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "teamWorkCount",
+          "completedCount",
+          "canceledCount",
+          "unassignedCount",
+          "activeTeams",
+          "allTeamWorksCompleted"
         ]
       },
       "IssueAttachmentFileResponseDto": {
@@ -12685,6 +12997,241 @@
           "handoffFlows"
         ]
       },
+      "IssueSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "identifier": {
+            "type": "string",
+            "example": "ISSUE-42"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "UNSORTED",
+              "TODO",
+              "IN_PROGRESS",
+              "REVIEW",
+              "DONE",
+              "PAUSED",
+              "CANCELED"
+            ],
+            "type": "string"
+          },
+          "priority": {
+            "enum": [
+              "NONE",
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "URGENT"
+            ],
+            "type": "string"
+          },
+          "project": {
+            "$ref": "#/components/schemas/IssueProjectSummaryResponseDto"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueLabelSummaryResponseDto"
+            }
+          },
+          "progress": {
+            "$ref": "#/components/schemas/IssueProgressResponseDto"
+          },
+          "createdBy": {
+            "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
+          },
+          "workflowSummary": {
+            "$ref": "#/components/schemas/IssueWorkflowSummaryResponseDto"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "identifier",
+          "title",
+          "status",
+          "priority",
+          "project",
+          "labels",
+          "progress",
+          "createdBy",
+          "workflowSummary",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "IssueListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueSummaryResponseDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "totalCount": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "totalCount"
+        ]
+      },
+      "TeamWorkListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamWorkSummaryResponseDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "totalCount": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "totalCount"
+        ]
+      },
+      "InitialTeamAssignmentDto": {
+        "type": "object",
+        "properties": {
+          "projectTeamId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "프로젝트 참여 팀 ID"
+          },
+          "assigneeMembershipId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "projectTeamId"
+        ]
+      },
+      "AppliedIssueTemplateDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ]
+      },
+      "CreateIssueDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1
+          },
+          "descriptionMarkdown": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100000
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "priority": {
+            "enum": [
+              "NONE",
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "URGENT"
+            ],
+            "type": "string",
+            "default": "NONE"
+          },
+          "labelIds": {
+            "uniqueItems": true,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "attachmentFileIds": {
+            "uniqueItems": true,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "initialTeams": {
+            "uniqueItems": true,
+            "maxItems": 100,
+            "description": "생성과 함께 시작할 프로젝트 참여 팀",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InitialTeamAssignmentDto"
+            }
+          },
+          "appliedTemplate": {
+            "description": "생성 입력을 채운 이슈 템플릿과 적용 당시 version",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AppliedIssueTemplateDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "title",
+          "projectId"
+        ]
+      },
       "CreateIssueResponseDto": {
         "type": "object",
         "properties": {
@@ -12881,7 +13428,6 @@
               "PAUSE",
               "RESUME",
               "CANCEL",
-              "COMPLETE",
               "REOPEN"
             ],
             "type": "string"
@@ -13062,6 +13608,41 @@
             "nullable": true,
             "maxLength": 10000
           },
+          "deploymentStatus": {
+            "enum": [
+              "NOT_APPLICABLE",
+              "PENDING",
+              "DEPLOYED",
+              "REDEPLOY_REQUIRED"
+            ],
+            "type": "string"
+          },
+          "deploymentGroupId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "deploymentPredecessorTeamWorkIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "deployedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          },
+          "deployedBy": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IssueMemberSummaryResponseDto"
+              }
+            ]
+          },
           "version": {
             "type": "number",
             "minimum": 1
@@ -13085,6 +13666,11 @@
           "stateProgress",
           "assignee",
           "workNoteMarkdown",
+          "deploymentStatus",
+          "deploymentGroupId",
+          "deploymentPredecessorTeamWorkIds",
+          "deployedAt",
+          "deployedBy",
           "version",
           "createdAt",
           "updatedAt"
@@ -13960,6 +14546,9 @@
             "nullable": true,
             "format": "date-time"
           },
+          "deploymentTrackingEnabled": {
+            "type": "boolean"
+          },
           "team": {
             "$ref": "#/components/schemas/ProjectTeamSummaryResponseDto"
           }
@@ -13968,6 +14557,7 @@
           "id",
           "active",
           "deactivatedAt",
+          "deploymentTrackingEnabled",
           "team"
         ]
       },
@@ -14003,6 +14593,11 @@
           },
           "name": {
             "type": "string"
+          },
+          "logoFileId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
           },
           "description": {
             "type": "string",
@@ -14064,6 +14659,7 @@
         "required": [
           "id",
           "name",
+          "logoFileId",
           "description",
           "status",
           "lead",
@@ -14099,6 +14695,11 @@
       "CreateProjectDto": {
         "type": "object",
         "properties": {
+          "logoFileId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
           "name": {
             "type": "string",
             "maxLength": 200,
@@ -14144,6 +14745,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "deploymentTrackingTeamIds": {
+            "uniqueItems": true,
+            "maxItems": 100,
+            "description": "운영 배포 현황을 관리할 프로젝트 참여 팀 ID",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         },
         "required": [
@@ -14156,6 +14767,11 @@
           "version": {
             "type": "number",
             "minimum": 1
+          },
+          "logoFileId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
           },
           "name": {
             "type": "string",
@@ -14196,6 +14812,16 @@
           "teamIds": {
             "uniqueItems": true,
             "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "deploymentTrackingTeamIds": {
+            "uniqueItems": true,
+            "maxItems": 100,
+            "description": "운영 배포 현황을 관리할 프로젝트 참여 팀 ID",
             "type": "array",
             "items": {
               "type": "string",

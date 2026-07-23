@@ -136,6 +136,7 @@ describe('LabelSettingsScreen', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: labels.title })).toBeVisible();
     expect(screen.getByText(activeLabel.name)).toBeVisible();
+    expect(screen.queryByText(activeLabel.color)).not.toBeInTheDocument();
     expect(screen.queryByText(archivedLabel.name)).not.toBeInTheDocument();
     expect(useLabelsControllerList).toHaveBeenLastCalledWith(
       { archivedOnly: false, includeArchived: false, limit: 20 },
@@ -176,7 +177,8 @@ describe('LabelSettingsScreen', () => {
     await user.type(nameInput, '새 분류');
     expect(colorOptions).toHaveLength(8);
     await user.click(within(dialog).getByRole('radio', { name: labels.colorCyan }));
-    expect(within(dialog).getByText('#4BC7C7')).toBeVisible();
+    expect(within(dialog).queryByText('#4BC7C7')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(labels.colorPreview)).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: labels.createLabel }));
 
     expect(mocks.createMutate).toHaveBeenCalledWith(
@@ -280,6 +282,7 @@ describe('LabelSettingsScreen', () => {
     const user = userEvent.setup();
     renderScreen();
 
+    expect(screen.getByText(customLabel.color)).toBeVisible();
     await user.click(screen.getByRole('button', { name: `${customLabel.name} ${labels.edit}` }));
     const dialog = screen.getByRole('dialog', { name: labels.editTitle });
     expect(
@@ -287,7 +290,6 @@ describe('LabelSettingsScreen', () => {
         name: `${labels.colorCustom} (${customLabel.color})`,
       }),
     ).toBeChecked();
-    expect(within(dialog).getByText(customLabel.color)).toBeVisible();
 
     const nameInput = within(dialog).getByLabelText(labels.nameLabel);
     await user.clear(nameInput);

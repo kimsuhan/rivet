@@ -51,6 +51,9 @@ export class ProjectTeamResponseDto {
   @ApiProperty({ format: 'date-time', nullable: true, type: String })
   deactivatedAt!: string | null;
 
+  @ApiProperty()
+  deploymentTrackingEnabled!: boolean;
+
   @ApiProperty({ type: ProjectTeamSummaryResponseDto })
   team!: ProjectTeamSummaryResponseDto;
 }
@@ -72,6 +75,9 @@ export class ProjectResponseDto {
 
   @ApiProperty()
   name!: string;
+
+  @ApiProperty({ format: 'uuid', nullable: true, type: String })
+  logoFileId!: string | null;
 
   @ApiProperty({ nullable: true, type: String })
   description!: string | null;

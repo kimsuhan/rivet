@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { LockKeyhole } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
@@ -8,8 +9,12 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import {
+  getAuthControllerGetSessionQueryKey,
+  setCsrfToken,
+  useAuthControllerLogin,
   useAuthControllerResendEmailVerification,
   useAuthControllerSignUp,
+  useInvitationAuthControllerAccept,
   useInvitationAuthControllerGetContinuation,
 } from '@rivet/api-client';
 
@@ -20,7 +25,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/c
 import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Spinner } from '@/components/ui/spinner';
-import { Link } from '@/i18n/navigation';
+import { useRouter } from '@/i18n/navigation';
 
 import { AuthFrame, type AuthFrameLabels, AuthLink } from './auth-frame';
 import { countUnicodeCodePoints, normalizePasswordInput } from './auth-validation';
@@ -33,8 +38,10 @@ type SignUpLabels = AuthFrameLabels & {
   invitationDescription: string;
   invitationEmailDescription: string;
   invitationEmailFixed: string;
+  invitationCompleting: string;
   invitationErrorTitle: string;
   invitationErrorDescription: string;
+  invitationSubmit: string;
   password: string;
   confirmPassword: string;
   passwordHelp: string;
@@ -48,9 +55,6 @@ type SignUpLabels = AuthFrameLabels & {
   acceptedTitle: string;
   acceptedDescription: string;
   acceptedEmailLabel: string;
-  invitationAcceptedTitle: string;
-  invitationAcceptedDescription: string;
-  continueToLogin: string;
   resend: string;
   resending: string;
   resentTitle: string;
@@ -79,6 +83,8 @@ export function SignUpScreen({
   loginHref: string;
 }) {
   const t = useTranslations('Auth.signUp');
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const [resendRetryAfterSeconds, setResendRetryAfterSeconds] = useState(0);
   const invitationContinuation = useInvitationAuthControllerGetContinuation({
     query: { enabled: isInvitationSignUp, retry: false },
@@ -138,6 +144,8 @@ export function SignUpScreen({
       },
     },
   });
+  const invitationLogin = useAuthControllerLogin();
+  const acceptInvitation = useInvitationAuthControllerAccept();
   const resendEmail = useAuthControllerResendEmailVerification({
     mutation: {
       onSuccess: () => setResendRetryAfterSeconds(0),
@@ -198,16 +206,26 @@ export function SignUpScreen({
   }
 
   if (signUp.data) {
-    const invitationEmailVerified = signUp.data.nextStep === 'LOGIN';
+    if (isInvitationSignUp && signUp.data.nextStep === 'LOGIN') {
+      return (
+        <AuthFrame labels={frameLabels}>
+          <div
+            role="status"
+            className="text-muted-foreground flex items-center justify-center gap-2"
+          >
+            <Spinner aria-hidden="true" />
+            {labels.invitationCompleting}
+          </div>
+        </AuthFrame>
+      );
+    }
 
     return (
       <AuthFrame
         labels={{
           ...labels,
-          title: invitationEmailVerified ? labels.invitationAcceptedTitle : labels.acceptedTitle,
-          description: invitationEmailVerified
-            ? labels.invitationAcceptedDescription
-            : labels.acceptedDescription,
+          title: labels.acceptedTitle,
+          description: labels.acceptedDescription,
         }}
       >
         <div className="flex flex-col gap-6">
@@ -216,55 +234,44 @@ export function SignUpScreen({
             <div className="mt-1 font-medium">{signUp.data.emailMasked}</div>
           </div>
 
-          {invitationEmailVerified ? (
-            <div className="flex flex-col items-center gap-4">
-              <Button render={<Link href={loginHref} />} size="lg" className="w-full">
-                {labels.continueToLogin}
-              </Button>
-              <AuthLink href={forgotPasswordHref}>{labels.passwordResetLink}</AuthLink>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {resendEmail.data ? (
-                <Alert>
-                  <AlertTitle>{labels.resentTitle}</AlertTitle>
-                  <AlertDescription>{labels.resentDescription}</AlertDescription>
-                </Alert>
-              ) : resendEmail.error || resendRetryAfterSeconds > 0 ? (
-                <Alert variant="destructive">
-                  <AlertTitle>
-                    {resendRetryAfterSeconds > 0
-                      ? t('resendRateLimitedWithRetry', { seconds: resendRetryAfterSeconds })
-                      : resendEmail.error?.body.code === 'RATE_LIMITED'
-                        ? labels.resendRateLimited
-                        : labels.resendUnexpectedError}
-                  </AlertTitle>
-                </Alert>
-              ) : null}
+          <div className="flex flex-col gap-3">
+            {resendEmail.data ? (
+              <Alert>
+                <AlertTitle>{labels.resentTitle}</AlertTitle>
+                <AlertDescription>{labels.resentDescription}</AlertDescription>
+              </Alert>
+            ) : resendEmail.error || resendRetryAfterSeconds > 0 ? (
+              <Alert variant="destructive">
+                <AlertTitle>
+                  {resendRetryAfterSeconds > 0
+                    ? t('resendRateLimitedWithRetry', { seconds: resendRetryAfterSeconds })
+                    : resendEmail.error?.body.code === 'RATE_LIMITED'
+                      ? labels.resendRateLimited
+                      : labels.resendUnexpectedError}
+                </AlertTitle>
+              </Alert>
+            ) : null}
 
-              <Button
-                type="button"
-                variant="outline"
-                size="lg"
-                className="w-full"
-                disabled={resendEmail.isPending || resendRetryAfterSeconds > 0}
-                onClick={() => {
-                  if (resendEmail.isPending || resendRetryAfterSeconds > 0) return;
-                  resendEmail.mutate({ data: { email: form.getValues('email').trim() } });
-                }}
-              >
-                {resendEmail.isPending ? <Spinner aria-label={labels.resending} /> : null}
-                {labels.resend}
-              </Button>
-            </div>
-          )}
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="w-full"
+              disabled={resendEmail.isPending || resendRetryAfterSeconds > 0}
+              onClick={() => {
+                if (resendEmail.isPending || resendRetryAfterSeconds > 0) return;
+                resendEmail.mutate({ data: { email: form.getValues('email').trim() } });
+              }}
+            >
+              {resendEmail.isPending ? <Spinner aria-label={labels.resending} /> : null}
+              {labels.resend}
+            </Button>
+          </div>
 
-          {!invitationEmailVerified ? (
-            <div className="text-muted-foreground flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm">
-              <AuthLink href={loginHref}>{labels.loginLink}</AuthLink>
-              <AuthLink href={forgotPasswordHref}>{labels.passwordResetLink}</AuthLink>
-            </div>
-          ) : null}
+          <div className="text-muted-foreground flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm">
+            <AuthLink href={loginHref}>{labels.loginLink}</AuthLink>
+            <AuthLink href={forgotPasswordHref}>{labels.passwordResetLink}</AuthLink>
+          </div>
         </div>
       </AuthFrame>
     );
@@ -283,11 +290,41 @@ export function SignUpScreen({
         noValidate
         onSubmit={form.handleSubmit((values) => {
           if (signUp.isPending) return;
-          signUp.mutate({
+          const email = values.email.trim();
+          const request = {
             data: {
               displayName: values.displayName.trim(),
-              email: values.email.trim(),
+              email,
               password: values.password,
+            },
+          };
+          if (!isInvitationSignUp) {
+            signUp.mutate(request);
+            return;
+          }
+          signUp.mutate(request, {
+            onSuccess: (result) => {
+              if (result.nextStep !== 'LOGIN') return;
+
+              invitationLogin.mutate(
+                { data: { email, password: values.password } },
+                {
+                  onSuccess: (session) => {
+                    setCsrfToken(session.csrfToken);
+                    queryClient.setQueryData(getAuthControllerGetSessionQueryKey(), session);
+                    acceptInvitation.mutate(undefined, {
+                      onSuccess: async () => {
+                        await queryClient.invalidateQueries({
+                          queryKey: getAuthControllerGetSessionQueryKey(),
+                        });
+                        router.replace('/my-issues');
+                      },
+                      onError: () => router.replace('/invite'),
+                    });
+                  },
+                  onError: () => router.replace(loginHref),
+                },
+              );
             },
           });
         })}
@@ -404,8 +441,12 @@ export function SignUpScreen({
         ) : null}
 
         <Button type="submit" size="lg" className="w-full" disabled={signUp.isPending}>
-          {signUp.isPending ? <Spinner aria-label={labels.submitting} /> : null}
-          {labels.submit}
+          {signUp.isPending ? (
+            <Spinner
+              aria-label={isInvitationSignUp ? labels.invitationCompleting : labels.submitting}
+            />
+          ) : null}
+          {isInvitationSignUp ? labels.invitationSubmit : labels.submit}
         </Button>
 
         <p className="text-muted-foreground text-center text-sm">

@@ -69,6 +69,14 @@ import {
   FieldSet,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -97,6 +105,7 @@ export type TeamSettingsLabels = {
   conflictTitle: string;
   create: string;
   createDescription: string;
+  createLeaderDescription: string;
   createTitle: string;
   creating: string;
   currentAdmin: string;
@@ -151,6 +160,7 @@ export type TeamSettingsLabels = {
   namePlaceholder: string;
   nameRequired: string;
   nameTooLong: string;
+  noLeader: string;
   removeMemberAction: string;
   removeMemberDescription: string;
   removeMemberTitle: string;
@@ -183,11 +193,11 @@ function MemberChoice({
   const id = 'team-member-' + member.id;
 
   return (
-    <Field orientation="horizontal" data-disabled={disabled || currentAdmin || undefined}>
+    <Field orientation="horizontal" data-disabled={disabled || undefined}>
       <Checkbox
         id={id}
         checked={checked}
-        disabled={disabled || currentAdmin}
+        disabled={disabled}
         onCheckedChange={(value) => onCheckedChange(Boolean(value))}
       />
       <FieldLabel htmlFor={id} className="min-w-0 items-start">
@@ -236,6 +246,7 @@ function TeamCreateDialog({
       .regex(/^[A-Z]{2,5}$/, labels.keyFormat),
     memberIds: z.array(z.string()).min(1, labels.memberRequired),
     name: z.string().trim().min(1, labels.nameRequired).max(100, labels.nameTooLong),
+    leaderId: z.string().optional(),
   });
   const {
     clearErrors,
@@ -246,10 +257,11 @@ function TeamCreateDialog({
     setError,
     setValue,
   } = useForm<z.infer<typeof schema>>({
-    defaultValues: { key: '', memberIds: [membershipId], name: '' },
+    defaultValues: { key: '', memberIds: [], name: '' },
     resolver: zodResolver(schema),
   });
   const selectedMemberIds = useWatch({ control, name: 'memberIds' }) ?? [];
+  const selectedLeaderId = useWatch({ control, name: 'leaderId' });
   const nameField = register('name');
   const keyField = register('key');
   const [unexpectedError, setUnexpectedError] = useState(false);
@@ -261,7 +273,14 @@ function TeamCreateDialog({
     clearErrors();
     setUnexpectedError(false);
     mutation.mutate(
-      { data: values },
+      {
+        data: {
+          key: values.key,
+          memberIds: values.memberIds,
+          name: values.name,
+          ...(values.leaderId ? { leaderId: values.leaderId } : {}),
+        },
+      },
       {
         onError: (error) => {
           const code = error.body.code;
@@ -409,6 +428,9 @@ function TeamCreateDialog({
                           ? [...new Set([...selectedMemberIds, member.id])]
                           : selectedMemberIds.filter((id) => id !== member.id);
                         setValue('memberIds', next, { shouldDirty: true, shouldValidate: true });
+                        if (!checked && selectedLeaderId === member.id) {
+                          setValue('leaderId', undefined, { shouldDirty: true });
+                        }
                       }}
                     />
                   ))}
@@ -447,6 +469,38 @@ function TeamCreateDialog({
                 ) : null}
                 <FieldError errors={[errors.memberIds]} />
               </FieldSet>
+              <Field>
+                <FieldLabel htmlFor="create-team-leader">{labels.leadersLabel}</FieldLabel>
+                <FieldDescription>{labels.createLeaderDescription}</FieldDescription>
+                <Select
+                  items={[
+                    { label: labels.noLeader, value: '' },
+                    ...members
+                      .filter((member) => selectedMemberIds.includes(member.id))
+                      .map((member) => ({ label: member.user.displayName, value: member.id })),
+                  ]}
+                  value={selectedLeaderId ?? ''}
+                  onValueChange={(value) =>
+                    setValue('leaderId', value || undefined, { shouldDirty: true })
+                  }
+                >
+                  <SelectTrigger id="create-team-leader" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    <SelectGroup>
+                      <SelectItem value="">{labels.noLeader}</SelectItem>
+                      {members
+                        .filter((member) => selectedMemberIds.includes(member.id))
+                        .map((member) => (
+                          <SelectItem key={member.id} value={member.id}>
+                            {member.user.displayName}
+                          </SelectItem>
+                        ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
             </FieldGroup>
           </form>
           <DialogFooter>
@@ -1191,12 +1245,6 @@ export function TeamSettingsScreen({ labels }: { labels: TeamSettingsLabels }) {
         ) : null}
       </header>
 
-      {detail.isPending && editTeamId ? (
-        <Alert className="mt-4">
-          <Spinner aria-hidden="true" />
-          <AlertTitle>{labels.loading}</AlertTitle>
-        </Alert>
-      ) : null}
       <Tabs defaultValue="active" className="mt-5">
         <TabsList variant="line" aria-label={labels.title}>
           <TabsTrigger value="active">

@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 
-import { MembershipStatus, Prisma, ProjectStatus } from '@rivet/database';
+import { FileScope, MembershipStatus, Prisma, ProjectStatus } from '@rivet/database';
 
 import { DatabaseService } from '../../common/database/database.service';
 import { ApiError } from '../../common/errors/api-error';
@@ -17,11 +17,24 @@ export type ProjectLockRow = {
   description: string | null;
   id: string;
   leadMembershipId: string | null;
+  logoFileId: string | null;
   name: string;
   startDate: Date | null;
   status: ProjectStatus;
   targetDate: Date | null;
   version: number;
+};
+
+export type ProjectLogoFileLockRow = {
+  attachmentLinked: boolean;
+  avatarLinked: boolean;
+  detectedMimeType: string;
+  id: string;
+  logoLinked: boolean;
+  scope: FileScope;
+  unlinkedAt: Date | null;
+  uploadedByUserId: string;
+  workspaceId: string | null;
 };
 
 type ProgressRow = {
@@ -129,6 +142,7 @@ export class ProjectRepository {
         "description",
         "status",
         "lead_membership_id" AS "leadMembershipId",
+        "logo_file_id" AS "logoFileId",
         "start_date" AS "startDate",
         "target_date" AS "targetDate",
         "archived_at" AS "archivedAt",
@@ -140,6 +154,35 @@ export class ProjectRepository {
       FOR UPDATE
     `;
     return row ?? projectNotFound();
+  }
+
+  async lockLogoFile(
+    transaction: Transaction,
+    fileId: string,
+  ): Promise<ProjectLogoFileLockRow | null> {
+    const [row] = await transaction.$queryRaw<ProjectLogoFileLockRow[]>`
+      SELECT
+        file."id",
+        file."scope",
+        file."workspace_id" AS "workspaceId",
+        file."uploaded_by_user_id" AS "uploadedByUserId",
+        file."detected_mime_type" AS "detectedMimeType",
+        file."unlinked_at" AS "unlinkedAt",
+        EXISTS (
+          SELECT 1 FROM "users" account WHERE account."avatar_file_id" = file."id"
+        ) AS "avatarLinked",
+        EXISTS (
+          SELECT 1 FROM "issue_file_attachments" attachment
+          WHERE attachment."file_id" = file."id"
+        ) AS "attachmentLinked",
+        EXISTS (
+          SELECT 1 FROM "projects" project WHERE project."logo_file_id" = file."id"
+        ) AS "logoLinked"
+      FROM "files" file
+      WHERE file."id" = ${fileId}::uuid
+      FOR UPDATE OF file
+    `;
+    return row ?? null;
   }
 
   async lockWorkspace(transaction: Transaction, workspaceId: string): Promise<void> {

@@ -30,6 +30,7 @@ const emails = {
   other: `m2.other.${runId}@example.com`,
   rateLimited: `m2.rate-limited.${runId}@example.com`,
   teamTarget: `m2.team-target.${runId}@example.com`,
+  unregistered: `m2.unregistered.${runId}@example.com`,
 };
 
 function invitationContinuationCookie(headers: { 'set-cookie'?: string | string[] }): string {
@@ -268,6 +269,7 @@ describe('M2 workspace invitations', () => {
     expect(preview.body).toMatchObject({
       emailMasked: 'M2***@EXAMPLE.COM',
       invitedByDisplayName: '관리자',
+      nextAction: 'LOGIN',
       workspaceName: 'M2 초대 워크스페이스',
     });
     expect(preview.body.email).toBeUndefined();
@@ -282,6 +284,7 @@ describe('M2 workspace invitations', () => {
     expect(continuation.body).toMatchObject({
       email: displayedInviteeEmail,
       emailMasked: 'M2***@EXAMPLE.COM',
+      nextAction: 'LOGIN',
       workspaceName: 'M2 초대 워크스페이스',
     });
     expect(continuation.headers['cache-control']).toContain('no-store');
@@ -797,6 +800,39 @@ describe('M2 workspace invitations', () => {
     ).resolves.toEqual({ aggregateId: canceledReissued.body.id });
 
     expect(duplicateTerminalResend.body.code).toBe('INVITATION_ALREADY_PENDING');
+
+    const unregisteredCreated = await request(app.getHttpServer())
+      .post('/api/v1/invitations')
+      .set('Cookie', `rivet_session=${adminSessionToken}`)
+      .set('Origin', WEB_ORIGIN)
+      .set('X-CSRF-Token', adminCsrfToken)
+      .send({ emails: [emails.unregistered] })
+      .expect(200);
+    const unregisteredInvitationId = unregisteredCreated.body.items[0].invitationId as string;
+    const unregisteredTokenRow = await database.client.oneTimeToken.findFirstOrThrow({
+      select: { id: true },
+      where: {
+        invitationId: unregisteredInvitationId,
+        purpose: 'WORKSPACE_INVITATION',
+        revokedAt: null,
+        usedAt: null,
+      },
+    });
+    const unregisteredToken = createOneTimeToken(
+      'WORKSPACE_INVITATION',
+      TOKEN_HMAC_KEY,
+      unregisteredTokenRow.id,
+    ).token;
+    const unregisteredPreview = await request(app.getHttpServer())
+      .post('/api/v1/auth/invitations/continuation')
+      .set('Origin', WEB_ORIGIN)
+      .send({ token: unregisteredToken })
+      .expect(200);
+    expect(unregisteredPreview.body).toMatchObject({
+      emailMasked: 'm2***@example.com',
+      nextAction: 'SIGN_UP',
+      workspaceName: 'M2 초대 워크스페이스',
+    });
 
     const invitationRateLimitKey = createHmac('sha256', RATE_LIMIT_HMAC_KEY)
       .update(`WORKSPACE_INVITATION_EMAIL:${workspaceId}`)

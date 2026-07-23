@@ -19,7 +19,10 @@ export default async function LoginPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ returnTo?: string | string[] }>;
+  searchParams: Promise<{
+    invitation?: string | string[];
+    returnTo?: string | string[];
+  }>;
 }) {
   const [{ locale }, query] = await Promise.all([params, searchParams]);
   setRequestLocale(locale);
@@ -27,6 +30,7 @@ export default async function LoginPage({
 
   return (
     <LoginScreen
+      acceptInvitationOnLogin={query.invitation === '1'}
       forgotPasswordHref="/forgot-password"
       signUpHref="/signup"
       verifyEmailHref="/verify-email"
@@ -48,6 +52,7 @@ export default async function LoginPage({
         passwordRequired: t('passwordRequired'),
         invalidCredentialsTitle: t('invalidCredentialsTitle'),
         invalidCredentialsDescription: t('invalidCredentialsDescription'),
+        invitationCompleting: t('invitationCompleting'),
         emailNotVerifiedTitle: t('emailNotVerifiedTitle'),
         emailNotVerifiedDescription: t('emailNotVerifiedDescription'),
         verifyEmailLink: t('verifyEmailLink'),

@@ -25,6 +25,7 @@ model File {
   workspace        Workspace?            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   uploadedByUser   User                  @relation("FileUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
   avatarUser       User?                 @relation("UserAvatarFile")
+  logoProject      Project?              @relation("ProjectLogoFile")
   issueAttachments IssueFileAttachment[]
 
   @@unique([workspaceId, id])

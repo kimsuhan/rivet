@@ -60,6 +60,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
   const category = searchParams.get('stateCategory') ?? (mode === 'my' ? MY_WORK_CATEGORIES : '');
   const projectId = searchParams.get('projectId') ?? '';
   const query = searchParams.get('query') ?? '';
+  const savedViewId = searchParams.get('view');
   const sort = searchParams.get('sort') ?? (mode === 'my' ? 'executionOrder' : 'updatedAt');
   const sortDirection = searchParams.get('sortDirection') ?? 'desc';
   const density = searchParams.get('density') ?? 'comfortable';
@@ -466,6 +467,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
                   key={work.id}
                   work={work}
                   density={density as 'compact' | 'comfortable'}
+                  savedViewId={savedViewId}
                 />
               ) : (
                 <TeamWorkListRow

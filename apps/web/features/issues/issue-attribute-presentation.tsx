@@ -23,8 +23,10 @@ import type {
   TeamWorkSummaryResponseDto,
 } from '@rivet/api-client';
 
+import { UserAvatar } from '@/components/user-avatar';
 import {
   WORKFLOW_STATE_PRESENTATION,
+  type WorkflowStateCategory,
   WorkflowStateIcon,
   workflowStateProgress,
 } from '@/components/workflow-state-icon';
@@ -38,10 +40,21 @@ export const ISSUE_STATUS_PRESENTATION: Record<IssueSummaryResponseDto['status']
   UNSORTED: { icon: CircleDashed, iconClassName: 'text-muted-foreground', label: '접수됨' },
   TODO: { icon: Circle, iconClassName: 'text-foreground', label: '할 일' },
   IN_PROGRESS: { icon: CircleDotDashed, iconClassName: 'text-info', label: '진행 중' },
-  REVIEW: { icon: CircleDot, iconClassName: 'text-info', label: '완료 확인' },
+  REVIEW: { icon: CircleDot, iconClassName: 'text-info', label: '배포 대기' },
   DONE: { icon: CircleCheck, iconClassName: 'text-success', label: '완료' },
   PAUSED: { icon: CirclePause, iconClassName: 'text-warning', label: '일시 중지' },
   CANCELED: { icon: CircleX, iconClassName: 'text-muted-foreground', label: '취소' },
+};
+
+const ISSUE_STATUS_WORKFLOW_ICON: Partial<
+  Record<IssueSummaryResponseDto['status'], { category: WorkflowStateCategory; progress?: number }>
+> = {
+  UNSORTED: { category: 'BACKLOG' },
+  TODO: { category: 'UNSTARTED' },
+  IN_PROGRESS: { category: 'STARTED', progress: 1 / 3 },
+  REVIEW: { category: 'STARTED', progress: 2 / 3 },
+  DONE: { category: 'COMPLETED' },
+  CANCELED: { category: 'CANCELED' },
 };
 
 export const TEAM_WORK_STATUS_PRESENTATION = WORKFLOW_STATE_PRESENTATION;
@@ -82,12 +95,27 @@ export function IssueStatusDisplay({
   status: IssueSummaryResponseDto['status'];
   className?: string;
 }) {
-  return (
-    <AttributeDisplay
-      presentation={ISSUE_STATUS_PRESENTATION[status]}
-      {...(className ? { className } : {})}
-    />
-  );
+  const presentation = ISSUE_STATUS_PRESENTATION[status];
+  const workflowIcon = ISSUE_STATUS_WORKFLOW_ICON[status];
+
+  if (workflowIcon) {
+    return (
+      <span
+        className={cn(
+          'inline-flex min-w-0 items-center gap-1.5 text-sm whitespace-nowrap',
+          className,
+        )}
+      >
+        <WorkflowStateIcon
+          category={workflowIcon.category}
+          {...(workflowIcon.progress !== undefined ? { progress: workflowIcon.progress } : {})}
+        />
+        <span className="truncate">{presentation.label}</span>
+      </span>
+    );
+  }
+
+  return <AttributeDisplay presentation={presentation} {...(className ? { className } : {})} />;
 }
 
 export function TeamWorkStatusDisplay({
@@ -241,8 +269,14 @@ export function CompactAssigneeTrigger({
   const options: IssueInlineSelectOption[] = [
     { icon: UserRound, iconClassName: 'text-muted-foreground', label: '담당자 없음', value: '' },
     ...members.map((member) => ({
-      icon: UserRound,
-      iconClassName: 'text-muted-foreground',
+      iconElement: (
+        <UserAvatar
+          avatarFileId={member.user.avatarFileId}
+          className="data-[size=sm]:size-4 [&_[data-slot=avatar-fallback]]:text-[9px]"
+          displayName={member.user.displayName}
+          size="sm"
+        />
+      ),
       label: member.user.displayName,
       value: member.id,
     })),

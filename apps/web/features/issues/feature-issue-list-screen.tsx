@@ -27,13 +27,14 @@ import { getIssuePagesQueryKey, useIssuePages } from './issue-list-queries';
 import { ISSUE_LIST_GRID_COLUMNS, IssueListRow } from './issue-list-row';
 import { issueSortsFromSearchParams, serializeIssueSorts } from './issue-multi-sort';
 import { IssueMultiSortControls } from './issue-multi-sort-controls';
+import { issueWorkHref } from './issue-work-routing';
 import { SavedViewControls } from './saved-view-controls';
 
 const STATUS_LABELS = {
   UNSORTED: '접수됨',
   TODO: '할 일',
   IN_PROGRESS: '진행 중',
-  REVIEW: '완료 확인',
+  REVIEW: '배포 대기',
   DONE: '완료',
   PAUSED: '일시 중지',
   CANCELED: '취소',
@@ -44,6 +45,7 @@ export function FeatureIssueListScreen() {
   const pathname = usePathname();
   const router = useRouter();
   const query = searchParams.get('query') ?? '';
+  const savedViewId = searchParams.get('view');
   const projectId = searchParams.get('projectId') ?? '';
   const status = searchParams.get('status') ?? '';
   const sorts = issueSortsFromSearchParams(searchParams);
@@ -291,6 +293,7 @@ export function FeatureIssueListScreen() {
             {issueItems.map((issue) => (
               <IssueListRow
                 key={issue.id}
+                detailHref={issueWorkHref(issue.identifier, undefined, savedViewId)}
                 issue={issue}
                 queryKey={issueQueryKey}
                 density={density as 'compact' | 'comfortable'}

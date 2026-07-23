@@ -309,6 +309,8 @@ describe('IssueTimeline', () => {
     const comment = await screen.findByText('첫 댓글');
     const commentItem = comment.closest('li');
     if (!commentItem) throw new Error('comment item missing');
+    expect(screen.getByRole('textbox', { name: 'mock-editor' })).toBeVisible();
+    expect(screen.queryByText('timeline.comments.write')).not.toBeInTheDocument();
 
     await user.click(within(commentItem).getByRole('button', { name: 'timeline.comments.edit' }));
     const edit = within(commentItem).getByRole('textbox', { name: 'mock-editor' });
@@ -343,6 +345,7 @@ describe('IssueTimeline', () => {
       issueId: 'issue-id',
     });
     expect(await screen.findByText('새 댓글')).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'mock-editor' })).toHaveValue('');
   });
 
   it('휴지통 이동과 복구 활동을 서로 다른 의미로 표시한다', async () => {

@@ -14,6 +14,7 @@ import {
   type IssueSummaryResponseDto,
 } from '@rivet/api-client';
 
+import { ProjectLogo } from '@/components/project-logo';
 import { buttonVariants } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Link } from '@/i18n/navigation';
@@ -53,10 +54,12 @@ function relativeUpdatedAt(value: string) {
 }
 
 export function IssueListRow({
+  detailHref,
   issue,
   queryKey,
   density = 'comfortable',
 }: {
+  detailHref?: string;
   issue: IssueSummaryResponseDto;
   queryKey: QueryKey;
   density?: 'compact' | 'comfortable';
@@ -85,13 +88,15 @@ export function IssueListRow({
   });
   const nextAction =
     issue.status === 'REVIEW'
-      ? '완료 확인'
+      ? '배포 현황 보기'
       : issue.workflowSummary.teamWorkCount === 0
         ? '팀 작업 시작'
         : issue.workflowSummary.unassignedCount
           ? '담당자 지정'
           : '업무 보기';
   const nextActionIsDecision = nextAction !== '업무 보기';
+  const href = detailHref ?? `/issues/${encodeURIComponent(issue.identifier)}?tab=work`;
+  const nextActionHref = issue.status === 'REVIEW' ? '/deployments' : href;
 
   return (
     <li className="group border-b last:border-b-0">
@@ -99,12 +104,17 @@ export function IssueListRow({
         className={`grid ${density === 'compact' ? 'min-h-11 gap-2 py-1.5' : 'min-h-16 gap-3 py-2.5'} ${ISSUE_LIST_GRID_COLUMNS} items-center px-3 text-sm`}
       >
         <Link
-          href={`/issues/${encodeURIComponent(issue.identifier)}?tab=work`}
+          href={href}
           className="focus-visible:ring-ring min-w-0 rounded-sm outline-none focus-visible:ring-2"
         >
           <span className="text-muted-foreground mr-2 font-mono text-xs">{issue.identifier}</span>
           <span className="font-medium">{issue.title}</span>
           <span className="text-muted-foreground mt-1 flex min-w-0 items-center gap-1.5 truncate text-xs">
+            <ProjectLogo
+              logoFileId={issue.project.logoFileId}
+              name={issue.project.name}
+              size="xs"
+            />
             <span className="truncate">{issue.project.name}</span>
             <IssueLabelChips emptyLabel="" labels={issue.labels} />
           </span>
@@ -130,7 +140,7 @@ export function IssueListRow({
           {relativeUpdatedAt(issue.updatedAt)}
         </time>
         <Link
-          href={`/issues/${encodeURIComponent(issue.identifier)}?tab=work`}
+          href={nextActionHref}
           className={cn(
             'max-lg:hidden',
             nextActionIsDecision

@@ -228,6 +228,12 @@ export class TeamWorksService {
           status: HttpStatus.UNPROCESSABLE_ENTITY,
         });
       }
+      const appliedStateId = dto.workflowStateId ?? autoStartStateId;
+      const requiresRedeployment =
+        appliedStateId !== undefined &&
+        current.workflowState.category === StateCategory.COMPLETED &&
+        nextCategory !== StateCategory.COMPLETED &&
+        current.deploymentStatus === 'DEPLOYED';
       const changed = await transaction.teamWork.updateMany({
         data: {
           ...(dto.assigneeMembershipId !== undefined
@@ -241,6 +247,7 @@ export class TeamWorksService {
             : autoStartStateId
               ? { workflowStateId: autoStartStateId }
               : {}),
+          ...(requiresRedeployment ? { deploymentStatus: 'REDEPLOY_REQUIRED' } : {}),
           version: { increment: 1 },
         },
         where: { id: teamWorkId, version: dto.version, workspaceId: context.workspaceId },
@@ -286,7 +293,6 @@ export class TeamWorksService {
           });
         }
       }
-      const appliedStateId = dto.workflowStateId ?? autoStartStateId;
       type ActivityFieldChange = {
         after: Prisma.InputJsonValue | typeof Prisma.JsonNull;
         before: Prisma.InputJsonValue | typeof Prisma.JsonNull;
@@ -349,6 +355,20 @@ export class TeamWorksService {
           workspaceId: context.workspaceId,
         },
       });
+      if (requiresRedeployment) {
+        await transaction.activityEvent.create({
+          data: {
+            actorMembershipId: context.membershipId,
+            afterData: 'REDEPLOY_REQUIRED',
+            beforeData: 'DEPLOYED',
+            eventType: 'TEAM_WORK_DEPLOYMENT_CHANGED',
+            fieldName: 'deploymentStatus',
+            issueId: current.issue.id,
+            teamWorkId,
+            workspaceId: context.workspaceId,
+          },
+        });
+      }
       const handoff = dto.handoff
         ? await this.handoffs.createHandoffInTransaction(transaction, context, teamWorkId, {
             bodyMarkdown: dto.handoff.bodyMarkdown,
@@ -358,7 +378,12 @@ export class TeamWorksService {
             kind: HandoffKind.INITIAL,
           })
         : undefined;
-      await this.statuses.recalculate(transaction, context.workspaceId, current.issue.id);
+      await this.statuses.recalculate(
+        transaction,
+        context.workspaceId,
+        current.issue.id,
+        context.membershipId,
+      );
       const changedFields: TeamWorkChangedField[] = [
         ...(dto.workflowStateId || autoStartStateId ? ['WORKFLOW_STATE' as const] : []),
         ...(dto.assigneeMembershipId !== undefined ? ['ASSIGNEE' as const] : []),
@@ -521,7 +546,12 @@ export class TeamWorksService {
             workspaceId: context.workspaceId,
           },
         });
-        await this.statuses.recalculate(transaction, context.workspaceId, current.issue.id);
+        await this.statuses.recalculate(
+          transaction,
+          context.workspaceId,
+          current.issue.id,
+          context.membershipId,
+        );
         const issue = await this.repository.findIssue(
           transaction,
           context.workspaceId,

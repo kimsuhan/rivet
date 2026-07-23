@@ -25,6 +25,7 @@ import {
   useMembersControllerList,
 } from '@rivet/api-client';
 
+import { ProjectLogo } from '@/components/project-logo';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -236,7 +237,11 @@ export function GlobalIssueCreate({
 
   const projectOptions = useMemo(
     () =>
-      (projects.data?.items ?? []).map((project) => ({ label: project.name, value: project.id })),
+      (projects.data?.items ?? []).map((project) => ({
+        label: project.name,
+        logoFileId: project.logoFileId,
+        value: project.id,
+      })),
     [projects.data?.items],
   );
   const priorityOptions = useMemo(
@@ -868,7 +873,15 @@ export function GlobalIssueCreate({
                         className={cn(toolbarTriggerClassName, 'max-w-full')}
                         disabled={templateApplyPending || projects.isPending}
                       >
-                        <FolderKanbanIcon data-icon="inline-start" />
+                        {selectedProject ? (
+                          <ProjectLogo
+                            logoFileId={selectedProject.logoFileId}
+                            name={selectedProject.name}
+                            size="xs"
+                          />
+                        ) : (
+                          <FolderKanbanIcon data-icon="inline-start" />
+                        )}
                         <span className="max-w-56 truncate">
                           {projects.isPending ? labels.optionsLoading : projectTriggerText}
                         </span>
@@ -904,7 +917,11 @@ export function GlobalIssueCreate({
                                   setOpenPopover(null);
                                 }}
                               >
-                                <FolderKanbanIcon data-icon="inline-start" />
+                                <ProjectLogo
+                                  logoFileId={option.logoFileId}
+                                  name={option.label}
+                                  size="xs"
+                                />
                                 <span className="truncate">{option.label}</span>
                                 {projectId === option.value ? (
                                   <CheckIcon data-icon="inline-end" className="ml-auto" />

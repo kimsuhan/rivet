@@ -10,5 +10,6 @@ import type { IssueTeamSummaryResponseDto } from './issueTeamSummaryResponseDto'
 export interface IssueProjectTeamSummaryResponseDto {
   id: string;
   active: boolean;
+  deploymentTrackingEnabled: boolean;
   team: IssueTeamSummaryResponseDto;
 }

@@ -14,6 +14,7 @@ describe('ResourcePurgeHandler', () => {
   const workspaceId = '77a49ce9-f158-4f4d-b898-bb5b309e461f';
   const issueId = 'f57fa7be-1fe9-4744-a8db-704bf989a3cd';
   const projectId = 'de9d55e4-6181-4a8a-8fdf-f8faf536dc99';
+  const logoFileId = '8a7bdbbb-bec5-42f2-9ce5-34eef061f2c4';
   const purgeAt = '2026-08-10T00:00:00.000Z';
   const event: ClaimedOutboxEvent = {
     actorMembershipId: '607629d0-53e6-469d-bbc8-eb86c50a0288',
@@ -43,7 +44,7 @@ describe('ResourcePurgeHandler', () => {
     activityEvent: { deleteMany: jest.fn() },
     apiHandoff: { deleteMany: jest.fn() },
     comment: { deleteMany: jest.fn() },
-    file: { updateMany: jest.fn() },
+    file: { update: jest.fn(), updateMany: jest.fn() },
     issue: { deleteMany: jest.fn(), findFirst: jest.fn() },
     issueFileAttachment: { deleteMany: jest.fn(), findMany: jest.fn() },
     issueLabel: { deleteMany: jest.fn() },
@@ -51,7 +52,7 @@ describe('ResourcePurgeHandler', () => {
     issueTemplate: { updateMany: jest.fn() },
     mention: { deleteMany: jest.fn() },
     notification: { deleteMany: jest.fn() },
-    project: { deleteMany: jest.fn() },
+    project: { deleteMany: jest.fn(), update: jest.fn() },
     projectTeam: { deleteMany: jest.fn() },
     projectRoleTeam: { deleteMany: jest.fn() },
   };
@@ -67,6 +68,7 @@ describe('ResourcePurgeHandler', () => {
       {
         databaseNow: new Date('2026-08-10T00:00:01.000Z'),
         deletedAt: new Date('2026-07-11T00:00:00.000Z'),
+        logoFileId,
         purgeAt: new Date(purgeAt),
       },
     ]);
@@ -217,6 +219,14 @@ describe('ResourcePurgeHandler', () => {
     ).toBeLessThan(transaction.projectTeam.deleteMany.mock.invocationCallOrder[0] ?? -Infinity);
     expect(transaction.projectRoleTeam.deleteMany).toHaveBeenCalled();
     expect(transaction.activityEvent.deleteMany).toHaveBeenCalled();
+    expect(transaction.project.update).toHaveBeenCalledWith({
+      data: { logoFileId: null },
+      where: { workspaceId_id: { id: projectId, workspaceId } },
+    });
+    expect(transaction.file.update).toHaveBeenCalledWith({
+      data: { unlinkedAt: new Date('2026-08-10T00:00:01.000Z') },
+      where: { id: logoFileId },
+    });
     expect(transaction.project.deleteMany).toHaveBeenCalled();
     const signal = JSON.parse(transaction.$executeRaw.mock.calls[0]?.[1] as string) as Record<
       string,

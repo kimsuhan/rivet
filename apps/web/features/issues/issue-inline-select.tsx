@@ -59,7 +59,7 @@ export function IssueInlineSelect({
         items={options}
         value={value}
         onValueChange={(nextValue) => {
-          if (nextValue && nextValue !== value) onValueChange(nextValue);
+          if (nextValue !== null && nextValue !== value) onValueChange(nextValue);
         }}
       >
         <SelectTrigger

@@ -10,6 +10,8 @@ import type { UpdateProjectDtoStatus } from './updateProjectDtoStatus';
 export interface UpdateProjectDto {
   /** @minimum 1 */
   version: number;
+  /** @nullable */
+  logoFileId?: string | null;
   /**
      * @minLength 1
      * @maxLength 200
@@ -35,4 +37,9 @@ export interface UpdateProjectDto {
   targetDate?: string | null;
   /** @maxItems 100 */
   teamIds?: string[];
+  /**
+     * 운영 배포 현황을 관리할 프로젝트 참여 팀 ID
+     * @maxItems 100
+     */
+  deploymentTrackingTeamIds?: string[];
 }

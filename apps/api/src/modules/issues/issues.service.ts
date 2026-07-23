@@ -131,7 +131,12 @@ export class IssuesService {
         dto.projectId,
         dto.initialTeams ?? [],
       );
-      await this.statuses.recalculate(transaction, context.workspaceId, issue.id);
+      await this.statuses.recalculate(
+        transaction,
+        context.workspaceId,
+        issue.id,
+        context.membershipId,
+      );
       await transaction.activityEvent.create({
         data: {
           actorMembershipId: context.membershipId,
@@ -215,11 +220,6 @@ export class IssuesService {
       const current = await this.repository.findIssue(transaction, context.workspaceId, issueId);
       if (current.version !== dto.version)
         conflict('ISSUE_VERSION_CONFLICT', '이슈가 다른 요청에서 변경되었습니다.', current.version);
-      if (dto.statusAction === 'COMPLETE' && current.status !== IssueStatus.REVIEW)
-        conflict(
-          'ISSUE_COMPLETION_NOT_READY',
-          '모든 팀 작업이 완료되어 검토 상태여야 이슈를 완료할 수 있습니다.',
-        );
       await this.assertLabels(transaction, context.workspaceId, dto.labelIds ?? []);
       if (description)
         await assertActiveMentionMemberships(
@@ -255,7 +255,12 @@ export class IssuesService {
       }
       if (description) await this.syncDescription(transaction, context, issueId, description);
       if (dto.statusAction === 'RESUME' || dto.statusAction === 'REOPEN') {
-        status = await this.statuses.recalculate(transaction, context.workspaceId, issueId);
+        status = await this.statuses.recalculate(
+          transaction,
+          context.workspaceId,
+          issueId,
+          context.membershipId,
+        );
       }
       const valueChanges: Array<{
         after: Prisma.InputJsonValue;
@@ -410,7 +415,6 @@ export class IssuesService {
     if (action === 'RESUME' && current === IssueStatus.PAUSED) return IssueStatus.UNSORTED;
     if (action === 'CANCEL' && current !== IssueStatus.CANCELED && current !== IssueStatus.DONE)
       return IssueStatus.CANCELED;
-    if (action === 'COMPLETE' && current === IssueStatus.REVIEW) return IssueStatus.DONE;
     if (action === 'REOPEN' && (current === IssueStatus.DONE || current === IssueStatus.CANCELED))
       return IssueStatus.UNSORTED;
     unprocessable(

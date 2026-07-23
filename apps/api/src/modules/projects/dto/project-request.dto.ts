@@ -77,6 +77,12 @@ export class ProjectListQueryDto {
 }
 
 export class CreateProjectDto {
+  @ApiPropertyOptional({ format: 'uuid', nullable: true, type: String })
+  @Transform(({ value }) => normalizeUuid(value))
+  @IsOptional()
+  @IsUUID('4', { message: '프로젝트 로고 파일 식별자가 올바르지 않습니다.' })
+  logoFileId?: string | null;
+
   @ApiProperty({ maxLength: 200, minLength: 1 })
   @Transform(({ value }) => normalizeString(value))
   @IsString({ message: '프로젝트 이름을 입력해 주세요.' })
@@ -121,6 +127,21 @@ export class CreateProjectDto {
   @ArrayUnique({ message: '같은 팀을 프로젝트에 중복 추가할 수 없습니다.' })
   @IsUUID('4', { each: true, message: '참여 팀 식별자가 올바르지 않습니다.' })
   teamIds?: string[];
+
+  @ApiPropertyOptional({
+    description: '운영 배포 현황을 관리할 프로젝트 참여 팀 ID',
+    format: 'uuid',
+    isArray: true,
+    maxItems: 100,
+    type: String,
+  })
+  @Transform(({ value }) => (Array.isArray(value) ? value.map(normalizeUuid) : value))
+  @IsOptional()
+  @IsArray({ message: '운영 배포 관리 팀 목록이 올바르지 않습니다.' })
+  @ArrayMaxSize(100, { message: '운영 배포 관리 팀은 최대 100개입니다.' })
+  @ArrayUnique({ message: '같은 팀을 운영 배포 관리 대상으로 중복 추가할 수 없습니다.' })
+  @IsUUID('4', { each: true, message: '운영 배포 관리 팀 식별자가 올바르지 않습니다.' })
+  deploymentTrackingTeamIds?: string[];
 }
 
 export class UpdateProjectDto {
@@ -128,6 +149,12 @@ export class UpdateProjectDto {
   @IsInt({ message: '프로젝트 버전이 올바르지 않습니다.' })
   @Min(1, { message: '프로젝트 버전이 올바르지 않습니다.' })
   version!: number;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true, type: String })
+  @Transform(({ value }) => normalizeUuid(value))
+  @IsOptional()
+  @IsUUID('4', { message: '프로젝트 로고 파일 식별자가 올바르지 않습니다.' })
+  logoFileId?: string | null;
 
   @ApiPropertyOptional({ maxLength: 200, minLength: 1 })
   @Transform(({ value }) => normalizeString(value))
@@ -174,6 +201,21 @@ export class UpdateProjectDto {
   @ArrayUnique({ message: '같은 팀을 프로젝트에 중복 추가할 수 없습니다.' })
   @IsUUID('4', { each: true, message: '참여 팀 식별자가 올바르지 않습니다.' })
   teamIds?: string[];
+
+  @ApiPropertyOptional({
+    description: '운영 배포 현황을 관리할 프로젝트 참여 팀 ID',
+    format: 'uuid',
+    isArray: true,
+    maxItems: 100,
+    type: String,
+  })
+  @Transform(({ value }) => (Array.isArray(value) ? value.map(normalizeUuid) : value))
+  @IsOptional()
+  @IsArray({ message: '운영 배포 관리 팀 목록이 올바르지 않습니다.' })
+  @ArrayMaxSize(100, { message: '운영 배포 관리 팀은 최대 100개입니다.' })
+  @ArrayUnique({ message: '같은 팀을 운영 배포 관리 대상으로 중복 추가할 수 없습니다.' })
+  @IsUUID('4', { each: true, message: '운영 배포 관리 팀 식별자가 올바르지 않습니다.' })
+  deploymentTrackingTeamIds?: string[];
 }
 
 export class ArchiveProjectDto {

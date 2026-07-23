@@ -7,6 +7,7 @@ import {
   useTeamsControllerListWorkflowStates,
 } from '@rivet/api-client';
 
+import { ProjectLogo } from '@/components/project-logo';
 import { Button } from '@/components/ui/button';
 import { workflowStateProgress } from '@/components/workflow-state-icon';
 import { Link } from '@/i18n/navigation';
@@ -24,16 +25,18 @@ export const MY_WORK_GRID_COLUMNS =
 export function MyWorkListRow({
   work,
   density = 'comfortable',
+  savedViewId,
 }: {
   work: TeamWorkSummaryResponseDto;
   density?: 'compact' | 'comfortable';
+  savedViewId?: string | null;
 }) {
   const states = useTeamsControllerListWorkflowStates(work.projectTeam.team.id, undefined, {
     query: { retry: false },
   });
   const stateMutation = useTeamWorkInlineMutation(work, 'workflowState');
   const [completionModalOpen, setCompletionModalOpen] = useState(false);
-  const href = myWorkHref(work.identifier);
+  const href = myWorkHref(work.identifier, 'work', savedViewId);
   const retry = () => {
     if (stateMutation.variables) stateMutation.mutate(stateMutation.variables);
   };
@@ -74,7 +77,14 @@ export function MyWorkListRow({
           </p>
         </div>
         <div className="min-w-0">
-          <p className="text-muted-foreground truncate">{work.issue.project.name}</p>
+          <p className="text-muted-foreground flex min-w-0 items-center gap-2">
+            <ProjectLogo
+              logoFileId={work.issue.project.logoFileId}
+              name={work.issue.project.name}
+              size="xs"
+            />
+            <span className="truncate">{work.issue.project.name}</span>
+          </p>
           <div className="mt-1 min-w-0">
             <IssueLabelChips emptyLabel="" labels={work.issue.labels} />
           </div>

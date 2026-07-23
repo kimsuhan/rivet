@@ -33,6 +33,7 @@ type CleanupFile = {
 type MetadataFile = CleanupFile & {
   avatarUser: { id: string } | null;
   issueAttachments: { id: string }[];
+  logoProject: { id: string } | null;
 };
 
 type UnlinkedCleanupResult = {
@@ -274,6 +275,11 @@ export class FileCleanupService implements OnApplicationBootstrap, OnApplication
           FROM "issue_file_attachments" AS a
           WHERE a."file_id" = f."id"
         )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "projects" AS p
+          WHERE p."logo_file_id" = f."id"
+        )
       ORDER BY f."unlinked_at", f."id"
       LIMIT ${DATABASE_BATCH_SIZE}
     `;
@@ -324,6 +330,10 @@ export class FileCleanupService implements OnApplicationBootstrap, OnApplication
             SELECT 1
             FROM "issue_file_attachments" AS a
             WHERE a."file_id" = ${fileId}::uuid
+          ) OR EXISTS (
+            SELECT 1
+            FROM "projects" AS p
+            WHERE p."logo_file_id" = ${fileId}::uuid
           ) AS "linked"
       `;
 
@@ -354,6 +364,9 @@ export class FileCleanupService implements OnApplicationBootstrap, OnApplication
             SELECT 1
             FROM "issue_file_attachments" AS a
             WHERE a."file_id" = f."id"
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM "projects" AS p WHERE p."logo_file_id" = f."id"
           )
         RETURNING f."id"
       `;
@@ -469,11 +482,16 @@ export class FileCleanupService implements OnApplicationBootstrap, OnApplication
         avatarUser: { select: { id: true } },
         id: true,
         issueAttachments: { select: { id: true }, take: 1 },
+        logoProject: { select: { id: true } },
         storageKey: true,
       },
       take: METADATA_SCAN_LIMIT,
       where: {
-        OR: [{ avatarUser: { isNot: null } }, { issueAttachments: { some: {} } }],
+        OR: [
+          { avatarUser: { isNot: null } },
+          { issueAttachments: { some: {} } },
+          { logoProject: { isNot: null } },
+        ],
         ...(cursor ? { id: { gt: cursor } } : {}),
       },
     });

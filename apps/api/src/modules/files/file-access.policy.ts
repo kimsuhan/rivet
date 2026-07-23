@@ -11,8 +11,12 @@ export function canAccessFile(
 ): boolean {
   const linkedToAvatar = file.avatarUser !== null;
   const linkedToIssue = file.issueAttachments.length > 0;
+  const linkedToProject = file.logoProject !== null;
   const canAccessUnlinked =
-    !linkedToAvatar && !linkedToIssue && file.uploadedByUserId === context.userId;
+    !linkedToAvatar &&
+    !linkedToIssue &&
+    !linkedToProject &&
+    file.uploadedByUserId === context.userId;
   const canAccessOwnAvatar = file.avatarUser?.id === context.userId;
   const canAccessWorkspaceAvatar =
     context.workspaceId !== null &&
@@ -20,8 +24,16 @@ export function canAccessFile(
   const canAccessIssue =
     context.workspaceId !== null &&
     file.issueAttachments.some(({ workspaceId }) => workspaceId === context.workspaceId);
+  const canAccessProject =
+    context.workspaceId !== null && file.logoProject?.workspaceId === context.workspaceId;
 
-  return canAccessUnlinked || canAccessOwnAvatar || canAccessWorkspaceAvatar || canAccessIssue;
+  return (
+    canAccessUnlinked ||
+    canAccessOwnAvatar ||
+    canAccessWorkspaceAvatar ||
+    canAccessIssue ||
+    canAccessProject
+  );
 }
 
 export function bodyAttachmentWhere(

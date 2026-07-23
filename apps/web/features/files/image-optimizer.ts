@@ -141,7 +141,7 @@ export async function optimizeWorkspaceImage(file: File): Promise<File> {
   }
 }
 
-export async function optimizeProfileImage(file: File): Promise<File> {
+async function optimizeSquareImage(file: File): Promise<File> {
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
     throw new ImageOptimizationError('INVALID_IMAGE');
   }
@@ -182,3 +182,6 @@ export async function optimizeProfileImage(file: File): Promise<File> {
     image.close();
   }
 }
+
+export const optimizeProfileImage = optimizeSquareImage;
+export const optimizeProjectLogo = optimizeSquareImage;

@@ -28,12 +28,39 @@ vi.mock('@rivet/api-client', () => ({
     },
   }),
   useNotificationsControllerUnreadCount: () => ({ data: { count: 7 } }),
+  useDeploymentsControllerList: () => ({ data: { items: [], totalCount: 2 } }),
   useProjectsControllerList: () => ({
     data: {
       items: [
         {
           id: 'project-1',
           name: '리벳 웹',
+          projectTeams: [
+            {
+              active: true,
+              team: { id: 'team-web' },
+            },
+          ],
+        },
+        {
+          id: 'project-2',
+          name: '리벳 API',
+          projectTeams: [
+            {
+              active: true,
+              team: { id: 'team-api' },
+            },
+          ],
+        },
+        {
+          id: 'project-3',
+          name: '종료된 웹 프로젝트',
+          projectTeams: [
+            {
+              active: false,
+              team: { id: 'team-web' },
+            },
+          ],
         },
       ],
       nextCursor: null,
@@ -211,10 +238,12 @@ vi.mock('next/navigation', () => ({
 const labels = {
   brandLabel: 'Rivet 홈',
   desktopNavigation: '주 탐색',
+  deploymentPending: '배포 현황, 내 팀에서 처리 가능한 배포 {count}건',
   inboxUnread: '알림함, 읽지 않은 알림 {count}개',
   mobileNavigation: '모바일 주 탐색',
   openIssueCreate: '이슈 만들기 열기',
   navigation: {
+    deployments: '배포 현황',
     inbox: '알림함',
     issues: '이슈',
     myIssues: '내 작업',
@@ -450,6 +479,7 @@ describe('AppShell', () => {
       '/my-issues?view=saved-my-work&sort=executionOrder&sortDirection=desc',
       '/issues',
       '/issues?view=saved-issues&query=%EA%B8%B4%EA%B8%89&sort=priority&sortDirection=desc',
+      '/deployments',
       '/projects',
       '/projects/project-1',
     ]);
@@ -615,7 +645,41 @@ describe('AppShell', () => {
     );
   });
 
-  it('데스크톱 사이드바에서 프로젝트를 하위 메뉴로 표시하고 해당 이슈 화면으로 연결한다', () => {
+  it('저장된 보기에서 연 이슈 상세에서도 해당 보기를 활성 상태로 유지한다', () => {
+    pathname = '/issues/F-1';
+    window.history.replaceState({}, '', '/ko/issues/F-1?tab=work&view=saved-issues');
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    const desktopNavigation = screen.getByRole('navigation', { name: labels.desktopNavigation });
+    const issueView = within(
+      within(desktopNavigation).getByRole('group', { name: '이슈 저장된 보기' }),
+    ).getByRole('link', { name: /긴급 이슈/u });
+
+    expect(issueView).toHaveAttribute('aria-current', 'location');
+  });
+
+  it('저장된 보기에서 연 내 작업 상세에서도 해당 보기를 활성 상태로 유지한다', () => {
+    pathname = '/my-issues/WEB-12';
+    window.history.replaceState({}, '', '/ko/my-issues/WEB-12?tab=work&view=saved-my-work');
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    const desktopNavigation = screen.getByRole('navigation', { name: labels.desktopNavigation });
+    const myWorkView = within(
+      within(desktopNavigation).getByRole('group', { name: '내 작업 저장된 보기' }),
+    ).getByRole('link', { name: '오늘 할 일' });
+
+    expect(myWorkView).toHaveAttribute('aria-current', 'location');
+  });
+
+  it('데스크톱 사이드바에서 내 팀이 참여하는 프로젝트만 표시하고 해당 이슈 화면으로 연결한다', () => {
     pathname = '/projects/project-1';
     window.history.replaceState({}, '', '/ko/projects/project-1');
 
@@ -638,6 +702,10 @@ describe('AppShell', () => {
     expect(projectLink).toHaveAttribute('aria-current', 'location');
     expect(projectLink).toHaveAttribute('href', '/projects/project-1');
     expect(projectLink).toHaveAttribute('title', '리벳 웹 프로젝트 이슈 보기');
+    expect(within(projectGroup).queryByRole('link', { name: '리벳 API' })).not.toBeInTheDocument();
+    expect(
+      within(projectGroup).queryByRole('link', { name: '종료된 웹 프로젝트' }),
+    ).not.toBeInTheDocument();
   });
 
   it('내 작업 상세 경로에서는 내 작업 탐색을 활성화한다', () => {
@@ -666,6 +734,25 @@ describe('AppShell', () => {
 
     expect(screen.getAllByRole('link', { name: '알림함, 읽지 않은 알림 7개' })).toHaveLength(2);
     expect(screen.getAllByText('7')).toHaveLength(3);
+  });
+
+  it('배포 현황에는 내 팀에서 처리 가능한 배포 수를 표시한다', () => {
+    render(
+      <AppShell labels={labels}>
+        <p>업무 내용</p>
+      </AppShell>,
+    );
+
+    const desktopNavigation = screen.getByRole('navigation', {
+      name: labels.desktopNavigation,
+    });
+
+    expect(
+      within(desktopNavigation).getByRole('link', {
+        name: '배포 현황, 내 팀에서 처리 가능한 배포 2건',
+      }),
+    ).toBeInTheDocument();
+    expect(within(desktopNavigation).getAllByText('2')).toHaveLength(2);
   });
 
   it('데스크톱 만들기 버튼으로 모달을 열고 닫은 뒤 트리거 포커스를 복원한다', async () => {
