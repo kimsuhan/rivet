@@ -415,9 +415,6 @@ export function IssueTimeline({
     const label = readCommentQuoteLabel(issueId);
     return label ? `> ${label}\n\n` : '';
   });
-  const [commentComposerOpen, setCommentComposerOpen] = useState(
-    () => mode === 'comments' && Boolean(readCommentQuoteLabel(issueId)),
-  );
   const [canSubmitComment, setCanSubmitComment] = useState(true);
   const createComment = useIssueCollaborationControllerCreateComment();
 
@@ -641,26 +638,8 @@ export function IssueTimeline({
         </Button>
       ) : null}
 
-      {mode === 'comments' && !commentComposerOpen ? (
-        <Button
-          type="button"
-          variant="ghost"
-          className="bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground mt-4 w-full justify-start"
-          onClick={() => setCommentComposerOpen(true)}
-        >
-          <MessageSquareIcon aria-hidden="true" className="size-4" />
-          {t('timeline.comments.write')}
-        </Button>
-      ) : null}
-
-      {mode === 'comments' && commentComposerOpen ? (
-        <div className="mt-6 flex flex-col gap-3" aria-labelledby="new-comment-title">
-          <div className="flex items-center gap-2">
-            <MessageSquareIcon aria-hidden="true" className="text-muted-foreground size-4" />
-            <h3 id="new-comment-title" className="text-sm font-semibold">
-              {t('timeline.comments.write')}
-            </h3>
-          </div>
+      {mode === 'comments' ? (
+        <div className="mt-4 flex flex-col gap-3">
           <CommentEditor
             charLimit={50_000}
             disabled={createComment.isPending}
@@ -698,7 +677,6 @@ export function IssueTimeline({
                     onSuccess: (created) => {
                       setTimelineData((data) => appendComment(data, created));
                       setCommentDraft('');
-                      setCommentComposerOpen(false);
                       void refresh().catch(() => undefined);
                     },
                   },

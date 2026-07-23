@@ -501,6 +501,7 @@ export function AppShell({ children, labels }: { children: ReactNode; labels: Sh
         {session.data?.authenticated && href === '/projects' ? (
           <ProjectSidebarNavigation
             expanded={sectionExpanded}
+            memberTeamIds={memberTeamIds}
             onHasItemsChange={(hasItems) => setSectionHasItems(href, hasItems)}
           />
         ) : null}

@@ -34,6 +34,32 @@ vi.mock('@rivet/api-client', () => ({
         {
           id: 'project-1',
           name: '리벳 웹',
+          projectTeams: [
+            {
+              active: true,
+              team: { id: 'team-web' },
+            },
+          ],
+        },
+        {
+          id: 'project-2',
+          name: '리벳 API',
+          projectTeams: [
+            {
+              active: true,
+              team: { id: 'team-api' },
+            },
+          ],
+        },
+        {
+          id: 'project-3',
+          name: '종료된 웹 프로젝트',
+          projectTeams: [
+            {
+              active: false,
+              team: { id: 'team-web' },
+            },
+          ],
         },
       ],
       nextCursor: null,
@@ -649,7 +675,7 @@ describe('AppShell', () => {
     expect(myWorkView).toHaveAttribute('aria-current', 'location');
   });
 
-  it('데스크톱 사이드바에서 프로젝트를 하위 메뉴로 표시하고 해당 이슈 화면으로 연결한다', () => {
+  it('데스크톱 사이드바에서 내 팀이 참여하는 프로젝트만 표시하고 해당 이슈 화면으로 연결한다', () => {
     pathname = '/projects/project-1';
     window.history.replaceState({}, '', '/ko/projects/project-1');
 
@@ -672,6 +698,10 @@ describe('AppShell', () => {
     expect(projectLink).toHaveAttribute('aria-current', 'location');
     expect(projectLink).toHaveAttribute('href', '/projects/project-1');
     expect(projectLink).toHaveAttribute('title', '리벳 웹 프로젝트 이슈 보기');
+    expect(within(projectGroup).queryByRole('link', { name: '리벳 API' })).not.toBeInTheDocument();
+    expect(
+      within(projectGroup).queryByRole('link', { name: '종료된 웹 프로젝트' }),
+    ).not.toBeInTheDocument();
   });
 
   it('내 작업 상세 경로에서는 내 작업 탐색을 활성화한다', () => {

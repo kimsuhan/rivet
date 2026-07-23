@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import {
@@ -67,7 +67,6 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const DEFAULT_LABEL_COLOR = '#9A8CF2';
-const HEX_COLOR_PATTERN = /^#[0-9A-F]{6}$/;
 const LABEL_COLOR_OPTIONS = [
   { label: 'colorLavender', value: '#9A8CF2' },
   { label: 'colorBlue', value: '#72A7F2' },
@@ -157,7 +156,15 @@ export type LabelSettingsLabels = {
   title: string;
 };
 
-function LabelColor({ color, label }: { color: string; label: string }) {
+function LabelColor({
+  color,
+  label,
+  showCode,
+}: {
+  color: string;
+  label: string;
+  showCode: boolean;
+}) {
   return (
     <span className="flex shrink-0 items-center gap-2">
       <span
@@ -166,7 +173,7 @@ function LabelColor({ color, label }: { color: string; label: string }) {
         style={{ backgroundColor: color }}
       />
       <span className="sr-only">{label}</span>
-      <code className="text-muted-foreground text-xs">{color}</code>
+      {showCode ? <code className="text-muted-foreground text-xs">{color}</code> : null}
     </span>
   );
 }
@@ -186,7 +193,11 @@ function LabelRows({
     <ul className="border-t">
       {items.map((label) => (
         <li key={label.id} className="flex min-h-14 items-center gap-4 border-b py-2">
-          <LabelColor color={label.color} label={`${labels.colorPreview}: ${label.color}`} />
+          <LabelColor
+            color={label.color}
+            label={`${labels.colorPreview}: ${label.color}`}
+            showCode={!LABEL_COLOR_VALUES.has(label.color.toUpperCase())}
+          />
           <span className="min-w-0 flex-1 truncate text-sm font-medium">{label.name}</span>
           <div className="flex shrink-0 items-center gap-1">
             <Button
@@ -419,10 +430,6 @@ function LabelFormDialog({
   });
   const createLabel = useLabelsControllerCreate();
   const updateLabel = useLabelsControllerUpdate();
-  const color = useWatch({ control: form.control, name: 'color' });
-  const previewColor = HEX_COLOR_PATTERN.test(color.toUpperCase())
-    ? color.toUpperCase()
-    : DEFAULT_LABEL_COLOR;
   const [version, setVersion] = useState(label?.version ?? 1);
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
   const mutation = label ? updateLabel : createLabel;
@@ -586,7 +593,7 @@ function LabelFormDialog({
                     {colorOptions.map((option) => (
                       <label
                         key={option.value}
-                        className="border-border bg-background hover:bg-muted focus-within:border-ring focus-within:ring-ring/50 has-[:checked]:border-primary/50 has-[:checked]:bg-primary/10 flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm outline-none focus-within:ring-2"
+                        className="border-border bg-background hover:bg-muted focus-within:border-ring focus-within:ring-ring/50 has-[:checked]:border-primary/50 has-[:checked]:bg-primary/10 flex min-h-11 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-sm outline-none focus-within:ring-2"
                       >
                         <input
                           type="radio"
@@ -601,10 +608,14 @@ function LabelFormDialog({
                         />
                         <span
                           aria-hidden="true"
-                          className="size-4 rounded-full border"
+                          className="size-4 shrink-0 rounded-full border"
                           style={{ backgroundColor: option.value }}
                         />
-                        <span>
+                        <span
+                          className={
+                            option.label === 'colorCustom' ? undefined : 'whitespace-nowrap'
+                          }
+                        >
                           {labels[option.label]}
                           {option.label === 'colorCustom' ? ` (${option.value})` : ''}
                         </span>
@@ -617,22 +628,6 @@ function LabelFormDialog({
                   <FieldError id="label-color-error" errors={[form.formState.errors.color]} />
                 </FieldSet>
               </FieldGroup>
-
-              <output
-                htmlFor="label-color"
-                aria-live="polite"
-                className="bg-surface-1 flex items-center gap-3 rounded-md border px-3 py-2"
-              >
-                <span
-                  aria-hidden="true"
-                  className="h-8 w-1.5 rounded-full"
-                  style={{ backgroundColor: previewColor }}
-                />
-                <span className="flex flex-col gap-0.5">
-                  <span className="text-muted-foreground text-xs">{labels.colorPreview}</span>
-                  <code className="text-sm">{previewColor}</code>
-                </span>
-              </output>
             </div>
 
             <DialogFooter>

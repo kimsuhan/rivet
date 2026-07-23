@@ -125,6 +125,9 @@ describe('IssueInlineSelect', () => {
     expect(todo.querySelector('[data-slot="inline-select-item-icon"]')).toHaveClass(
       'lucide-circle',
     );
+    expect(todo.querySelector('[data-slot="inline-select-item-icon"]')?.parentElement).toHaveClass(
+      'items-center',
+    );
     await user.click(todo);
     expect(onValueChange).toHaveBeenCalledWith('TODO');
   });
