@@ -72,6 +72,12 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
   const categories = parseCsv(category);
   const projectId = searchParams.get('projectId') ?? '';
   const projectIds = parseCsv(projectId);
+  const priority = mode === 'my' ? (searchParams.get('priority') ?? '') : '';
+  const priorities = parseCsv(priority);
+  const teamId = mode === 'my' ? (searchParams.get('teamId') ?? '') : '';
+  const teamIds = parseCsv(teamId);
+  const workflowStateId = mode === 'my' ? (searchParams.get('workflowStateId') ?? '') : '';
+  const workflowStateIds = parseCsv(workflowStateId);
   const query = searchParams.get('query') ?? '';
   const savedViewId = searchParams.get('view');
   const sort = searchParams.get('sort') ?? (mode === 'my' ? 'executionOrder' : 'updatedAt');
@@ -90,6 +96,9 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
     ...(query ? { query } : {}),
     ...(projectId ? { projectId } : {}),
     ...(category && category !== MY_WORK_CATEGORIES ? { stateCategory: category } : {}),
+    ...(priority ? { priority } : {}),
+    ...(teamId ? { teamId } : {}),
+    ...(workflowStateId ? { workflowStateId } : {}),
     sort,
     sortDirection,
     density,
@@ -105,6 +114,9 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
         : {}),
     ...(projectId ? { projectId } : {}),
     ...(mode === 'team' && category ? { stateCategory: category as never } : {}),
+    ...(mode === 'my' && priority ? { priority: priority as never } : {}),
+    ...(mode === 'my' && teamId ? { teamId } : {}),
+    ...(mode === 'my' && workflowStateId ? { workflowStateId } : {}),
     ...(query ? { query } : {}),
     limit: 50,
     sort: sort as 'executionOrder' | 'priority' | 'createdAt' | 'updatedAt' | 'status',
@@ -146,7 +158,11 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
   );
   const activeFilterCount =
     mode === 'my'
-      ? Number(projectIds.length > 0) + Number(Boolean(selectedCategory))
+      ? Number(projectIds.length > 0) +
+        Number(Boolean(selectedCategory)) +
+        Number(priorities.length > 0) +
+        Number(teamIds.length > 0) +
+        Number(workflowStateIds.length > 0)
       : Number(Boolean(selectedCategory));
   return (
     <section className="mx-auto max-w-[1440px] space-y-5" aria-labelledby="team-work-list-title">
@@ -213,7 +229,15 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
                       className="w-full"
                       size="sm"
                       variant="ghost"
-                      onClick={() => replaceMany({ projectId: '', stateCategory: '' })}
+                      onClick={() =>
+                        replaceMany({
+                          priority: '',
+                          projectId: '',
+                          stateCategory: '',
+                          teamId: '',
+                          workflowStateId: '',
+                        })
+                      }
                     >
                       필터 초기화
                     </Button>
@@ -249,7 +273,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
             />
           }
           activeFilters={
-            query || projectId || selectedCategory ? (
+            query || projectId || selectedCategory || priority || teamId || workflowStateId ? (
               <>
                 {query ? (
                   <Button size="xs" variant="secondary" onClick={() => replace('query', '')}>
@@ -280,10 +304,41 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
                     <X data-icon="inline-end" aria-label="상태 필터 제거" />
                   </Button>
                 ) : null}
+                {priority ? (
+                  <Button size="xs" variant="secondary" onClick={() => replace('priority', '')}>
+                    우선순위: {priorities.length}개 조건
+                    <X data-icon="inline-end" aria-label="우선순위 필터 제거" />
+                  </Button>
+                ) : null}
+                {teamId ? (
+                  <Button size="xs" variant="secondary" onClick={() => replace('teamId', '')}>
+                    팀: {teamIds.length}개 조건
+                    <X data-icon="inline-end" aria-label="팀 필터 제거" />
+                  </Button>
+                ) : null}
+                {workflowStateId ? (
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={() => replace('workflowStateId', '')}
+                  >
+                    워크플로 상태: {workflowStateIds.length}개 조건
+                    <X data-icon="inline-end" aria-label="워크플로 상태 필터 제거" />
+                  </Button>
+                ) : null}
                 <Button
                   size="xs"
                   variant="ghost"
-                  onClick={() => replaceMany({ projectId: '', query: '', stateCategory: '' })}
+                  onClick={() =>
+                    replaceMany({
+                      priority: '',
+                      projectId: '',
+                      query: '',
+                      stateCategory: '',
+                      teamId: '',
+                      workflowStateId: '',
+                    })
+                  }
                 >
                   모두 지우기
                 </Button>
@@ -457,7 +512,12 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           icon={ListTodo}
           title={
             mode === 'my'
-              ? query || projectId || searchParams.get('stateCategory')
+              ? query ||
+                projectId ||
+                priority ||
+                teamId ||
+                workflowStateId ||
+                searchParams.get('stateCategory')
                 ? '조건에 맞는 작업이 없습니다'
                 : '현재 할당된 작업이 없습니다'
               : '표시할 팀 작업이 없습니다'
