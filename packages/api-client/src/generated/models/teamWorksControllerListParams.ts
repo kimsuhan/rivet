@@ -5,7 +5,6 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { TeamWorksControllerListPriority } from './teamWorksControllerListPriority';
 import type { TeamWorksControllerListSort } from './teamWorksControllerListSort';
 import type { TeamWorksControllerListSortDirection } from './teamWorksControllerListSortDirection';
 import type { TeamWorksControllerListStateCategory } from './teamWorksControllerListStateCategory';
@@ -46,7 +45,7 @@ stateCategory?: TeamWorksControllerListStateCategory;
  * 쉼표로 구분한 상위 이슈 우선순위
  * @maxLength 100
  */
-priority?: TeamWorksControllerListPriority;
+priority?: string;
 /**
  * 쉼표로 구분한 멤버십 ID 또는 me
  * @maxLength 2048

@@ -405,7 +405,10 @@ export class TeamWorkListQueryDto {
   @MaxLength(100)
   stateCategory?: string;
 
-  @ApiPropertyOptional({ description: '쉼표로 구분한 상위 이슈 우선순위', enum: IssuePriority })
+  @ApiPropertyOptional({
+    description: '쉼표로 구분한 상위 이슈 우선순위',
+    example: 'HIGH,URGENT',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)

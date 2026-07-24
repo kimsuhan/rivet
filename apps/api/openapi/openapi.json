@@ -6713,14 +6713,8 @@
             "description": "쉼표로 구분한 상위 이슈 우선순위",
             "schema": {
               "maxLength": 100,
-              "type": "string",
-              "enum": [
-                "NONE",
-                "LOW",
-                "MEDIUM",
-                "HIGH",
-                "URGENT"
-              ]
+              "example": "HIGH,URGENT",
+              "type": "string"
             }
           },
           {
@@ -6896,14 +6890,8 @@
             "description": "쉼표로 구분한 상위 이슈 우선순위",
             "schema": {
               "maxLength": 100,
-              "type": "string",
-              "enum": [
-                "NONE",
-                "LOW",
-                "MEDIUM",
-                "HIGH",
-                "URGENT"
-              ]
+              "example": "HIGH,URGENT",
+              "type": "string"
             }
           },
           {

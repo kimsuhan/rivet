@@ -6,7 +6,6 @@
  * OpenAPI spec version: 1.0
  */
 import type { TeamWorksControllerGroupsGroupBy } from './teamWorksControllerGroupsGroupBy';
-import type { TeamWorksControllerGroupsPriority } from './teamWorksControllerGroupsPriority';
 import type { TeamWorksControllerGroupsStateCategory } from './teamWorksControllerGroupsStateCategory';
 import type { TeamWorksControllerGroupsSubGroupBy } from './teamWorksControllerGroupsSubGroupBy';
 import type { TeamWorksControllerGroupsUnassigned } from './teamWorksControllerGroupsUnassigned';
@@ -46,7 +45,7 @@ stateCategory?: TeamWorksControllerGroupsStateCategory;
  * 쉼표로 구분한 상위 이슈 우선순위
  * @maxLength 100
  */
-priority?: TeamWorksControllerGroupsPriority;
+priority?: string;
 /**
  * 쉼표로 구분한 멤버십 ID 또는 me
  * @maxLength 2048
