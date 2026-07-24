@@ -5,10 +5,20 @@ const SAVED_VIEW_CONFIGURATION_KEYS = [
   'projectId',
   'status',
   'stateCategory',
+  'priority',
+  'labelId',
+  'createdByMembershipId',
+  'assigneeMembershipId',
+  'unassigned',
+  'teamId',
+  'workflowStateId',
   'sort',
   'sortDirection',
   'sorts',
   'density',
+  'visibleFields',
+  'groupBy',
+  'subGroupBy',
 ] as const;
 
 const SAVED_VIEW_QUERY_KEYS = ['view', ...SAVED_VIEW_CONFIGURATION_KEYS] as const;
@@ -39,6 +49,11 @@ export function normalizeSavedViewConfiguration(
     if (key === 'sorts') {
       const sorts = normalizeIssueSorts(value);
       if (sorts) normalized.sorts = serializeIssueSorts(sorts);
+      continue;
+    }
+    if (key === 'visibleFields' && Array.isArray(value)) {
+      const fields = value.filter((field): field is string => typeof field === 'string');
+      normalized.visibleFields = fields.length ? [...new Set(fields)].sort().join(',') : 'none';
       continue;
     }
     if (typeof value === 'string' && value) normalized[key] = value;

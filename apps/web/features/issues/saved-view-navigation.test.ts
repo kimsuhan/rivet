@@ -27,4 +27,32 @@ describe('saved view navigation', () => {
       normalizeSavedViewConfiguration({ sort: 'executionOrder', sortDirection: 'desc' }),
     ).toEqual({ sort: 'executionOrder', sortDirection: 'desc' });
   });
+
+  it('여러 필터와 표시 필드, 2단계 그룹 설정을 저장 보기 주소로 복원한다', () => {
+    const configuration = {
+      assigneeMembershipId: 'member-1,member-2',
+      groupBy: 'projectId',
+      projectId: 'project-1,project-2',
+      status: 'DONE,IN_PROGRESS',
+      subGroupBy: 'status',
+      unassigned: 'true',
+      visibleFields: ['updatedAt', 'createdAt', 'updatedAt'],
+    };
+
+    expect(normalizeSavedViewConfiguration(configuration)).toEqual({
+      projectId: 'project-1,project-2',
+      status: 'DONE,IN_PROGRESS',
+      assigneeMembershipId: 'member-1,member-2',
+      unassigned: 'true',
+      visibleFields: 'createdAt,updatedAt',
+      groupBy: 'projectId',
+      subGroupBy: 'status',
+    });
+  });
+
+  it('표시 필드를 모두 숨긴 설정도 잃지 않는다', () => {
+    expect(normalizeSavedViewConfiguration({ visibleFields: [] })).toEqual({
+      visibleFields: 'none',
+    });
+  });
 });

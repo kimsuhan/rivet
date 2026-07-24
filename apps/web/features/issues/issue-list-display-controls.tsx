@@ -13,27 +13,42 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+import { ListViewConfigurationControls } from './list-view-configuration-controls';
+
 export function IssueListDisplayControls({
   density,
+  fieldOptions,
+  groupBy,
+  groupOptions,
   onDensityChange,
+  onGroupingChange,
   onSortChange,
   onSortDirectionChange,
+  onVisibleFieldsChange,
   sort,
   sortDirection,
   sortLabel,
   sortOptions,
+  subGroupBy,
+  visibleFields,
 }: {
   density: string;
+  fieldOptions?: ReadonlyArray<{ label: string; value: string }>;
+  groupBy?: string;
+  groupOptions?: ReadonlyArray<{ label: string; value: string }>;
   onDensityChange: (value: 'comfortable' | 'compact') => void;
+  onGroupingChange?: (groupBy: string, subGroupBy: string) => void;
   onSortChange: (value: string) => void;
   onSortDirectionChange: (value: 'asc' | 'desc') => void;
+  onVisibleFieldsChange?: (value: string[]) => void;
   sort: string;
   sortDirection: string;
   sortLabel: string;
   sortOptions: Array<{ label: string; value: string }>;
+  subGroupBy?: string;
+  visibleFields?: readonly string[];
 }) {
   const descending = sortDirection === 'desc';
-  const compact = density === 'compact';
   const directionLabel = descending ? '내림차순' : '오름차순';
   const sortOption = sortOptions.find((option) => option.value === sort);
 
@@ -94,46 +109,64 @@ export function IssueListDisplayControls({
           </div>
         </PopoverContent>
       </Popover>
-      <Popover>
-        <PopoverTrigger
-          type="button"
-          aria-label={`보기 설정: ${compact ? '촘촘히 보기' : '여유 보기'}`}
-          title="보기 설정"
-          className={buttonVariants({
-            size: 'icon-sm',
-            variant: compact ? 'secondary' : 'ghost',
-          })}
-        >
-          <Settings2 />
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-56 gap-2 p-3">
-          <PopoverTitle className="text-sm">보기 설정</PopoverTitle>
-          <div className="space-y-1" aria-label="목록 밀도">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="w-full justify-start"
-              onClick={() => onDensityChange('comfortable')}
-            >
-              <Rows3 data-icon="inline-start" />
-              여유 보기
-              {!compact ? <Check className="ml-auto" aria-label="선택됨" /> : null}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="w-full justify-start"
-              onClick={() => onDensityChange('compact')}
-            >
-              <Rows3 data-icon="inline-start" className="scale-y-75" />
-              촘촘히 보기
-              {compact ? <Check className="ml-auto" aria-label="선택됨" /> : null}
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
+      {fieldOptions &&
+      groupOptions &&
+      onGroupingChange &&
+      onVisibleFieldsChange &&
+      visibleFields ? (
+        <ListViewConfigurationControls
+          density={density}
+          fieldOptions={fieldOptions}
+          groupBy={groupBy ?? ''}
+          groupOptions={groupOptions}
+          onDensityChange={onDensityChange}
+          onGroupingChange={onGroupingChange}
+          onVisibleFieldsChange={onVisibleFieldsChange}
+          subGroupBy={subGroupBy ?? ''}
+          visibleFields={visibleFields}
+        />
+      ) : (
+        <Popover>
+          <PopoverTrigger
+            type="button"
+            aria-label={`보기 설정: ${density === 'compact' ? '촘촘히 보기' : '여유 보기'}`}
+            title="보기 설정"
+            className={buttonVariants({
+              size: 'icon-sm',
+              variant: density === 'compact' ? 'secondary' : 'ghost',
+            })}
+          >
+            <Settings2 />
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-56 gap-2 p-3">
+            <PopoverTitle className="text-sm">보기 설정</PopoverTitle>
+            <div className="space-y-1" aria-label="목록 밀도">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={() => onDensityChange('comfortable')}
+              >
+                <Rows3 data-icon="inline-start" />
+                여유 보기
+                {density !== 'compact' ? <Check className="ml-auto" aria-label="선택됨" /> : null}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={() => onDensityChange('compact')}
+              >
+                <Rows3 data-icon="inline-start" className="scale-y-75" />
+                촘촘히 보기
+                {density === 'compact' ? <Check className="ml-auto" aria-label="선택됨" /> : null}
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }

@@ -53,6 +53,7 @@ function parseSortValue(value: unknown, field: IssueSortField): Date | number {
 
 function normalizedFilterPayload(filters: IssueListFilters): Record<string, unknown> {
   return {
+    assigneeIds: [...filters.assigneeIds].sort(),
     createdFrom: filters.createdFrom?.toISOString() ?? null,
     createdTo: filters.createdTo?.toISOString() ?? null,
     creatorIds: [...filters.creatorIds].sort(),
@@ -61,6 +62,7 @@ function normalizedFilterPayload(filters: IssueListFilters): Record<string, unkn
     projectIds: [...filters.projectIds].sort(),
     query: filters.query ?? null,
     statuses: [...filters.statuses].sort(),
+    unassigned: filters.unassigned,
     updatedFrom: filters.updatedFrom?.toISOString() ?? null,
     updatedTo: filters.updatedTo?.toISOString() ?? null,
     workspaceId: filters.workspaceId,

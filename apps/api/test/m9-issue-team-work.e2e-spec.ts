@@ -5,7 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
-import { MembershipRole, StateCategory } from '@rivet/database';
+import { IssueStatus, MembershipRole, StateCategory } from '@rivet/database';
 
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
@@ -912,6 +912,200 @@ describe('M9 issue content and team execution API', () => {
       resourceType: 'TEAM_WORK',
       teamWork: { id: web.id },
     });
+  });
+
+  it('filters issues by multiple assignees and unassigned work and returns exact groups', async () => {
+    const marker = `보기-${randomUUID().slice(0, 8)}`;
+    const firstAssigned = await mutate('post', '/api/v1/issues')
+      .send({
+        initialTeams: [{ assigneeMembershipId: membershipId, projectTeamId: appProjectTeamId }],
+        projectId,
+        title: `${marker} 첫 담당자`,
+      })
+      .expect(201);
+    const secondAssigned = await mutate('post', '/api/v1/issues')
+      .send({
+        initialTeams: [
+          { assigneeMembershipId: secondMembershipId, projectTeamId: appProjectTeamId },
+        ],
+        projectId,
+        title: `${marker} 두 번째 담당자`,
+      })
+      .expect(201);
+    const unassignedWork = await mutate('post', '/api/v1/issues')
+      .send({
+        initialTeams: [{ projectTeamId: appProjectTeamId }],
+        projectId,
+        title: `${marker} 미할당 작업`,
+      })
+      .expect(201);
+    const noWork = await mutate('post', '/api/v1/issues')
+      .send({ projectId, title: `${marker} 작업 없음` })
+      .expect(201);
+
+    const multipleAssignees = await request(app.getHttpServer())
+      .get('/api/v1/issues')
+      .query({
+        assigneeMembershipId: `${membershipId},${secondMembershipId}`,
+        query: marker,
+      })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(multipleAssignees.body.items.map(({ id }: { id: string }) => id).sort()).toEqual(
+      [firstAssigned.body.issue.id, secondAssigned.body.issue.id].sort(),
+    );
+
+    const unassigned = await request(app.getHttpServer())
+      .get('/api/v1/issues')
+      .query({ query: marker, unassigned: 'true' })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(unassigned.body.items.map(({ id }: { id: string }) => id).sort()).toEqual(
+      [noWork.body.issue.id, unassignedWork.body.issue.id].sort(),
+    );
+
+    const combined = await request(app.getHttpServer())
+      .get('/api/v1/issues')
+      .query({
+        assigneeMembershipId: membershipId,
+        query: marker,
+        unassigned: 'true',
+      })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(combined.body.items.map(({ id }: { id: string }) => id).sort()).toEqual(
+      [firstAssigned.body.issue.id, noWork.body.issue.id, unassignedWork.body.issue.id].sort(),
+    );
+
+    const groups = await request(app.getHttpServer())
+      .get('/api/v1/issues/groups')
+      .query({
+        groupBy: 'projectId',
+        query: marker,
+        subGroupBy: 'status',
+      })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(groups.body).toMatchObject({
+      groupBy: 'projectId',
+      subGroupBy: 'status',
+      totalCount: 4,
+    });
+    expect(groups.body.groups).toHaveLength(1);
+    expect(groups.body.groups[0]).toMatchObject({
+      count: 4,
+      imageFileId: null,
+      value: projectId,
+    });
+    expect(
+      groups.body.groups[0].subGroups.reduce(
+        (count: number, group: { count: number }) => count + group.count,
+        0,
+      ),
+    ).toBe(4);
+
+    const statusFilteredGroups = await request(app.getHttpServer())
+      .get('/api/v1/issues/groups')
+      .query({
+        groupBy: 'projectId',
+        query: marker,
+        status: Object.values(IssueStatus).join(','),
+      })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(statusFilteredGroups.body.totalCount).toBe(4);
+
+    const assigneeGroups = await request(app.getHttpServer())
+      .get('/api/v1/issues/groups')
+      .query({
+        groupBy: 'assigneeMembershipId',
+        query: marker,
+        subGroupBy: 'status',
+      })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(assigneeGroups.body.totalCount).toBe(4);
+    expect(
+      assigneeGroups.body.groups.every(
+        (group: { imageFileId: string | null }) => group.imageFileId === null,
+      ),
+    ).toBe(true);
+    expect(
+      Object.fromEntries(
+        assigneeGroups.body.groups.map((group: { count: number; value: string }) => [
+          group.value,
+          group.count,
+        ]),
+      ),
+    ).toEqual({
+      __unassigned__: 2,
+      [membershipId]: 1,
+      [secondMembershipId]: 1,
+    });
+    for (const group of assigneeGroups.body.groups as Array<{
+      count: number;
+      subGroups: Array<{ count: number }>;
+    }>) {
+      expect(group.subGroups.reduce((count, subGroup) => count + subGroup.count, 0)).toBe(
+        group.count,
+      );
+    }
+
+    const workGroups = await request(app.getHttpServer())
+      .get('/api/v1/team-works/groups')
+      .query({
+        groupBy: 'projectId',
+        query: marker,
+        subGroupBy: 'stateCategory',
+      })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(workGroups.body).toMatchObject({
+      groupBy: 'projectId',
+      subGroupBy: 'stateCategory',
+      totalCount: 3,
+    });
+    expect(workGroups.body.groups[0]).toMatchObject({
+      count: 3,
+      imageFileId: null,
+      value: projectId,
+    });
+
+    const categoryFilteredWorkGroups = await request(app.getHttpServer())
+      .get('/api/v1/team-works/groups')
+      .query({
+        groupBy: 'projectId',
+        query: marker,
+        stateCategory: Object.values(StateCategory).join(','),
+      })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(categoryFilteredWorkGroups.body.totalCount).toBe(3);
+
+    const sharedAssigneeMarker = `복수담당-${randomUUID().slice(0, 8)}`;
+    await mutate('post', '/api/v1/issues')
+      .send({
+        initialTeams: [
+          { assigneeMembershipId: membershipId, projectTeamId: webProjectTeamId },
+          { assigneeMembershipId: secondMembershipId, projectTeamId: appProjectTeamId },
+        ],
+        projectId,
+        title: sharedAssigneeMarker,
+      })
+      .expect(201);
+    const filteredAssigneeGroups = await request(app.getHttpServer())
+      .get('/api/v1/issues/groups')
+      .query({
+        assigneeMembershipId: membershipId,
+        groupBy: 'assigneeMembershipId',
+        query: sharedAssigneeMarker,
+      })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(filteredAssigneeGroups.body.totalCount).toBe(1);
+    expect(filteredAssigneeGroups.body.groups).toEqual([
+      expect.objectContaining({ count: 1, value: membershipId }),
+    ]);
   });
 
   it('uses any-category default for unassigned work and unstarted for assigned work', async () => {

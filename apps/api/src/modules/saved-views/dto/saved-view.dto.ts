@@ -16,7 +16,7 @@ import {
 export const SAVED_VIEW_RESOURCE_TYPES = ['ISSUES', 'MY_WORK'] as const;
 
 export type SavedViewConfigurationValue =
-  boolean | string | Array<{ direction: 'asc' | 'desc'; field: string }>;
+  boolean | string | string[] | Array<{ direction: 'asc' | 'desc'; field: string }>;
 
 function normalizeString(value: unknown): unknown {
   return typeof value === 'string' ? value.normalize('NFC').trim() : value;

@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -22,7 +22,9 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-import { IssuePriority, IssueStatus, StateCategory } from '@rivet/database';
+import { IssuePriority } from '@rivet/database';
+
+import { ISSUE_GROUP_FIELDS, TEAM_WORK_GROUP_FIELDS } from '../issue-list.policy';
 
 export const ISSUE_STATUS_ACTIONS = ['PAUSE', 'RESUME', 'CANCEL', 'REOPEN'] as const;
 export type IssueStatusAction = (typeof ISSUE_STATUS_ACTIONS)[number];
@@ -53,7 +55,10 @@ export class IssueListQueryDto {
   @MaxLength(2048)
   projectId?: string;
 
-  @ApiPropertyOptional({ description: '쉼표로 구분한 이슈 상태', enum: IssueStatus })
+  @ApiPropertyOptional({
+    description: '쉼표로 구분한 이슈 상태',
+    example: 'TODO,DONE',
+  })
   @IsOptional()
   @IsString({ message: '이슈 상태 필터가 올바르지 않습니다.' })
   @MaxLength(200)
@@ -76,6 +81,20 @@ export class IssueListQueryDto {
   @IsString({ message: '만든 사람 필터가 올바르지 않습니다.' })
   @MaxLength(2048)
   createdByMembershipId?: string;
+
+  @ApiPropertyOptional({ description: '쉼표로 구분한 팀 작업 담당자 멤버십 ID' })
+  @IsOptional()
+  @IsString({ message: '담당자 필터가 올바르지 않습니다.' })
+  @MaxLength(2048)
+  assigneeMembershipId?: string;
+
+  @ApiPropertyOptional({
+    description: '팀 작업이 없거나 담당자가 없는 팀 작업이 있는 이슈 포함 여부',
+    enum: ['true', 'false'],
+  })
+  @IsOptional()
+  @IsBooleanString()
+  unassigned?: string;
 
   @ApiPropertyOptional({ format: 'date-time' })
   @IsOptional()
@@ -132,6 +151,23 @@ export class IssueListQueryDto {
   @IsString()
   @MaxLength(1024)
   cursor?: string;
+}
+
+export class IssueGroupQueryDto extends OmitType(IssueListQueryDto, [
+  'cursor',
+  'limit',
+  'sort',
+  'sortDirection',
+  'sorts',
+] as const) {
+  @ApiProperty({ enum: ISSUE_GROUP_FIELDS })
+  @IsIn(ISSUE_GROUP_FIELDS)
+  groupBy!: (typeof ISSUE_GROUP_FIELDS)[number];
+
+  @ApiPropertyOptional({ enum: ISSUE_GROUP_FIELDS })
+  @IsIn(ISSUE_GROUP_FIELDS)
+  @IsOptional()
+  subGroupBy?: (typeof ISSUE_GROUP_FIELDS)[number];
 }
 
 export class InitialTeamAssignmentDto {
@@ -366,11 +402,23 @@ export class TeamWorkListQueryDto {
   @MaxLength(2048)
   workflowStateId?: string;
 
-  @ApiPropertyOptional({ description: '쉼표로 구분한 상태 범주', enum: StateCategory })
+  @ApiPropertyOptional({
+    description: '쉼표로 구분한 상태 범주',
+    example: 'BACKLOG,UNSTARTED,STARTED',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   stateCategory?: string;
+
+  @ApiPropertyOptional({
+    description: '쉼표로 구분한 상위 이슈 우선순위',
+    example: 'HIGH,URGENT',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  priority?: string;
 
   @ApiPropertyOptional({ description: '쉼표로 구분한 멤버십 ID 또는 me' })
   @IsOptional()
@@ -408,6 +456,22 @@ export class TeamWorkListQueryDto {
   @IsString()
   @MaxLength(1024)
   cursor?: string;
+}
+
+export class TeamWorkGroupQueryDto extends OmitType(TeamWorkListQueryDto, [
+  'cursor',
+  'limit',
+  'sort',
+  'sortDirection',
+] as const) {
+  @ApiProperty({ enum: TEAM_WORK_GROUP_FIELDS })
+  @IsIn(TEAM_WORK_GROUP_FIELDS)
+  groupBy!: (typeof TEAM_WORK_GROUP_FIELDS)[number];
+
+  @ApiPropertyOptional({ enum: TEAM_WORK_GROUP_FIELDS })
+  @IsIn(TEAM_WORK_GROUP_FIELDS)
+  @IsOptional()
+  subGroupBy?: (typeof TEAM_WORK_GROUP_FIELDS)[number];
 }
 
 export class InlineHandoffDto {

@@ -5,12 +5,108 @@ import { Prisma } from '@rivet/database';
 import { DatabaseService } from '../../common/database/database.service';
 import type { IssueListCursor } from './issue-list.cursor';
 import type {
+  IssueGroupField,
+  IssueGroupRow,
   IssueListFilters,
   IssueListOrderRow,
   IssueSortClause,
   IssueSortDirection,
   IssueSortField,
 } from './issue-list.policy';
+
+function issueGroupValue(field: IssueGroupField): Prisma.Sql {
+  switch (field) {
+    case 'assigneeMembershipId':
+      return Prisma.sql`assignee_group.\"value\"`;
+    case 'createdByMembershipId':
+      return Prisma.sql`i."created_by_membership_id"::text`;
+    case 'priority':
+      return Prisma.sql`i."priority"::text`;
+    case 'projectId':
+      return Prisma.sql`i."project_id"::text`;
+    case 'status':
+      return Prisma.sql`i."status"::text`;
+  }
+}
+
+function issueGroupLabel(field: IssueGroupField): Prisma.Sql {
+  switch (field) {
+    case 'assigneeMembershipId':
+      return Prisma.sql`assignee_group.\"label\"`;
+    case 'createdByMembershipId':
+      return Prisma.sql`creator_user."display_name"`;
+    case 'priority':
+      return Prisma.sql`i."priority"::text`;
+    case 'projectId':
+      return Prisma.sql`project."name"`;
+    case 'status':
+      return Prisma.sql`i."status"::text`;
+  }
+}
+
+function issueGroupImageFileId(field: IssueGroupField): Prisma.Sql {
+  switch (field) {
+    case 'assigneeMembershipId':
+      return Prisma.sql`assignee_group.\"imageFileId\"`;
+    case 'createdByMembershipId':
+      return Prisma.sql`creator_user."avatar_file_id"`;
+    case 'projectId':
+      return Prisma.sql`project."logo_file_id"`;
+    case 'priority':
+    case 'status':
+      return Prisma.sql`NULL::uuid`;
+  }
+}
+
+function issueAssigneeGroupPredicate(filters: IssueListFilters): Prisma.Sql {
+  const predicates: Prisma.Sql[] = [];
+  if (filters.assigneeIds.length) {
+    predicates.push(
+      Prisma.sql`team_work."assignee_membership_id" IN (${Prisma.join(
+        filters.assigneeIds.map((id) => Prisma.sql`${id}::uuid`),
+      )})`,
+    );
+  }
+  if (filters.unassigned) {
+    predicates.push(Prisma.sql`team_work."assignee_membership_id" IS NULL`);
+  }
+  return predicates.length ? Prisma.sql`(${Prisma.join(predicates, ' OR ')})` : Prisma.sql`TRUE`;
+}
+
+function issueAssigneeGroupJoin(filters: IssueListFilters, enabled: boolean): Prisma.Sql {
+  if (!enabled) return Prisma.sql``;
+  const includeIssuesWithoutTeamWorks = filters.unassigned || filters.assigneeIds.length === 0;
+  return Prisma.sql`
+    JOIN LATERAL (
+      SELECT DISTINCT
+        COALESCE(team_work.\"assignee_membership_id\"::text, '__unassigned__') AS "value",
+        COALESCE(assignee_user.\"display_name\", '담당자 없음') AS "label",
+        assignee_user.\"avatar_file_id\" AS "imageFileId"
+      FROM "team_works" team_work
+      LEFT JOIN "workspace_memberships" assignee_membership
+        ON assignee_membership."workspace_id" = team_work."workspace_id"
+        AND assignee_membership."id" = team_work."assignee_membership_id"
+      LEFT JOIN "users" assignee_user
+        ON assignee_user."id" = assignee_membership."user_id"
+      WHERE team_work."workspace_id" = i."workspace_id"
+        AND team_work."issue_id" = i."id"
+        AND team_work."deleted_at" IS NULL
+        AND ${issueAssigneeGroupPredicate(filters)}
+
+      UNION ALL
+
+      SELECT '__unassigned__' AS "value", '담당자 없음' AS "label", NULL::uuid AS "imageFileId"
+      WHERE ${includeIssuesWithoutTeamWorks}
+        AND NOT EXISTS (
+        SELECT 1
+        FROM "team_works" existing_team_work
+        WHERE existing_team_work."workspace_id" = i."workspace_id"
+          AND existing_team_work."issue_id" = i."id"
+          AND existing_team_work."deleted_at" IS NULL
+      )
+    ) assignee_group ON TRUE
+  `;
+}
 
 function sortColumn(field: IssueSortField): Prisma.Sql {
   switch (field) {
@@ -119,6 +215,41 @@ function issueFilterPredicates(filters: IssueListFilters): Prisma.Sql[] {
       )`,
     );
   }
+  if (filters.assigneeIds.length || filters.unassigned) {
+    const assigneePredicates: Prisma.Sql[] = [];
+    if (filters.assigneeIds.length) {
+      assigneePredicates.push(Prisma.sql`EXISTS (
+        SELECT 1
+        FROM "team_works" assignee_tw
+        WHERE assignee_tw."workspace_id" = i."workspace_id"
+          AND assignee_tw."issue_id" = i."id"
+          AND assignee_tw."deleted_at" IS NULL
+          AND assignee_tw."assignee_membership_id" IN (${Prisma.join(
+            filters.assigneeIds.map((id) => Prisma.sql`${id}::uuid`),
+          )})
+      )`);
+    }
+    if (filters.unassigned) {
+      assigneePredicates.push(Prisma.sql`(
+        NOT EXISTS (
+          SELECT 1
+          FROM "team_works" any_tw
+          WHERE any_tw."workspace_id" = i."workspace_id"
+            AND any_tw."issue_id" = i."id"
+            AND any_tw."deleted_at" IS NULL
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM "team_works" unassigned_tw
+          WHERE unassigned_tw."workspace_id" = i."workspace_id"
+            AND unassigned_tw."issue_id" = i."id"
+            AND unassigned_tw."deleted_at" IS NULL
+            AND unassigned_tw."assignee_membership_id" IS NULL
+        )
+      )`);
+    }
+    predicates.push(Prisma.sql`(${Prisma.join(assigneePredicates, ' OR ')})`);
+  }
   if (filters.query) {
     predicates.push(
       Prisma.sql`(
@@ -216,5 +347,49 @@ export class IssueListRepository {
 
   count(where: Prisma.IssueWhereInput): Promise<number> {
     return this.database.client.issue.count({ where });
+  }
+
+  groupRows(
+    filters: IssueListFilters,
+    groupBy: IssueGroupField,
+    subGroupBy: IssueGroupField | undefined,
+  ): Promise<IssueGroupRow[]> {
+    const mainValue = issueGroupValue(groupBy);
+    const mainLabel = issueGroupLabel(groupBy);
+    const mainImageFileId = issueGroupImageFileId(groupBy);
+    const subValue = subGroupBy ? issueGroupValue(subGroupBy) : Prisma.sql`NULL::text`;
+    const subLabel = subGroupBy ? issueGroupLabel(subGroupBy) : Prisma.sql`NULL::text`;
+    const subImageFileId = subGroupBy ? issueGroupImageFileId(subGroupBy) : Prisma.sql`NULL::uuid`;
+    const groupColumns = subGroupBy
+      ? [mainValue, mainLabel, mainImageFileId, subValue, subLabel, subImageFileId]
+      : [mainValue, mainLabel, mainImageFileId];
+    const assigneeGroupJoin = issueAssigneeGroupJoin(
+      filters,
+      groupBy === 'assigneeMembershipId' || subGroupBy === 'assigneeMembershipId',
+    );
+
+    return this.database.client.$queryRaw<IssueGroupRow[]>(Prisma.sql`
+      SELECT
+        ${mainValue} AS "mainValue",
+        ${mainLabel} AS "mainLabel",
+        ${mainImageFileId} AS "mainImageFileId",
+        ${subValue} AS "subValue",
+        ${subLabel} AS "subLabel",
+        ${subImageFileId} AS "subImageFileId",
+        COUNT(DISTINCT i."id")::bigint AS "count"
+      FROM "issues" i
+      JOIN "projects" project
+        ON project."workspace_id" = i."workspace_id"
+        AND project."id" = i."project_id"
+      JOIN "workspace_memberships" creator_membership
+        ON creator_membership."workspace_id" = i."workspace_id"
+        AND creator_membership."id" = i."created_by_membership_id"
+      JOIN "users" creator_user
+        ON creator_user."id" = creator_membership."user_id"
+      ${assigneeGroupJoin}
+      WHERE ${Prisma.join(issueFilterPredicates(filters), ' AND ')}
+      GROUP BY ${Prisma.join(groupColumns, ', ')}
+      ORDER BY ${mainLabel} ASC, ${mainValue} ASC, ${subLabel} ASC NULLS FIRST, ${subValue} ASC NULLS FIRST
+    `);
   }
 }

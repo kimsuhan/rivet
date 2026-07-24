@@ -34,6 +34,7 @@ import {
   AssignTeamWorksDto,
   ClaimTeamWorkDto,
   CreateIssueDto,
+  IssueGroupQueryDto,
   IssueListQueryDto,
   StartIssueDto,
   TrashIssueDto,
@@ -45,6 +46,7 @@ import {
   CreateIssueResponseDto,
   IssueDetailResponseDto,
   IssueListResponseDto,
+  ListGroupSummaryResponseDto,
   StartIssueResponseDto,
   TeamWorkListResponseDto,
   UpdateIssueResponseDto,
@@ -98,6 +100,19 @@ export class IssuesController {
     @Query() query: IssueListQueryDto,
   ): Promise<IssueListResponseDto> {
     return this.queries.list(workspaceContext(authentication).workspaceId, query);
+  }
+
+  @Get('groups')
+  @ApiOperation({ summary: '이슈 보기 그룹별 항목 개수 조회' })
+  @ApiOkResponse({ type: ListGroupSummaryResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
+  @ApiForbiddenResponse({ type: ApiErrorResponseDto })
+  groups(
+    @CurrentAuthentication() authentication: AuthenticatedRequestContext,
+    @Query() query: IssueGroupQueryDto,
+  ): Promise<ListGroupSummaryResponseDto> {
+    return this.queries.groups(workspaceContext(authentication).workspaceId, query);
   }
 
   @Get(':issueId/team-works')

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 import {
+  type TeamWorksControllerGroupsParams,
   type TeamWorksControllerListParams,
   useProjectsControllerList,
   useTeamsControllerList,
@@ -27,9 +28,18 @@ import {
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 
+import { GroupedMyWorkList } from './grouped-issue-lists';
+import { IssueFilterMenu } from './issue-filter-menu';
 import { IssueListDisplayControls } from './issue-list-display-controls';
 import { useTeamWorkPages } from './issue-list-queries';
 import { IssueListToolbar } from './issue-list-toolbar';
+import {
+  MY_WORK_GROUP_OPTIONS,
+  MY_WORK_VISIBLE_FIELD_OPTIONS,
+  parseCsv,
+  serializeCsv,
+  visibleFieldsFromSearch,
+} from './issue-view-configuration';
 import { MyWorkListRow } from './my-work-list-row';
 import { SavedViewControls } from './saved-view-controls';
 import { TeamWorkListRow } from './team-work-list-row';
@@ -59,12 +69,24 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
     (team) => team.key.toUpperCase() === teamKey?.toUpperCase(),
   );
   const category = searchParams.get('stateCategory') ?? (mode === 'my' ? MY_WORK_CATEGORIES : '');
+  const categories = parseCsv(category);
   const projectId = searchParams.get('projectId') ?? '';
+  const projectIds = parseCsv(projectId);
+  const priority = mode === 'my' ? (searchParams.get('priority') ?? '') : '';
+  const priorities = parseCsv(priority);
+  const teamId = mode === 'my' ? (searchParams.get('teamId') ?? '') : '';
+  const teamIds = parseCsv(teamId);
+  const workflowStateId = mode === 'my' ? (searchParams.get('workflowStateId') ?? '') : '';
+  const workflowStateIds = parseCsv(workflowStateId);
   const query = searchParams.get('query') ?? '';
   const savedViewId = searchParams.get('view');
   const sort = searchParams.get('sort') ?? (mode === 'my' ? 'executionOrder' : 'updatedAt');
   const sortDirection = searchParams.get('sortDirection') ?? 'desc';
   const density = searchParams.get('density') ?? 'comfortable';
+  const visibleFieldsParam = searchParams.get('visibleFields');
+  const visibleFields = visibleFieldsFromSearch(visibleFieldsParam, 'MY_WORK');
+  const groupBy = mode === 'my' ? (searchParams.get('groupBy') ?? '') : '';
+  const subGroupBy = mode === 'my' ? (searchParams.get('subGroupBy') ?? '') : '';
   const defaultMyWorkConfiguration = {
     density: 'comfortable',
     sort: 'executionOrder',
@@ -74,9 +96,15 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
     ...(query ? { query } : {}),
     ...(projectId ? { projectId } : {}),
     ...(category && category !== MY_WORK_CATEGORIES ? { stateCategory: category } : {}),
+    ...(priority ? { priority } : {}),
+    ...(teamId ? { teamId } : {}),
+    ...(workflowStateId ? { workflowStateId } : {}),
     sort,
     sortDirection,
     density,
+    ...(visibleFieldsParam !== null ? { visibleFields } : {}),
+    ...(groupBy ? { groupBy } : {}),
+    ...(subGroupBy ? { subGroupBy } : {}),
   };
   const params: TeamWorksControllerListParams = {
     ...(mode === 'my'
@@ -86,12 +114,15 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
         : {}),
     ...(projectId ? { projectId } : {}),
     ...(mode === 'team' && category ? { stateCategory: category as never } : {}),
+    ...(mode === 'my' && priority ? { priority: priority as never } : {}),
+    ...(mode === 'my' && teamId ? { teamId } : {}),
+    ...(mode === 'my' && workflowStateId ? { workflowStateId } : {}),
     ...(query ? { query } : {}),
     limit: 50,
     sort: sort as 'executionOrder' | 'priority' | 'createdAt' | 'updatedAt' | 'status',
     sortDirection: sortDirection as 'asc' | 'desc',
   };
-  const myWorks = useTeamWorkPages(params, mode === 'my');
+  const myWorks = useTeamWorkPages(params, mode === 'my' && !groupBy);
   const teamWorks = useTeamWorksControllerList(params, {
     query: { enabled: mode === 'team' && Boolean(selectedTeam), retry: false },
   });
@@ -117,13 +148,21 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
     router.push(`${pathname}${next.size ? `?${next.toString()}` : ''}`, { scroll: false });
   }
 
-  const pending = teams.isPending || (mode === 'my' ? myWorks.isPending : teamWorks.isPending);
-  const errored = teams.isError || (mode === 'my' ? myWorks.isError : teamWorks.isError);
+  const pending =
+    teams.isPending || (mode === 'my' ? !groupBy && myWorks.isPending : teamWorks.isPending);
+  const errored =
+    teams.isError || (mode === 'my' ? !groupBy && myWorks.isError : teamWorks.isError);
   const selectedCategory = mode === 'my' && category === MY_WORK_CATEGORIES ? '' : category;
-  const activeProjectName = projects.data?.items.find((project) => project.id === projectId)?.name;
+  const projectNames = new Map(
+    (projects.data?.items ?? []).map((project) => [project.id, project.name]),
+  );
   const activeFilterCount =
     mode === 'my'
-      ? Number(Boolean(projectId)) + Number(Boolean(selectedCategory))
+      ? Number(projectIds.length > 0) +
+        Number(Boolean(selectedCategory)) +
+        Number(priorities.length > 0) +
+        Number(teamIds.length > 0) +
+        Number(workflowStateIds.length > 0)
       : Number(Boolean(selectedCategory));
   return (
     <section className="mx-auto max-w-[1440px] space-y-5" aria-labelledby="team-work-list-title">
@@ -160,68 +199,45 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
               onSearchOpenChange={setSearchOpen}
               filterContent={
                 <>
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-muted-foreground text-xs">상태</span>
-                    <Select
-                      items={[
-                        { label: '모든 상태', value: '' },
-                        ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({
-                          label,
-                          value,
-                        })),
-                      ]}
-                      value={selectedCategory}
-                      onValueChange={(value) => replace('stateCategory', value ?? '')}
-                    >
-                      <SelectTrigger className="w-full" size="sm" aria-label="작업 상태 필터">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="">모든 상태</SelectItem>
-                          {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                            <SelectItem key={value} value={value}>
-                              {label}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-muted-foreground text-xs">프로젝트</span>
-                    <Select
-                      items={[
-                        { label: '모든 프로젝트', value: '' },
-                        ...(projects.data?.items ?? []).map((project) => ({
-                          label: project.name,
-                          value: project.id,
-                        })),
-                      ]}
-                      value={projectId}
-                      onValueChange={(value) => replace('projectId', value ?? '')}
-                    >
-                      <SelectTrigger className="w-full" size="sm" aria-label="프로젝트 필터">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="">모든 프로젝트</SelectItem>
-                          {(projects.data?.items ?? []).map((project) => (
-                            <SelectItem key={project.id} value={project.id}>
-                              {project.name}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <IssueFilterMenu
+                    emptyLabel="선택할 상태가 없습니다."
+                    label="상태"
+                    onChange={(values) => {
+                      const serialized = serializeCsv(values);
+                      replace(
+                        'stateCategory',
+                        serialized === serializeCsv(parseCsv(MY_WORK_CATEGORIES)) ? '' : serialized,
+                      );
+                    }}
+                    options={Object.entries(CATEGORY_LABELS).map(([id, label]) => ({ id, label }))}
+                    selected={categories}
+                    variant="compact"
+                  />
+                  <IssueFilterMenu
+                    emptyLabel="선택할 프로젝트가 없습니다."
+                    label="프로젝트"
+                    onChange={(values) => replace('projectId', serializeCsv(values))}
+                    options={(projects.data?.items ?? []).map((project) => ({
+                      id: project.id,
+                      label: project.name,
+                    }))}
+                    selected={projectIds}
+                    variant="compact"
+                  />
                   {activeFilterCount ? (
                     <Button
                       className="w-full"
                       size="sm"
                       variant="ghost"
-                      onClick={() => replaceMany({ projectId: '', stateCategory: '' })}
+                      onClick={() =>
+                        replaceMany({
+                          priority: '',
+                          projectId: '',
+                          stateCategory: '',
+                          teamId: '',
+                          workflowStateId: '',
+                        })
+                      }
                     >
                       필터 초기화
                     </Button>
@@ -231,6 +247,9 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
               sortAndViewControls={
                 <IssueListDisplayControls
                   density={density}
+                  fieldOptions={MY_WORK_VISIBLE_FIELD_OPTIONS}
+                  groupBy={groupBy}
+                  groupOptions={MY_WORK_GROUP_OPTIONS}
                   sort={sort}
                   sortDirection={sortDirection}
                   sortLabel="내 작업 정렬 기준"
@@ -243,12 +262,18 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
                   onSortChange={(value) => replace('sort', value)}
                   onSortDirectionChange={(value) => replace('sortDirection', value)}
                   onDensityChange={(value) => replace('density', value)}
+                  onGroupingChange={(groupBy, subGroupBy) => replaceMany({ groupBy, subGroupBy })}
+                  onVisibleFieldsChange={(value) =>
+                    replace('visibleFields', serializeCsv(value) || 'none')
+                  }
+                  subGroupBy={subGroupBy}
+                  visibleFields={visibleFields}
                 />
               }
             />
           }
           activeFilters={
-            query || projectId || selectedCategory ? (
+            query || projectId || selectedCategory || priority || teamId || workflowStateId ? (
               <>
                 {query ? (
                   <Button size="xs" variant="secondary" onClick={() => replace('query', '')}>
@@ -258,7 +283,10 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
                 ) : null}
                 {projectId ? (
                   <Button size="xs" variant="secondary" onClick={() => replace('projectId', '')}>
-                    프로젝트: {activeProjectName ?? '접근할 수 없음'}
+                    프로젝트:{' '}
+                    {projectIds.length === 1
+                      ? (projectNames.get(projectIds[0]!) ?? '접근할 수 없음')
+                      : `${projectIds.length}개`}
                     <X data-icon="inline-end" aria-label="프로젝트 필터 제거" />
                   </Button>
                 ) : null}
@@ -269,22 +297,55 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
                     onClick={() => replace('stateCategory', '')}
                   >
                     상태:{' '}
-                    {CATEGORY_LABELS[selectedCategory as keyof typeof CATEGORY_LABELS] ??
-                      selectedCategory}
+                    {categories.length === 1
+                      ? (CATEGORY_LABELS[categories[0] as keyof typeof CATEGORY_LABELS] ??
+                        categories[0])
+                      : `${categories.length}개`}
                     <X data-icon="inline-end" aria-label="상태 필터 제거" />
+                  </Button>
+                ) : null}
+                {priority ? (
+                  <Button size="xs" variant="secondary" onClick={() => replace('priority', '')}>
+                    우선순위: {priorities.length}개 조건
+                    <X data-icon="inline-end" aria-label="우선순위 필터 제거" />
+                  </Button>
+                ) : null}
+                {teamId ? (
+                  <Button size="xs" variant="secondary" onClick={() => replace('teamId', '')}>
+                    팀: {teamIds.length}개 조건
+                    <X data-icon="inline-end" aria-label="팀 필터 제거" />
+                  </Button>
+                ) : null}
+                {workflowStateId ? (
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={() => replace('workflowStateId', '')}
+                  >
+                    워크플로 상태: {workflowStateIds.length}개 조건
+                    <X data-icon="inline-end" aria-label="워크플로 상태 필터 제거" />
                   </Button>
                 ) : null}
                 <Button
                   size="xs"
                   variant="ghost"
-                  onClick={() => replaceMany({ projectId: '', query: '', stateCategory: '' })}
+                  onClick={() =>
+                    replaceMany({
+                      priority: '',
+                      projectId: '',
+                      query: '',
+                      stateCategory: '',
+                      teamId: '',
+                      workflowStateId: '',
+                    })
+                  }
                 >
                   모두 지우기
                 </Button>
               </>
             ) : undefined
           }
-          {...(projectId && projects.data && !activeProjectName
+          {...(projectIds.length && projects.data && projectIds.some((id) => !projectNames.has(id))
             ? {
                 staleValueMessage:
                   '저장된 보기의 프로젝트가 보관되었거나 접근 권한이 없습니다. 필터를 수정한 뒤 보기를 다시 저장하세요.',
@@ -434,12 +495,29 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           description="팀 주소를 확인해 주세요."
         />
       ) : null}
-      {works?.length === 0 ? (
+      {mode === 'my' && groupBy ? (
+        <GroupedMyWorkList
+          baseParams={params}
+          density={density as 'compact' | 'comfortable'}
+          groupBy={groupBy as TeamWorksControllerGroupsParams['groupBy']}
+          savedViewId={savedViewId}
+          {...(subGroupBy
+            ? { subGroupBy: subGroupBy as TeamWorksControllerGroupsParams['subGroupBy'] }
+            : {})}
+          visibleFields={visibleFields}
+        />
+      ) : null}
+      {!groupBy && works?.length === 0 ? (
         <ContentEmpty
           icon={ListTodo}
           title={
             mode === 'my'
-              ? query || projectId || searchParams.get('stateCategory')
+              ? query ||
+                projectId ||
+                priority ||
+                teamId ||
+                workflowStateId ||
+                searchParams.get('stateCategory')
                 ? '조건에 맞는 작업이 없습니다'
                 : '현재 할당된 작업이 없습니다'
               : '표시할 팀 작업이 없습니다'
@@ -457,7 +535,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           ) : null}
         </ContentEmpty>
       ) : null}
-      {works?.length ? (
+      {!groupBy && works?.length ? (
         mode === 'my' ? (
           <ul className="!-mt-3">
             {works.map((work) => (
@@ -466,6 +544,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
                 work={work}
                 density={density as 'compact' | 'comfortable'}
                 savedViewId={savedViewId}
+                visibleFields={visibleFields}
               />
             ))}
           </ul>
@@ -481,7 +560,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           </ul>
         )
       ) : null}
-      {mode === 'my' && myWorks.hasNextPage ? (
+      {mode === 'my' && !groupBy && myWorks.hasNextPage ? (
         <Button
           disabled={myWorks.isFetchingNextPage}
           onClick={() => void myWorks.fetchNextPage()}
@@ -490,7 +569,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
           {myWorks.isFetchingNextPage ? '불러오는 중' : '작업 더 불러오기'}
         </Button>
       ) : null}
-      {totalCount !== undefined ? (
+      {!groupBy && totalCount !== undefined ? (
         <p className="text-muted-foreground text-right text-xs">
           총 {totalCount.toLocaleString('ko-KR')}개
         </p>

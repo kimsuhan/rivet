@@ -14,6 +14,7 @@ import {
 
 import {
   getIssuesControllerGetQueryKey,
+  getIssuesControllerGroupsQueryKey,
   getIssuesControllerListQueryKey,
   getIssueTemplatesControllerListQueryKey,
   getLabelsControllerListQueryKey,
@@ -522,6 +523,7 @@ export function GlobalIssueCreate({
       });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: getIssuesControllerListQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getIssuesControllerGroupsQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getProjectsControllerListQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getProjectsControllerGetQueryKey(projectId) }),
       ]);

@@ -358,6 +358,27 @@ export class IssueRepository {
     });
   }
 
+  listTeamWorkGroupRows(where: Prisma.TeamWorkWhereInput) {
+    return this.database.client.teamWork.findMany({
+      select: {
+        issue: {
+          select: {
+            priority: true,
+            project: { select: { id: true, logoFileId: true, name: true } },
+          },
+        },
+        teamId: true,
+        workflowState: {
+          select: { category: true, id: true, name: true },
+        },
+        projectTeam: {
+          select: { team: { select: { id: true, name: true } } },
+        },
+      },
+      where,
+    });
+  }
+
   async findTeamWorkByRef(workspaceId: string, teamWorkRef: string): Promise<TeamWorkRow> {
     const row = await this.database.client.teamWork.findFirst({
       select: TEAM_WORK_SELECT,

@@ -5,11 +5,11 @@
  * Rivet 비공개 MVP 베타 REST API
  * OpenAPI spec version: 1.0
  */
-import type { TeamWorksControllerListSort } from './teamWorksControllerListSort';
-import type { TeamWorksControllerListSortDirection } from './teamWorksControllerListSortDirection';
-import type { TeamWorksControllerListUnassigned } from './teamWorksControllerListUnassigned';
+import type { TeamWorksControllerGroupsGroupBy } from './teamWorksControllerGroupsGroupBy';
+import type { TeamWorksControllerGroupsSubGroupBy } from './teamWorksControllerGroupsSubGroupBy';
+import type { TeamWorksControllerGroupsUnassigned } from './teamWorksControllerGroupsUnassigned';
 
-export type TeamWorksControllerListParams = {
+export type TeamWorksControllerGroupsParams = {
 /**
  * 팀 작업 표시 ID, 상위 이슈 표시 ID·제목 또는 프로젝트 이름 검색
  * @maxLength 500
@@ -50,16 +50,7 @@ priority?: string;
  * @maxLength 2048
  */
 assigneeMembershipId?: string;
-unassigned?: TeamWorksControllerListUnassigned;
-sort?: TeamWorksControllerListSort;
-sortDirection?: TeamWorksControllerListSortDirection;
-/**
- * @minimum 1
- * @maximum 100
- */
-limit?: number;
-/**
- * @maxLength 1024
- */
-cursor?: string;
+unassigned?: TeamWorksControllerGroupsUnassigned;
+groupBy: TeamWorksControllerGroupsGroupBy;
+subGroupBy?: TeamWorksControllerGroupsSubGroupBy;
 };

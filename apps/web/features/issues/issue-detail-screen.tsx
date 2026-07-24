@@ -1134,16 +1134,25 @@ export function IssueDetailScreen(props: IssueDetailScreenProps) {
           href={backHref}
           className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
           onClick={(event) => {
-            if (!isMyWorkEntry) return;
-            const stored = window.sessionStorage.getItem('rivet.my-work.return');
+            const storageKey = isMyWorkEntry ? 'rivet.my-work.return' : 'rivet.issue.return';
+            if (isProjectEntry) return;
+            const stored = window.sessionStorage.getItem(storageKey);
             if (!stored) return;
             try {
-              const value = JSON.parse(stored) as { teamWorkIdentifier?: unknown };
-              if (value.teamWorkIdentifier !== issueRef) return;
+              const value = JSON.parse(stored) as {
+                href?: unknown;
+                issueIdentifier?: unknown;
+                teamWorkIdentifier?: unknown;
+              };
+              const identifier = isMyWorkEntry
+                ? value.teamWorkIdentifier
+                : value.issueIdentifier;
+              if (identifier !== issueRef || typeof value.href !== 'string') return;
               event.preventDefault();
-              router.back();
+              if (isMyWorkEntry) router.back();
+              else router.push(value.href);
             } catch {
-              window.sessionStorage.removeItem('rivet.my-work.return');
+              window.sessionStorage.removeItem(storageKey);
             }
           }}
         >

@@ -205,6 +205,27 @@ export class IssueListResponseDto {
   @ApiProperty({ minimum: 0 }) totalCount!: number;
 }
 
+export class ListSubGroupResponseDto {
+  @ApiProperty({ minimum: 0 }) count!: number;
+  @ApiProperty({ format: 'uuid', nullable: true, type: String })
+  imageFileId!: string | null;
+  @ApiProperty() label!: string;
+  @ApiProperty() value!: string;
+}
+
+export class ListGroupResponseDto extends ListSubGroupResponseDto {
+  @ApiProperty({ isArray: true, type: ListSubGroupResponseDto })
+  subGroups!: ListSubGroupResponseDto[];
+}
+
+export class ListGroupSummaryResponseDto {
+  @ApiProperty() groupBy!: string;
+  @ApiProperty({ isArray: true, type: ListGroupResponseDto })
+  groups!: ListGroupResponseDto[];
+  @ApiProperty({ nullable: true, type: String }) subGroupBy!: string | null;
+  @ApiProperty({ minimum: 0 }) totalCount!: number;
+}
+
 export class StartIssueResponseDto {
   @ApiProperty({ type: IssueSummaryResponseDto }) issue!: IssueSummaryResponseDto;
   @ApiProperty({ isArray: true, type: TeamWorkSummaryResponseDto })

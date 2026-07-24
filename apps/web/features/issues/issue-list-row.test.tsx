@@ -1,17 +1,33 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { AnchorHTMLAttributes } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IssueListRow } from './issue-list-row';
 
+const reactQueryMocks = vi.hoisted(() => ({
+  invalidateQueries: vi.fn().mockResolvedValue(undefined),
+  mutationOptions: null as null | { onSettled: () => Promise<unknown> },
+}));
+
 vi.mock('@tanstack/react-query', () => ({
-  useMutation: () => ({ isPending: false, mutate: vi.fn() }),
-  useQueryClient: () => ({}),
+  useMutation: (options: { onSettled: () => Promise<unknown> }) => {
+    reactQueryMocks.mutationOptions = options;
+    return { isPending: false, mutate: vi.fn() };
+  },
+  useQueryClient: () => ({ invalidateQueries: reactQueryMocks.invalidateQueries }),
 }));
 
 vi.mock('@/i18n/navigation', () => ({
-  Link: ({ children, href, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a href={href} {...props}>
+  Link: ({ children, href, onClick, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a
+      href={href}
+      onClick={(event) => {
+        event.preventDefault();
+        onClick?.(event);
+      }}
+      {...props}
+    >
       {children}
     </a>
   ),
@@ -51,6 +67,14 @@ function issue(
 }
 
 describe('IssueListRow', () => {
+  beforeEach(() => {
+    reactQueryMocks.invalidateQueries.mockClear();
+    reactQueryMocks.mutationOptions = null;
+    window.sessionStorage.clear();
+  });
+
+  afterEach(cleanup);
+
   it('결정이 필요한 다음 행동(담당자 지정)은 버튼 위계로 강조한다', () => {
     render(
       <ul>
@@ -92,6 +116,32 @@ describe('IssueListRow', () => {
     );
 
     expect(container.querySelectorAll(`a[href="${detailHref}"]`)).toHaveLength(2);
+  });
+
+  it('전역 이슈 목록에서 상세를 열면 현재 필터와 그룹 문맥을 보존한다', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(
+      null,
+      '',
+      '/issues?view=view-1&groupBy=priority&priority=HIGH#current',
+    );
+    render(
+      <ul>
+        <IssueListRow
+          detailHref="/issues/API-1?tab=work&view=view-1"
+          issue={issue({ workflowSummary: { teamWorkCount: 2, unassignedCount: 0 } })}
+          preserveListReturn
+          queryKey={['issues']}
+        />
+      </ul>,
+    );
+
+    await user.click(screen.getByRole('link', { name: /API-1.*이슈 제목/ }));
+
+    expect(JSON.parse(window.sessionStorage.getItem('rivet.issue.return') ?? '{}')).toEqual({
+      href: '/issues?view=view-1&groupBy=priority&priority=HIGH#current',
+      issueIdentifier: 'API-1',
+    });
   });
 
   it('배포 대기 이슈의 다음 행동은 배포 현황으로 이동한다', () => {
@@ -137,5 +187,29 @@ describe('IssueListRow', () => {
     expect(comfortableRow?.className).toContain('py-2.5');
     expect(comfortableContainer.querySelector('[data-icon-only]')).toBeNull();
     expect(compactRow?.className).not.toEqual(comfortableRow?.className);
+  });
+
+  it('우선순위 변경 후 모든 이슈 목록과 그룹 요약을 무효화한다', async () => {
+    render(
+      <ul>
+        <IssueListRow issue={issue({})} queryKey={['issues', 'priority-high']} />
+      </ul>,
+    );
+
+    await reactQueryMocks.mutationOptions?.onSettled();
+
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledTimes(4);
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['/api/v1/issues'],
+    });
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['/api/v1/issues/groups'],
+    });
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['/api/v1/team-works'],
+    });
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['/api/v1/team-works/groups'],
+    });
   });
 });
