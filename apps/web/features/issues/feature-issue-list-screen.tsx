@@ -53,6 +53,12 @@ export function FeatureIssueListScreen() {
   const projectIds = parseCsv(projectId);
   const status = searchParams.get('status') ?? '';
   const statuses = parseCsv(status);
+  const priority = searchParams.get('priority') ?? '';
+  const priorities = parseCsv(priority);
+  const labelId = searchParams.get('labelId') ?? '';
+  const labelIds = parseCsv(labelId);
+  const createdByMembershipId = searchParams.get('createdByMembershipId') ?? '';
+  const creatorIds = parseCsv(createdByMembershipId);
   const assigneeMembershipId = searchParams.get('assigneeMembershipId') ?? '';
   const assigneeMembershipIds = parseCsv(assigneeMembershipId);
   const unassigned = searchParams.get('unassigned') === 'true';
@@ -71,6 +77,9 @@ export function FeatureIssueListScreen() {
     ...(query ? { query } : {}),
     ...(projectId ? { projectId } : {}),
     ...(status ? { status } : {}),
+    ...(priority ? { priority } : {}),
+    ...(labelId ? { labelId } : {}),
+    ...(createdByMembershipId ? { createdByMembershipId } : {}),
     ...(assigneeMembershipId ? { assigneeMembershipId } : {}),
     ...(unassigned ? { unassigned: 'true' } : {}),
     sorts,
@@ -83,6 +92,9 @@ export function FeatureIssueListScreen() {
     ...(projectId ? { projectId } : {}),
     ...(query ? { query } : {}),
     ...(status ? { status: status as never } : {}),
+    ...(priority ? { priority } : {}),
+    ...(labelId ? { labelId } : {}),
+    ...(createdByMembershipId ? { createdByMembershipId } : {}),
     ...(assigneeMembershipId ? { assigneeMembershipId } : {}),
     ...(unassigned ? { unassigned: 'true' as const } : {}),
     sorts: serializedSorts,
@@ -118,6 +130,9 @@ export function FeatureIssueListScreen() {
   const activeFilterCount =
     Number(projectIds.length > 0) +
     Number(statuses.length > 0) +
+    Number(priorities.length > 0) +
+    Number(labelIds.length > 0) +
+    Number(creatorIds.length > 0) +
     Number(assigneeMembershipIds.length > 0 || unassigned);
 
   return (
@@ -188,6 +203,9 @@ export function FeatureIssueListScreen() {
                     onClick={() =>
                       replaceMany({
                         assigneeMembershipId: '',
+                        createdByMembershipId: '',
+                        labelId: '',
+                        priority: '',
                         projectId: '',
                         status: '',
                         unassigned: '',
@@ -225,7 +243,14 @@ export function FeatureIssueListScreen() {
           />
         }
         activeFilters={
-          query || projectId || status || assigneeMembershipId || unassigned ? (
+          query ||
+          projectId ||
+          status ||
+          priority ||
+          labelId ||
+          createdByMembershipId ||
+          assigneeMembershipId ||
+          unassigned ? (
             <>
               {query ? (
                 <Button size="xs" variant="secondary" onClick={() => replace('query', '')}>
@@ -251,6 +276,28 @@ export function FeatureIssueListScreen() {
                   <X data-icon="inline-end" aria-label="상태 필터 제거" />
                 </Button>
               ) : null}
+              {priority ? (
+                <Button size="xs" variant="secondary" onClick={() => replace('priority', '')}>
+                  우선순위: {priorities.length}개 조건
+                  <X data-icon="inline-end" aria-label="우선순위 필터 제거" />
+                </Button>
+              ) : null}
+              {labelId ? (
+                <Button size="xs" variant="secondary" onClick={() => replace('labelId', '')}>
+                  라벨: {labelIds.length}개 조건
+                  <X data-icon="inline-end" aria-label="라벨 필터 제거" />
+                </Button>
+              ) : null}
+              {createdByMembershipId ? (
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => replace('createdByMembershipId', '')}
+                >
+                  생성자: {creatorIds.length}개 조건
+                  <X data-icon="inline-end" aria-label="생성자 필터 제거" />
+                </Button>
+              ) : null}
               {assigneeMembershipId || unassigned ? (
                 <Button
                   size="xs"
@@ -267,6 +314,9 @@ export function FeatureIssueListScreen() {
                 onClick={() =>
                   replaceMany({
                     assigneeMembershipId: '',
+                    createdByMembershipId: '',
+                    labelId: '',
+                    priority: '',
                     projectId: '',
                     query: '',
                     status: '',
