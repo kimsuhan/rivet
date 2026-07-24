@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import {
+  getIssuesControllerGroupsQueryKey,
   getTeamWorksControllerGroupsQueryKey,
   type IssueDetailResponseDto,
   type IssueMemberSummaryResponseDto,
@@ -142,6 +143,9 @@ export function useTeamWorkInlineMutation(
         queryKey: getTeamWorksControllerGroupsQueryKey(),
       });
       void queryClient.invalidateQueries({ queryKey: ['/api/v1/issues'] });
+      void queryClient.invalidateQueries({
+        queryKey: getIssuesControllerGroupsQueryKey(),
+      });
     },
   });
 }

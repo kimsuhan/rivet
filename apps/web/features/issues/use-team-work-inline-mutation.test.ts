@@ -34,7 +34,7 @@ describe('useTeamWorkInlineMutation', () => {
 
     reactQueryMocks.mutationOptions?.onSettled();
 
-    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledTimes(3);
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledTimes(4);
     expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['/api/v1/team-works'],
     });
@@ -43,6 +43,9 @@ describe('useTeamWorkInlineMutation', () => {
     });
     expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['/api/v1/issues'],
+    });
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['/api/v1/issues/groups'],
     });
   });
 });
