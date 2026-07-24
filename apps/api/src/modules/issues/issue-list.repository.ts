@@ -58,8 +58,24 @@ function issueGroupImageFileId(field: IssueGroupField): Prisma.Sql {
   }
 }
 
-function issueAssigneeGroupJoin(enabled: boolean): Prisma.Sql {
+function issueAssigneeGroupPredicate(filters: IssueListFilters): Prisma.Sql {
+  const predicates: Prisma.Sql[] = [];
+  if (filters.assigneeIds.length) {
+    predicates.push(
+      Prisma.sql`team_work."assignee_membership_id" IN (${Prisma.join(
+        filters.assigneeIds.map((id) => Prisma.sql`${id}::uuid`),
+      )})`,
+    );
+  }
+  if (filters.unassigned) {
+    predicates.push(Prisma.sql`team_work."assignee_membership_id" IS NULL`);
+  }
+  return predicates.length ? Prisma.sql`(${Prisma.join(predicates, ' OR ')})` : Prisma.sql`TRUE`;
+}
+
+function issueAssigneeGroupJoin(filters: IssueListFilters, enabled: boolean): Prisma.Sql {
   if (!enabled) return Prisma.sql``;
+  const includeIssuesWithoutTeamWorks = filters.unassigned || filters.assigneeIds.length === 0;
   return Prisma.sql`
     JOIN LATERAL (
       SELECT DISTINCT
@@ -75,11 +91,13 @@ function issueAssigneeGroupJoin(enabled: boolean): Prisma.Sql {
       WHERE team_work."workspace_id" = i."workspace_id"
         AND team_work."issue_id" = i."id"
         AND team_work."deleted_at" IS NULL
+        AND ${issueAssigneeGroupPredicate(filters)}
 
       UNION ALL
 
       SELECT '__unassigned__' AS "value", '담당자 없음' AS "label", NULL::uuid AS "imageFileId"
-      WHERE NOT EXISTS (
+      WHERE ${includeIssuesWithoutTeamWorks}
+        AND NOT EXISTS (
         SELECT 1
         FROM "team_works" existing_team_work
         WHERE existing_team_work."workspace_id" = i."workspace_id"
@@ -346,6 +364,7 @@ export class IssueListRepository {
       ? [mainValue, mainLabel, mainImageFileId, subValue, subLabel, subImageFileId]
       : [mainValue, mainLabel, mainImageFileId];
     const assigneeGroupJoin = issueAssigneeGroupJoin(
+      filters,
       groupBy === 'assigneeMembershipId' || subGroupBy === 'assigneeMembershipId',
     );
 

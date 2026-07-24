@@ -161,12 +161,18 @@ describe('IssueListRow', () => {
 
     await reactQueryMocks.mutationOptions?.onSettled();
 
-    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledTimes(2);
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledTimes(4);
     expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['/api/v1/issues'],
     });
     expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['/api/v1/issues/groups'],
+    });
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['/api/v1/team-works'],
+    });
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['/api/v1/team-works/groups'],
     });
   });
 });

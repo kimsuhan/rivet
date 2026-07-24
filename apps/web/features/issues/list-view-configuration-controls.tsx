@@ -21,8 +21,7 @@ export function ListViewConfigurationControls({
   groupBy,
   groupOptions,
   onDensityChange,
-  onGroupByChange,
-  onSubGroupByChange,
+  onGroupingChange,
   onVisibleFieldsChange,
   subGroupBy,
   visibleFields,
@@ -32,8 +31,7 @@ export function ListViewConfigurationControls({
   groupBy: string;
   groupOptions: ReadonlyArray<{ label: string; value: string }>;
   onDensityChange: (value: 'comfortable' | 'compact') => void;
-  onGroupByChange: (value: string) => void;
-  onSubGroupByChange: (value: string) => void;
+  onGroupingChange: (groupBy: string, subGroupBy: string) => void;
   onVisibleFieldsChange: (value: string[]) => void;
   subGroupBy: string;
   visibleFields: readonly string[];
@@ -127,8 +125,7 @@ export function ListViewConfigurationControls({
             value={groupBy || '__none__'}
             onValueChange={(value) => {
               const next = value === '__none__' ? '' : (value ?? '');
-              onGroupByChange(next);
-              if (!next || next === subGroupBy) onSubGroupByChange('');
+              onGroupingChange(next, !next || next === subGroupBy ? '' : subGroupBy);
             }}
           >
             <SelectTrigger className="w-full" size="sm" aria-label="메인 그룹">
@@ -149,7 +146,9 @@ export function ListViewConfigurationControls({
             disabled={!groupBy}
             items={[{ label: '서브 그룹 없음', value: '__none__' }, ...subGroupOptions]}
             value={subGroupBy || '__none__'}
-            onValueChange={(value) => onSubGroupByChange(value === '__none__' ? '' : (value ?? ''))}
+            onValueChange={(value) =>
+              onGroupingChange(groupBy, value === '__none__' ? '' : (value ?? ''))
+            }
           >
             <SelectTrigger className="w-full" size="sm" aria-label="서브 그룹">
               <SelectValue />

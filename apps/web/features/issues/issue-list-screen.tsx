@@ -238,8 +238,7 @@ export function IssueListScreen({ mode, teamKey }: { mode: IssueListMode; teamKe
                   onSortChange={(value) => replace('sort', value)}
                   onSortDirectionChange={(value) => replace('sortDirection', value)}
                   onDensityChange={(value) => replace('density', value)}
-                  onGroupByChange={(value) => replace('groupBy', value)}
-                  onSubGroupByChange={(value) => replace('subGroupBy', value)}
+                  onGroupingChange={(groupBy, subGroupBy) => replaceMany({ groupBy, subGroupBy })}
                   onVisibleFieldsChange={(value) =>
                     replace('visibleFields', serializeCsv(value) || 'none')
                   }

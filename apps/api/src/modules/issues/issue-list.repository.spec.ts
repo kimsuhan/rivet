@@ -90,4 +90,21 @@ describe('IssueListRepository', () => {
     expect(statement.sql).toContain('assignee_user."avatar_file_id"');
     expect(statement.sql).toContain('COUNT(DISTINCT i."id")::bigint');
   });
+
+  it('limits assignee groups to the active assignee and unassigned filters', async () => {
+    await repository.groupRows(
+      {
+        ...filters,
+        assigneeIds: ['3dc0b213-eafa-450c-ad12-49a7d927c7b8'],
+        unassigned: true,
+      },
+      'assigneeMembershipId',
+      'status',
+    );
+
+    const statement = queryRaw.mock.calls[0]![0] as { sql: string };
+    expect(statement.sql).toContain('team_work."assignee_membership_id" IN');
+    expect(statement.sql).toContain('team_work."assignee_membership_id" IS NULL');
+    expect(statement.sql).toContain(' OR ');
+  });
 });

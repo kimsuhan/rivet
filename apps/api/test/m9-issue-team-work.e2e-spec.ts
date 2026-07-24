@@ -1059,6 +1059,31 @@ describe('M9 issue content and team execution API', () => {
       imageFileId: null,
       value: projectId,
     });
+
+    const sharedAssigneeMarker = `복수담당-${randomUUID().slice(0, 8)}`;
+    await mutate('post', '/api/v1/issues')
+      .send({
+        initialTeams: [
+          { assigneeMembershipId: membershipId, projectTeamId: webProjectTeamId },
+          { assigneeMembershipId: secondMembershipId, projectTeamId: appProjectTeamId },
+        ],
+        projectId,
+        title: sharedAssigneeMarker,
+      })
+      .expect(201);
+    const filteredAssigneeGroups = await request(app.getHttpServer())
+      .get('/api/v1/issues/groups')
+      .query({
+        assigneeMembershipId: membershipId,
+        groupBy: 'assigneeMembershipId',
+        query: sharedAssigneeMarker,
+      })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(filteredAssigneeGroups.body.totalCount).toBe(1);
+    expect(filteredAssigneeGroups.body.groups).toEqual([
+      expect.objectContaining({ count: 1, value: membershipId }),
+    ]);
   });
 
   it('uses any-category default for unassigned work and unstarted for assigned work', async () => {

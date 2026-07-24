@@ -12,6 +12,8 @@ import type { CSSProperties } from 'react';
 import {
   getIssuesControllerGroupsQueryKey,
   getIssuesControllerListQueryKey,
+  getTeamWorksControllerGroupsQueryKey,
+  getTeamWorksControllerListQueryKey,
   type IssueListResponseDto,
   issuesControllerUpdate,
   type IssueSummaryResponseDto,
@@ -98,6 +100,8 @@ export function IssueListRow({
       Promise.all([
         queryClient.invalidateQueries({ queryKey: getIssuesControllerListQueryKey() }),
         queryClient.invalidateQueries({ queryKey: getIssuesControllerGroupsQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getTeamWorksControllerListQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getTeamWorksControllerGroupsQueryKey() }),
       ]),
   });
   const nextAction =

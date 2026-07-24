@@ -61,9 +61,8 @@ export function IssueMultiSortControls({
   groupBy = '',
   groupOptions = [],
   onDensityChange,
-  onGroupByChange = () => undefined,
+  onGroupingChange = () => undefined,
   onSortsChange,
-  onSubGroupByChange = () => undefined,
   onVisibleFieldsChange = () => undefined,
   sorts,
   subGroupBy = '',
@@ -74,9 +73,8 @@ export function IssueMultiSortControls({
   groupBy?: string;
   groupOptions?: ReadonlyArray<{ label: string; value: string }>;
   onDensityChange: (value: 'comfortable' | 'compact') => void;
-  onGroupByChange?: (value: string) => void;
+  onGroupingChange?: (groupBy: string, subGroupBy: string) => void;
   onSortsChange: (value: IssueSortClause[]) => void;
-  onSubGroupByChange?: (value: string) => void;
   onVisibleFieldsChange?: (value: string[]) => void;
   sorts: readonly IssueSortClause[];
   subGroupBy?: string;
@@ -253,8 +251,7 @@ export function IssueMultiSortControls({
         groupBy={groupBy}
         groupOptions={groupOptions}
         onDensityChange={onDensityChange}
-        onGroupByChange={onGroupByChange}
-        onSubGroupByChange={onSubGroupByChange}
+        onGroupingChange={onGroupingChange}
         onVisibleFieldsChange={onVisibleFieldsChange}
         subGroupBy={subGroupBy}
         visibleFields={visibleFields}

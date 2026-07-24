@@ -21,10 +21,9 @@ export function IssueListDisplayControls({
   groupBy,
   groupOptions,
   onDensityChange,
-  onGroupByChange,
+  onGroupingChange,
   onSortChange,
   onSortDirectionChange,
-  onSubGroupByChange,
   onVisibleFieldsChange,
   sort,
   sortDirection,
@@ -38,10 +37,9 @@ export function IssueListDisplayControls({
   groupBy?: string;
   groupOptions?: ReadonlyArray<{ label: string; value: string }>;
   onDensityChange: (value: 'comfortable' | 'compact') => void;
-  onGroupByChange?: (value: string) => void;
+  onGroupingChange?: (groupBy: string, subGroupBy: string) => void;
   onSortChange: (value: string) => void;
   onSortDirectionChange: (value: 'asc' | 'desc') => void;
-  onSubGroupByChange?: (value: string) => void;
   onVisibleFieldsChange?: (value: string[]) => void;
   sort: string;
   sortDirection: string;
@@ -113,8 +111,7 @@ export function IssueListDisplayControls({
       </Popover>
       {fieldOptions &&
       groupOptions &&
-      onGroupByChange &&
-      onSubGroupByChange &&
+      onGroupingChange &&
       onVisibleFieldsChange &&
       visibleFields ? (
         <ListViewConfigurationControls
@@ -123,8 +120,7 @@ export function IssueListDisplayControls({
           groupBy={groupBy ?? ''}
           groupOptions={groupOptions}
           onDensityChange={onDensityChange}
-          onGroupByChange={onGroupByChange}
-          onSubGroupByChange={onSubGroupByChange}
+          onGroupingChange={onGroupingChange}
           onVisibleFieldsChange={onVisibleFieldsChange}
           subGroupBy={subGroupBy ?? ''}
           visibleFields={visibleFields}

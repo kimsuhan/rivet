@@ -214,8 +214,7 @@ export function FeatureIssueListScreen() {
                   })
                 }
                 onDensityChange={(value) => replace('density', value)}
-                onGroupByChange={(value) => replace('groupBy', value)}
-                onSubGroupByChange={(value) => replace('subGroupBy', value)}
+                onGroupingChange={(groupBy, subGroupBy) => replaceMany({ groupBy, subGroupBy })}
                 onVisibleFieldsChange={(value) =>
                   replace('visibleFields', serializeCsv(value) || 'none')
                 }

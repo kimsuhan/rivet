@@ -26,8 +26,7 @@ describe('ListViewConfigurationControls', () => {
         groupBy=""
         groupOptions={groupOptions}
         onDensityChange={vi.fn()}
-        onGroupByChange={vi.fn()}
-        onSubGroupByChange={vi.fn()}
+        onGroupingChange={vi.fn()}
         onVisibleFieldsChange={onVisibleFieldsChange}
         subGroupBy=""
         visibleFields={['updatedAt']}
@@ -46,8 +45,7 @@ describe('ListViewConfigurationControls', () => {
 
   it('메인 그룹을 해제하면 서브 그룹도 함께 해제한다', async () => {
     const user = userEvent.setup();
-    const onGroupByChange = vi.fn();
-    const onSubGroupByChange = vi.fn();
+    const onGroupingChange = vi.fn();
     render(
       <ListViewConfigurationControls
         density="comfortable"
@@ -55,8 +53,7 @@ describe('ListViewConfigurationControls', () => {
         groupBy="projectId"
         groupOptions={groupOptions}
         onDensityChange={vi.fn()}
-        onGroupByChange={onGroupByChange}
-        onSubGroupByChange={onSubGroupByChange}
+        onGroupingChange={onGroupingChange}
         onVisibleFieldsChange={vi.fn()}
         subGroupBy="status"
         visibleFields={['createdAt']}
@@ -69,7 +66,34 @@ describe('ListViewConfigurationControls', () => {
     await waitFor(() => expect(groupTrigger).toHaveAttribute('data-popup-open'));
     await user.click(screen.getByRole('option', { name: '그룹 없음' }));
 
-    expect(onGroupByChange).toHaveBeenCalledWith('');
-    expect(onSubGroupByChange).toHaveBeenCalledWith('');
+    expect(onGroupingChange).toHaveBeenCalledOnce();
+    expect(onGroupingChange).toHaveBeenCalledWith('', '');
+  });
+
+  it('현재 서브 그룹을 메인 그룹으로 선택하면 두 값을 한 번에 갱신한다', async () => {
+    const user = userEvent.setup();
+    const onGroupingChange = vi.fn();
+    render(
+      <ListViewConfigurationControls
+        density="comfortable"
+        fieldOptions={fieldOptions}
+        groupBy="projectId"
+        groupOptions={groupOptions}
+        onDensityChange={vi.fn()}
+        onGroupingChange={onGroupingChange}
+        onVisibleFieldsChange={vi.fn()}
+        subGroupBy="status"
+        visibleFields={['createdAt']}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: '보기 설정: 여유 보기, 그룹화됨' }));
+    const groupTrigger = screen.getByRole('combobox', { name: '메인 그룹' });
+    await user.click(groupTrigger);
+    await waitFor(() => expect(groupTrigger).toHaveAttribute('data-popup-open'));
+    await user.click(screen.getByRole('option', { name: '상태' }));
+
+    expect(onGroupingChange).toHaveBeenCalledOnce();
+    expect(onGroupingChange).toHaveBeenCalledWith('status', '');
   });
 });
