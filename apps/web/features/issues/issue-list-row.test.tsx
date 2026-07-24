@@ -1,12 +1,20 @@
 import { render, screen } from '@testing-library/react';
 import type { AnchorHTMLAttributes } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IssueListRow } from './issue-list-row';
 
+const reactQueryMocks = vi.hoisted(() => ({
+  invalidateQueries: vi.fn().mockResolvedValue(undefined),
+  mutationOptions: null as null | { onSettled: () => Promise<unknown> },
+}));
+
 vi.mock('@tanstack/react-query', () => ({
-  useMutation: () => ({ isPending: false, mutate: vi.fn() }),
-  useQueryClient: () => ({}),
+  useMutation: (options: { onSettled: () => Promise<unknown> }) => {
+    reactQueryMocks.mutationOptions = options;
+    return { isPending: false, mutate: vi.fn() };
+  },
+  useQueryClient: () => ({ invalidateQueries: reactQueryMocks.invalidateQueries }),
 }));
 
 vi.mock('@/i18n/navigation', () => ({
@@ -51,6 +59,11 @@ function issue(
 }
 
 describe('IssueListRow', () => {
+  beforeEach(() => {
+    reactQueryMocks.invalidateQueries.mockClear();
+    reactQueryMocks.mutationOptions = null;
+  });
+
   it('결정이 필요한 다음 행동(담당자 지정)은 버튼 위계로 강조한다', () => {
     render(
       <ul>
@@ -137,5 +150,23 @@ describe('IssueListRow', () => {
     expect(comfortableRow?.className).toContain('py-2.5');
     expect(comfortableContainer.querySelector('[data-icon-only]')).toBeNull();
     expect(compactRow?.className).not.toEqual(comfortableRow?.className);
+  });
+
+  it('우선순위 변경 후 모든 이슈 목록과 그룹 요약을 무효화한다', async () => {
+    render(
+      <ul>
+        <IssueListRow issue={issue({})} queryKey={['issues', 'priority-high']} />
+      </ul>,
+    );
+
+    await reactQueryMocks.mutationOptions?.onSettled();
+
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledTimes(2);
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['/api/v1/issues'],
+    });
+    expect(reactQueryMocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['/api/v1/issues/groups'],
+    });
   });
 });

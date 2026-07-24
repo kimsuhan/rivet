@@ -10,6 +10,8 @@ import { ArrowRight, CircleAlert } from 'lucide-react';
 import type { CSSProperties } from 'react';
 
 import {
+  getIssuesControllerGroupsQueryKey,
+  getIssuesControllerListQueryKey,
   type IssueListResponseDto,
   issuesControllerUpdate,
   type IssueSummaryResponseDto,
@@ -92,7 +94,11 @@ export function IssueListRow({
       queryClient.setQueryData<IssueListQueryData>(queryKey, (current) =>
         updateIssueListData(current, (item) => (item.id === issue.id ? updated : item)),
       ),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey }),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: getIssuesControllerListQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getIssuesControllerGroupsQueryKey() }),
+      ]),
   });
   const nextAction =
     issue.status === 'REVIEW'
