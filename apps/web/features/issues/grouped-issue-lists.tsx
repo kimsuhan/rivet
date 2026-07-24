@@ -356,7 +356,7 @@ function IssueSubGroup({
   savedViewId: string | null;
   visibleFields: readonly string[];
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   return (
     <div>
       <GroupHeader
@@ -444,7 +444,7 @@ function IssueMainGroup({
   subGroupBy: string | null;
   visibleFields: readonly string[];
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const groupedParams = issueParamsForGroup(baseParams, groupBy, group.value);
   return (
     <section className="space-y-1.5">

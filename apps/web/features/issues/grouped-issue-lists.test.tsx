@@ -48,7 +48,7 @@ describe('GroupedIssueList', () => {
     vi.clearAllMocks();
   });
 
-  it('메인·서브 그룹의 정확한 개수를 표시하고 각각 접고 펼친다', async () => {
+  it('메인·서브 그룹을 펼친 뒤에만 항목을 조회한다', async () => {
     const user = userEvent.setup();
     mockedUseIssuesControllerGroups.mockReturnValue({
       data: {
@@ -97,24 +97,32 @@ describe('GroupedIssueList', () => {
       subGroupBy: 'status',
     });
     const main = screen.getByRole('button', { name: /리벳\s*3/ });
+    expect(main).toHaveAttribute('aria-expanded', 'false');
+    expect(main).toHaveAttribute('data-group-field', 'projectId');
+    expect(main.querySelector('.lucide-folder-kanban')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /진행 중\s*2/ })).not.toBeInTheDocument();
+    expect(mockedUseIssuePages).not.toHaveBeenCalled();
+
+    await user.click(main);
     const inProgress = screen.getByRole('button', { name: /진행 중\s*2/ });
     const done = screen.getByRole('button', { name: /완료\s*1/ });
     expect(main).toHaveAttribute('aria-expanded', 'true');
-    expect(main).toHaveAttribute('data-group-field', 'projectId');
-    expect(main.querySelector('.lucide-folder-kanban')).toBeInTheDocument();
+    expect(inProgress).toHaveAttribute('aria-expanded', 'false');
     expect(inProgress).toHaveAttribute('data-group-field', 'status');
     expect(inProgress.querySelector('.lucide-circle-dot-dashed')).toBeInTheDocument();
     expect(
       inProgress.compareDocumentPosition(done) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(mockedUseIssuePages).not.toHaveBeenCalled();
+
+    await user.click(inProgress);
+    expect(inProgress).toHaveAttribute('aria-expanded', 'true');
     expect(mockedUseIssuePages).toHaveBeenCalledWith({
       projectId: 'project-1',
       sorts: 'updatedAt:desc',
       status: 'IN_PROGRESS',
     });
 
-    await user.click(inProgress);
-    expect(inProgress).toHaveAttribute('aria-expanded', 'false');
     await user.click(main);
     expect(main).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('button', { name: /완료\s*1/ })).not.toBeInTheDocument();
@@ -147,7 +155,8 @@ describe('GroupedIssueList', () => {
     expect(screen.getByRole('heading', { name: '조건에 맞는 이슈가 없습니다' })).toBeVisible();
   });
 
-  it('담당자 없음 그룹은 담당자 없음 필터로 목록을 조회한다', () => {
+  it('담당자 없음 그룹은 펼치면 담당자 없음 필터로 목록을 조회한다', async () => {
+    const user = userEvent.setup();
     mockedUseIssuesControllerGroups.mockReturnValue({
       data: {
         groupBy: 'assigneeMembershipId',
@@ -197,6 +206,8 @@ describe('GroupedIssueList', () => {
       />,
     );
 
+    expect(mockedUseIssuePages).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /담당자 없음\s*2/ }));
     expect(mockedUseIssuePages).toHaveBeenCalledWith({
       sorts: 'updatedAt:desc',
       unassigned: 'true',
