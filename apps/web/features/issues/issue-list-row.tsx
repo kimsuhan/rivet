@@ -58,6 +58,7 @@ function relativeDate(value: string) {
 export function IssueListRow({
   detailHref,
   issue,
+  preserveListReturn = false,
   queryKey,
   density = 'comfortable',
   visibleFields = [
@@ -72,6 +73,7 @@ export function IssueListRow({
 }: {
   detailHref?: string;
   issue: IssueSummaryResponseDto;
+  preserveListReturn?: boolean;
   queryKey: QueryKey;
   density?: 'compact' | 'comfortable';
   visibleFields?: readonly string[];
@@ -115,6 +117,16 @@ export function IssueListRow({
   const nextActionIsDecision = nextAction !== '업무 보기';
   const href = detailHref ?? `/issues/${encodeURIComponent(issue.identifier)}?tab=work`;
   const nextActionHref = issue.status === 'REVIEW' ? '/deployments' : href;
+  const preserveReturnContext = () => {
+    if (!preserveListReturn) return;
+    window.sessionStorage.setItem(
+      'rivet.issue.return',
+      JSON.stringify({
+        href: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+        issueIdentifier: issue.identifier,
+      }),
+    );
+  };
   const visible = new Set(visibleFields);
   const columns = [
     'minmax(18rem,1fr)',
@@ -136,6 +148,7 @@ export function IssueListRow({
       >
         <Link
           href={href}
+          onClick={preserveReturnContext}
           className={cn(
             'focus-visible:ring-ring min-w-0 rounded-sm outline-none focus-visible:ring-2',
             density === 'compact' && 'flex items-center gap-2 overflow-hidden',
@@ -216,6 +229,7 @@ export function IssueListRow({
         ) : null}
         <Link
           href={nextActionHref}
+          onClick={nextActionHref === href ? preserveReturnContext : undefined}
           className={cn(
             'w-fit',
             nextActionIsDecision && density === 'comfortable'

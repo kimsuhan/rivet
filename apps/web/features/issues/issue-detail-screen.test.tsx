@@ -236,6 +236,7 @@ function renderDetail() {
 describe('IssueDetailScreen', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn();
+    window.sessionStorage.clear();
     pathname = '/issues/F-2';
     search = 'tab=work';
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -351,6 +352,25 @@ describe('IssueDetailScreen', () => {
     expect(screen.getByRole('link', { name: '활동' })).toHaveAttribute(
       'href',
       '/issues/F-2?tab=activity&work=WEB-1&view=saved-issues',
+    );
+  });
+
+  it('이슈 목록에서 저장한 전체 보기 URL로 복귀한다', async () => {
+    const user = userEvent.setup();
+    search = 'tab=work&view=saved-issues';
+    window.sessionStorage.setItem(
+      'rivet.issue.return',
+      JSON.stringify({
+        href: '/issues?view=saved-issues&groupBy=priority&priority=HIGH',
+        issueIdentifier: 'F-2',
+      }),
+    );
+
+    renderDetail();
+    await user.click(screen.getByRole('link', { name: '이슈 목록' }));
+
+    expect(navigationMocks.push).toHaveBeenCalledWith(
+      '/issues?view=saved-issues&groupBy=priority&priority=HIGH',
     );
   });
 

@@ -7,6 +7,7 @@ import { useProjectsControllerList } from '@rivet/api-client';
 import { FeatureIssueListScreen } from './feature-issue-list-screen';
 import { GroupedIssueList } from './grouped-issue-lists';
 import { getIssuePagesQueryKey, useIssuePages } from './issue-list-queries';
+import { IssueListRow } from './issue-list-row';
 
 const mocks = vi.hoisted(() => ({
   configuration: {} as Record<string, unknown>,
@@ -41,7 +42,7 @@ vi.mock('./issue-list-queries', () => ({
   getIssuePagesQueryKey: vi.fn(() => ['issues']),
   useIssuePages: vi.fn(),
 }));
-vi.mock('./issue-list-row', () => ({ IssueListRow: () => null }));
+vi.mock('./issue-list-row', () => ({ IssueListRow: vi.fn(() => null) }));
 vi.mock('./issue-list-toolbar', () => ({ IssueListToolbar: () => null }));
 vi.mock('./issue-multi-sort-controls', () => ({ IssueMultiSortControls: () => null }));
 vi.mock('./issue-work-routing', () => ({ issueWorkHref: () => '/issues/RIV-1' }));
@@ -111,5 +112,25 @@ describe('FeatureIssueListScreen', () => {
     expect(screen.getByText('우선순위: 2개 조건')).toBeVisible();
     expect(screen.getByText('라벨: 2개 조건')).toBeVisible();
     expect(screen.getByText('생성자: 2개 조건')).toBeVisible();
+  });
+
+  it('일반 이슈 목록 행도 전체 보기 URL 복원을 활성화한다', () => {
+    mocks.search = 'priority=HIGH';
+    vi.mocked(useIssuePages).mockReturnValue({
+      data: {
+        pageParams: [undefined],
+        pages: [{ items: [{ id: 'issue-1' }], nextCursor: null, totalCount: 1 }],
+      },
+      hasNextPage: false,
+      isError: false,
+      isPending: false,
+    } as never);
+
+    render(<FeatureIssueListScreen />);
+
+    expect(IssueListRow).toHaveBeenCalledWith(
+      expect.objectContaining({ preserveListReturn: true }),
+      undefined,
+    );
   });
 });

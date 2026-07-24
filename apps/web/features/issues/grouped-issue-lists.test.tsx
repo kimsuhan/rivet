@@ -8,6 +8,7 @@ import { useIssuesControllerGroups } from '@rivet/api-client';
 import { GroupedIssueList } from './grouped-issue-lists';
 import type * as IssueQueriesModule from './issue-list-queries';
 import { useIssuePages } from './issue-list-queries';
+import { IssueListRow } from './issue-list-row';
 
 vi.mock('@rivet/api-client', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiClientModule>();
@@ -28,7 +29,7 @@ vi.mock('./issue-list-queries', async (importOriginal) => {
 });
 
 vi.mock('./issue-list-row', () => ({
-  IssueListRow: () => <li>이슈 행</li>,
+  IssueListRow: vi.fn(() => <li>이슈 행</li>),
 }));
 
 vi.mock('./issue-work-routing', () => ({
@@ -74,7 +75,7 @@ describe('GroupedIssueList', () => {
     mockedUseIssuePages.mockReturnValue({
       data: {
         pageParams: [undefined],
-        pages: [{ items: [], nextCursor: null, totalCount: 0 }],
+        pages: [{ items: [{ id: 'issue-1' }], nextCursor: null, totalCount: 1 }],
       },
       hasNextPage: false,
       isError: false,
@@ -122,6 +123,10 @@ describe('GroupedIssueList', () => {
       sorts: 'updatedAt:desc',
       status: 'IN_PROGRESS',
     });
+    expect(IssueListRow).toHaveBeenCalledWith(
+      expect.objectContaining({ preserveListReturn: true }),
+      undefined,
+    );
 
     await user.click(main);
     expect(main).toHaveAttribute('aria-expanded', 'false');

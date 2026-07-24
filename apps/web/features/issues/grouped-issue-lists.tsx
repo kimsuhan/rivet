@@ -197,6 +197,7 @@ function IssueGroupLeaf({
             density={density}
             detailHref={issueWorkHref(issue.identifier, undefined, savedViewId)}
             issue={issue}
+            preserveListReturn
             queryKey={queryKey}
             visibleFields={visibleFields}
           />

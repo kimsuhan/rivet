@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { AnchorHTMLAttributes } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IssueListRow } from './issue-list-row';
 
@@ -18,8 +19,15 @@ vi.mock('@tanstack/react-query', () => ({
 }));
 
 vi.mock('@/i18n/navigation', () => ({
-  Link: ({ children, href, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a href={href} {...props}>
+  Link: ({ children, href, onClick, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a
+      href={href}
+      onClick={(event) => {
+        event.preventDefault();
+        onClick?.(event);
+      }}
+      {...props}
+    >
       {children}
     </a>
   ),
@@ -62,7 +70,10 @@ describe('IssueListRow', () => {
   beforeEach(() => {
     reactQueryMocks.invalidateQueries.mockClear();
     reactQueryMocks.mutationOptions = null;
+    window.sessionStorage.clear();
   });
+
+  afterEach(cleanup);
 
   it('결정이 필요한 다음 행동(담당자 지정)은 버튼 위계로 강조한다', () => {
     render(
@@ -105,6 +116,32 @@ describe('IssueListRow', () => {
     );
 
     expect(container.querySelectorAll(`a[href="${detailHref}"]`)).toHaveLength(2);
+  });
+
+  it('전역 이슈 목록에서 상세를 열면 현재 필터와 그룹 문맥을 보존한다', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(
+      null,
+      '',
+      '/issues?view=view-1&groupBy=priority&priority=HIGH#current',
+    );
+    render(
+      <ul>
+        <IssueListRow
+          detailHref="/issues/API-1?tab=work&view=view-1"
+          issue={issue({ workflowSummary: { teamWorkCount: 2, unassignedCount: 0 } })}
+          preserveListReturn
+          queryKey={['issues']}
+        />
+      </ul>,
+    );
+
+    await user.click(screen.getByRole('link', { name: /API-1.*이슈 제목/ }));
+
+    expect(JSON.parse(window.sessionStorage.getItem('rivet.issue.return') ?? '{}')).toEqual({
+      href: '/issues?view=view-1&groupBy=priority&priority=HIGH#current',
+      issueIdentifier: 'API-1',
+    });
   });
 
   it('배포 대기 이슈의 다음 행동은 배포 현황으로 이동한다', () => {

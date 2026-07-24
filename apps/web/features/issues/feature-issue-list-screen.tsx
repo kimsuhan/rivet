@@ -383,6 +383,7 @@ export function FeatureIssueListScreen() {
               key={issue.id}
               detailHref={issueWorkHref(issue.identifier, undefined, savedViewId)}
               issue={issue}
+              preserveListReturn
               queryKey={issueQueryKey}
               density={density as 'compact' | 'comfortable'}
               visibleFields={visibleFields}
