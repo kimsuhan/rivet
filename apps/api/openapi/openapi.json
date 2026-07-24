@@ -5773,16 +5773,8 @@
             "description": "쉼표로 구분한 이슈 상태",
             "schema": {
               "maxLength": 200,
-              "type": "string",
-              "enum": [
-                "UNSORTED",
-                "TODO",
-                "IN_PROGRESS",
-                "REVIEW",
-                "DONE",
-                "PAUSED",
-                "CANCELED"
-              ]
+              "example": "TODO,DONE",
+              "type": "string"
             }
           },
           {
@@ -6105,16 +6097,8 @@
             "description": "쉼표로 구분한 이슈 상태",
             "schema": {
               "maxLength": 200,
-              "type": "string",
-              "enum": [
-                "UNSORTED",
-                "TODO",
-                "IN_PROGRESS",
-                "REVIEW",
-                "DONE",
-                "PAUSED",
-                "CANCELED"
-              ]
+              "example": "TODO,DONE",
+              "type": "string"
             }
           },
           {
@@ -6696,14 +6680,8 @@
             "description": "쉼표로 구분한 상태 범주",
             "schema": {
               "maxLength": 100,
-              "type": "string",
-              "enum": [
-                "BACKLOG",
-                "UNSTARTED",
-                "STARTED",
-                "COMPLETED",
-                "CANCELED"
-              ]
+              "example": "BACKLOG,UNSTARTED,STARTED",
+              "type": "string"
             }
           },
           {
@@ -6873,14 +6851,8 @@
             "description": "쉼표로 구분한 상태 범주",
             "schema": {
               "maxLength": 100,
-              "type": "string",
-              "enum": [
-                "BACKLOG",
-                "UNSTARTED",
-                "STARTED",
-                "COMPLETED",
-                "CANCELED"
-              ]
+              "example": "BACKLOG,UNSTARTED,STARTED",
+              "type": "string"
             }
           },
           {

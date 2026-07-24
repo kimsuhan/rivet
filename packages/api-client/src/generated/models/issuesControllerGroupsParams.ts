@@ -6,7 +6,6 @@
  * OpenAPI spec version: 1.0
  */
 import type { IssuesControllerGroupsGroupBy } from './issuesControllerGroupsGroupBy';
-import type { IssuesControllerGroupsStatus } from './issuesControllerGroupsStatus';
 import type { IssuesControllerGroupsSubGroupBy } from './issuesControllerGroupsSubGroupBy';
 import type { IssuesControllerGroupsUnassigned } from './issuesControllerGroupsUnassigned';
 
@@ -25,7 +24,7 @@ projectId?: string;
  * 쉼표로 구분한 이슈 상태
  * @maxLength 200
  */
-status?: IssuesControllerGroupsStatus;
+status?: string;
 /**
  * 쉼표로 구분한 우선순위
  * @maxLength 100

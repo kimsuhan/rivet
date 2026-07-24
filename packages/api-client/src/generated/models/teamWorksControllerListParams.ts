@@ -7,7 +7,6 @@
  */
 import type { TeamWorksControllerListSort } from './teamWorksControllerListSort';
 import type { TeamWorksControllerListSortDirection } from './teamWorksControllerListSortDirection';
-import type { TeamWorksControllerListStateCategory } from './teamWorksControllerListStateCategory';
 import type { TeamWorksControllerListUnassigned } from './teamWorksControllerListUnassigned';
 
 export type TeamWorksControllerListParams = {
@@ -40,7 +39,7 @@ workflowStateId?: string;
  * 쉼표로 구분한 상태 범주
  * @maxLength 100
  */
-stateCategory?: TeamWorksControllerListStateCategory;
+stateCategory?: string;
 /**
  * 쉼표로 구분한 상위 이슈 우선순위
  * @maxLength 100

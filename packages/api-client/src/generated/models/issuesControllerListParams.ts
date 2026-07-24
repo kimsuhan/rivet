@@ -7,7 +7,6 @@
  */
 import type { IssuesControllerListSort } from './issuesControllerListSort';
 import type { IssuesControllerListSortDirection } from './issuesControllerListSortDirection';
-import type { IssuesControllerListStatus } from './issuesControllerListStatus';
 import type { IssuesControllerListUnassigned } from './issuesControllerListUnassigned';
 
 export type IssuesControllerListParams = {
@@ -25,7 +24,7 @@ projectId?: string;
  * 쉼표로 구분한 이슈 상태
  * @maxLength 200
  */
-status?: IssuesControllerListStatus;
+status?: string;
 /**
  * 쉼표로 구분한 우선순위
  * @maxLength 100

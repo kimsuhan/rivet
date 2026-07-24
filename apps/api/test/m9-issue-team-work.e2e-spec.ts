@@ -5,7 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
-import { MembershipRole, StateCategory } from '@rivet/database';
+import { IssueStatus, MembershipRole, StateCategory } from '@rivet/database';
 
 import { AppModule } from '../src/app.module';
 import { configureApplication } from '../src/bootstrap';
@@ -1004,6 +1004,17 @@ describe('M9 issue content and team execution API', () => {
       ),
     ).toBe(4);
 
+    const statusFilteredGroups = await request(app.getHttpServer())
+      .get('/api/v1/issues/groups')
+      .query({
+        groupBy: 'projectId',
+        query: marker,
+        status: Object.values(IssueStatus).join(','),
+      })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(statusFilteredGroups.body.totalCount).toBe(4);
+
     const assigneeGroups = await request(app.getHttpServer())
       .get('/api/v1/issues/groups')
       .query({
@@ -1059,6 +1070,17 @@ describe('M9 issue content and team execution API', () => {
       imageFileId: null,
       value: projectId,
     });
+
+    const categoryFilteredWorkGroups = await request(app.getHttpServer())
+      .get('/api/v1/team-works/groups')
+      .query({
+        groupBy: 'projectId',
+        query: marker,
+        stateCategory: Object.values(StateCategory).join(','),
+      })
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(categoryFilteredWorkGroups.body.totalCount).toBe(3);
 
     const sharedAssigneeMarker = `복수담당-${randomUUID().slice(0, 8)}`;
     await mutate('post', '/api/v1/issues')

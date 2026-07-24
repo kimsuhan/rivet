@@ -6,7 +6,6 @@
  * OpenAPI spec version: 1.0
  */
 import type { TeamWorksControllerGroupsGroupBy } from './teamWorksControllerGroupsGroupBy';
-import type { TeamWorksControllerGroupsStateCategory } from './teamWorksControllerGroupsStateCategory';
 import type { TeamWorksControllerGroupsSubGroupBy } from './teamWorksControllerGroupsSubGroupBy';
 import type { TeamWorksControllerGroupsUnassigned } from './teamWorksControllerGroupsUnassigned';
 
@@ -40,7 +39,7 @@ workflowStateId?: string;
  * 쉼표로 구분한 상태 범주
  * @maxLength 100
  */
-stateCategory?: TeamWorksControllerGroupsStateCategory;
+stateCategory?: string;
 /**
  * 쉼표로 구분한 상위 이슈 우선순위
  * @maxLength 100

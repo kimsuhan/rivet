@@ -22,7 +22,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-import { IssuePriority, IssueStatus, StateCategory } from '@rivet/database';
+import { IssuePriority } from '@rivet/database';
 
 import { ISSUE_GROUP_FIELDS, TEAM_WORK_GROUP_FIELDS } from '../issue-list.policy';
 
@@ -55,7 +55,10 @@ export class IssueListQueryDto {
   @MaxLength(2048)
   projectId?: string;
 
-  @ApiPropertyOptional({ description: '쉼표로 구분한 이슈 상태', enum: IssueStatus })
+  @ApiPropertyOptional({
+    description: '쉼표로 구분한 이슈 상태',
+    example: 'TODO,DONE',
+  })
   @IsOptional()
   @IsString({ message: '이슈 상태 필터가 올바르지 않습니다.' })
   @MaxLength(200)
@@ -399,7 +402,10 @@ export class TeamWorkListQueryDto {
   @MaxLength(2048)
   workflowStateId?: string;
 
-  @ApiPropertyOptional({ description: '쉼표로 구분한 상태 범주', enum: StateCategory })
+  @ApiPropertyOptional({
+    description: '쉼표로 구분한 상태 범주',
+    example: 'BACKLOG,UNSTARTED,STARTED',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
