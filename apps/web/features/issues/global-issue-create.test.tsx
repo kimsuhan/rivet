@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  getIssuesControllerGroupsQueryKey,
   getIssueTemplatesControllerListQueryKey,
   getLabelsControllerListQueryKey,
   getProjectsControllerListQueryKey,
@@ -290,6 +291,9 @@ describe('GlobalIssueCreate issue template', () => {
         projectId: project.id,
         title: '로그인 오류',
       }),
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: getIssuesControllerGroupsQueryKey(),
     });
   });
 
